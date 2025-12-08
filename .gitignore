@@ -1,0 +1,29 @@
+# Animation outputs
+*.mp4
+*_ffmpeg.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+Scratch.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ImGui
+imgui.ini
