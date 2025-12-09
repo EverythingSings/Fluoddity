@@ -280,6 +280,12 @@ class UI:
             v_min=0.0,
             v_max=1.0,
         )
+        _,self.sim.speedmult=imgui.slider_int(
+            label="Speed Mult",
+            v=self.sim.speedmult,
+            v_min=1,
+            v_max=6,
+        )
         if imgui.button('Hist'):
             from hist import display_brightness_histogram
             import numpy as np
@@ -356,7 +362,7 @@ class UI:
         imgui.text(f"Zoom: {self.camera.zoom:.2f}")
         
         imgui.separator()
-        imgui.text("Screen Recording:")
+        imgui.text("Screen Recording (Must have speedmult ==1):")
         _,self.recorder_max_frames = imgui.input_int('Max Frames',self.recorder_max_frames)
         _,self.motion_blur_samps = imgui.input_int('Motion Blur Samples',self.motion_blur_samps)
         _,self.supersample_k = imgui.input_int('Supersample Kernel Width',self.supersample_k)

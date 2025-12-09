@@ -59,7 +59,28 @@ class App:
             #print(self.ctx.info['GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS'])
             # Update simulation
             if self.sim.going:
-                self.sim.update(self.ctx)
+                speedmult = self.sim.speedmult
+
+                if speedmult > 1:
+                    # Run multiple simulation steps and accumulate for motion blur
+                    for step in range(speedmult):
+                        self.sim.update(self.ctx)
+                        # Generate the view texture based on current mode
+                        view_tex = self.camera.generate_view_texture()
+                        # Accumulate it
+                        accumulated_tex = self.sim.temporal_accumulator.accumulate_frame(
+                            view_tex, speedmult
+                        )
+
+                    # After all steps, use the accumulated texture for display
+                    if accumulated_tex is not None:
+                        self.camera.accumulated_view_texture = accumulated_tex
+                        self.camera.use_accumulated_view = True
+                else:
+                    # Normal operation: single step, no accumulation
+                    self.sim.update(self.ctx)
+                    self.camera.use_accumulated_view = False
+
                 self.frame_count+=1
                 self.ui.recorder.frame(self.camera.ctx,self.camera.cam_brush_target,max_frames = self.ui.recorder_max_frames,mb_samples = self.ui.motion_blur_samps,ssk_w = self.ui.supersample_k)
 

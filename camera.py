@@ -94,10 +94,13 @@ class Camera:
         self.cam_brush_pp_target = self.ctx.texture(glfw.get_framebuffer_size(self.window),4,dtype='f4')
         self.cam_brush_pp_fbo = self.ctx.framebuffer([self.cam_brush_pp_target])
         self.march_program = VolumetricRenderProgram(self.ctx,self.sim.view_can,glfw.get_framebuffer_size(self.window))
-    
-    def render(self):
-        
 
+        # Temporal accumulation
+        self.use_accumulated_view = False
+        self.accumulated_view_texture = None
+    
+    def generate_view_texture(self):
+        """Generate the appropriate view texture based on current mode without rendering to screen."""
         TEX_TO_VIEW = self.sim.view_tex
         #If we're rendering with the specialized brush renderer.
         if self.cam_brush_mode:
@@ -124,7 +127,7 @@ class Camera:
                 self.ctx.blend_equation=moderngl.MAX
             else:
                 self.ctx.disable(moderngl.BLEND)
-            
+
             self.cam_brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=self.sim.entity_count, vertices=4)
             self.cam_brush_pp_fbo.use()
             self.ctx.disable(moderngl.BLEND)
@@ -140,9 +143,9 @@ class Camera:
             tryset(self.cam_brush_postprocess_program,'cam_zoom', self.zoom)
             tryset(self.cam_brush_postprocess_program,'tex_size', TEX_TO_VIEW.size)
             tryset(self.cam_brush_postprocess_program,'window_size', glfw.get_framebuffer_size(self.window))
-            
-            
-            
+
+
+
             self.cam_brush_postprocess_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
             TEX_TO_VIEW = self.cam_brush_pp_target
@@ -150,6 +153,17 @@ class Camera:
             self.march_program.render_frame(self.march_pos,self.march_ori,self.sim.going)
             TEX_TO_VIEW = self.march_program.render_target
 
+        return TEX_TO_VIEW
+
+    def render(self):
+        # Use accumulated texture if temporal accumulation is active
+        if self.use_accumulated_view and self.accumulated_view_texture is not None:
+            TEX_TO_VIEW = self.accumulated_view_texture
+        else:
+            # Generate the view texture based on current mode
+            TEX_TO_VIEW = self.generate_view_texture()
+
+        # Render to screen
         self.ctx.screen.use()
                 # Set viewport to window size
         width, height = glfw.get_framebuffer_size(self.window)

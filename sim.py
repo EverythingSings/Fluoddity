@@ -3,9 +3,10 @@
 import moderngl
 import time
 import numpy as np
-import math 
+import math
 from util import create_grid_coords, read_shader, shader_prepend, prepend_defines,tryset, load_image_as_texture
 from imgui_bundle import imgui
+from temporal_accumulator import TemporalAccumulator
 # Global constants
 ENTITY_COUNT = 1024*1024 #free_list and stack_tester AND #INTITIALIZE FREE LIST
 SIZE_OF_ENTITY_STRUCT=4*16 #4 bytes per 32bit value. 16 values (pos:2,vel:2,status:1,size:1,spare*2,color:4, lock:1,padding: 3)
@@ -29,6 +30,7 @@ class Sim:
         self.current_brush_blend_option=1
         self.brush_blend_options=['MAX','ADD','OFF']
         self.dt_slider=1#.887#.024#.25*.33
+        self.speedmult=1  # Speed multiplier for temporal accumulation
         self.generic_sliders=[.371,-.707,.116,0.]#[.185,.336,.241,.013]#[.009,.036,.129,.036]#[.326,.116,.103,.116]#[.304,.058,-.085,.098]#[.214,.674,-.549,.424]#[.509,.156,.188,.317]#[1,.732,.004,.143]#[-.134,-1.,.317,.022]#[.295,.326,.031,.348]#[1.,.732,.004,.143]#[.179,.330,.036,0.02]#[.991,-.107,.107,.038]#[.865,1.,.019,.50]#[.519,.635,.269,.173]#[.692,481,.385,0]
         self.current_view_option=0
         self.view_options=[self.view_can,self.can,self.view_brush_tex,self.brush_tex]
@@ -84,7 +86,11 @@ class Sim:
 
         # For camera to use
         self.view_tex = self.view_can
-        
+
+        # Create temporal accumulator for motion blur
+        self.temporal_accumulator = TemporalAccumulator(self.ctx, self.view_can)
+        self.accumulated_view_tex = self.ctx.texture(CANVAS_SHAPE, 4, dtype='f4')
+
         # Clear canvases initially
         self.canvas.use()
         self.ctx.clear()
