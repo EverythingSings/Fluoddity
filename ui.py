@@ -403,6 +403,12 @@ class UI:
                 v_min=-3,
                 v_max=3,
             )
+        _,self.sim.RULE_OUTPUT_GAIN = imgui.slider_float(
+                label=f"RULE_OUTPUT_GAIN",
+                v=self.sim.RULE_OUTPUT_GAIN,
+                v_min=0.0,
+                v_max=5.0,
+            )
         imgui.end()
     def cleanup(self):
         self.imgui_renderer.shutdown()

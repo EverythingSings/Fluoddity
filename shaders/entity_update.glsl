@@ -19,7 +19,7 @@ struct Entity {
     float padding2;
 };
 struct Rule {
-    RbfCenter centers[10];
+    FourierCenter centers[10];
 };
 layout(std430, binding = 0) buffer EntityBuffer {
     Entity entities[];
@@ -35,6 +35,7 @@ uniform sampler2D canvas;
 uniform float DRAG;
 uniform float STRAFE_SCALE;
 uniform float TAP_STRETCH;
+uniform float RULE_OUTPUT_GAIN;
 uniform sampler2D reference_image;
 vec3 rgb2hsv(vec3 c)
 {
@@ -147,13 +148,22 @@ void reset2(uint index){
     release_lock(index);
 }
 void mutate_rule(inout Rule current_rule,float amount,float cohort){
-    float seed = hash(current_rule.centers[4].pos.xy+current_rule.centers[7].weight.ys+current_rule.centers[1].pos.zw)+cohort;
-    RbfCenter[10] new_centers = generate_random_centers(seed);
+    float seed = hash(current_rule.centers[4].frequency.xy+current_rule.centers[7].amplitude.ys+current_rule.centers[1].frequency.zw)+cohort;
+
     for(int i = 0; i < 10; i++) {
-        //current_rule.centers[i].pos = mix(current_rule.centers[i].pos,new_centers[i].pos,vec4(amount));
-        //current_rule.centers[i].weight = mix(current_rule.centers[i].weight,new_centers[i].weight,vec4(amount));
-        current_rule.centers[i].pos += amount*(-1 + 2 * hash4(vec2(i+seed,-i)));
-        current_rule.centers[i].weight += amount*(-1 + 2 * hash4(-.5+vec2(-i+seed,i)));
+        // Mutate frequencies (controls where in input space we sample)
+        // Smaller mutations for frequencies since they have large effect on behavior
+        vec4 freq_mutation = amount * 0.5 * (-1.0 + 2.0 * hash4(vec2(i+seed,-i)));
+        current_rule.centers[i].frequency += freq_mutation;
+
+        // Mutate amplitudes (controls output strength)
+        vec4 amp_mutation = amount * (-1.0 + 2.0 * hash4(-.5+vec2(-i+seed,i)));
+        current_rule.centers[i].amplitude += amp_mutation;
+
+        // Occasional octave jump for exploration (5% chance)
+        if(hash(vec2(seed, float(i))) < 0.05 * amount) {
+            current_rule.centers[i].frequency *= (hash(vec2(seed, float(i+100))) > 0.5 ? 2.0 : 0.5);
+        }
     }
     }
 
@@ -260,7 +270,7 @@ if(get_lock(index)){
     //RULE CALCS
     //Rule current_rule=rules[index];
     Rule current_rule=target_rule;
-    if(current_rule.centers[0].pos==vec4(0) && current_rule.centers[5].weight==vec4(0)){
+    if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
         current_rule = Rule(generate_random_centers(floor(e.cohort)));
     }
     mutate_rule(current_rule,sliders.w,floor(e.cohort));
@@ -283,6 +293,11 @@ if(get_lock(index)){
     pR(rtap.xy,PI/3);
     vec2 strafe =vec2(0);
     vec4 noiseval=sym(strafe,ltap.xy,rtap.xy,e.vel,current_rule);//random_rbf_noise(vec4(.01*(ltap.xy-get_can(e.pos).xy),.01*(rtap.xy-get_can(e.pos).xy)),floor(e.cohort*6));
+
+    // Apply output gain to Fourier network result
+    noiseval *= RULE_OUTPUT_GAIN;
+    strafe *= RULE_OUTPUT_GAIN;
+
     vec2 force=(noiseval.xy*refcol.z);
     strafe = strafe * (refcol.y);
     e.color.xy=fract(noiseval.zw);

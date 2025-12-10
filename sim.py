@@ -42,6 +42,7 @@ class Sim:
         self.DRAG = .504#.25
         self.STRAFE_SCALE = .224#1.
         self.TAP_STRETCH = .2
+        self.RULE_OUTPUT_GAIN = 1.0  # Output gain multiplier for Fourier network
 
         self.reference_tex = load_image_as_texture(ctx, 'colorspace.jpg')
 
@@ -100,7 +101,7 @@ class Sim:
         #build source string
         self.entity_update_source = read_shader('shaders/entity_update.glsl')
         self.entity_update_source=shader_prepend(self.entity_update_source,read_shader('shaders/free_list.glsl'))
-        self.entity_update_source=shader_prepend(self.entity_update_source,read_shader('shaders/rbf4_4.glsl'))
+        self.entity_update_source=shader_prepend(self.entity_update_source,read_shader('shaders/fourier4_4.glsl'))
         self.entity_update_source=prepend_defines(self.entity_update_source,ENTITY_COUNT)
         
         #try to compile it
@@ -167,6 +168,7 @@ class Sim:
         tryset(self.entity_update_program,'DRAG',self.DRAG)
         tryset(self.entity_update_program,'STRAFE_SCALE',self.STRAFE_SCALE)
         tryset(self.entity_update_program,'TAP_STRETCH',self.TAP_STRETCH)
+        tryset(self.entity_update_program,'RULE_OUTPUT_GAIN',self.RULE_OUTPUT_GAIN)
         tryset(self.entity_update_program,'reference_image',5)
         
         # Dispatch compute shader - need enough workgroups for all entities

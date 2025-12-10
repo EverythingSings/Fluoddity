@@ -63,22 +63,22 @@ def readback_rule(rule_buffer, rule_index):
 def set_rule_uniform(program, rule_data):
     """
     Set a Rule as a uniform in the shader program.
-    
+
     Args:
         example_prog: ModernGL program object
         rule_data: numpy array of shape (10, 8) containing the rule data
     """
-    
-    # Method 1: Set individual RbfCenter uniforms
+
+    # Method 1: Set individual FourierCenter uniforms
     for i in range(10):
         center_data = rule_data[i]
-        pos = center_data[:4]      # First 4 floats are position
-        weight = center_data[4:]   # Last 4 floats are weight
-        
-        # Set uniforms (assuming uniform names like r.centers[0].pos, etc.)
+        frequency = center_data[:4]      # First 4 floats are frequency
+        amplitude = center_data[4:]      # Last 4 floats are amplitude
+
+        # Set uniforms (assuming uniform names like target_rule.centers[0].frequency, etc.)
         try:
-            program[f'target_rule.centers[{i}].pos'] = tuple(pos)
-            program[f'target_rule.centers[{i}].weight'] = tuple(weight)
+            program[f'target_rule.centers[{i}].frequency'] = tuple(frequency)
+            program[f'target_rule.centers[{i}].amplitude'] = tuple(amplitude)
         except Exception:
             print('failed rule uniforms')
 
