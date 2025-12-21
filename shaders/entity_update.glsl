@@ -127,26 +127,6 @@ void reset(uint index){
     entities[index]=Entity(pos,vel,status,size,depth,cohort,color,0,0,0,0);
     release_lock(index);
 }
-void reset2(uint index){
-    vec2 pos=vec2(0);
-    vec2 vel=vec2(0,0);
-    int status= 0;
-    float size=0;
-    float depth=0;
-    float cohort=0;
-    vec4 color = vec4(.005);
-    if(index<START_COUNT){
-        status = 600;
-        size = .0015;
-        cohort = float(index)/float(START_COUNT);
-    }
-    pos = vec2(.7,.2+.3*fract(5000*cohort*COHORTS));
-    pR(pos,cohort*3.1415*2);
-    vel = pos*.01;
-    pR(vel,cohort*3.1415*15000);
-    entities[index]=Entity(pos,vel,status,size,depth,COHORTS*cohort,color,0,0,0,0);
-    release_lock(index);
-}
 void mutate_rule(inout Rule current_rule,float amount,float cohort){
     float seed = hash(current_rule.centers[4].frequency.xy+current_rule.centers[7].amplitude.ys+current_rule.centers[1].frequency.zw)+cohort;
 
@@ -160,10 +140,12 @@ void mutate_rule(inout Rule current_rule,float amount,float cohort){
         vec4 amp_mutation = amount * (-1.0 + 2.0 * hash4(-.5+vec2(-i+seed,i)));
         current_rule.centers[i].amplitude += amp_mutation;
 
+        //mutate frequency
+        current_rule.centers[i].frequency *= 1 + amount * 0.5 * (hash(vec2(seed,i))-.5);
         // Occasional octave jump for exploration (5% chance)
-        if(hash(vec2(seed, float(i))) < 0.05 * amount) {
-            current_rule.centers[i].frequency *= (hash(vec2(seed, float(i+100))) > 0.5 ? 2.0 : 0.5);
-        }
+        //if(hash(vec2(seed, float(i))) < 0.05 * amount) {
+        //    current_rule.centers[i].frequency *= (hash(vec2(seed, float(i+100))) > 0.5 ? 2.0 : 0.5);
+        //}
     }
     }
 
@@ -183,6 +165,9 @@ vec4 exnoise(vec2 L,vec2 R,Rule rule){
 }
 vec2 flect(vec2 p){
     return p*vec2(1,-1);
+}
+float  edgeflect(float x){ //Reflects x across -1 and 1.
+    return sign(x)*(1-abs(1-abs(x)));
 }
 vec4 sym(out vec2 strafe,vec2 L,vec2 R,vec2 axis,Rule rule){
     vec2 n=safenorm(axis);
@@ -244,7 +229,7 @@ if(get_lock(index)){
 
     //BUSINESS (ONLY SPAWN ON ODD FRAMES)
     int status_index=e.status_code/2;
-    float samplen = .0016;//*pow(hash(vec2(frame_count,index)/vec2(10000,ENTITY_COUNT)),2.); //.006;//
+    float samplen = 3*.0016;//*pow(hash(vec2(frame_count,index)/vec2(10000,ENTITY_COUNT)),2.); //.006;//
     //e.vel*=-1;
     vec2 vds = safenorm(e.vel)*samplen;
     vec2 vds_prime = vds;
@@ -252,23 +237,7 @@ if(get_lock(index)){
     
     vec4 ltap = get_can(e.pos+vds_prime*1+TAP_STRETCH*vds);
     vec4 rtap = get_can(e.pos-vds_prime*1+TAP_STRETCH*vds);
-
-    //vec2 mvl = safenorm(ltap.xy);
-    //vec2 mvr = safenorm(rtap.xy);
-    //ltap.xy-=mvr*.051;
-    //rtap.xy-=mvl*.051;
-    //rtap.xy=mvr*length(rtap.xy/(rtap.z+.001));
-    //ltap.xy=mvl*length(ltap.xy/(ltap.z+.001));
-    //ltap.xy-=get_can(e.pos).xy;
-    //rtap.xy-=get_can(e.pos).xy;
-    //ltap.xy=safenorm(ltap.xy);
-    //rtap.xy=safenorm(rtap.xy);
-    //ltap/=20;
-    //rtap/=20;
-    //ltap.xy*=20;
-    //rtap.xy*=20;
     //RULE CALCS
-    //Rule current_rule=rules[index];
     Rule current_rule=target_rule;
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
         current_rule = Rule(generate_random_centers(floor(e.cohort)));
@@ -280,15 +249,7 @@ if(get_lock(index)){
     float tap_scaling = 15.542*.5*sliders.z*5;
     ltap *= tap_scaling;
     rtap *= tap_scaling;
-    //L=safenorm(L)*log(length(L)+.001);
-    //R=safenorm(R)*log(length(R)+.001);
-    //L=safenorm(L)*pow(length(L),.5);
-    //R=safenorm(R)*pow(length(R),.5);
     
-
-
-    //DIAG           DIAG
-    vec3 refcol = vec3(1);//rgb2hsv(texture(reference_image,e.pos/2.+.5).xyz);
     pR(ltap.xy,-PI/3);
     pR(rtap.xy,PI/3);
     vec2 strafe =vec2(0);
@@ -298,27 +259,33 @@ if(get_lock(index)){
     noiseval *= RULE_OUTPUT_GAIN;
     strafe *= RULE_OUTPUT_GAIN;
 
-    vec2 force=(noiseval.xy*refcol.z);
-    strafe = strafe * (refcol.y);
-    e.color.xy=fract(noiseval.zw);
+    vec2 force=(noiseval.xy);
+
+    //ALTERNATE COLORATION MODES. RULE BASED:
+    //e.color.xy=fract(noiseval.zw);
+    //COHORT BASED COLOR:
+    e.color.xy=vec2(e.cohort/float(COHORTS),0.75);
     e.color.z=1;
 
-        //DIAG           DIAG
-    e.padding0=ltap.x;
-    e.padding1=ltap.y;
-    e.padding2=rtap.x;
-    //e.color.xyz = refcol;
+    //DRAG AND APPLY FORCE 
     e.vel =e.vel*DRAG+ (force)*dt;
+
 if(EDGE_BOUNCE){
-        if (e.pos.x < -1.0 || e.pos.x > 1.0) e.vel.x=-e.vel.x;//e.vel.x-=.01*e.pos.x*dt;//e.vel.x = -e.vel.x;
-        if (e.pos.y < -1.0*canvas_resolution.y/canvas_resolution.x || e.pos.y > 1.0*canvas_resolution.y/canvas_resolution.x)e.vel.y=-e.vel.y;// e.vel.y-=.01*e.pos.y*dt; //e.vel.y = -e.vel.y;
+        float edge_band=.8;
+        
+        if (e.pos.x < -1.0 || e.pos.x > 1.0){
+            e.vel.x=-e.vel.x;//e.vel.x-=.01*e.pos.x*dt;//e.vel.x = -e.vel.x;
+            e.pos.x=edgeflect(e.pos.x);
+        }
+        float y_edge = canvas_resolution.y/canvas_resolution.x;
+        if (e.pos.y < -y_edge || e.pos.y > y_edge){
+            e.vel.y=-e.vel.y;// e.vel.y-=.01*e.pos.y*dt; //e.vel.y = -e.vel.y;
+            e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
+        }
         //e.pos.x = clamp(e.pos.x, -1.0, 1.0);
         //e.pos.y = clamp(e.pos.y, -1.0, 1.0);
 
     }
-    //FRICTION
-    //pow(.865,dt);
-    // Update position
     e.pos += e.vel * dt;
     e.pos += strafe * dt*STRAFE_SCALE;
     // Boundary bouncing

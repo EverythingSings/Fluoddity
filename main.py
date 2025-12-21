@@ -3,15 +3,6 @@ import moderngl
 from camera import Camera
 from sim import Sim
 from ui import UI
-### & C:\Users\jgeld\Documents\KodeLife\SimScratch\Scratch.venv\Scripts\Activate.ps1
-###  & C:\Users\jgeld\Documents\KodeLife\SimScratch\Scratch.venv\Scripts\python.exe c:/Users/jgeld/Documents/KodeLife/SimScratch/main.py
-####
-#dragon curve but we have CA mechanics so interior cells 'die'
-#pickleable sim state / ui state.
-#custom record
-#3 prong dragon curve
-#spawn allocates eggs. partivle size proportional to eggs^.5
-####
 global FREE_TESTER
 from stack_tester import StackFreeListTester
 FREE_TESTER=None

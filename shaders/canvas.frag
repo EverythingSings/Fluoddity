@@ -53,7 +53,6 @@
         vec4 getCan(vec2 p,sampler2D sam){
             return texture(sam,p);
         }
-        ////////////// TONE MAPPING
         vec4 getBlur(vec2 pos,sampler2D sam){
 
             ivec2 imsz=textureSize(sam,0);
