@@ -169,7 +169,9 @@ class Camera:
         self.vao.render()
 
     def reload(self):
-        self.setup_rendering()
+        winx, winy =glfw.get_framebuffer_size(self.window)
+        if winx > 0 and winy > 0:
+            self.setup_rendering()
 
     def screen_to_tex(self, coord_tuple):
         """

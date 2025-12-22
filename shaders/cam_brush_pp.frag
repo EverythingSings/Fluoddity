@@ -10,21 +10,6 @@
         uniform vec2 tex_size;
         uniform vec2 window_size;
         
-        vec3 bloom(vec2 texcoord){
-            vec2 delta = 1./textureSize(brush,0);
-            vec3 result = vec3(0);
-            int k = 7;
-            for(int i =-k;i<=k;i++){
-                for(int j = -k; j<=k; j++){
-                    if(i!=j || i != 0){
-                        vec4 tap = texture(brush,texcoord+delta*vec2(i,j));
-                        float tmag = pow(dot(vec2(i,j),vec2(i,j)),-.5);
-                        result += max(vec3(0),(tap.xyz-1.))*tmag;
-                    }
-                }
-            }
-            return result/(k*k);
-        }
         vec2 screen_tex_to_can(vec2 tex_coords){
             //transform uv coords on screen to canvas coords. 
             vec2 pos = tex_coords * 2 - 1;
@@ -55,11 +40,5 @@
             fragColor=texture(brush,texcoord);
             //SYNC WITH SAVE_FRAME_GPU.PY!!!!!!!!!!!!
             if(length(fragColor.xyz)>0)
-            
             fragColor.xyz/=pow(length(fragColor.xyz),.575);
-            //fragColor = (fragColor)+.01*vec4(log(10000*length(can.xy)+1));
-            
-            
-            //fragColor.xyz=log(1+log(1+fragColor.xyz));
-            //fragColor.xyz = exp(-3*fragColor.xyz);//sqrt(3)*normalize(fragColor.xyz+.001)*exp(-length(fragColor.xyz));
         }

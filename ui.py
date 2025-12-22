@@ -209,12 +209,19 @@ class UI:
         )
         imgui.text(f"Texture Size: {width}x{height}")
 
-        _, self.sim.speedmult = imgui.slider_int(
-            label="Speed Mult",
-            v=self.sim.speedmult,
-            v_min=1,
-            v_max=6,
-        )
+        # Lock speedmult to 1 when recording video
+        if self.recorder.active:
+            self.sim.speedmult = 1
+            imgui.begin_disabled()
+            imgui.slider_int(label="Speed Mult (locked)", v=1, v_min=1, v_max=6)
+            imgui.end_disabled()
+        else:
+            _, self.sim.speedmult = imgui.slider_int(
+                label="Speed Mult",
+                v=self.sim.speedmult,
+                v_min=1,
+                v_max=6,
+            )
 
         # Camera dropdown
         changed, self.sim.current_view_option = imgui.combo(
