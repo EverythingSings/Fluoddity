@@ -56,7 +56,7 @@ vec2 safenorm(vec2 p){
     return length(p)==0?vec2(0):normalize(p);
 }
 
-#define COHORTS 64
+#define COHORTS 64 //each cohort gets it's own rule and starting location.
 #define ACTIVE_COUNT 600000
 
 float get_cohort(uint index) {
@@ -74,7 +74,7 @@ void reset(uint index){
     pos=.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
     vel=.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
     float spots=COHORTS;
-    float spot_rows=sqrt(spots);
+    float spot_rows=ceil(sqrt(spots));
     vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
     pR(pos,floor(cohort_val)*3.1415*2*spots);
     pos+=1.8*((gridcell)/spot_rows-.45);
