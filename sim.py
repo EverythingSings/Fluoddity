@@ -1,6 +1,6 @@
 import moderngl
 import time
-from utilities.util import read_shader, shader_prepend, prepend_defines, tryset
+from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, tryset
 from utilities.temporal_accumulator import TemporalAccumulator
 
 # Global constants

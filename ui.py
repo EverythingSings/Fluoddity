@@ -4,7 +4,7 @@ from imgui_bundle.python_backends import glfw_backend
 import time
 import sim
 import numpy as np
-from utilities.util import readback_rule, set_rule_uniform, tryset
+from utilities.gl_helpers import readback_rule, set_rule_uniform, tryset
 from utilities.vid_saver import VidSaver
 
 class UI:
@@ -37,6 +37,10 @@ class UI:
         self.supersample_k = 2
         self.recorder = VidSaver()
 
+        # Resize debouncing
+        self.pending_resize_time = None
+        self.resize_debounce_delay = 0.15  # seconds
+
     def setup_callbacks(self):
         self.imgui_mouse_callback = glfw.set_mouse_button_callback(self.window, None)
         self.imgui_cursor_callback = glfw.set_cursor_pos_callback(self.window, None)
@@ -52,7 +56,14 @@ class UI:
         glfw.set_framebuffer_size_callback(self.window, self.framebuffer_size_callback)
 
     def framebuffer_size_callback(self, window, width, height):
+        # Debounce: just record the time, actual reload happens in render()
+        self.pending_resize_time = time.time()
+
+    def full_reload(self):
+        """Reload shaders and restore rule uniform."""
         self.sim.reload()
+        if len(self.rule_history) > 0:
+            set_rule_uniform(self.sim.entity_update_program, self.rule_history[-1])
         self.camera.reload()
 
     def mouse_button_callback(self, window, button, action, mods):
@@ -113,10 +124,7 @@ class UI:
             self.keys_pressed.discard(key)
 
         if key == glfw.KEY_V and action == glfw.PRESS:
-            self.sim.reload()
-            if len(self.rule_history) > 0:
-                set_rule_uniform(self.sim.entity_update_program, self.rule_history[-1])
-            self.camera.reload()
+            self.full_reload()
 
         if key == glfw.KEY_P and action == glfw.PRESS:
             if self.recorder.active:
@@ -169,6 +177,12 @@ class UI:
 
     def render(self):
         self.update_cam()
+
+        # Check for pending resize (debounced)
+        if self.pending_resize_time is not None:
+            if time.time() - self.pending_resize_time >= self.resize_debounce_delay:
+                self.full_reload()
+                self.pending_resize_time = None
 
         self.imgui_renderer.process_inputs()
 

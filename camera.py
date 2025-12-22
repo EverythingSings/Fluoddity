@@ -1,6 +1,6 @@
 import glfw
 import numpy as np
-from utilities.util import read_shader, tryset
+from utilities.gl_helpers import read_shader, tryset
 import moderngl
 
 class Camera:
@@ -97,9 +97,10 @@ class Camera:
 
     def generate_view_texture(self):
         """Generate the appropriate view texture based on current mode without rendering to screen."""
-        TEX_TO_VIEW = self.sim.view_tex
+
 
         if self.cam_brush_mode:
+            TEX_TO_VIEW = self.cam_brush_pp_target
             self.cam_brush_fbo.use()
             width, height = glfw.get_framebuffer_size(self.window)
             self.ctx.viewport = (0, 0, width, height)
@@ -134,8 +135,9 @@ class Camera:
 
             self.cam_brush_postprocess_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
-            TEX_TO_VIEW = self.cam_brush_pp_target
-
+            
+        else:
+            TEX_TO_VIEW = self.sim.view_tex
         return TEX_TO_VIEW
 
     def render(self):
