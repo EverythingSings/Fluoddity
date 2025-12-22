@@ -6,9 +6,9 @@ struct Entity {
     vec2 pos;
     vec2 vel;
     float size;
-    float padding;
+    float padding[3];  // Align to 16-byte boundary for vec4
     vec4 color;
-};
+};  // Total: 48 bytes (12 floats)
 layout(std430, binding = 0) buffer EntityBuffer {
     Entity entities[];
 };

@@ -9,7 +9,7 @@ class Camera:
         self.sim = sim
         self.window = window
         self.amplitude = 1
-        self.cam_brush_mode = False
+        self.cam_brush_mode = True
         # Camera state
         self.position = np.array([0.0, 0.0])  # 2D position
         self.zoom = 1.0  # zoom factor

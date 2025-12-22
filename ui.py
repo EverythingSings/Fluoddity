@@ -63,8 +63,8 @@ class UI:
         if button == glfw.MOUSE_BUTTON_LEFT:
             ent_cache = np.frombuffer(self.sim.entities.read(), dtype=np.float32)
             tmouse = self.camera.screen_to_tex(self.mouse_pos)
-            xs = ent_cache[::10].copy()
-            ys = ent_cache[1::10].copy()
+            xs = ent_cache[::12].copy()
+            ys = ent_cache[1::12].copy()
             xs = xs / 2. + .5
             ys = ys / 2. + .5
             xs -= tmouse[0]

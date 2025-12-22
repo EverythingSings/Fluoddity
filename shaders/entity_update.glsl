@@ -7,9 +7,9 @@ struct Entity {
     vec2 pos;
     vec2 vel;
     float size;
-    float padding;
+    float padding[3];  // Align to 16-byte boundary for vec4
     vec4 color;
-};
+};  // Total: 48 bytes (12 floats)
 struct Rule {
     FourierCenter centers[10];
 };
@@ -79,7 +79,7 @@ void reset(uint index){
     pR(pos,floor(cohort_val)*3.1415*2*spots);
     pos+=1.8*((gridcell)/spot_rows-.45);
 
-    entities[index]=Entity(pos,vel,size,0.0,color);
+    entities[index]=Entity(pos,vel,size,float[3](0,0,0),color);
 }
 
 void mutate_rule(inout Rule current_rule,float amount,float cohort){
@@ -134,7 +134,7 @@ void main() {
 
     // Inactive entities get zeroed out
     if (index >= ACTIVE_COUNT) {
-        entities[index] = Entity(vec2(0), vec2(0), 0.0, 0.0, vec4(0));
+        entities[index] = Entity(vec2(10000), vec2(10000), 0.0, float[3](0,0,0), vec4(0));
         return;
     }
 

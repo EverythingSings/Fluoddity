@@ -5,7 +5,7 @@ from temporal_accumulator import TemporalAccumulator
 
 # Global constants
 ENTITY_COUNT = 1024*1024
-SIZE_OF_ENTITY_STRUCT = 4*10  # 4 bytes per 32bit value. 10 values (pos:2, vel:2, size:1, padding:1, color:4)
+SIZE_OF_ENTITY_STRUCT = 4*12  # 4 bytes per 32bit value. 12 values (pos:2, vel:2, size:1, padding:3, color:4)
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
 CANVAS_SHAPE = (1024, 1024)
 
@@ -24,7 +24,7 @@ class Sim:
         self.going = True
         self.speedmult = 1
         self.generic_sliders = [.371, -.707, .116, 0.]
-        self.current_view_option = 0
+        self.current_view_option = 2 #cam_brush mode
         self.view_options = [self.can, self.brush_tex]
         self.view_option_labels = ['can', 'brush_tex']
 
