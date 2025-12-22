@@ -1,7 +1,7 @@
 import moderngl
 import time
-from util import read_shader, shader_prepend, prepend_defines, tryset
-from temporal_accumulator import TemporalAccumulator
+from utilities.util import read_shader, shader_prepend, prepend_defines, tryset
+from utilities.temporal_accumulator import TemporalAccumulator
 
 # Global constants
 ENTITY_COUNT = 1024*1024
@@ -12,7 +12,6 @@ CANVAS_SHAPE = (1024, 1024)
 class Sim:
     def __init__(self, ctx: moderngl.Context):
         self.entity_count = ENTITY_COUNT
-        self.PARTICLE_ALPHA = 1
         self.ctx = ctx
         self.time = 0.0
         self.start_time_stamp = time.time()
@@ -21,7 +20,7 @@ class Sim:
         self.setup_shaders()
 
         # UI settings
-        self.going = True
+        self.going = True #false means simulation is paused
         self.speedmult = 1
         self.generic_sliders = [.371, -.707, .116, 0.]
         self.current_view_option = 2 #cam_brush mode
@@ -35,6 +34,7 @@ class Sim:
         self.RULE_OUTPUT_GAIN = 1.0
 
     def setup_simulation_state(self):
+        # Allocate state buffers
         self.entities = self.ctx.buffer(reserve=ENTITY_COUNT * SIZE_OF_ENTITY_STRUCT)
         self.rule_buffer = self.ctx.buffer(reserve=ENTITY_COUNT * SIZE_OF_RULE_STRUCT)
 
@@ -169,6 +169,6 @@ class Sim:
         old_fbo.use()
 
     def reload(self):
-        print('reloading')
+        print('reloading shaders')
         self.setup_shaders()
-        print('done')
+        print('reload done')

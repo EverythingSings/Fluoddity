@@ -1,5 +1,5 @@
-from save_frame_gpu import save_frame_gpu, reset_gpu_frame_counter, clear_gpu_frame_cache
-from ffmpeg_recorder import FFmpegVideoRecorder
+from .save_frame_gpu import save_frame_gpu, reset_gpu_frame_counter, clear_gpu_frame_cache
+from .ffmpeg_recorder import FFmpegVideoRecorder
 from datetime import datetime
 
 class VidSaver:

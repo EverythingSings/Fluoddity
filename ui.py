@@ -4,8 +4,8 @@ from imgui_bundle.python_backends import glfw_backend
 import time
 import sim
 import numpy as np
-from util import readback_rule, set_rule_uniform, tryset
-from vid_saver import VidSaver
+from utilities.util import readback_rule, set_rule_uniform, tryset
+from utilities.vid_saver import VidSaver
 
 class UI:
     def __init__(self, sim: sim.Sim, camera, window):
@@ -49,6 +49,11 @@ class UI:
         glfw.set_scroll_callback(self.window, self.scroll_callback)
         glfw.set_key_callback(self.window, self.key_callback)
         glfw.set_char_callback(self.window, self.char_callback)
+        glfw.set_framebuffer_size_callback(self.window, self.framebuffer_size_callback)
+
+    def framebuffer_size_callback(self, window, width, height):
+        self.sim.reload()
+        self.camera.reload()
 
     def mouse_button_callback(self, window, button, action, mods):
         if self.imgui_mouse_callback:

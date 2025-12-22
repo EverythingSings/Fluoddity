@@ -1,6 +1,6 @@
 import glfw
 import numpy as np
-from util import read_shader, tryset
+from utilities.util import read_shader, tryset
 import moderngl
 
 class Camera:
@@ -139,8 +139,9 @@ class Camera:
         return TEX_TO_VIEW
 
     def render(self):
-        # Use accumulated texture if temporal accumulation is active
-        if self.use_accumulated_view and self.accumulated_view_texture is not None:
+        # Use accumulated texture if temporal accumulation is active AND simulation is running
+        # When paused, always regenerate view to allow camera panning/zooming
+        if self.use_accumulated_view and self.accumulated_view_texture is not None and self.sim.going:
             TEX_TO_VIEW = self.accumulated_view_texture
         else:
             TEX_TO_VIEW = self.generate_view_texture()
