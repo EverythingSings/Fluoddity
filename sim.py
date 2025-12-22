@@ -115,6 +115,7 @@ class Sim:
         tryset(self.entity_update_program, 'STRAFE_SCALE', self._state.STRAFE_SCALE)
         tryset(self.entity_update_program, 'TAP_STRETCH', self._state.TAP_STRETCH)
         tryset(self.entity_update_program, 'RULE_OUTPUT_GAIN', self._state.RULE_OUTPUT_GAIN)
+        tryset(self.entity_update_program, 'SENSOR_DISTANCE', self._state.SENSOR_DISTANCE)
 
         num_workgroups = (ENTITY_COUNT + 63) // 64
         ctx.memory_barrier()

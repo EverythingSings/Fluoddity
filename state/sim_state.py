@@ -15,3 +15,4 @@ class SimState:
     STRAFE_SCALE: float = 0.224
     TAP_STRETCH: float = 0.2
     RULE_OUTPUT_GAIN: float = 1.0
+    SENSOR_DISTANCE: float = 1.0

@@ -27,18 +27,9 @@ uniform float DRAG;
 uniform float STRAFE_SCALE;
 uniform float TAP_STRETCH;
 uniform float RULE_OUTPUT_GAIN;
+uniform float SENSOR_DISTANCE;
 uniform vec4 sliders;
 
-vec3 rgb2hsv(vec3 c)
-{
-    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-
-    float d = q.x - min(q.w, q.y);
-    float e = 1.0e-10;
-    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-}
 
 void pR(inout vec2 p, float a) {
 	p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
@@ -132,9 +123,9 @@ void main() {
     uint index = gl_GlobalInvocationID.x;
     if (index >= ENTITY_COUNT) return;
 
-    // Inactive entities get zeroed out
+    // Inactive entities get zeroed out. Position offscreen so they don't accidentally get clicked on
     if (index >= ACTIVE_COUNT) {
-        entities[index] = Entity(vec2(10000), vec2(10000), 0.0, float[3](0,0,0), vec4(0));
+        entities[index] = Entity(vec2(10000), vec2(0), 0.0, float[3](0,0,0), vec4(0));
         return;
     }
 
@@ -143,10 +134,10 @@ void main() {
     Entity e=entities[index];
     float cohort = get_cohort(index);
 
-    float samplen = 3*.0016;
+    float samplen = 3*.0016 * SENSOR_DISTANCE;
     vec2 vds = safenorm(e.vel)*samplen;
     vec2 vds_prime = vds;
-    pR(vds_prime,3.14159*.5);
+    pR(vds_prime,3.14159*.5); //vds_prime should be perpendicular to vds
 
     vec4 ltap = get_can(e.pos+vds_prime*1+TAP_STRETCH*vds);
     vec4 rtap = get_can(e.pos-vds_prime*1+TAP_STRETCH*vds);

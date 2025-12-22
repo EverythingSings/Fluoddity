@@ -291,6 +291,12 @@ class UI:
             v_min=0.0,
             v_max=5.0,
         )
+        _, self.state.sim.SENSOR_DISTANCE = imgui.slider_float(
+            label="Sensor Distance",
+            v=self.state.sim.SENSOR_DISTANCE,
+            v_min=0.0,
+            v_max=5.0,
+        )
         imgui.end()
 
     def cleanup(self):

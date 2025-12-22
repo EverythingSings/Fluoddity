@@ -1,5 +1,4 @@
 // Fourier Feature Network: 4D input -> 4D output
-// Optimized for evolutionary/non-differentiable learning
 struct FourierCenter {
     vec4 frequency;  // 4D frequency vector
     vec4 amplitude;  // 4D amplitude/weight vector
