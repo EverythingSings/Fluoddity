@@ -193,10 +193,10 @@ class UI:
 
         imgui.text(f"Simulation Time: {sim_time:.2f}, Frame: {frame_count}")
 
-        # Amplitude slider
-        _, self.state.camera.amplitude = imgui.slider_float(
-            label="amp",
-            v=self.state.camera.amplitude,
+        # Brightness slider
+        _, self.state.camera.BRIGHTNESS = imgui.slider_float(
+            label="Brightness",
+            v=self.state.camera.BRIGHTNESS,
             v_min=0.0,
             v_max=4.0,
         )
@@ -230,14 +230,6 @@ class UI:
                 self.state.camera.cam_brush_mode = False
                 print(f"Selected: {self.view_option_labels[self.state.sim.current_view_option]}")
 
-        # DRAIN
-        _, self.state.sim.DRAIN = imgui.slider_float(
-            label="DRAIN",
-            v=self.state.sim.DRAIN,
-            v_min=0.0,
-            v_max=1.0,
-        )
-
         imgui.separator()
         imgui.text("Camera:")
         imgui.text(f"Position: ({self.state.camera.position[0]:.1f}, {self.state.camera.position[1]:.1f})")
@@ -258,36 +250,52 @@ class UI:
 
         imgui.end()
 
-        imgui.begin('Sliders')
-        s_labels = ['Axial Force', 'Lateral Force', 'Rule Sensitivity', 'Mutation Scale']
-        for i in range(len(self.state.sim.generic_sliders)):
-            _, self.state.sim.generic_sliders[i] = imgui.slider_float(
-                label=s_labels[i],
-                v=self.state.sim.generic_sliders[i],
-                v_min=-1.0,
-                v_max=1.0,
-            )
+        imgui.begin('Physics Settings')
+        _, self.state.sim.AXIAL_FORCE = imgui.slider_float(
+            label="Axial Force",
+            v=self.state.sim.AXIAL_FORCE,
+            v_min=-1.0,
+            v_max=1.0,
+        )
+        _, self.state.sim.LATERAL_FORCE = imgui.slider_float(
+            label="Lateral Force",
+            v=self.state.sim.LATERAL_FORCE,
+            v_min=-1.0,
+            v_max=1.0,
+        )
+        _, self.state.sim.RULE_SENSITIVITY = imgui.slider_float(
+            label="Rule Sensitivity",
+            v=self.state.sim.RULE_SENSITIVITY,
+            v_min=-1.0,
+            v_max=1.0,
+        )
+        _, self.state.sim.MUTATION_SCALE = imgui.slider_float(
+            label="Mutation Scale",
+            v=self.state.sim.MUTATION_SCALE,
+            v_min=-1.0,
+            v_max=1.0,
+        )
         _, self.state.sim.DRAG = imgui.slider_float(
-            label="DRAG",
+            label="Drag",
             v=self.state.sim.DRAG,
             v_min=-1.0,
             v_max=1.0,
         )
-        _, self.state.sim.STRAFE_SCALE = imgui.slider_float(
-            label="STRAFE_SCALE",
-            v=self.state.sim.STRAFE_SCALE,
+        _, self.state.sim.STRAFE_POWER = imgui.slider_float(
+            label="Strafe Power",
+            v=self.state.sim.STRAFE_POWER,
             v_min=0,
             v_max=4.0,
         )
-        _, self.state.sim.TAP_STRETCH = imgui.slider_float(
-            label="TAP_STRETCH",
-            v=self.state.sim.TAP_STRETCH,
+        _, self.state.sim.SENSOR_ANGLE = imgui.slider_float(
+            label="Sensor Angle",
+            v=self.state.sim.SENSOR_ANGLE,
             v_min=-3,
             v_max=3,
         )
-        _, self.state.sim.RULE_OUTPUT_GAIN = imgui.slider_float(
-            label="RULE_OUTPUT_GAIN",
-            v=self.state.sim.RULE_OUTPUT_GAIN,
+        _, self.state.sim.GLOBAL_FORCE_MULT = imgui.slider_float(
+            label="Global Force Multiplier",
+            v=self.state.sim.GLOBAL_FORCE_MULT,
             v_min=0.0,
             v_max=5.0,
         )
@@ -296,6 +304,12 @@ class UI:
             v=self.state.sim.SENSOR_DISTANCE,
             v_min=0.0,
             v_max=5.0,
+        )
+        _, self.state.sim.TRAIL_PERSISTENCE = imgui.slider_float(
+            label="Trail Persistence",
+            v=self.state.sim.TRAIL_PERSISTENCE,
+            v_min=0.0,
+            v_max=1.0,
         )
         imgui.end()
 

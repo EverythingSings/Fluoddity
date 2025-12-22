@@ -1,6 +1,6 @@
 #version 430
 
-uniform float amp;
+uniform float BRIGHTNESS;
 in vec2 uv;
 in vec4 pos_vel;
 in vec4 view_col;
@@ -30,5 +30,5 @@ void main() {
 
     // Output directly to viewport
     vec3 hsv_viewcol = hsv2rgb(view_col.xyz);
-    cam_brush_out = vec4(hsv_viewcol, amp * view_col.w * kernel_func);
+    cam_brush_out = vec4(hsv_viewcol, BRIGHTNESS * view_col.w * kernel_func);
 }

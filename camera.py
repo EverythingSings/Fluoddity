@@ -9,7 +9,7 @@ class Camera:
         self.ctx = ctx
         self.sim = sim
         self.window = window
-        self.amplitude = 1
+        self.BRIGHTNESS = 1
         self.cam_brush_mode = True
         
         # Camera state
@@ -112,7 +112,7 @@ class Camera:
             self.cam_brush_program['cam_zoom'].value = self.zoom
             self.cam_brush_program['canvas_resolution'].value = self.sim.view_tex.size
             self.cam_brush_program['window_size'].value = (width, height)
-            self.cam_brush_program['amp'].value = self.amplitude
+            self.cam_brush_program['BRIGHTNESS'].value = self.BRIGHTNESS
 
             #particles need additive blending 
             self.ctx.enable(moderngl.BLEND)
@@ -146,7 +146,7 @@ class Camera:
         """Apply camera state from Orchestrator."""
         self.position = state.position.copy()
         self.zoom = state.zoom
-        self.amplitude = state.amplitude
+        self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
 
     def render(self, sim_going: bool = True):
@@ -167,7 +167,7 @@ class Camera:
         self.program['cam_zoom'].value = self.zoom
         self.program['tex_size'].value = TEX_TO_VIEW.size
         self.program['window_size'].value = (width, height)
-        self.program['amp'].value = self.amplitude
+        self.program['BRIGHTNESS'].value = self.BRIGHTNESS
 
         if self.cam_brush_mode:
             tryset(self.program, 'cam_pos', (0, 0))

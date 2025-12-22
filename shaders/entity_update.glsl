@@ -24,11 +24,14 @@ uniform Rule target_rule;
 uniform vec2 canvas_resolution;
 uniform sampler2D canvas;
 uniform float DRAG;
-uniform float STRAFE_SCALE;
-uniform float TAP_STRETCH;
-uniform float RULE_OUTPUT_GAIN;
+uniform float STRAFE_POWER;
+uniform float SENSOR_ANGLE;
+uniform float GLOBAL_FORCE_MULT;
 uniform float SENSOR_DISTANCE;
-uniform vec4 sliders;
+uniform float AXIAL_FORCE;
+uniform float LATERAL_FORCE;
+uniform float RULE_SENSITIVITY;
+uniform float MUTATION_SCALE;
 
 
 void pR(inout vec2 p, float a) {
@@ -105,15 +108,14 @@ vec4 sym(out vec2 strafe,vec2 L,vec2 R,vec2 axis,Rule rule){
     pR(on,3.14159/2);
     L=vec2(dot(L,n),dot(L,on));
     R=vec2(dot(R,n),dot(R,on));
-
     vec4 baseterm= exnoise(L,R,rule);
     vec4 mirrorterm=exnoise(flect(R),flect(L),rule);
     vec2 cols = baseterm.zw+(mirrorterm.zw);
     strafe = baseterm.zx + flect(mirrorterm.zx);
     vec2 force = baseterm.xy+flect(mirrorterm.xy);
-    force=n*force.x*sliders.x+on*force.y*sliders.y;
+    force=n*force.x*AXIAL_FORCE+on*force.y*LATERAL_FORCE;
     force=force*.051*2.;
-    strafe = n*strafe.x*sliders.x + on * strafe.y * sliders.y;
+    strafe = n*strafe.x*AXIAL_FORCE + on * strafe.y * LATERAL_FORCE;
     force/=20;
     strafe/=20;
     return vec4(force,cols)/2;
@@ -139,16 +141,16 @@ void main() {
     vec2 vds_prime = vds;
     pR(vds_prime,3.14159*.5); //vds_prime should be perpendicular to vds
 
-    vec4 ltap = get_can(e.pos+vds_prime*1+TAP_STRETCH*vds);
-    vec4 rtap = get_can(e.pos-vds_prime*1+TAP_STRETCH*vds);
+    vec4 ltap = get_can(e.pos+vds_prime*1+SENSOR_ANGLE*vds);
+    vec4 rtap = get_can(e.pos-vds_prime*1+SENSOR_ANGLE*vds);
 
     Rule current_rule=target_rule;
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
         current_rule = Rule(generate_random_centers(floor(cohort)));
     }
-    mutate_rule(current_rule,sliders.w,floor(cohort));
+    mutate_rule(current_rule,MUTATION_SCALE,floor(cohort));
 
-    float tap_scaling = 15.542*.5*sliders.z*5;
+    float tap_scaling = 15.542*.5*RULE_SENSITIVITY*5;
     ltap *= tap_scaling;
     rtap *= tap_scaling;
 
@@ -157,8 +159,8 @@ void main() {
     vec2 strafe =vec2(0);
     vec4 noiseval=sym(strafe,ltap.xy,rtap.xy,e.vel,current_rule);
 
-    noiseval *= RULE_OUTPUT_GAIN;
-    strafe *= RULE_OUTPUT_GAIN;
+    noiseval *= GLOBAL_FORCE_MULT;
+    strafe *= GLOBAL_FORCE_MULT;
 
     vec2 force=(noiseval.xy);
 
@@ -179,7 +181,7 @@ void main() {
         }
     }
     e.pos += e.vel;
-    e.pos += strafe*STRAFE_SCALE;
+    e.pos += strafe*STRAFE_POWER;
 
     entities[index]=e;
     rules[index] = current_rule;

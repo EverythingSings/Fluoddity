@@ -3,15 +3,17 @@ import moderngl
 
 
 class EntityPicker:
-    """Handles entity selection from screen coordinates.
+    """Handles entity selection from screen coordinates."""
 
-    Encapsulates the entity buffer structure (12 floats per entity stride).
-    """
+    def __init__(self, entity_buffer: moderngl.Buffer, entity_stride: int):
+        """Initialize EntityPicker.
 
-    ENTITY_STRIDE = 12  # 12 floats per entity: pos(2) + vel(2) + size(1) + padding(3) + color(4)
-
-    def __init__(self, entity_buffer: moderngl.Buffer):
+        Args:
+            entity_buffer: GPU buffer containing entity data
+            entity_stride: Number of floats per entity (e.g., 12 for pos:2 + vel:2 + size:1 + padding:3 + color:4)
+        """
         self.entity_buffer = entity_buffer
+        self.entity_stride = entity_stride
 
     def find_nearest_entity(self, tex_coords: tuple[float, float]) -> int:
         """Find the entity closest to given texture coordinates.
@@ -24,9 +26,9 @@ class EntityPicker:
         """
         ent_cache = np.frombuffer(self.entity_buffer.read(), dtype=np.float32)
 
-        # Extract positions (every 12th float starting at 0 and 1)
-        xs = ent_cache[0::self.ENTITY_STRIDE].copy()
-        ys = ent_cache[1::self.ENTITY_STRIDE].copy()
+        # Extract positions (every Nth float starting at 0 and 1)
+        xs = ent_cache[0::self.entity_stride].copy()
+        ys = ent_cache[1::self.entity_stride].copy()
 
         # Convert from [-1,1] to [0,1] texture space
         xs = xs / 2.0 + 0.5

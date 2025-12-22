@@ -110,11 +110,14 @@ class Sim:
     def entity_update(self, ctx: moderngl.Context):
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
-        tryset(self.entity_update_program, 'sliders', self._state.generic_sliders)
+        tryset(self.entity_update_program, 'AXIAL_FORCE', self._state.AXIAL_FORCE)
+        tryset(self.entity_update_program, 'LATERAL_FORCE', self._state.LATERAL_FORCE)
+        tryset(self.entity_update_program, 'RULE_SENSITIVITY', self._state.RULE_SENSITIVITY)
+        tryset(self.entity_update_program, 'MUTATION_SCALE', self._state.MUTATION_SCALE)
         tryset(self.entity_update_program, 'DRAG', self._state.DRAG)
-        tryset(self.entity_update_program, 'STRAFE_SCALE', self._state.STRAFE_SCALE)
-        tryset(self.entity_update_program, 'TAP_STRETCH', self._state.TAP_STRETCH)
-        tryset(self.entity_update_program, 'RULE_OUTPUT_GAIN', self._state.RULE_OUTPUT_GAIN)
+        tryset(self.entity_update_program, 'STRAFE_POWER', self._state.STRAFE_POWER)
+        tryset(self.entity_update_program, 'SENSOR_ANGLE', self._state.SENSOR_ANGLE)
+        tryset(self.entity_update_program, 'GLOBAL_FORCE_MULT', self._state.GLOBAL_FORCE_MULT)
         tryset(self.entity_update_program, 'SENSOR_DISTANCE', self._state.SENSOR_DISTANCE)
 
         num_workgroups = (ENTITY_COUNT + 63) // 64
@@ -133,7 +136,7 @@ class Sim:
         self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=ENTITY_COUNT, vertices=4)
 
     def can_update(self, ctx: moderngl.Context):
-        tryset(self.canvas_update_program, 'DRAIN', self._state.DRAIN)
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE', self._state.TRAIL_PERSISTENCE)
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
 

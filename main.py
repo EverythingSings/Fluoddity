@@ -2,7 +2,7 @@ import glfw
 import moderngl
 import time
 from camera import Camera
-from sim import Sim
+from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService
 from utilities.gl_helpers import readback_rule
@@ -37,7 +37,9 @@ class App:
 
         # Create services (Orchestrator owns these)
         self.rule_manager = RuleManager()
-        self.entity_picker = EntityPicker(self.sim.get_entity_buffer())
+        # Divide by 4 to convert from bytes to floats (each float32 is 4 bytes)
+        entity_stride = SIZE_OF_ENTITY_STRUCT // 4
+        self.entity_picker = EntityPicker(self.sim.get_entity_buffer(), entity_stride)
         self.video_service = VideoRecorderService()
 
         # Frame timing

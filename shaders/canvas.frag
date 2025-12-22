@@ -4,7 +4,7 @@ in vec2 texcoord;
 
 uniform sampler2D brush_tex;
 uniform sampler2D can_tex;
-uniform float DRAIN;
+uniform float TRAIL_PERSISTENCE;
 out vec4 can_out;
 
 vec4 getCan(vec2 p, sampler2D sam) {
@@ -29,5 +29,5 @@ vec4 getBlur(vec2 pos, sampler2D sam) {
 void main() {
     vec4 brush_color = texture(brush_tex, texcoord);
     vec4 can_color = getBlur(texcoord, can_tex);
-    can_out = can_color * DRAIN + (1 - DRAIN) * brush_color;
+    can_out = can_color * TRAIL_PERSISTENCE + (1 - TRAIL_PERSISTENCE) * brush_color;
 }
