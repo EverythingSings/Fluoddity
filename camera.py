@@ -2,6 +2,7 @@ import glfw
 import numpy as np
 from utilities.gl_helpers import read_shader, tryset
 import moderngl
+from state import CameraState
 
 class Camera:
     def __init__(self, ctx, sim, window):
@@ -10,9 +11,10 @@ class Camera:
         self.window = window
         self.amplitude = 1
         self.cam_brush_mode = True
+        
         # Camera state
         self.position = np.array([0.0, 0.0])  # 2D position
-        self.zoom = 1.0  # zoom factor
+        self.zoom = 1.0
 
         self.setup_rendering()
 
@@ -112,7 +114,7 @@ class Camera:
             self.cam_brush_program['window_size'].value = (width, height)
             self.cam_brush_program['amp'].value = self.amplitude
 
-            # Always use additive blending
+            #particles need additive blending 
             self.ctx.enable(moderngl.BLEND)
             self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
             self.ctx.blend_equation = moderngl.FUNC_ADD
@@ -140,10 +142,17 @@ class Camera:
             TEX_TO_VIEW = self.sim.view_tex
         return TEX_TO_VIEW
 
-    def render(self):
+    def apply_state(self, state: CameraState) -> None:
+        """Apply camera state from Orchestrator."""
+        self.position = state.position.copy()
+        self.zoom = state.zoom
+        self.amplitude = state.amplitude
+        self.cam_brush_mode = state.cam_brush_mode
+
+    def render(self, sim_going: bool = True):
         # Use accumulated texture if temporal accumulation is active AND simulation is running
         # When paused, always regenerate view to allow camera panning/zooming
-        if self.use_accumulated_view and self.accumulated_view_texture is not None and self.sim.going:
+        if self.use_accumulated_view and self.accumulated_view_texture is not None and sim_going:
             TEX_TO_VIEW = self.accumulated_view_texture
         else:
             TEX_TO_VIEW = self.generate_view_texture()
@@ -173,12 +182,13 @@ class Camera:
         if winx > 0 and winy > 0:
             self.setup_rendering()
 
-    def screen_to_tex(self, coord_tuple):
+    def screen_to_tex(self, coord_tuple, tex_size: tuple = None):
         """
         Transform screen coordinates to texture coordinates.
 
         Args:
             coord_tuple: (x, y) screen coordinates where (0,0) is top-left
+            tex_size: (width, height) of texture. If None, uses self.sim.view_tex.size
 
         Returns:
             (tex_x, tex_y) texture coordinates where (0,0) is top-left of texture
@@ -189,7 +199,9 @@ class Camera:
         x_ndc = (x_screen / width) * 2 - 1
         y_ndc = (1 - y_screen / height) * 2 - 1
 
-        tex_aspect = self.sim.view_tex.size[0] / self.sim.view_tex.size[1]
+        if tex_size is None:
+            tex_size = self.sim.view_tex.size
+        tex_aspect = tex_size[0] / tex_size[1]
         window_aspect = width / height
 
         if tex_aspect > window_aspect:
@@ -213,12 +225,13 @@ class Camera:
 
         return (tex_x, tex_y)
 
-    def tex_to_screen(self, coord_tuple):
+    def tex_to_screen(self, coord_tuple, tex_size: tuple = None):
         """
         Transform texture coordinates to screen coordinates.
 
         Args:
             coord_tuple: (tex_x, tex_y) texture coordinates where (0,0) is top-left
+            tex_size: (width, height) of texture. If None, uses self.sim.view_tex.size
 
         Returns:
             (x, y) screen coordinates where (0,0) is top-left of screen
@@ -229,7 +242,9 @@ class Camera:
         in_pos_x = tex_x * 2 - 1
         in_pos_y = tex_y * 2 - 1
 
-        tex_aspect = self.sim.view_tex.size[0] / self.sim.view_tex.size[1]
+        if tex_size is None:
+            tex_size = self.sim.view_tex.size
+        tex_aspect = tex_size[0] / tex_size[1]
         window_aspect = width / height
 
         if tex_aspect > window_aspect:

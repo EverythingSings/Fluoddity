@@ -1,7 +1,9 @@
 import moderngl
 import time
-from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, tryset
+import numpy as np
+from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, tryset, set_rule_uniform
 from utilities.temporal_accumulator import TemporalAccumulator
+from state import SimState
 
 # Global constants
 ENTITY_COUNT = 1024*1024
@@ -19,19 +21,12 @@ class Sim:
         self.setup_simulation_state()
         self.setup_shaders()
 
-        # UI settings
-        self.going = True #false means simulation is paused
-        self.speedmult = 1
-        self.generic_sliders = [.371, -.707, .116, 0.]
-        self.current_view_option = 2 #cam_brush mode
+        # View options (for UI combo box)
         self.view_options = [self.can, self.brush_tex]
         self.view_option_labels = ['can', 'brush_tex']
 
-        self.DRAIN = .938
-        self.DRAG = .504
-        self.STRAFE_SCALE = .224
-        self.TAP_STRETCH = .2
-        self.RULE_OUTPUT_GAIN = 1.0
+        # Current state (will be updated by apply_state each frame)
+        self._state = SimState()
 
     def setup_simulation_state(self):
         # Allocate state buffers
@@ -115,11 +110,11 @@ class Sim:
     def entity_update(self, ctx: moderngl.Context):
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
-        tryset(self.entity_update_program, 'sliders', self.generic_sliders)
-        tryset(self.entity_update_program, 'DRAG', self.DRAG)
-        tryset(self.entity_update_program, 'STRAFE_SCALE', self.STRAFE_SCALE)
-        tryset(self.entity_update_program, 'TAP_STRETCH', self.TAP_STRETCH)
-        tryset(self.entity_update_program, 'RULE_OUTPUT_GAIN', self.RULE_OUTPUT_GAIN)
+        tryset(self.entity_update_program, 'sliders', self._state.generic_sliders)
+        tryset(self.entity_update_program, 'DRAG', self._state.DRAG)
+        tryset(self.entity_update_program, 'STRAFE_SCALE', self._state.STRAFE_SCALE)
+        tryset(self.entity_update_program, 'TAP_STRETCH', self._state.TAP_STRETCH)
+        tryset(self.entity_update_program, 'RULE_OUTPUT_GAIN', self._state.RULE_OUTPUT_GAIN)
 
         num_workgroups = (ENTITY_COUNT + 63) // 64
         ctx.memory_barrier()
@@ -137,7 +132,7 @@ class Sim:
         self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=ENTITY_COUNT, vertices=4)
 
     def can_update(self, ctx: moderngl.Context):
-        tryset(self.canvas_update_program, 'DRAIN', self.DRAIN)
+        tryset(self.canvas_update_program, 'DRAIN', self._state.DRAIN)
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
 
@@ -172,3 +167,25 @@ class Sim:
         print('reloading shaders')
         self.setup_shaders()
         print('reload done')
+
+    def apply_state(self, state: SimState) -> None:
+        """Apply state from Orchestrator before update."""
+        self._state = state
+        # Update view_tex based on current_view_option
+        if state.current_view_option < len(self.view_options):
+            self.view_tex = self.view_options[state.current_view_option]
+
+    def apply_rule(self, rule: np.ndarray | None) -> None:
+        """Apply a rule to the shader."""
+        if rule is None:
+            set_rule_uniform(self.entity_update_program, np.zeros((10, 8), dtype=np.float32))
+        else:
+            set_rule_uniform(self.entity_update_program, rule)
+
+    def get_entity_buffer(self) -> moderngl.Buffer:
+        """Expose entity buffer for EntityPicker."""
+        return self.entities
+
+    def get_rule_buffer(self) -> moderngl.Buffer:
+        """Expose rule buffer for rule readback."""
+        return self.rule_buffer
