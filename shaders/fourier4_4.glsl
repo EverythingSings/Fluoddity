@@ -5,7 +5,6 @@ struct FourierCenter {
     vec4 amplitude;  // 4D amplitude/weight vector
 };
 
-uniform vec4 sliders;
 
 // Fourier basis evaluation
 vec4 fourier_noise(FourierCenter[10] centers, vec4 pos) {
@@ -90,6 +89,3 @@ vec4 normalized_fourier_noise(vec4 pos, float seed) {
     vec4 noise = random_fourier_noise(pos, seed);
     return noise * 0.1 + 0.5;
 }
-
-// Alias for backwards compatibility with rbf_noise calls
-#define rbf_noise fourier_noise

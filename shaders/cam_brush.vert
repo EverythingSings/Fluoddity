@@ -5,18 +5,13 @@ uniform vec2 cam_pos;
 uniform float cam_zoom;
 uniform vec2 window_size;
 
+//SYNC WITH ENTITY_UPDATE.GLSL AND BRUSH.VERT
 struct Entity {
     vec2 pos;
     vec2 vel;
-    int status_code; //0 means kill me, -1 means dead and on the free_list
     float size;
-    float spare;
-    float spare2;
+    float padding;
     vec4 color;
-    uint lock;
-    float padding0;
-    float padding1;
-    float padding2;
 };
 layout(std430, binding = 0) buffer EntityBuffer {
     Entity entities[];
@@ -96,19 +91,11 @@ void main() {
         else{
             offsets[i].x*=1+NARROWED_EDGE;
         }
-        //offsets[i]=w2a(offsets[i],entity_vel);
-        //offsets[i].x*=2.5;
-        //offsets[i].y*=4/2;
-        //offsets[i].y/=2.5;
         offsets[i]*=sprite_size;
         offsets[i]=a2w(offsets[i],entity_vel);
 
     }
-    //#endif
 
-    //DIAG           DIAG
-    //entity_pos = vec2(entities[instance_id].padding0,entities[instance_id].padding1);
-    //DIAG           DIAG
     // If not visible, render degenerate primitive (all vertices at same position)
     vec2 offset = is_visible ? offsets[vertex_id] : vec2(0.0);
     vec2 vertex_pos = entity_pos + offset;

@@ -1,6 +1,5 @@
 #version 430
 
-uniform int kernel_mode;
 uniform float amp;
 in vec2 uv;
 in vec4 pos_vel;
@@ -21,20 +20,15 @@ float gaussian(vec2 pos, float sigma) {
 }
 
 void main() {
-    vec2 scaluv = uv-.5;
+    vec2 scaluv = uv - .5;
+    float kernel_func = .5 * gaussian(scaluv, .163);
 
-    //scaluv.x*=2;
-    float kernel_func = .5*gaussian(scaluv,.163);//
-    //float kernel_func = 1.5*pow(2*(.5-length(uv-.5)),10)+.05*gaussian(uv - 0.5, 0.163);
-    float particle_kernel = mix(kernel_func, 1.0, float(kernel_mode));
-    
     // Discard fragments outside circular particle boundary or with zero alpha
     if (length(uv - 0.5) > 0.5 || view_col.w == 0.0) {
         discard;
     }
-    
-    // Output directly to viewport (equivalent to view_brush_out from brush.frag)
+
+    // Output directly to viewport
     vec3 hsv_viewcol = hsv2rgb(view_col.xyz);
-    //hsv_viewcol/=pow(length(hsv_viewcol)+.01,.575);
-    cam_brush_out = vec4(hsv_viewcol, amp*view_col.w * particle_kernel);
+    cam_brush_out = vec4(hsv_viewcol, amp * view_col.w * kernel_func);
 }

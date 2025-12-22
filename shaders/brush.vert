@@ -1,16 +1,13 @@
 #version 430 
         
 uniform vec2 canvas_resolution;
+//SYNC WITH ENTITY_UPDATE.GLSL AND CAM_BRUSH.VERT
 struct Entity {
     vec2 pos;
     vec2 vel;
-    int status_code; //0 means kill me, -1 means dead and on the free_list
     float size;
-    float spare;
-    float spare2;
+    float padding;
     vec4 color;
-    uint lock;
-    uint padding[3];
 };
 layout(std430, binding = 0) buffer EntityBuffer {
     Entity entities[];
