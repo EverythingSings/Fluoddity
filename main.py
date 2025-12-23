@@ -1,6 +1,7 @@
 import glfw
 import moderngl
 import time
+from pathlib import Path
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
@@ -42,6 +43,8 @@ class App:
         self.entity_picker = EntityPicker(self.sim.get_entity_buffer(), entity_stride)
         self.video_service = VideoRecorderService()
         self.config_saver = ConfigSaver()
+        self.configs_dir = Path("physics_configs")
+        self.configs_dir.mkdir(exist_ok=True)
 
         # Frame timing
         self.last_update_time = time.time()
@@ -149,6 +152,33 @@ class App:
                     print("Config loaded from clipboard")
                 else:
                     print("Failed to load config from clipboard")
+
+        # Handle file save (menu)
+        if ui_state.request_save_file:
+            filename = ui_state.save_filename
+            if filename:
+                current_rule = self.rule_manager.get_current_rule()
+                config_string = self.config_saver.save_to_string(ui_state.sim, current_rule)
+                filepath = self.configs_dir / f"{filename}.txt"
+                filepath.write_text(config_string)
+                print(f"Config saved to {filepath}")
+
+        # Handle file load (menu)
+        if ui_state.request_load_file:
+            filename = ui_state.load_filename
+            if filename:
+                filepath = self.configs_dir / f"{filename}.txt"
+                if filepath.exists():
+                    config_string = filepath.read_text()
+                    rule = self.config_saver.load_from_string(config_string, ui_state.sim)
+                    if rule is not None:
+                        self.rule_manager.push_rule(rule)
+                        self.sim.apply_rule(rule)
+                        print(f"Config loaded from {filepath}")
+                    else:
+                        print(f"Failed to parse config from {filepath}")
+                else:
+                    print(f"Config file not found: {filepath}")
 
     def process_camera_input(self, ui_state):
         """Handle continuous WASD/QE input for camera."""

@@ -4,6 +4,7 @@ from imgui_bundle.python_backends import glfw_backend
 import time
 import numpy as np
 import moderngl
+from pathlib import Path
 from state import UIState, SimState, CameraState, RecordingState
 
 
@@ -63,6 +64,13 @@ class UI:
         self.physics_window_interaction = False  # Track if we're interacting with sliders
         self.tooltip_start_time = time.time()  # Track time for animations
 
+        # File save/load popup state
+        self.save_popup_open = False
+        self.load_popup_open = False
+        self.save_filename_buffer = ""
+        self.config_files: list[str] = []  # List of available config files
+        self.configs_dir = Path("physics_configs")
+
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
             sim=SimState(),
@@ -83,6 +91,10 @@ class UI:
         self._toggle_recording = False
         self._request_save_config = False
         self._request_load_config = False
+        self._request_save_file = False
+        self._request_load_file = False
+        self._save_filename = ""
+        self._load_filename = ""
 
         # Display info (received from Orchestrator)
         self._display_info = {
@@ -250,6 +262,10 @@ class UI:
         self.state.toggle_recording = self._toggle_recording
         self.state.request_save_config = self._request_save_config
         self.state.request_load_config = self._request_load_config
+        self.state.request_save_file = self._request_save_file
+        self.state.request_load_file = self._request_load_file
+        self.state.save_filename = self._save_filename
+        self.state.load_filename = self._load_filename
 
         # Read clipboard content if load is requested
         if self._request_load_config:
@@ -267,6 +283,10 @@ class UI:
         self._toggle_recording = False
         self._request_save_config = False
         self._request_load_config = False
+        self._request_save_file = False
+        self._request_load_file = False
+        self._save_filename = ""
+        self._load_filename = ""
 
         return self.state
 
@@ -365,7 +385,69 @@ class UI:
 
         imgui.end()
 
-        imgui.begin('Physics Settings')
+        imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
+
+        # Menu bar
+        if imgui.begin_menu_bar():
+            if imgui.begin_menu("File"):
+                if imgui.menu_item("Save...", "", False)[0]:
+                    self.save_popup_open = True
+                    self.save_filename_buffer = ""
+                if imgui.menu_item("Load...", "", False)[0]:
+                    self.load_popup_open = True
+                    self._refresh_config_files()
+                imgui.end_menu()
+            imgui.end_menu_bar()
+
+        # Save popup modal
+        if self.save_popup_open:
+            imgui.open_popup("Save Config")
+
+        if imgui.begin_popup_modal("Save Config", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text("Enter filename (without extension):")
+            _, self.save_filename_buffer = imgui.input_text(
+                "##filename",
+                self.save_filename_buffer,
+            )
+
+            imgui.separator()
+            if imgui.button("Save", imgui.ImVec2(120, 0)):
+                if self.save_filename_buffer.strip():
+                    self._save_filename = self.save_filename_buffer.strip()
+                    self._request_save_file = True
+                self.save_popup_open = False
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self.save_popup_open = False
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Load popup modal
+        if self.load_popup_open:
+            imgui.open_popup("Load Config")
+
+        if imgui.begin_popup_modal("Load Config", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text("Select a config file:")
+            imgui.separator()
+
+            if not self.config_files:
+                imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files found")
+            else:
+                for filename in self.config_files:
+                    if imgui.selectable(filename, False)[0]:
+                        self._load_filename = filename
+                        self._request_load_file = True
+                        self.load_popup_open = False
+                        imgui.close_current_popup()
+                        break
+
+            imgui.separator()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self.load_popup_open = False
+                imgui.close_current_popup()
+            imgui.end_popup()
+
         _, self.state.sim.AXIAL_FORCE = imgui.slider_float(
             label="Axial Force",
             v=self.state.sim.AXIAL_FORCE,
@@ -582,6 +664,14 @@ class UI:
 
         # Reset interaction flag for next frame
         self.physics_window_interaction = False
+
+    def _refresh_config_files(self):
+        """Scan physics_configs directory for .txt files."""
+        self.config_files = []
+        if self.configs_dir.exists():
+            for f in sorted(self.configs_dir.glob("*.txt")):
+                # Store just the stem (filename without extension)
+                self.config_files.append(f.stem)
 
     def cleanup(self):
         self.tooltip_fbo.release()

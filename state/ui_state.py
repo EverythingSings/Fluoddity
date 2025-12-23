@@ -29,3 +29,9 @@ class UIState:
     request_save_config: bool = False
     request_load_config: bool = False
     clipboard_text: str = ""  # For passing clipboard content to orchestrator
+
+    # File save/load (menu bar)
+    request_save_file: bool = False
+    request_load_file: bool = False
+    save_filename: str = ""  # Filename to save to (without extension)
+    load_filename: str = ""  # Filename to load from (without extension)
