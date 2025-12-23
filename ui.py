@@ -65,6 +65,7 @@ class UI:
         # Tooltip state - track which slider was last hovered
         self.last_hovered_slider = None
         self.last_hovered_description = ""
+        self.physics_window_interaction = False  # Track if we're interacting with sliders
 
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
@@ -402,14 +403,28 @@ class UI:
             self.last_hovered_slider = label
             self.last_hovered_description = description
 
+        # Track if any item is being actively manipulated (dragged)
+        if imgui.is_item_active():
+            self.physics_window_interaction = True
+
     def render_physics_tooltip(self):
         """Render the tooltip if mouse is over the Physics Settings window."""
-        # Only show tooltip if window is hovered and we have a slider tracked
-        if not imgui.is_window_hovered():
+        # Check if physics settings window is hovered or if we're actively interacting with it
+        physics_window_hovered = imgui.is_window_hovered()
+
+        # First, check if we should show the tooltip at all
+        # We need to render it at least once to check if IT is hovered
+        should_show = (physics_window_hovered or
+                      self.physics_window_interaction or
+                      self.last_hovered_slider is not None)
+
+        if not should_show:
             self.last_hovered_slider = None
+            self.physics_window_interaction = False
             return
 
         if self.last_hovered_slider is None:
+            self.physics_window_interaction = False
             return
 
         # Get the position and size of the anchor window
@@ -423,14 +438,17 @@ class UI:
         # Set next window position
         imgui.set_next_window_pos(imgui.ImVec2(tooltip_x, tooltip_y))
 
-        # Begin a borderless, no-move tooltip window
+        # Begin a borderless, no-move, no-focus tooltip window
+        # Note: no_focus_on_appearing allows clicking to gain focus, just not automatic focus
         imgui.begin(
             "##SliderTooltip",
             flags=(
                 imgui.WindowFlags_.no_title_bar |
                 imgui.WindowFlags_.no_move |
                 imgui.WindowFlags_.no_resize |
-                imgui.WindowFlags_.always_auto_resize
+                imgui.WindowFlags_.always_auto_resize |
+                imgui.WindowFlags_.no_focus_on_appearing |
+                imgui.WindowFlags_.no_nav
             )
         )
 
@@ -446,7 +464,18 @@ class UI:
         imgui.separator()
         imgui.text_wrapped(self.last_hovered_description)
 
+        # Check if tooltip itself is hovered (must be after content is rendered)
+        tooltip_hovered = imgui.is_window_hovered()
+
         imgui.end()
+
+        # Now decide if we should keep the tooltip visible next frame
+        # Keep it if: physics window hovered, tooltip hovered, or actively dragging
+        if not physics_window_hovered and not tooltip_hovered and not self.physics_window_interaction:
+            self.last_hovered_slider = None
+
+        # Reset interaction flag for next frame
+        self.physics_window_interaction = False
 
     def cleanup(self):
         self.tooltip_texture.release()
