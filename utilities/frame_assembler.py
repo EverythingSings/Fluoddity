@@ -1,8 +1,8 @@
 import moderngl
 import numpy as np
 
-def create_temporal_accumulation_shader(ctx, motion_blur_samples):
-    """Create a shader program for temporal accumulation (no spatial supersampling)."""
+def create_frame_assembly_shader(ctx, total_samples):
+    """Create a shader program for frame assembly with temporal accumulation and gamma correction."""
 
     vertex_shader = """
     #version 330 core
@@ -20,6 +20,7 @@ def create_temporal_accumulation_shader(ctx, motion_blur_samples):
     uniform sampler2D input_frame;
     uniform sampler2D accumulation_buffer;
     uniform bool is_first_frame;
+    uniform bool final_sample;
 
     in vec2 uv;
     out vec4 fragColor;
@@ -29,7 +30,7 @@ def create_temporal_accumulation_shader(ctx, motion_blur_samples):
         vec3 current_color = texture(input_frame, uv).rgb;
 
         // Divide by number of samples (for averaging)
-        current_color /= {motion_blur_samples}.0;
+        current_color /= {total_samples}.0;
 
         // Add to or replace accumulation
         if (is_first_frame) {{
@@ -38,14 +39,23 @@ def create_temporal_accumulation_shader(ctx, motion_blur_samples):
             vec3 previous_accumulation = texture(accumulation_buffer, uv).rgb;
             fragColor = vec4(previous_accumulation + current_color, 1.0);
         }}
+
+        // Apply gamma correction only on final sample (AFTER accumulation)
+        if (final_sample) {{
+            // SYNC WITH cam_brush_pp.frag line 42-43
+            float len = length(fragColor.xyz);
+            if (len > 0.0) {{
+                fragColor.xyz /= pow(len, 0.575);
+            }}
+        }}
     }}
     """
 
     return ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
 
 
-def setup_temporal_accumulation(ctx, width, height, motion_blur_samples):
-    """Set up GPU-based temporal accumulation system."""
+def setup_frame_assembly(ctx, width, height, total_samples):
+    """Set up GPU-based frame assembly system."""
 
     # Create accumulation texture and framebuffer
     accumulation_texture = ctx.texture((width, height), 4, dtype='f4')
@@ -54,7 +64,7 @@ def setup_temporal_accumulation(ctx, width, height, motion_blur_samples):
     accumulation_fbo = ctx.framebuffer(color_attachments=[accumulation_texture])
 
     # Create shader program
-    shader = create_temporal_accumulation_shader(ctx, motion_blur_samples)
+    shader = create_frame_assembly_shader(ctx, total_samples)
 
     # Create a fullscreen quad
     vertices = np.array([
@@ -75,45 +85,44 @@ def setup_temporal_accumulation(ctx, width, height, motion_blur_samples):
         'accumulation_texture': accumulation_texture,
         'shader': shader,
         'vao': vao,
-        'motion_blur_samples': motion_blur_samples,
-        'frame_count': 0,
+        'total_samples': total_samples,
         'width': width,
         'height': height
     }
 
 
-class TemporalAccumulator:
-    """GPU-based temporal accumulation for motion blur in the main view."""
+class FrameAssembler:
+    """GPU-based frame assembly with temporal accumulation and gamma correction."""
 
     def __init__(self, ctx, texture):
         """
-        Initialize temporal accumulator.
+        Initialize frame assembler.
 
         Args:
             ctx: moderngl.Context
-            texture: The texture to accumulate (determines size)
+            texture: The texture to assemble (determines size)
         """
         self.ctx = ctx
         self.width, self.height = texture.size
         self.resources = None
-        self.current_samples = 1
 
-    def accumulate_frame(self, input_texture, motion_blur_samples):
+    def assemble_frame(self, input_texture, total_samples, current_sample_index):
         """
-        Accumulate a frame into the temporal buffer.
+        Accumulate a frame and optionally apply gamma correction.
 
         Args:
-            input_texture: moderngl.Texture to accumulate
-            motion_blur_samples: Number of frames to accumulate before outputting
+            input_texture: moderngl.Texture to accumulate (PRE-gamma)
+            total_samples: Number of frames in accumulation cycle
+            current_sample_index: 0-indexed sample number (0 to total_samples-1)
 
         Returns:
-            The accumulated texture if ready, None if still accumulating
+            The assembled texture if final sample, None if still accumulating
         """
         # Check if we need to recreate resources
         input_width, input_height = input_texture.size
         recreate_resources = (
             self.resources is None or
-            self.resources['motion_blur_samples'] != motion_blur_samples or
+            self.resources['total_samples'] != total_samples or
             self.resources['width'] != input_width or
             self.resources['height'] != input_height
         )
@@ -124,15 +133,15 @@ class TemporalAccumulator:
                 self.cleanup_resources()
 
             # Create new resources
-            self.resources = setup_temporal_accumulation(
-                self.ctx, input_width, input_height, motion_blur_samples
+            self.resources = setup_frame_assembly(
+                self.ctx, input_width, input_height, total_samples
             )
             self.width = input_width
             self.height = input_height
 
-        # Determine if this is the first frame of a new accumulation cycle
-        is_first_frame = (self.resources['frame_count'] % motion_blur_samples) == 0
-        self.resources['frame_count'] += 1
+        # Determine frame position in accumulation cycle
+        is_first_frame = (current_sample_index == 0)
+        final_sample = (current_sample_index == total_samples - 1)
 
         # Bind textures
         input_texture.use(location=0)  # input_frame
@@ -142,6 +151,7 @@ class TemporalAccumulator:
         self.resources['shader']['input_frame'] = 0
         self.resources['shader']['accumulation_buffer'] = 1
         self.resources['shader']['is_first_frame'] = is_first_frame
+        self.resources['shader']['final_sample'] = final_sample
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()
@@ -149,22 +159,21 @@ class TemporalAccumulator:
             self.resources['accumulation_fbo'].clear()
         self.resources['vao'].render()
 
-        # Check if we should return the accumulated result
-        if self.resources['frame_count'] % motion_blur_samples == 0:
+        # Return assembled texture only on final sample
+        if final_sample:
             return self.resources['accumulation_texture']
 
         return None
 
-    def get_accumulated_texture(self):
-        """Get the current accumulated texture (even if not fully accumulated)."""
+    def get_current_texture(self):
+        """Get the current assembled texture (even if not fully assembled)."""
         if self.resources is None:
             return None
         return self.resources['accumulation_texture']
 
     def reset(self):
-        """Clear the accumulation buffer and reset frame count."""
+        """Clear the accumulation buffer."""
         if self.resources is not None:
-            self.resources['frame_count'] = 0
             self.resources['accumulation_fbo'].clear()
 
     def cleanup_resources(self):

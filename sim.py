@@ -2,7 +2,6 @@ import moderngl
 import time
 import numpy as np
 from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, tryset, set_rule_uniform
-from utilities.temporal_accumulator import TemporalAccumulator
 from state import SimState
 
 # Global constants
@@ -51,10 +50,6 @@ class Sim:
 
         # For camera to use
         self.view_tex = self.can
-
-        # Create temporal accumulator for motion blur
-        self.temporal_accumulator = TemporalAccumulator(self.ctx, self.can)
-        self.accumulated_view_tex = self.ctx.texture(CANVAS_SHAPE, 4, dtype='f4')
 
         # Clear canvases initially
         self.canvas.use()

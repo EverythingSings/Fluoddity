@@ -159,7 +159,7 @@ void main() {
     vec2 strafe =vec2(0);
     vec4 noiseval=sym(strafe,ltap.xy,rtap.xy,e.vel,current_rule);
 
-    noiseval *= GLOBAL_FORCE_MULT;
+    noiseval.xy *= GLOBAL_FORCE_MULT;
     strafe *= GLOBAL_FORCE_MULT;
 
     vec2 force=(noiseval.xy);

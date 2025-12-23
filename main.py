@@ -72,9 +72,9 @@ class App:
         # 3. Process continuous input (camera movement)
         self.process_camera_input(ui_state)
 
-        # 4. Lock speedmult if recording
+        # 4. Lock speedmult to motion_blur_samples if recording
         if self.video_service.is_active():
-            ui_state.sim.speedmult = 1
+            ui_state.sim.speedmult = ui_state.recording.motion_blur_samples
 
         # 5. Apply state to components
         self.sim.apply_state(ui_state.sim)
@@ -243,34 +243,36 @@ class App:
             ui_state.camera.zoom *= (1.0 + zoom_speed)
 
     def run_simulation_frame(self, ui_state):
-        """Run simulation step(s) and handle video recording."""
+        """Run simulation step(s) with frame assembly and video recording."""
         speedmult = ui_state.sim.speedmult
 
-        if speedmult > 1:
-            # Motion blur accumulation
-            for step in range(speedmult):
-                self.sim.update(self.ctx)
-                view_tex = self.camera.generate_view_texture()
-                accumulated_tex = self.sim.temporal_accumulator.accumulate_frame(
-                    view_tex, speedmult
-                )
-
-            if accumulated_tex is not None:
-                self.camera.accumulated_view_texture = accumulated_tex
-                self.camera.use_accumulated_view = True
-        else:
-            # Normal operation: single step, no accumulation
+        # ALWAYS use frame assembler (even at speedmult=1)
+        # Run simulation steps and accumulate frames
+        for step in range(speedmult):
             self.sim.update(self.ctx)
-            self.camera.use_accumulated_view = False
 
-        # Video recording
-        self.video_service.process_frame(
-            self.camera.ctx,
-            self.camera.cam_brush_target,
-            ui_state.recording.max_frames,
-            ui_state.recording.motion_blur_samples,
-            ui_state.recording.supersample_k
-        )
+            # Generate raw view texture (PRE-gamma correction)
+            raw_view_tex = self.camera.generate_view_texture()
+
+            # Assemble frame (applies gamma correction on final sample)
+            assembled_tex = self.camera.frame_assembler.assemble_frame(
+                raw_view_tex,
+                total_samples=speedmult,
+                current_sample_index=step
+            )
+
+            # Only process when accumulation cycle completes
+            if assembled_tex is not None:
+                self.camera.assembled_texture = assembled_tex
+
+                # Send to video recorder if recording
+                if self.video_service.is_active():
+                    self.video_service.process_frame(
+                        self.camera.ctx,
+                        assembled_tex,  # Already gamma-corrected and temporally complete
+                        ui_state.recording.max_frames,
+                        ui_state.recording.supersample_k
+                    )
 
     def cleanup(self):
         self.video_service.cleanup()

@@ -3,6 +3,7 @@ import numpy as np
 from utilities.gl_helpers import read_shader, tryset
 import moderngl
 from state import CameraState
+from utilities.frame_assembler import FrameAssembler
 
 class Camera:
     def __init__(self, ctx, sim, window):
@@ -58,18 +59,6 @@ class Camera:
             print('Cambrush shader failed')
             print(e)
 
-        self.cam_brush_pp_vertex_shader = read_shader('shaders/cam_brush_pp.vert')
-        self.cam_brush_pp_fragment_shader = read_shader('shaders/cam_brush_pp.frag')
-
-        try:
-            self.cam_brush_postprocess_program = self.ctx.program(
-                vertex_shader=self.cam_brush_pp_vertex_shader,
-                fragment_shader=self.cam_brush_pp_fragment_shader
-            )
-        except Exception as e:
-            print('Cambrush postprocess shader failed')
-            print(e)
-
         # Create vertex array
         vbo = self.ctx.buffer(quad_vertices.tobytes())
         ibo = self.ctx.buffer(quad_indices.tobytes())
@@ -82,27 +71,19 @@ class Camera:
             self.cam_brush_program,
             []
         )
-        self.cam_brush_postprocess_vao = self.ctx.vertex_array(
-            self.cam_brush_postprocess_program,
-            []
-        )
 
         self.cam_brush_target = self.ctx.texture(glfw.get_framebuffer_size(self.window), 4, dtype='f4')
         self.cam_brush_fbo = self.ctx.framebuffer([self.cam_brush_target])
 
-        self.cam_brush_pp_target = self.ctx.texture(glfw.get_framebuffer_size(self.window), 4, dtype='f4')
-        self.cam_brush_pp_fbo = self.ctx.framebuffer([self.cam_brush_pp_target])
-
-        # Temporal accumulation
-        self.use_accumulated_view = False
-        self.accumulated_view_texture = None
+        # Frame assembler (temporal accumulation + gamma correction)
+        self.frame_assembler = FrameAssembler(self.ctx, self.cam_brush_target)
+        self.assembled_texture = None
 
     def generate_view_texture(self):
-        """Generate the appropriate view texture based on current mode without rendering to screen."""
-
+        """Generate raw view texture (PRE-gamma correction) based on current mode."""
 
         if self.cam_brush_mode:
-            TEX_TO_VIEW = self.cam_brush_pp_target
+            # Render particles to cam_brush_target
             self.cam_brush_fbo.use()
             width, height = glfw.get_framebuffer_size(self.window)
             self.ctx.viewport = (0, 0, width, height)
@@ -114,33 +95,19 @@ class Camera:
             self.cam_brush_program['window_size'].value = (width, height)
             self.cam_brush_program['BRIGHTNESS'].value = self.BRIGHTNESS
 
-            #particles need additive blending 
+            # Particles need additive blending
             self.ctx.enable(moderngl.BLEND)
             self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
             self.ctx.blend_equation = moderngl.FUNC_ADD
 
             self.cam_brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=self.sim.entity_count, vertices=4)
 
-            self.cam_brush_pp_fbo.use()
             self.ctx.disable(moderngl.BLEND)
-            width, height = glfw.get_framebuffer_size(self.window)
-            self.ctx.viewport = (0, 0, width, height)
 
-            self.cam_brush_target.use(location=0)
-            self.cam_brush_postprocess_program['brush'] = 0
-            self.sim.can.use(location=1)
-            tryset(self.cam_brush_postprocess_program, 'can', 1)
-            tryset(self.cam_brush_postprocess_program, 'cam_pos', tuple(self.position))
-            tryset(self.cam_brush_postprocess_program, 'cam_zoom', self.zoom)
-            tryset(self.cam_brush_postprocess_program, 'tex_size', TEX_TO_VIEW.size)
-            tryset(self.cam_brush_postprocess_program, 'window_size', glfw.get_framebuffer_size(self.window))
-
-            self.cam_brush_postprocess_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
-
-            
+            # Return raw texture (NO gamma correction - that happens in FrameAssembler)
+            return self.cam_brush_target
         else:
-            TEX_TO_VIEW = self.sim.view_tex
-        return TEX_TO_VIEW
+            return self.sim.view_tex
 
     def apply_state(self, state: CameraState) -> None:
         """Apply camera state from Orchestrator."""
@@ -150,11 +117,12 @@ class Camera:
         self.cam_brush_mode = state.cam_brush_mode
 
     def render(self, sim_going: bool = True):
-        # Use accumulated texture if temporal accumulation is active AND simulation is running
-        # When paused, always regenerate view to allow camera panning/zooming
-        if self.use_accumulated_view and self.accumulated_view_texture is not None and sim_going:
-            TEX_TO_VIEW = self.accumulated_view_texture
+        # ALWAYS use assembled texture when simulation is running
+        # When paused, regenerate view to allow camera panning/zooming
+        if sim_going and self.assembled_texture is not None:
+            TEX_TO_VIEW = self.assembled_texture
         else:
+            # When paused or no assembled texture yet, generate fresh frame
             TEX_TO_VIEW = self.generate_view_texture()
 
         # Render to screen

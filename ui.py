@@ -362,11 +362,16 @@ class UI:
         )
         imgui.text(f"Texture Size: {tex_size[0]}x{tex_size[1]}")
 
-        # Lock speedmult to 1 when recording video
+        # Lock speedmult to motion_blur_samples when recording video
         if recording_active:
-            self.state.sim.speedmult = 1
+            locked_value = self.state.recording.motion_blur_samples
             imgui.begin_disabled()
-            imgui.slider_int(label="Speed Mult (locked)", v=1, v_min=1, v_max=6)
+            imgui.slider_int(
+                label=f"Speed Mult (locked to {locked_value})",
+                v=locked_value,
+                v_min=1,
+                v_max=6
+            )
             imgui.end_disabled()
         else:
             _, self.state.sim.speedmult = imgui.slider_int(
@@ -399,9 +404,25 @@ class UI:
         _, self.physics_tooltips_enabled = imgui.checkbox("Physics tooltips", self.physics_tooltips_enabled)
 
         imgui.separator()
-        imgui.text("Screen Recording (Must have speedmult == 1):")
+        imgui.text("Screen Recording (speedmult locked to motion blur samples):")
         _, self.state.recording.max_frames = imgui.input_int('Max Frames', self.state.recording.max_frames)
-        _, self.state.recording.motion_blur_samples = imgui.input_int('Motion Blur Samples', self.state.recording.motion_blur_samples)
+
+        # Lock motion_blur_samples during recording
+        if recording_active:
+            imgui.begin_disabled()
+
+        _, self.state.recording.motion_blur_samples = imgui.input_int(
+            'Motion Blur Samples',
+            self.state.recording.motion_blur_samples
+        )
+
+        if recording_active:
+            imgui.end_disabled()
+            imgui.text_colored(
+                imgui.ImVec4(1.0, 0.8, 0.0, 1.0),
+                "(Locked during recording)"
+            )
+
         _, self.state.recording.supersample_k = imgui.input_int('Supersample Kernel Width', self.state.recording.supersample_k)
 
         imgui.separator()
