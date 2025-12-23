@@ -27,3 +27,6 @@ Thumbs.db
 
 # ImGui
 imgui.ini
+
+# Physics configs (user-generated)
+physics_configs/*.txt

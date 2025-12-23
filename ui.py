@@ -439,22 +439,40 @@ class UI:
                     if not self.config_files:
                         imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files")
                     else:
+                        # Calculate max filename width to size the submenu properly
+                        max_text_width = 0.0
+                        for fn in self.config_files:
+                            text_size = imgui.calc_text_size(fn)
+                            if text_size.x > max_text_width:
+                                max_text_width = text_size.x
+
+                        # Add padding for the X button (25px) and some margin
+                        total_width = max_text_width + 40
+
                         hovered_this_frame = None
                         for filename in self.config_files:
-                            # Config name as selectable
-                            clicked, _ = imgui.selectable(filename, False)
+                            # Selectable for filename with calculated width
+                            clicked, _ = imgui.selectable(
+                                filename, False,
+                                imgui.SelectableFlags_.no_auto_close_popups,
+                                imgui.ImVec2(max_text_width + 10, 0)
+                            )
 
-                            # Check if this item is hovered
+                            # Check if filename is hovered
                             if imgui.is_item_hovered():
                                 hovered_this_frame = filename
 
-                            # Delete button on same line (far right with padding)
-                            imgui.same_line(imgui.get_content_region_avail().x + imgui.get_cursor_pos_x() - 20)
+                            # X button on same line (right after the selectable)
+                            imgui.same_line()
                             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
                             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
                             if imgui.small_button(f"X##{filename}"):
                                 self.delete_confirm_filename = filename
                             imgui.pop_style_color(2)
+
+                            # Also check hover on X button for preview
+                            if imgui.is_item_hovered():
+                                hovered_this_frame = filename
 
                             if clicked:
                                 # Finalize selection
