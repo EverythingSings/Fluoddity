@@ -49,15 +49,9 @@ class UI:
         # Set up event callbacks
         self.setup_callbacks()
 
-        # Create tooltip texture
+        # Create tooltip shader and texture
         self.tooltip_texture_size = 128
-        pattern_data = create_test_pattern(self.tooltip_texture_size)
-        self.tooltip_texture = self.ctx.texture(
-            size=(self.tooltip_texture_size, self.tooltip_texture_size),
-            components=4,
-            data=pattern_data.tobytes()
-        )
-        self.tooltip_texture_id = imgui.ImTextureRef(self.tooltip_texture.glo)
+        self.setup_tooltip_shader()
 
         # UI-only state
         self.show_demo_window = False
@@ -67,6 +61,7 @@ class UI:
         self.last_hovered_slider = None
         self.last_hovered_description = ""
         self.physics_window_interaction = False  # Track if we're interacting with sliders
+        self.tooltip_start_time = time.time()  # Track time for animations
 
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
@@ -115,6 +110,51 @@ class UI:
         glfw.set_key_callback(self.window, self.key_callback)
         glfw.set_char_callback(self.window, self.char_callback)
         glfw.set_framebuffer_size_callback(self.window, self.framebuffer_size_callback)
+
+    def setup_tooltip_shader(self):
+        """Create shader program and texture for tooltip graphics."""
+        # Simple vertex shader for full-screen quad
+        vert_shader = """
+        #version 150
+        in vec2 in_vert;
+        out vec2 texcoord;
+        void main() {
+            texcoord = in_vert * 0.5 + 0.5;
+            gl_Position = vec4(in_vert, 0.0, 1.0);
+        }
+        """
+
+        # Load fragment shader
+        with open('shaders/tooltip_graphic.frag', 'r') as f:
+            frag_shader = f.read()
+
+        # Create shader program
+        self.tooltip_program = self.ctx.program(
+            vertex_shader=vert_shader,
+            fragment_shader=frag_shader
+        )
+
+        # Create full-screen quad
+        vertices = np.array([
+            -1.0, -1.0,
+             1.0, -1.0,
+             1.0,  1.0,
+            -1.0,  1.0,
+        ], dtype='f4')
+
+        vbo = self.ctx.buffer(vertices.tobytes())
+        self.tooltip_vao = self.ctx.vertex_array(
+            self.tooltip_program,
+            [(vbo, '2f', 'in_vert')]
+        )
+
+        # Create framebuffer and texture for rendering
+        self.tooltip_texture = self.ctx.texture(
+            size=(self.tooltip_texture_size, self.tooltip_texture_size),
+            components=4
+        )
+        self.tooltip_fbo = self.ctx.framebuffer(color_attachments=[self.tooltip_texture])
+        self.tooltip_texture_id = imgui.ImTextureRef(self.tooltip_texture.glo)
 
     def framebuffer_size_callback(self, window, width, height):
         # Debounce: just record the time, actual reload happens via request_reload flag
@@ -318,14 +358,14 @@ class UI:
         self.render_custom_tooltip("Lateral Force",
             "Controls the force applied perpendicular to the direction particles are facing. Affects sideways movement and strafing behavior.")
 
-        _, self.state.sim.RULE_SENSITIVITY = imgui.slider_float(
-            label="Rule Sensitivity",
-            v=self.state.sim.RULE_SENSITIVITY,
+        _, self.state.sim.SENSOR_GAIN = imgui.slider_float(
+            label="Sensor Gain",
+            v=self.state.sim.SENSOR_GAIN,
             v_min=-1.0,
             v_max=1.0,
         )
-        self.render_custom_tooltip("Rule Sensitivity",
-            "Determines how strongly particles respond to interaction rules. Higher values make particles more reactive to their neighbors.")
+        self.render_custom_tooltip("Sensor Gain",
+            "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to their neighbors.")
 
         _, self.state.sim.MUTATION_SCALE = imgui.slider_float(
             label="Mutation Scale",
@@ -395,6 +435,31 @@ class UI:
 
         imgui.end()
 
+    def update_tooltip_texture(self):
+        """Render the tooltip graphic to texture using shader."""
+        # Set time uniform for animations
+        current_time = time.time() - self.tooltip_start_time
+        self.tooltip_program['time'] = current_time * 3.0  # Speed up animation a bit
+
+        # Set sensor angle (raw value, not normalized)
+        self.tooltip_program['SENSOR_ANGLE'] = self.state.sim.SENSOR_ANGLE
+
+        # Set MODE bools based on which slider is hovered
+        self.tooltip_program['AXIAL_MODE'] = (self.last_hovered_slider == "Axial Force")
+        self.tooltip_program['LATERAL_MODE'] = (self.last_hovered_slider == "Lateral Force")
+        self.tooltip_program['SENSOR_MODE'] = (self.last_hovered_slider == "Sensor Gain")
+        self.tooltip_program['DRAG_MODE'] = (self.last_hovered_slider == "Drag")
+        self.tooltip_program['ANGLE_MODE'] = (self.last_hovered_slider == "Sensor Angle")
+        self.tooltip_program['DISTANCE_MODE'] = (self.last_hovered_slider == "Sensor Distance")
+        self.tooltip_program['TRAIL_MODE'] = (self.last_hovered_slider == "Trail Persistence")
+        self.tooltip_program['GLOBAL_MODE'] = (self.last_hovered_slider == "Global Force Multiplier")
+
+        # Render to framebuffer
+        self.tooltip_fbo.use()
+        self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+        self.tooltip_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
+        self.ctx.screen.use()  # Return to default framebuffer
+
     def render_custom_tooltip(self, label: str, description: str):
         """Render a custom tooltip anchored to the right edge of a window.
 
@@ -437,6 +502,9 @@ class UI:
             self.physics_window_interaction = False
             return
 
+        # Update the tooltip texture with current slider values
+        self.update_tooltip_texture()
+
         # Get the position and size of the anchor window
         window_pos = imgui.get_window_pos()
         window_size = imgui.get_window_size()
@@ -462,7 +530,7 @@ class UI:
             )
         )
 
-        # Display the test pattern texture
+        # Display the shader-rendered tooltip graphic
         imgui.image(
             self.tooltip_texture_id,
             imgui.ImVec2(self.tooltip_texture_size, self.tooltip_texture_size)
@@ -488,5 +556,7 @@ class UI:
         self.physics_window_interaction = False
 
     def cleanup(self):
+        self.tooltip_fbo.release()
         self.tooltip_texture.release()
+        self.tooltip_program.release()
         self.imgui_renderer.shutdown()

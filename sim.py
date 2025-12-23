@@ -112,7 +112,7 @@ class Sim:
         tryset(self.entity_update_program, 'canvas', 1)
         tryset(self.entity_update_program, 'AXIAL_FORCE', self._state.AXIAL_FORCE)
         tryset(self.entity_update_program, 'LATERAL_FORCE', self._state.LATERAL_FORCE)
-        tryset(self.entity_update_program, 'RULE_SENSITIVITY', self._state.RULE_SENSITIVITY)
+        tryset(self.entity_update_program, 'SENSOR_GAIN', self._state.SENSOR_GAIN)
         tryset(self.entity_update_program, 'MUTATION_SCALE', self._state.MUTATION_SCALE)
         tryset(self.entity_update_program, 'DRAG', self._state.DRAG)
         tryset(self.entity_update_program, 'STRAFE_POWER', self._state.STRAFE_POWER)

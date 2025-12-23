@@ -11,11 +11,11 @@ class SimState:
     # Physics parameters
     AXIAL_FORCE: float = 0.371
     LATERAL_FORCE: float = -0.707
-    RULE_SENSITIVITY: float = 0.116
+    SENSOR_GAIN: float = 0.116
     MUTATION_SCALE: float = 0.0
     DRAG: float = 0.504
     STRAFE_POWER: float = 0.224
-    SENSOR_ANGLE: float = 0.2
+    SENSOR_ANGLE: float = .45
     GLOBAL_FORCE_MULT: float = 1.0
     SENSOR_DISTANCE: float = 1.0
     TRAIL_PERSISTENCE: float = 0.938

@@ -38,7 +38,7 @@
             vec2 mags = (abs(screen_tex_to_can(texcoord)-.5));
             if(mags.x>.5||mags.y>.5){can=vec4(0);}
             fragColor=texture(brush,texcoord);
-            //SYNC WITH SAVE_FRAME_GPU.PY!!!!!!!!!!!!
+            //SYNC WITH SAVE_FRAME_GPU.PY!!!!!!!!!!!! 
             if(length(fragColor.xyz)>0)
             fragColor.xyz/=pow(length(fragColor.xyz),.575);
         }

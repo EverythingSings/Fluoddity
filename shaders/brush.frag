@@ -22,5 +22,5 @@ void main() {
     float kernel_func = gaussian(uv - .5, .163);
     if (length(uv - .5) > .5 || view_col.w == 0) { discard; }
     vec2 vel = pos_vel.zw;
-    brush_out = vec4(vel, 1, 1) * kernel_func;
+    brush_out = vec4(vel, .01, 1) * kernel_func;
 }

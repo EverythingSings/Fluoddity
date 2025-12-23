@@ -30,7 +30,7 @@ uniform float GLOBAL_FORCE_MULT;
 uniform float SENSOR_DISTANCE;
 uniform float AXIAL_FORCE;
 uniform float LATERAL_FORCE;
-uniform float RULE_SENSITIVITY;
+uniform float SENSOR_GAIN;
 uniform float MUTATION_SCALE;
 
 
@@ -136,13 +136,15 @@ void main() {
     Entity e=entities[index];
     float cohort = get_cohort(index);
 
-    float samplen = 3*.0016 * SENSOR_DISTANCE;
+    float samplen = .005 * SENSOR_DISTANCE;
     vec2 vds = safenorm(e.vel)*samplen;
-    vec2 vds_prime = vds;
-    pR(vds_prime,3.14159*.5); //vds_prime should be perpendicular to vds
+    vec2 left_sensor_offset = vds;
+    vec2 right_sensor_offset = vds;
+    pR(left_sensor_offset,SENSOR_ANGLE*PI);
+    pR(right_sensor_offset,-SENSOR_ANGLE*PI);
 
-    vec4 ltap = get_can(e.pos+vds_prime*1+SENSOR_ANGLE*vds);
-    vec4 rtap = get_can(e.pos-vds_prime*1+SENSOR_ANGLE*vds);
+    vec4 ltap = get_can(e.pos+left_sensor_offset);
+    vec4 rtap = get_can(e.pos+right_sensor_offset);
 
     Rule current_rule=target_rule;
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
@@ -150,12 +152,10 @@ void main() {
     }
     mutate_rule(current_rule,MUTATION_SCALE,floor(cohort));
 
-    float tap_scaling = 15.542*.5*RULE_SENSITIVITY*5;
+    float tap_scaling = 38.855*SENSOR_GAIN;
     ltap *= tap_scaling;
     rtap *= tap_scaling;
 
-    pR(ltap.xy,-PI/3);
-    pR(rtap.xy,PI/3);
     vec2 strafe =vec2(0);
     vec4 noiseval=sym(strafe,ltap.xy,rtap.xy,e.vel,current_rule);
 

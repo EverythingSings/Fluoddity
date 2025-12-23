@@ -35,7 +35,7 @@ void main() {
     // Read entity data
     vec2 entity_pos = entities[instance_id].pos;
     vec2 entity_vel = entities[instance_id].vel;
-    float size = entities[instance_id].size*1.;
+    float size = entities[instance_id].size;
     // Calculate particle center in viewport coordinates for culling
     vec2 canvas_ndc_center = entity_pos * vec2(1, canvas_resolution.x/canvas_resolution.y);
     
