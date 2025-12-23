@@ -61,6 +61,7 @@ class UI:
 
         # UI-only state
         self.show_demo_window = False
+        self.physics_tooltips_enabled = True  # Control tooltip visibility
 
         # Tooltip state - track which slider was last hovered
         self.last_hovered_slider = None
@@ -281,6 +282,9 @@ class UI:
         imgui.text(f"Zoom: {self.state.camera.zoom:.2f}")
 
         imgui.separator()
+        _, self.physics_tooltips_enabled = imgui.checkbox("Physics tooltips", self.physics_tooltips_enabled)
+
+        imgui.separator()
         imgui.text("Screen Recording (Must have speedmult == 1):")
         _, self.state.recording.max_frames = imgui.input_int('Max Frames', self.state.recording.max_frames)
         _, self.state.recording.motion_blur_samples = imgui.input_int('Motion Blur Samples', self.state.recording.motion_blur_samples)
@@ -409,6 +413,12 @@ class UI:
 
     def render_physics_tooltip(self):
         """Render the tooltip if mouse is over the Physics Settings window."""
+        # Early exit if tooltips are disabled
+        if not self.physics_tooltips_enabled:
+            self.last_hovered_slider = None
+            self.physics_window_interaction = False
+            return
+
         # Check if physics settings window is hovered or if we're actively interacting with it
         physics_window_hovered = imgui.is_window_hovered()
 
