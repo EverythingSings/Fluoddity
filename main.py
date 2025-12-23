@@ -33,7 +33,7 @@ class App:
         # Create components (no cross-references between UI and sim/camera)
         self.sim = Sim(self.ctx)
         self.camera = Camera(self.ctx, self.sim, self.window)
-        self.ui = UI(self.window, self.sim.view_option_labels)
+        self.ui = UI(self.window, self.ctx, self.sim.view_option_labels)
 
         # Create services (Orchestrator owns these)
         self.rule_manager = RuleManager()

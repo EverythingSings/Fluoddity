@@ -2,14 +2,44 @@ import glfw
 from imgui_bundle import imgui
 from imgui_bundle.python_backends import glfw_backend
 import time
+import numpy as np
+import moderngl
 from state import UIState, SimState, CameraState, RecordingState
+
+
+def create_test_pattern(size=128):
+    """Create a simple test pattern texture data."""
+    data = np.zeros((size, size, 4), dtype=np.uint8)
+
+    # Create a checkerboard pattern with colored squares
+    square_size = size // 8
+    for y in range(size):
+        for x in range(size):
+            square_x = x // square_size
+            square_y = y // square_size
+
+            if (square_x + square_y) % 2 == 0:
+                # Red squares
+                data[y, x] = [255, 0, 0, 255]
+            else:
+                # Blue squares
+                data[y, x] = [0, 0, 255, 255]
+
+    # Add a green border
+    data[0, :] = [0, 255, 0, 255]  # Top
+    data[-1, :] = [0, 255, 0, 255]  # Bottom
+    data[:, 0] = [0, 255, 0, 255]  # Left
+    data[:, -1] = [0, 255, 0, 255]  # Right
+
+    return data
 
 
 class UI:
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
-    def __init__(self, window, view_option_labels: list[str]):
+    def __init__(self, window, ctx: moderngl.Context, view_option_labels: list[str]):
         self.window = window
+        self.ctx = ctx
         self.view_option_labels = view_option_labels
 
         # Initialize ImGui
@@ -19,8 +49,22 @@ class UI:
         # Set up event callbacks
         self.setup_callbacks()
 
+        # Create tooltip texture
+        self.tooltip_texture_size = 128
+        pattern_data = create_test_pattern(self.tooltip_texture_size)
+        self.tooltip_texture = self.ctx.texture(
+            size=(self.tooltip_texture_size, self.tooltip_texture_size),
+            components=4,
+            data=pattern_data.tobytes()
+        )
+        self.tooltip_texture_id = imgui.ImTextureRef(self.tooltip_texture.glo)
+
         # UI-only state
         self.show_demo_window = False
+
+        # Tooltip state - track which slider was last hovered
+        self.last_hovered_slider = None
+        self.last_hovered_description = ""
 
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
@@ -257,61 +301,153 @@ class UI:
             v_min=-1.0,
             v_max=1.0,
         )
+        self.render_custom_tooltip("Axial Force",
+            "Controls the force applied in the direction particles are facing. Positive values push particles forward, negative values pull them backward.")
+
         _, self.state.sim.LATERAL_FORCE = imgui.slider_float(
             label="Lateral Force",
             v=self.state.sim.LATERAL_FORCE,
             v_min=-1.0,
             v_max=1.0,
         )
+        self.render_custom_tooltip("Lateral Force",
+            "Controls the force applied perpendicular to the direction particles are facing. Affects sideways movement and strafing behavior.")
+
         _, self.state.sim.RULE_SENSITIVITY = imgui.slider_float(
             label="Rule Sensitivity",
             v=self.state.sim.RULE_SENSITIVITY,
             v_min=-1.0,
             v_max=1.0,
         )
+        self.render_custom_tooltip("Rule Sensitivity",
+            "Determines how strongly particles respond to interaction rules. Higher values make particles more reactive to their neighbors.")
+
         _, self.state.sim.MUTATION_SCALE = imgui.slider_float(
             label="Mutation Scale",
             v=self.state.sim.MUTATION_SCALE,
             v_min=-1.0,
             v_max=1.0,
         )
+        self.render_custom_tooltip("Mutation Scale",
+            "Controls the amount of random variation in particle behavior. Higher values introduce more chaos and unpredictability.")
+
         _, self.state.sim.DRAG = imgui.slider_float(
             label="Drag",
             v=self.state.sim.DRAG,
             v_min=-1.0,
             v_max=1.0,
         )
+        self.render_custom_tooltip("Drag",
+            "Simulates air resistance and friction. Higher values slow particles down more quickly, lower values allow particles to maintain momentum.")
+
         _, self.state.sim.STRAFE_POWER = imgui.slider_float(
             label="Strafe Power",
             v=self.state.sim.STRAFE_POWER,
             v_min=0,
             v_max=4.0,
         )
+        self.render_custom_tooltip("Strafe Power",
+            "Amplifies the lateral movement force. Higher values enable more aggressive sideways motion and circular patterns.")
+
         _, self.state.sim.SENSOR_ANGLE = imgui.slider_float(
             label="Sensor Angle",
             v=self.state.sim.SENSOR_ANGLE,
             v_min=-3,
             v_max=3,
         )
+        self.render_custom_tooltip("Sensor Angle",
+            "Sets the angular offset of particle sensors from their forward direction. Affects how particles perceive their surroundings.")
+
         _, self.state.sim.GLOBAL_FORCE_MULT = imgui.slider_float(
             label="Global Force Multiplier",
             v=self.state.sim.GLOBAL_FORCE_MULT,
             v_min=0.0,
             v_max=5.0,
         )
+        self.render_custom_tooltip("Global Force Multiplier",
+            "Scales all forces applied to particles. Acts as a master speed control - higher values create faster, more energetic simulations.")
+
         _, self.state.sim.SENSOR_DISTANCE = imgui.slider_float(
             label="Sensor Distance",
             v=self.state.sim.SENSOR_DISTANCE,
             v_min=0.0,
             v_max=5.0,
         )
+        self.render_custom_tooltip("Sensor Distance",
+            "Determines how far ahead particles can sense their environment. Longer distances enable more anticipatory behavior.")
+
         _, self.state.sim.TRAIL_PERSISTENCE = imgui.slider_float(
             label="Trail Persistence",
             v=self.state.sim.TRAIL_PERSISTENCE,
             v_min=0.0,
             v_max=1.0,
         )
+        self.render_custom_tooltip("Trail Persistence",
+            "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly.")
+
+        # Render the tooltip if window is hovered
+        self.render_physics_tooltip()
+
+        imgui.end()
+
+    def render_custom_tooltip(self, label: str, description: str):
+        """Render a custom tooltip anchored to the right edge of a window.
+
+        Args:
+            label: The label of the slider
+            description: Description text to display in the tooltip
+        """
+        # Track which slider is currently hovered
+        if imgui.is_item_hovered():
+            self.last_hovered_slider = label
+            self.last_hovered_description = description
+
+    def render_physics_tooltip(self):
+        """Render the tooltip if mouse is over the Physics Settings window."""
+        # Only show tooltip if window is hovered and we have a slider tracked
+        if not imgui.is_window_hovered():
+            self.last_hovered_slider = None
+            return
+
+        if self.last_hovered_slider is None:
+            return
+
+        # Get the position and size of the anchor window
+        window_pos = imgui.get_window_pos()
+        window_size = imgui.get_window_size()
+
+        # Calculate tooltip position (right edge of the anchor window)
+        tooltip_x = window_pos.x + window_size.x
+        tooltip_y = window_pos.y
+
+        # Set next window position
+        imgui.set_next_window_pos(imgui.ImVec2(tooltip_x, tooltip_y))
+
+        # Begin a borderless, no-move tooltip window
+        imgui.begin(
+            "##SliderTooltip",
+            flags=(
+                imgui.WindowFlags_.no_title_bar |
+                imgui.WindowFlags_.no_move |
+                imgui.WindowFlags_.no_resize |
+                imgui.WindowFlags_.always_auto_resize
+            )
+        )
+
+        # Display the test pattern texture
+        imgui.image(
+            self.tooltip_texture_id,
+            imgui.ImVec2(self.tooltip_texture_size, self.tooltip_texture_size)
+        )
+
+        # Display slider name and description
+        imgui.separator()
+        imgui.text(f"Parameter: {self.last_hovered_slider}")
+        imgui.separator()
+        imgui.text_wrapped(self.last_hovered_description)
+
         imgui.end()
 
     def cleanup(self):
+        self.tooltip_texture.release()
         self.imgui_renderer.shutdown()
