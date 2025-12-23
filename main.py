@@ -4,7 +4,7 @@ import time
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver
 from utilities.gl_helpers import readback_rule
 
 
@@ -41,6 +41,7 @@ class App:
         entity_stride = SIZE_OF_ENTITY_STRUCT // 4
         self.entity_picker = EntityPicker(self.sim.get_entity_buffer(), entity_stride)
         self.video_service = VideoRecorderService()
+        self.config_saver = ConfigSaver()
 
         # Frame timing
         self.last_update_time = time.time()
@@ -129,6 +130,25 @@ class App:
         if ui_state.right_click_this_frame:
             prev_rule = self.rule_manager.pop_rule()
             self.sim.apply_rule(prev_rule)
+
+        # Handle config save (Ctrl+C)
+        if ui_state.request_save_config:
+            current_rule = self.rule_manager.get_current_rule()
+            config_string = self.config_saver.save_to_string(ui_state.sim, current_rule)
+            self.ui.set_clipboard(config_string)
+            print(f"Config copied to clipboard ({len(config_string)} chars)")
+
+        # Handle config load (Ctrl+V)
+        if ui_state.request_load_config:
+            config_string = ui_state.clipboard_text
+            if config_string:
+                rule = self.config_saver.load_from_string(config_string, ui_state.sim)
+                if rule is not None:
+                    self.rule_manager.push_rule(rule)
+                    self.sim.apply_rule(rule)
+                    print("Config loaded from clipboard")
+                else:
+                    print("Failed to load config from clipboard")
 
     def process_camera_input(self, ui_state):
         """Handle continuous WASD/QE input for camera."""

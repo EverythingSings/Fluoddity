@@ -110,7 +110,7 @@ vec4 sym(out vec2 strafe,vec2 L,vec2 R,vec2 axis,Rule rule){
     R=vec2(dot(R,n),dot(R,on));
     vec4 baseterm= exnoise(L,R,rule);
     vec4 mirrorterm=exnoise(flect(R),flect(L),rule);
-    vec2 cols = baseterm.zw+(mirrorterm.zw);
+    vec2 cols = baseterm.xy+(mirrorterm.xy);
     strafe = baseterm.zx + flect(mirrorterm.zx);
     vec2 force = baseterm.xy+flect(mirrorterm.xy);
     force=n*force.x*AXIAL_FORCE+on*force.y*LATERAL_FORCE;
@@ -165,6 +165,7 @@ void main() {
     vec2 force=(noiseval.xy);
 
     e.color.xy=vec2(cohort/float(COHORTS),0.75);
+    e.color.xy = noiseval.zw;
     e.color.z=1;
 
     e.vel = e.vel*DRAG + force;

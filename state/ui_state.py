@@ -24,3 +24,8 @@ class UIState:
     request_reset: bool = False
     request_full_reset: bool = False
     toggle_recording: bool = False
+
+    # Config save/load (Ctrl+C/Ctrl+V)
+    request_save_config: bool = False
+    request_load_config: bool = False
+    clipboard_text: str = ""  # For passing clipboard content to orchestrator

@@ -84,7 +84,7 @@ void main() {
     
     //trail indicator
     vec2 tuv = uv;
-    pR(tuv,-length(tuv*.61)*LATERAL_SLIDER/(1+1*abs(AXIAL_SLIDER)));
+    //pR(tuv,-length(tuv*.61)*LATERAL_SLIDER/(1+1*abs(AXIAL_SLIDER)));
     vec3 trail_col = 2*vec3(1,.6,.2);
     if(!TRAIL_MODE)trail_col = mix(trail_col,vec3(.5),.75);
     fragColor.xyz += trail_col*.7*max(0,sign(-tuv.y)*max(0,1-8*abs(tuv.x)))*exp(tuv.y*10*(1-TRAIL_PERSISTENCE_SLIDER)/TRAIL_PERSISTENCE_SLIDER);

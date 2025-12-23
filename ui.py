@@ -81,6 +81,8 @@ class UI:
         self._request_reset = False
         self._request_full_reset = False
         self._toggle_recording = False
+        self._request_save_config = False
+        self._request_load_config = False
 
         # Display info (received from Orchestrator)
         self._display_info = {
@@ -198,7 +200,14 @@ class UI:
 
         # One-shot key commands
         if action == glfw.PRESS:
-            if key == glfw.KEY_V:
+            ctrl_pressed = mods & glfw.MOD_CONTROL
+
+            # Config save/load with Ctrl+C/Ctrl+V
+            if ctrl_pressed and key == glfw.KEY_C:
+                self._request_save_config = True
+            elif ctrl_pressed and key == glfw.KEY_V:
+                self._request_load_config = True
+            elif key == glfw.KEY_V:
                 self._request_reload = True
             elif key == glfw.KEY_P:
                 self._toggle_recording = True
@@ -239,6 +248,15 @@ class UI:
         self.state.request_reset = self._request_reset
         self.state.request_full_reset = self._request_full_reset
         self.state.toggle_recording = self._toggle_recording
+        self.state.request_save_config = self._request_save_config
+        self.state.request_load_config = self._request_load_config
+
+        # Read clipboard content if load is requested
+        if self._request_load_config:
+            clipboard = glfw.get_clipboard_string(self.window)
+            self.state.clipboard_text = clipboard if clipboard else ""
+        else:
+            self.state.clipboard_text = ""
 
         # Reset one-shot flags
         self._left_click_pending = False
@@ -247,12 +265,18 @@ class UI:
         self._request_reset = False
         self._request_full_reset = False
         self._toggle_recording = False
+        self._request_save_config = False
+        self._request_load_config = False
 
         return self.state
 
     def update_display_info(self, info: dict) -> None:
         """Receive read-only info for display (time, frame_count, etc.)."""
         self._display_info = info
+
+    def set_clipboard(self, text: str) -> None:
+        """Set clipboard content (used by orchestrator for config save)."""
+        glfw.set_clipboard_string(self.window, text)
 
     def render(self):
         """Render ImGui widgets - modifies self.state based on widget interactions."""
@@ -334,6 +358,8 @@ class UI:
         imgui.text("Controls:")
         imgui.text("WASD - Move camera")
         imgui.text("Q/E - Zoom out/in")
+        imgui.text("Ctrl+C - Copy config to clipboard")
+        imgui.text("Ctrl+V - Paste config from clipboard")
         imgui.text("F1 - Toggle ImGui Demo Window")
         imgui.text("ESC - Exit")
 
