@@ -46,6 +46,9 @@ class App:
         self.configs_dir = Path("physics_configs")
         self.configs_dir.mkdir(exist_ok=True)
 
+        # Preview state
+        self.preview_rule_active = False
+
         # Frame timing
         self.last_update_time = time.time()
 
@@ -165,6 +168,11 @@ class App:
 
         # Handle file load (menu)
         if ui_state.request_load_file:
+            # If we were previewing, pop the preview rule first
+            if self.preview_rule_active:
+                self.rule_manager.pop_rule()
+                self.preview_rule_active = False
+
             filename = ui_state.load_filename
             if filename:
                 filepath = self.configs_dir / f"{filename}.txt"
@@ -179,6 +187,35 @@ class App:
                         print(f"Failed to parse config from {filepath}")
                 else:
                     print(f"Config file not found: {filepath}")
+
+        # Handle file delete (menu)
+        if ui_state.request_delete_file:
+            filename = ui_state.delete_filename
+            if filename:
+                filepath = self.configs_dir / f"{filename}.txt"
+                if filepath.exists():
+                    filepath.unlink()
+                    print(f"Config deleted: {filepath}")
+
+        # Handle clear preview (unhover or close submenu) - must happen before new preview
+        if ui_state.request_clear_preview:
+            if self.preview_rule_active:
+                prev_rule = self.rule_manager.pop_rule()
+                self.sim.apply_rule(prev_rule)
+                self.preview_rule_active = False
+
+        # Handle config preview (hover in Load submenu)
+        if ui_state.request_preview_config:
+            filename = ui_state.preview_filename
+            if filename:
+                filepath = self.configs_dir / f"{filename}.txt"
+                if filepath.exists():
+                    config_string = filepath.read_text()
+                    config = self.config_saver.decode_config(config_string)
+                    if config and config.rule is not None:
+                        self.rule_manager.push_rule(config.rule)
+                        self.sim.apply_rule(config.rule)
+                        self.preview_rule_active = True
 
     def process_camera_input(self, ui_state):
         """Handle continuous WASD/QE input for camera."""

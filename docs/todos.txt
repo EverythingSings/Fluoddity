@@ -1,0 +1,7 @@
+Rewrite slider tooltips
+write tooltips for some sim controls
+color mode toggle
+dialog to name videos
+tune slider ranges
+right click restore to default for sliders (restore to loaded config)
+update adding_ui_slider_params to support save-load and optional tooltip_graphic integration

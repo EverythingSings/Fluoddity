@@ -30,8 +30,15 @@ class UIState:
     request_load_config: bool = False
     clipboard_text: str = ""  # For passing clipboard content to orchestrator
 
-    # File save/load (menu bar)
+    # File save/load/delete (menu bar)
     request_save_file: bool = False
     request_load_file: bool = False
+    request_delete_file: bool = False
     save_filename: str = ""  # Filename to save to (without extension)
     load_filename: str = ""  # Filename to load from (without extension)
+    delete_filename: str = ""  # Filename to delete (without extension)
+
+    # Config preview (for Load submenu hover)
+    request_preview_config: bool = False  # Push rule for preview
+    request_clear_preview: bool = False  # Pop preview rule
+    preview_filename: str = ""  # Filename to preview

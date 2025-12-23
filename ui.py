@@ -5,7 +5,9 @@ import time
 import numpy as np
 import moderngl
 from pathlib import Path
+from dataclasses import replace
 from state import UIState, SimState, CameraState, RecordingState
+from services.config_saver import ConfigSaver, PhysicsConfig
 
 
 def create_test_pattern(size=128):
@@ -64,12 +66,25 @@ class UI:
         self.physics_window_interaction = False  # Track if we're interacting with sliders
         self.tooltip_start_time = time.time()  # Track time for animations
 
-        # File save/load popup state
+        # File save/load state
         self.save_popup_open = False
-        self.load_popup_open = False
         self.save_filename_buffer = ""
-        self.config_files: list[str] = []  # List of available config files
         self.configs_dir = Path("physics_configs")
+        self.config_saver = ConfigSaver()
+
+        # Load submenu preview state
+        self.config_files: list[str] = []  # List of available config filenames
+        self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs
+        self.load_submenu_was_open = False  # Track submenu open state
+        self.base_sim_state: SimState | None = None  # State before preview
+        self.currently_previewing: str | None = None  # Currently hovered config
+        self.last_loaded_filename: str = ""  # For default save name
+
+        # Delete confirmation state
+        self.delete_confirm_filename: str | None = None
+
+        # Overwrite confirmation state
+        self.overwrite_confirm_filename: str | None = None
 
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
@@ -93,8 +108,13 @@ class UI:
         self._request_load_config = False
         self._request_save_file = False
         self._request_load_file = False
+        self._request_delete_file = False
+        self._request_preview_config = False
+        self._request_clear_preview = False
         self._save_filename = ""
         self._load_filename = ""
+        self._delete_filename = ""
+        self._preview_filename = ""
 
         # Display info (received from Orchestrator)
         self._display_info = {
@@ -264,8 +284,13 @@ class UI:
         self.state.request_load_config = self._request_load_config
         self.state.request_save_file = self._request_save_file
         self.state.request_load_file = self._request_load_file
+        self.state.request_delete_file = self._request_delete_file
+        self.state.request_preview_config = self._request_preview_config
+        self.state.request_clear_preview = self._request_clear_preview
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
+        self.state.delete_filename = self._delete_filename
+        self.state.preview_filename = self._preview_filename
 
         # Read clipboard content if load is requested
         if self._request_load_config:
@@ -285,8 +310,13 @@ class UI:
         self._request_load_config = False
         self._request_save_file = False
         self._request_load_file = False
+        self._request_delete_file = False
+        self._request_preview_config = False
+        self._request_clear_preview = False
         self._save_filename = ""
         self._load_filename = ""
+        self._delete_filename = ""
+        self._preview_filename = ""
 
         return self.state
 
@@ -388,16 +418,88 @@ class UI:
         imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
 
         # Menu bar
+        load_submenu_open = False
         if imgui.begin_menu_bar():
             if imgui.begin_menu("File"):
                 if imgui.menu_item("Save...", "", False)[0]:
                     self.save_popup_open = True
-                    self.save_filename_buffer = ""
-                if imgui.menu_item("Load...", "", False)[0]:
-                    self.load_popup_open = True
-                    self._refresh_config_files()
+                    # Default to last loaded filename
+                    self.save_filename_buffer = self.last_loaded_filename
+
+                # Load submenu with preview
+                if imgui.begin_menu("Load"):
+                    load_submenu_open = True
+
+                    # First frame submenu opens: cache configs and store base state
+                    if not self.load_submenu_was_open:
+                        self._cache_all_configs()
+                        self.base_sim_state = replace(self.state.sim)
+                        self.currently_previewing = None
+
+                    if not self.config_files:
+                        imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files")
+                    else:
+                        hovered_this_frame = None
+                        for filename in self.config_files:
+                            # Config name as selectable
+                            clicked, _ = imgui.selectable(filename, False)
+
+                            # Check if this item is hovered
+                            if imgui.is_item_hovered():
+                                hovered_this_frame = filename
+
+                            # Delete button on same line
+                            imgui.same_line(imgui.get_window_width() - 30)
+                            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+                            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+                            if imgui.small_button(f"X##{filename}"):
+                                self.delete_confirm_filename = filename
+                            imgui.pop_style_color(2)
+
+                            if clicked:
+                                # Finalize selection
+                                self._load_filename = filename
+                                self._request_load_file = True
+                                self.last_loaded_filename = filename
+                                self.base_sim_state = None
+                                self.currently_previewing = None
+                                imgui.close_current_popup()
+
+                        # Handle preview on hover
+                        if hovered_this_frame != self.currently_previewing:
+                            # First, clear any existing preview
+                            if self.currently_previewing:
+                                self._request_clear_preview = True
+
+                            if hovered_this_frame and hovered_this_frame in self.cached_configs:
+                                # Apply preview config (physics locally, rule via orchestrator)
+                                config = self.cached_configs[hovered_this_frame]
+                                self._apply_config_to_sim_state(config)
+                                self._request_preview_config = True
+                                self._preview_filename = hovered_this_frame
+                                self.currently_previewing = hovered_this_frame
+                            elif hovered_this_frame is None and self.base_sim_state:
+                                # Revert to base state
+                                self._restore_base_sim_state()
+                                self.currently_previewing = None
+
+                    imgui.end_menu()
+
                 imgui.end_menu()
             imgui.end_menu_bar()
+
+        # Handle submenu close without selection
+        if self.load_submenu_was_open and not load_submenu_open:
+            # Submenu just closed
+            if self.base_sim_state:
+                self._restore_base_sim_state()
+            if self.currently_previewing:
+                self._request_clear_preview = True
+            self.base_sim_state = None
+            self.currently_previewing = None
+            self.cached_configs = {}
+
+        self.load_submenu_was_open = load_submenu_open
 
         # Save popup modal
         if self.save_popup_open:
@@ -413,38 +515,58 @@ class UI:
             imgui.separator()
             if imgui.button("Save", imgui.ImVec2(120, 0)):
                 if self.save_filename_buffer.strip():
-                    self._save_filename = self.save_filename_buffer.strip()
-                    self._request_save_file = True
-                self.save_popup_open = False
-                imgui.close_current_popup()
+                    filename = self.save_filename_buffer.strip()
+                    filepath = self.configs_dir / f"{filename}.txt"
+                    if filepath.exists():
+                        # File exists, need overwrite confirmation
+                        self.overwrite_confirm_filename = filename
+                    else:
+                        # File doesn't exist, save directly
+                        self._save_filename = filename
+                        self._request_save_file = True
+                        self.save_popup_open = False
+                        imgui.close_current_popup()
             imgui.same_line()
             if imgui.button("Cancel", imgui.ImVec2(120, 0)):
                 self.save_popup_open = False
                 imgui.close_current_popup()
             imgui.end_popup()
 
-        # Load popup modal
-        if self.load_popup_open:
-            imgui.open_popup("Load Config")
+        # Overwrite confirmation popup
+        if self.overwrite_confirm_filename:
+            imgui.open_popup("Overwrite?")
 
-        if imgui.begin_popup_modal("Load Config", flags=imgui.WindowFlags_.always_auto_resize)[0]:
-            imgui.text("Select a config file:")
+        if imgui.begin_popup_modal("Overwrite?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text(f"File '{self.overwrite_confirm_filename}.txt' already exists.")
+            imgui.text("Do you want to overwrite it?")
             imgui.separator()
-
-            if not self.config_files:
-                imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files found")
-            else:
-                for filename in self.config_files:
-                    if imgui.selectable(filename, False)[0]:
-                        self._load_filename = filename
-                        self._request_load_file = True
-                        self.load_popup_open = False
-                        imgui.close_current_popup()
-                        break
-
-            imgui.separator()
+            if imgui.button("Overwrite", imgui.ImVec2(120, 0)):
+                self._save_filename = self.overwrite_confirm_filename
+                self._request_save_file = True
+                self.overwrite_confirm_filename = None
+                self.save_popup_open = False
+                imgui.close_current_popup()
+            imgui.same_line()
             if imgui.button("Cancel", imgui.ImVec2(120, 0)):
-                self.load_popup_open = False
+                self.overwrite_confirm_filename = None
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Delete confirmation popup
+        if self.delete_confirm_filename:
+            imgui.open_popup("Delete Config?")
+
+        if imgui.begin_popup_modal("Delete Config?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text(f"Are you sure you want to delete '{self.delete_confirm_filename}.txt'?")
+            imgui.separator()
+            if imgui.button("Delete", imgui.ImVec2(120, 0)):
+                self._delete_filename = self.delete_confirm_filename
+                self._request_delete_file = True
+                self.delete_confirm_filename = None
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self.delete_confirm_filename = None
                 imgui.close_current_popup()
             imgui.end_popup()
 
@@ -672,6 +794,45 @@ class UI:
             for f in sorted(self.configs_dir.glob("*.txt")):
                 # Store just the stem (filename without extension)
                 self.config_files.append(f.stem)
+
+    def _cache_all_configs(self):
+        """Load and cache all config files for preview."""
+        self._refresh_config_files()
+        self.cached_configs = {}
+        for filename in self.config_files:
+            filepath = self.configs_dir / f"{filename}.txt"
+            if filepath.exists():
+                config_string = filepath.read_text()
+                config = self.config_saver.decode_config(config_string)
+                if config:
+                    self.cached_configs[filename] = config
+
+    def _apply_config_to_sim_state(self, config: PhysicsConfig):
+        """Apply a config's physics settings to the current sim state."""
+        self.state.sim.AXIAL_FORCE = config.axial_force
+        self.state.sim.LATERAL_FORCE = config.lateral_force
+        self.state.sim.SENSOR_GAIN = config.sensor_gain
+        self.state.sim.MUTATION_SCALE = config.mutation_scale
+        self.state.sim.DRAG = config.drag
+        self.state.sim.STRAFE_POWER = config.strafe_power
+        self.state.sim.SENSOR_ANGLE = config.sensor_angle
+        self.state.sim.GLOBAL_FORCE_MULT = config.global_force_mult
+        self.state.sim.SENSOR_DISTANCE = config.sensor_distance
+        self.state.sim.TRAIL_PERSISTENCE = config.trail_persistence
+
+    def _restore_base_sim_state(self):
+        """Restore sim state from saved base state."""
+        if self.base_sim_state:
+            self.state.sim.AXIAL_FORCE = self.base_sim_state.AXIAL_FORCE
+            self.state.sim.LATERAL_FORCE = self.base_sim_state.LATERAL_FORCE
+            self.state.sim.SENSOR_GAIN = self.base_sim_state.SENSOR_GAIN
+            self.state.sim.MUTATION_SCALE = self.base_sim_state.MUTATION_SCALE
+            self.state.sim.DRAG = self.base_sim_state.DRAG
+            self.state.sim.STRAFE_POWER = self.base_sim_state.STRAFE_POWER
+            self.state.sim.SENSOR_ANGLE = self.base_sim_state.SENSOR_ANGLE
+            self.state.sim.GLOBAL_FORCE_MULT = self.base_sim_state.GLOBAL_FORCE_MULT
+            self.state.sim.SENSOR_DISTANCE = self.base_sim_state.SENSOR_DISTANCE
+            self.state.sim.TRAIL_PERSISTENCE = self.base_sim_state.TRAIL_PERSISTENCE
 
     def cleanup(self):
         self.tooltip_fbo.release()
