@@ -122,8 +122,15 @@ class Camera:
         if sim_going and self.assembled_texture is not None:
             TEX_TO_VIEW = self.assembled_texture
         else:
-            # When paused or no assembled texture yet, generate fresh frame
-            TEX_TO_VIEW = self.generate_view_texture()
+            # When paused or no assembled texture yet, generate fresh frame and apply gamma
+            raw_tex = self.generate_view_texture()
+            # Apply gamma correction via frame assembler (single sample mode)
+            TEX_TO_VIEW = self.frame_assembler.assemble_frame(
+                raw_tex,
+                total_samples=1,
+                current_sample_index=0
+            )
+            # assemble_frame returns the texture immediately when total_samples=1
 
         # Render to screen
         self.ctx.screen.use()

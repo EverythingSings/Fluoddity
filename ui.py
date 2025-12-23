@@ -381,6 +381,18 @@ class UI:
                 v_max=6,
             )
 
+        # Motion blur checkbox (lock during recording)
+        if recording_active:
+            imgui.begin_disabled()
+
+        _, self.state.sim.motion_blur = imgui.checkbox(
+            "Motion Blur",
+            self.state.sim.motion_blur
+        )
+
+        if recording_active:
+            imgui.end_disabled()
+
         # View dropdown
         changed, self.state.sim.current_view_option = imgui.combo(
             label="Current View",
