@@ -453,6 +453,8 @@ class UI:
         self.tooltip_program['DISTANCE_MODE'] = (self.last_hovered_slider == "Sensor Distance")
         self.tooltip_program['TRAIL_MODE'] = (self.last_hovered_slider == "Trail Persistence")
         self.tooltip_program['GLOBAL_MODE'] = (self.last_hovered_slider == "Global Force Multiplier")
+        self.tooltip_program['STRAFE_MODE'] = (self.last_hovered_slider == "Strafe Power")
+        self.tooltip_program['MUTATION_MODE'] = (self.last_hovered_slider == "Mutation Scale")
 
         # Render to framebuffer
         self.tooltip_fbo.use()

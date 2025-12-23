@@ -18,6 +18,8 @@ uniform bool ANGLE_MODE;
 uniform bool DISTANCE_MODE;
 uniform bool TRAIL_MODE;
 uniform bool GLOBAL_MODE;
+uniform bool STRAFE_MODE;
+uniform bool MUTATION_MODE;
 float sdSegment( in vec2 p, in vec2 a, in vec2 b )
 {
     vec2 pa = p-a, ba = b-a;
@@ -62,6 +64,11 @@ void main() {
     vec2 uv = (texcoord - .5)*2.1;
     uv.y = -uv.y;
 
+    // Apply circular motion when strafe power is hovered
+    if (STRAFE_MODE) {
+        uv += 0.1 * vec2(cos(time), sin(time));
+    }
+
     // Hardcoded middling values with oscillation when hovered
     float AXIAL_SLIDER = 0.3 + (AXIAL_MODE||GLOBAL_MODE ? 0.1*sin(time) : 0.0);
     float LATERAL_SLIDER = 0.75 + (LATERAL_MODE||GLOBAL_MODE ? 0.1*sin(time) : 0.0);
@@ -85,6 +92,14 @@ void main() {
     //center particle
     fragColor.xyz = sd_particle(uv)<0? vec3(1):fragColor.xyz;
     
+    //wiggle stuff around if mutation mode
+    vec2 mutation_noise0 = vec2(0);
+    vec2 mutation_noise1 = vec2(0);
+    if(MUTATION_MODE){
+        mutation_noise0 = .1*vec2(cos(time*1.4),sin(time*.75));
+        mutation_noise1 = .1*vec2(sin(time*1.3+.1),sin(time*.5));
+    }
+
     //sensor indicator(on bottom)
     vec3 sensor_col = vec3(1,1,0);
 
@@ -95,13 +110,13 @@ void main() {
        
     //axial indicator
     vec3 axial_col = vec3(1,0,0);
-    if(!(GLOBAL_MODE||AXIAL_MODE)) axial_col = mix(axial_col, vec3(.5), .75);
-    fragColor.xyz = sd_arrow(uv, vec2(0, .15 + .85 * abs(AXIAL_SLIDER)), scale) < 0 ? axial_col : fragColor.xyz;
+    if(!(GLOBAL_MODE||AXIAL_MODE||MUTATION_MODE)) axial_col = mix(axial_col, vec3(.5), .75);
+    fragColor.xyz = sd_arrow(uv, mutation_noise0+vec2(0, .15 + .85 * abs(AXIAL_SLIDER)), scale) < 0 ? axial_col : fragColor.xyz;
 
     //lateral indicator
     vec3 lateral_col = vec3(0,1,0);
-    if(!(GLOBAL_MODE||LATERAL_MODE)) lateral_col = mix(lateral_col, vec3(.5), .75);
-    fragColor.xyz = sd_arrow(uv, vec2(-LATERAL_SLIDER*.85 - .15*sign(LATERAL_SLIDER), 0), scale) < 0 ? lateral_col : fragColor.xyz;
+    if(!(GLOBAL_MODE||LATERAL_MODE||MUTATION_MODE)) lateral_col = mix(lateral_col, vec3(.5), .75);
+    fragColor.xyz = sd_arrow(uv, mutation_noise1+vec2(-LATERAL_SLIDER*.85 - .15*sign(LATERAL_SLIDER), 0), scale) < 0 ? lateral_col : fragColor.xyz;
     
     //drag indicator
     if(DRAG_MODE)
