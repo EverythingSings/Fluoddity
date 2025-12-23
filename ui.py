@@ -448,8 +448,8 @@ class UI:
                             if imgui.is_item_hovered():
                                 hovered_this_frame = filename
 
-                            # Delete button on same line
-                            imgui.same_line(imgui.get_window_width() - 30)
+                            # Delete button on same line (far right with padding)
+                            imgui.same_line(imgui.get_content_region_avail().x + imgui.get_cursor_pos_x() - 20)
                             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
                             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
                             if imgui.small_button(f"X##{filename}"):
@@ -519,7 +519,10 @@ class UI:
                     filepath = self.configs_dir / f"{filename}.txt"
                     if filepath.exists():
                         # File exists, need overwrite confirmation
+                        # Close save popup first, then open overwrite popup
                         self.overwrite_confirm_filename = filename
+                        self.save_popup_open = False
+                        imgui.close_current_popup()
                     else:
                         # File doesn't exist, save directly
                         self._save_filename = filename
