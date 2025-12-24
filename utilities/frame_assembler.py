@@ -1,5 +1,6 @@
 import moderngl
 import numpy as np
+from utilities.gl_helpers import tryset
 
 def create_frame_assembly_shader(ctx, total_samples):
     """Create a shader program for frame assembly with temporal accumulation and gamma correction."""
@@ -21,10 +22,16 @@ def create_frame_assembly_shader(ctx, total_samples):
     uniform sampler2D accumulation_buffer;
     uniform bool is_first_frame;
     uniform bool final_sample;
+    uniform int view_mode;  // 0=can, 1=brush_tex, 2=cam_brush
 
     in vec2 uv;
     out vec4 fragColor;
-
+    vec3 hsv2rgb(vec3 c)
+    {{
+        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }}
     void main() {{
         // Sample the input frame
         vec3 current_color = texture(input_frame, uv).rgb;
@@ -42,6 +49,10 @@ def create_frame_assembly_shader(ctx, total_samples):
 
         // Apply gamma correction only on final sample (AFTER accumulation)
         if (final_sample) {{
+            //if we are in canvas or brush view, we must interpret raw texture before gamma correction and display:
+            if(view_mode !=2){{
+                fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
+            }}
             // SYNC WITH cam_brush_pp.frag line 42-43
             float len = length(fragColor.xyz);
             if (len > 0.0) {{
@@ -106,7 +117,7 @@ class FrameAssembler:
         self.width, self.height = texture.size
         self.resources = None
 
-    def assemble_frame(self, input_texture, total_samples, current_sample_index):
+    def assemble_frame(self, input_texture, total_samples, current_sample_index, view_mode=0):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -114,6 +125,7 @@ class FrameAssembler:
             input_texture: moderngl.Texture to accumulate (PRE-gamma)
             total_samples: Number of frames in accumulation cycle
             current_sample_index: 0-indexed sample number (0 to total_samples-1)
+            view_mode: Current view mode (0=can, 1=brush_tex, 2=cam_brush)
 
         Returns:
             The assembled texture if final sample, None if still accumulating
@@ -152,6 +164,7 @@ class FrameAssembler:
         self.resources['shader']['accumulation_buffer'] = 1
         self.resources['shader']['is_first_frame'] = is_first_frame
         self.resources['shader']['final_sample'] = final_sample
+        tryset(self.resources['shader'], 'view_mode', view_mode)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()

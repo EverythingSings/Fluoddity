@@ -364,6 +364,21 @@ class UI:
             v_min=0.0,
             v_max=4.0,
         )
+
+        # Hue sensitivity slider
+        _, self.state.camera.HUE_SENSITIVITY = imgui.slider_float(
+            label="Hue Sensitivity",
+            v=self.state.camera.HUE_SENSITIVITY,
+            v_min=-1.0,
+            v_max=1.0,
+        )
+
+        # Color by cohort checkbox
+        _, self.state.camera.COLOR_BY_COHORT = imgui.checkbox(
+            "Color by Cohort",
+            self.state.camera.COLOR_BY_COHORT
+        )
+
         imgui.text(f"Texture Size: {tex_size[0]}x{tex_size[1]}")
 
         # Lock speedmult to motion_blur_samples when recording video

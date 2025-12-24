@@ -26,6 +26,7 @@ class Sim:
 
         # Current state (will be updated by apply_state each frame)
         self._state = SimState()
+        self._camera_state = None  # Will be set by apply_camera_state
 
     def setup_simulation_state(self):
         # Allocate state buffers
@@ -115,6 +116,11 @@ class Sim:
         tryset(self.entity_update_program, 'GLOBAL_FORCE_MULT', self._state.GLOBAL_FORCE_MULT)
         tryset(self.entity_update_program, 'SENSOR_DISTANCE', self._state.SENSOR_DISTANCE)
 
+        # Camera state uniforms
+        if self._camera_state is not None:
+            tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._camera_state.HUE_SENSITIVITY)
+            tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._camera_state.COLOR_BY_COHORT)
+
         num_workgroups = (ENTITY_COUNT + 63) // 64
         ctx.memory_barrier()
         self.entity_update_program.run(num_workgroups)
@@ -173,6 +179,10 @@ class Sim:
         # Update view_tex based on current_view_option
         if state.current_view_option < len(self.view_options):
             self.view_tex = self.view_options[state.current_view_option]
+
+    def apply_camera_state(self, camera_state) -> None:
+        """Apply camera state from Orchestrator before update."""
+        self._camera_state = camera_state
 
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""

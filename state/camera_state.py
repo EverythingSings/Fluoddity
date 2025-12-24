@@ -7,5 +7,7 @@ class CameraState:
     """State for camera position and rendering mode."""
     position: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0]))
     zoom: float = 1.0
-    BRIGHTNESS: float = 1.0
+    BRIGHTNESS: float = 1.
     cam_brush_mode: bool = True
+    HUE_SENSITIVITY: float = 0.5
+    COLOR_BY_COHORT: bool = False

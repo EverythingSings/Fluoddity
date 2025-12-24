@@ -116,7 +116,7 @@ class Camera:
         self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
 
-    def render(self, sim_going: bool = True):
+    def render(self, sim_going: bool = True,current_view_option = 2):
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
         if sim_going and self.assembled_texture is not None:
@@ -128,7 +128,8 @@ class Camera:
             TEX_TO_VIEW = self.frame_assembler.assemble_frame(
                 raw_tex,
                 total_samples=1,
-                current_sample_index=0
+                current_sample_index=0,
+                view_mode = current_view_option
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

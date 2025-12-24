@@ -32,6 +32,8 @@ uniform float AXIAL_FORCE;
 uniform float LATERAL_FORCE;
 uniform float SENSOR_GAIN;
 uniform float MUTATION_SCALE;
+uniform float HUE_SENSITIVITY;
+uniform bool COLOR_BY_COHORT;
 ////////////////////////////////////
 //FOURIER NOISE IS IMPORTED INTO THIS SHADER
 //FROM fourier4_4.glsl
@@ -180,12 +182,13 @@ void main() {
 
     //e.color is interpreted as vec4(hue,saturation,brightness,alpha)
     //We just set brightness to 1 and modulate hue and saturation
-    e.color.xy=vec2(cohort/float(COHORTS),0.75);
-    e.color.x = hash(vec2(floor(cohort)));
-    //e.color.x = noiseval.z;//hue can be anything
+    e.color.y = .75;
+    
+    e.color.x = HUE_SENSITIVITY*noiseval.z;//hue can be anything
     e.color.y = sin(noiseval.w)/2.+.5;//saturation must be 0..1
-    e.color.z=1;
-    e.color.w=0.045;
+    if(COLOR_BY_COHORT) {e.color.x = hash(vec2(floor(cohort)));} //just assign a color to each cohort
+    e.color.z=1;//brightness 1.
+    e.color.w=0.045; //low alpha
 
     e.vel = e.vel*DRAG + force;
 

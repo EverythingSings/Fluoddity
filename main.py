@@ -96,6 +96,7 @@ class App:
 
         # 5. Apply state to components
         self.sim.apply_state(ui_state.sim)
+        self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)
 
         # 6. Run simulation if going
@@ -103,7 +104,7 @@ class App:
             self.run_simulation_frame(ui_state)
 
         # 7. Render camera view
-        self.camera.render(sim_going=ui_state.sim.going)
+        self.camera.render(sim_going=ui_state.sim.going,current_view_option=ui_state.sim.current_view_option)
 
         # 8. Update UI display info and render
         self.ui.update_display_info({
@@ -278,7 +279,8 @@ class App:
                 assembled_tex = self.camera.frame_assembler.assemble_frame(
                     raw_view_tex,
                     total_samples=speedmult,
-                    current_sample_index=step
+                    current_sample_index=step,
+                    view_mode = ui_state.sim.current_view_option
                 )
 
                 # Only process when accumulation cycle completes
@@ -307,7 +309,8 @@ class App:
             assembled_tex = self.camera.frame_assembler.assemble_frame(
                 raw_view_tex,
                 total_samples=1,
-                current_sample_index=0
+                current_sample_index=0,
+                view_mode = ui_state.sim.current_view_option
             )
 
             self.camera.assembled_texture = assembled_tex
