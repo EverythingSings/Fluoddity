@@ -52,6 +52,10 @@ class App:
         # Frame timing
         self.last_update_time = time.time()
 
+        # Track user's desired speedmult (for restoration after recording)
+        self.user_speedmult = 1
+        self.was_recording = False
+
     def run(self):
         while not glfw.window_should_close(self.window):
             glfw.poll_events()
@@ -73,8 +77,22 @@ class App:
         self.process_camera_input(ui_state)
 
         # 4. Lock speedmult to motion_blur_samples if recording
-        if self.video_service.is_active():
+        is_recording = self.video_service.is_active()
+
+        # Detect recording state changes
+        if is_recording and not self.was_recording:
+            # Recording just started - save user's speedmult
+            self.user_speedmult = ui_state.sim.speedmult
+        elif not is_recording and self.was_recording:
+            # Recording just stopped - restore user's speedmult
+            ui_state.sim.speedmult = self.user_speedmult
+
+        # Lock speedmult while recording
+        if is_recording:
             ui_state.sim.speedmult = ui_state.recording.motion_blur_samples
+
+        # Update recording state for next frame
+        self.was_recording = is_recording
 
         # 5. Apply state to components
         self.sim.apply_state(ui_state.sim)
@@ -273,7 +291,8 @@ class App:
                             self.camera.ctx,
                             assembled_tex,  # Already gamma-corrected and temporally complete
                             ui_state.recording.max_frames,
-                            ui_state.recording.supersample_k
+                            ui_state.recording.supersample_k,
+                            ui_state.recording.filename_prefix
                         )
         else:
             # Motion blur disabled: multiple physics steps, single render call
@@ -299,7 +318,8 @@ class App:
                     self.camera.ctx,
                     assembled_tex,
                     ui_state.recording.max_frames,
-                    ui_state.recording.supersample_k
+                    ui_state.recording.supersample_k,
+                    ui_state.recording.filename_prefix
                 )
 
     def cleanup(self):

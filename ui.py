@@ -343,13 +343,17 @@ class UI:
         self.imgui_renderer.render(imgui.get_draw_data())
 
     def render_main_window(self):
-        imgui.begin("Simulation Controls")
-
         # Display info from orchestrator
         sim_time = self._display_info.get('time', 0.0)
         frame_count = self._display_info.get('frame_count', 0)
         tex_size = self._display_info.get('tex_size', (1024, 1024))
         recording_active = self._display_info.get('recording_active', False)
+
+        # Apply red tint to window background when recording
+        if recording_active:
+            imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
+
+        imgui.begin("Simulation Controls")
 
         imgui.text(f"Simulation Time: {sim_time:.2f}, Frame: {frame_count}")
 
@@ -437,6 +441,13 @@ class UI:
 
         _, self.state.recording.supersample_k = imgui.input_int('Supersample Kernel Width', self.state.recording.supersample_k)
 
+        # Filename prefix input
+        _, self.state.recording.filename_prefix = imgui.input_text(
+            'Filename Prefix (empty = "animation")',
+            self.state.recording.filename_prefix,
+            256
+        )
+
         imgui.separator()
         imgui.text("Controls:")
         imgui.text("WASD - Move camera")
@@ -447,6 +458,10 @@ class UI:
         imgui.text("ESC - Exit")
 
         imgui.end()
+
+        # Restore normal window background color if it was changed
+        if recording_active:
+            imgui.pop_style_color()
 
         imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
 

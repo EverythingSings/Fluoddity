@@ -2,7 +2,7 @@
 #define EDGE_BOUNCE true
 layout(local_size_x = 64) in;
 
-//SYNC WITH BRUSH.VERT AND CAM_BRUSH.VERT
+//SAME STRUCT USED IN BRUSH.VERT AND CAM_BRUSH.VERT
 struct Entity {
     vec2 pos;
     vec2 vel;
@@ -32,14 +32,18 @@ uniform float AXIAL_FORCE;
 uniform float LATERAL_FORCE;
 uniform float SENSOR_GAIN;
 uniform float MUTATION_SCALE;
+////////////////////////////////////
+//FOURIER NOISE IS IMPORTED INTO THIS SHADER
+//FROM fourier4_4.glsl
+////////////////////////////////////
 
-
+//rotate p around origin by angle a
 void pR(inout vec2 p, float a) {
 	p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
 }
 
 #define PI 3.1415926
-
+//convert p to texture coords and retrieve canvas
 vec4 get_can(vec2 p){
     vec2 res=textureSize(canvas,0);
     vec2 aspect=vec2(1,res.x/res.y);
@@ -51,31 +55,37 @@ vec2 safenorm(vec2 p){
 }
 
 #define COHORTS 64 //each cohort gets it's own rule and starting location.
-#define ACTIVE_COUNT 600000
+#define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer. 
+                            //Entities with index > ACTIVE_COUNT aren't rendered or updated
 
 float get_cohort(uint index) {
     return float(COHORTS) * float(index) / float(ACTIVE_COUNT);
 }
 
+//Return all entities to their initialization state
 void reset(uint index){
-    vec2 pos=vec2(0);
-    vec2 vel=-vec2(.0091,0);
-    float size=0;
+
+    float size=index<ACTIVE_COUNT?.0015: 0;
     float cohort_val = get_cohort(index);
-    pR(vel,index/float(ACTIVE_COUNT)*2*3.1415);
-    if(index<ACTIVE_COUNT){size=.0015;}
-    vec4 color=vec4(cohort_val*6,.95*0,0,.012*3*1.25);
-    pos=.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
-    vel=.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
+    
+    vec4 color=vec4(0,0,1,.045);
+    //set pos and vel to small random values
+    vec2 pos=.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
+    vec2 vel=.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
+
+    //position different cohorts at different places
     float spots=COHORTS;
     float spot_rows=ceil(sqrt(spots));
     vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
     pR(pos,floor(cohort_val)*3.1415*2*spots);
     pos+=1.8*((gridcell)/spot_rows-.45);
 
+    //store to persistent entity buffer
     entities[index]=Entity(pos,vel,size,float[3](0,0,0),color);
 }
 
+//randomly change noise function parameters, scaled by parameter amount. 
+//Each cohort gets a unique mutation for any given rule
 void mutate_rule(inout Rule current_rule,float amount,float cohort){
     float seed = hash(current_rule.centers[4].frequency.xy+current_rule.centers[7].amplitude.ys+current_rule.centers[1].frequency.zw)+cohort;
 
@@ -90,14 +100,18 @@ void mutate_rule(inout Rule current_rule,float amount,float cohort){
     }
 }
 
-vec4 exnoise(vec2 L,vec2 R,Rule rule){
+//Somewhat arbitrary generator of functions with 4 float inputs and 4 float outputs,
+//varying rule should smoothly change the behavior of the function
+vec4 black_box(vec2 L,vec2 R,Rule rule){
     return (fourier_noise(rule.centers, vec4(L,R)));
 }
 
+//reflect across the y axis (bilateral symmetry in the local coordinates vec2(forward, left) )
 vec2 flect(vec2 p){
     return p*vec2(1,-1);
 }
 
+//reflect across the boundary [-1,1] to keep things inside a square
 float edgeflect(float x){
     return sign(x)*(1-abs(1-abs(x)));
 }
@@ -108,9 +122,9 @@ vec4 sym(out vec2 strafe,vec2 L,vec2 R,vec2 axis,Rule rule){
     pR(on,3.14159/2);
     L=vec2(dot(L,n),dot(L,on));
     R=vec2(dot(R,n),dot(R,on));
-    vec4 baseterm= exnoise(L,R,rule);
-    vec4 mirrorterm=exnoise(flect(R),flect(L),rule);
-    vec2 cols = baseterm.xy+(mirrorterm.xy);
+    vec4 baseterm= black_box(L,R,rule);
+    vec4 mirrorterm=black_box(flect(R),flect(L),rule);
+    vec2 cols = baseterm.xy+(mirrorterm.xy); //basically just direct output of black_box
     strafe = baseterm.zx + flect(mirrorterm.zx);
     vec2 force = baseterm.xy+flect(mirrorterm.xy);
     force=n*force.x*AXIAL_FORCE+on*force.y*LATERAL_FORCE;
@@ -164,9 +178,14 @@ void main() {
 
     vec2 force=(noiseval.xy);
 
+    //e.color is interpreted as vec4(hue,saturation,brightness,alpha)
+    //We just set brightness to 1 and modulate hue and saturation
     e.color.xy=vec2(cohort/float(COHORTS),0.75);
-    e.color.xy = noiseval.zw;
+    e.color.x = hash(vec2(floor(cohort)));
+    //e.color.x = noiseval.z;//hue can be anything
+    e.color.y = sin(noiseval.w)/2.+.5;//saturation must be 0..1
     e.color.z=1;
+    e.color.w=0.045;
 
     e.vel = e.vel*DRAG + force;
 

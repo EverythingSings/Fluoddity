@@ -9,7 +9,7 @@ class VidSaver:
         self.recorder = None
         self.ssk_w = 2
 
-    def frame(self, ctx, tex, max_frames=-1, ssk_w=2):
+    def frame(self, ctx, tex, max_frames=-1, ssk_w=2, filename_prefix=""):
         if not self.active:
             return
 
@@ -35,7 +35,8 @@ class VidSaver:
 
             # Create timestamped filename
             timestamp = datetime.now().strftime('%H-%M-%S')
-            output_path = f"animation-{timestamp}.mp4"
+            prefix = filename_prefix if filename_prefix else "animation"
+            output_path = f"{prefix}-{timestamp}.mp4"
 
             self.recorder = FFmpegVideoRecorder(
                 width=output_width,

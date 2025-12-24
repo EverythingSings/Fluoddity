@@ -28,15 +28,16 @@ class VideoRecorderService:
         else:
             self.start()
 
-    def process_frame(self, ctx, texture, max_frames: int, ssk_w: int) -> None:
+    def process_frame(self, ctx, texture, max_frames: int, ssk_w: int, filename_prefix: str = "") -> None:
         """Process a frame if recording is active.
 
         Args:
             texture: Already assembled and gamma-corrected texture
             max_frames: Maximum frames to record
             ssk_w: Spatial supersample kernel width
+            filename_prefix: Custom filename prefix (empty = use "animation")
         """
-        self.recorder.frame(ctx, texture, max_frames, ssk_w)
+        self.recorder.frame(ctx, texture, max_frames, ssk_w, filename_prefix)
 
     def cleanup(self) -> None:
         """Cleanup resources."""

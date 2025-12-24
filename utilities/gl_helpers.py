@@ -23,8 +23,13 @@ def prepend_defines(shader_source, entity_count):
 def shader_prepend(shader_source, content_to_insert):
     first_newline = shader_source.find('\n')
     return shader_source[:first_newline+1] + content_to_insert + shader_source[first_newline+1:]
+
 MUTED_TRYSET_WARNINGS={}
 def tryset(program:moderngl.Program,uniform,value):
+    """
+    Gracefully handle a uniform that doesn't appear in program.
+    Uniforms are frequently optimized out if they are not used in the current version of the shader.
+    """
     if uniform in program:
         program[uniform]=value
     else:
@@ -40,7 +45,7 @@ def readback_rule(rule_buffer, rule_index):
     Read back a single Rule from the buffer at the specified index.
     
     Structure:
-    - RbfCenter: vec4 pos + vec4 weight = 8 floats = 32 bytes
+    - FourierCenter: vec4 frequency + vec4 amplitude = 8 floats = 32 bytes
     - Rule: 10 RbfCenters = 10 * 32 = 320 bytes
     """
     
@@ -56,7 +61,6 @@ def readback_rule(rule_buffer, rule_index):
     rule_data = np.frombuffer(rule_bytes, dtype=np.float32)
     
     # Reshape to [10 centers, 8 floats per center]
-    # Each center has [pos.x, pos.y, pos.z, pos.w, weight.x, weight.y, weight.z, weight.w]
     rule_reshaped = rule_data.reshape(10, 8)
     
     return rule_reshaped

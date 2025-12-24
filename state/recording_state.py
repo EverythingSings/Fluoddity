@@ -7,3 +7,4 @@ class RecordingState:
     max_frames: int = 150 * 12
     motion_blur_samples: int = 12
     supersample_k: int = 2
+    filename_prefix: str = ""  # Custom filename prefix (empty = use "animation")
