@@ -65,7 +65,6 @@ class UI:
 
         # UI-only state
         self.show_demo_window = False
-        self.physics_tooltips_enabled = True  # Control tooltip visibility
 
         # Tooltip state - track which slider was last hovered
         self.last_hovered_slider = None
@@ -92,9 +91,6 @@ class UI:
 
         # Overwrite confirmation state
         self.overwrite_confirm_filename: str | None = None
-
-        # Slider ranges for context menu (stores [min, max, default_min, default_max])
-        self.slider_ranges: dict[str, list[float]] = {}
 
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
@@ -419,16 +415,16 @@ class UI:
         )
 
         # Color by cohort checkbox
-        _, self.state.camera.COLOR_BY_COHORT = imgui.checkbox(
+        _, self.state.preferences.color_by_cohort = imgui.checkbox(
             "Color by Cohort",
-            self.state.camera.COLOR_BY_COHORT
+            self.state.preferences.color_by_cohort
         )
 
         imgui.text(f"Texture Size: {tex_size[0]}x{tex_size[1]}")
 
         # Lock speedmult to motion_blur_samples when recording video
         if recording_active:
-            locked_value = self.state.recording.motion_blur_samples
+            locked_value = self.state.preferences.motion_blur_samples
             imgui.begin_disabled()
             imgui.slider_int(
                 label=f"Speed Mult (locked to {locked_value})",
@@ -438,9 +434,9 @@ class UI:
             )
             imgui.end_disabled()
         else:
-            _, self.state.sim.speedmult = imgui.slider_int(
+            _, self.state.preferences.speedmult = imgui.slider_int(
                 label="Speed Mult",
-                v=self.state.sim.speedmult,
+                v=self.state.preferences.speedmult,
                 v_min=1,
                 v_max=6,
             )
@@ -449,9 +445,9 @@ class UI:
         if recording_active:
             imgui.begin_disabled()
 
-        _, self.state.sim.motion_blur = imgui.checkbox(
+        _, self.state.preferences.motion_blur = imgui.checkbox(
             "Motion Blur",
-            self.state.sim.motion_blur
+            self.state.preferences.motion_blur
         )
 
         if recording_active:
@@ -477,19 +473,19 @@ class UI:
         imgui.text(f"Zoom: {self.state.camera.zoom:.2f}")
 
         imgui.separator()
-        _, self.physics_tooltips_enabled = imgui.checkbox("Physics tooltips", self.physics_tooltips_enabled)
+        _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox("Physics tooltips", self.state.preferences.physics_tooltips_enabled)
 
         imgui.separator()
         imgui.text("Screen Recording (speedmult locked to motion blur samples):")
-        _, self.state.recording.max_frames = imgui.input_int('Max Frames', self.state.recording.max_frames)
+        _, self.state.preferences.max_frames = imgui.input_int('Max Frames', self.state.preferences.max_frames)
 
         # Lock motion_blur_samples during recording
         if recording_active:
             imgui.begin_disabled()
 
-        _, self.state.recording.motion_blur_samples = imgui.input_int(
+        _, self.state.preferences.motion_blur_samples = imgui.input_int(
             'Motion Blur Samples',
-            self.state.recording.motion_blur_samples
+            self.state.preferences.motion_blur_samples
         )
 
         if recording_active:
@@ -499,12 +495,12 @@ class UI:
                 "(Locked during recording)"
             )
 
-        _, self.state.recording.supersample_k = imgui.input_int('Supersample Kernel Width', self.state.recording.supersample_k)
+        _, self.state.preferences.supersample_k = imgui.input_int('Supersample Kernel Width', self.state.preferences.supersample_k)
 
         # Filename prefix input
-        _, self.state.recording.filename_prefix = imgui.input_text(
+        _, self.state.preferences.filename_prefix = imgui.input_text(
             'Filename Prefix (empty = "animation")',
-            self.state.recording.filename_prefix,
+            self.state.preferences.filename_prefix,
             256
         )
 
@@ -850,7 +846,7 @@ class UI:
     def render_physics_tooltip(self):
         """Render the tooltip if mouse is over the Physics Settings window."""
         # Early exit if tooltips are disabled
-        if not self.physics_tooltips_enabled:
+        if not self.state.preferences.physics_tooltips_enabled:
             self.last_hovered_slider = None
             self.physics_window_interaction = False
             return
@@ -990,10 +986,10 @@ class UI:
             tuple: (changed, new_value)
         """
         # Initialize or get current range
-        if label not in self.slider_ranges:
-            self.slider_ranges[label] = [default_min, default_max, default_min, default_max]
+        if label not in self.state.preferences.slider_ranges:
+            self.state.preferences.slider_ranges[label] = [default_min, default_max, default_min, default_max]
 
-        min_val, max_val = self.slider_ranges[label][0], self.slider_ranges[label][1]
+        min_val, max_val = self.state.preferences.slider_ranges[label][0], self.state.preferences.slider_ranges[label][1]
 
         # Create the slider
         changed, new_value = imgui.slider_float(label, value, min_val, max_val, format=format)
@@ -1022,10 +1018,10 @@ class UI:
             tuple: (current_min, current_max, reset_requested, range_changed)
         """
         # Initialize slider range if not exists
-        if slider_name not in self.slider_ranges:
-            self.slider_ranges[slider_name] = [default_min, default_max, default_min, default_max]
+        if slider_name not in self.state.preferences.slider_ranges:
+            self.state.preferences.slider_ranges[slider_name] = [default_min, default_max, default_min, default_max]
 
-        min_val, max_val, def_min, def_max = self.slider_ranges[slider_name]
+        min_val, max_val, def_min, def_max = self.state.preferences.slider_ranges[slider_name]
         range_changed = False
         reset_requested = False
 
@@ -1039,34 +1035,34 @@ class UI:
             changed_max, new_max = imgui.input_float(f"Max##{slider_name}", max_val)
 
             if changed_min:
-                self.slider_ranges[slider_name][0] = new_min
+                self.state.preferences.slider_ranges[slider_name][0] = new_min
                 range_changed = True
             if changed_max:
-                self.slider_ranges[slider_name][1] = new_max
+                self.state.preferences.slider_ranges[slider_name][1] = new_max
                 range_changed = True
 
             imgui.separator()
 
             # Reset range to default button
             if imgui.button(f"Reset Range to Default##{slider_name}"):
-                self.slider_ranges[slider_name][0] = def_min
-                self.slider_ranges[slider_name][1] = def_max
+                self.state.preferences.slider_ranges[slider_name][0] = def_min
+                self.state.preferences.slider_ranges[slider_name][1] = def_max
                 range_changed = True
 
             imgui.separator()
 
             # Reset value button (uses current_physics_defaults)
             if self.current_physics_defaults.source_filename:
-                button_label = f"Reset to '{self.current_physics_defaults.source_filename}'##{slider_name}"
+                button_label = f"Reset value to '{self.current_physics_defaults.source_filename}'##{slider_name}"
             else:
-                button_label = f"Reset to defaults##{slider_name}"
+                button_label = f"Reset value to defaults##{slider_name}"
 
             if imgui.button(button_label):
                 reset_requested = True
 
             imgui.end_popup()
 
-        return self.slider_ranges[slider_name][0], self.slider_ranges[slider_name][1], reset_requested, range_changed
+        return self.state.preferences.slider_ranges[slider_name][0], self.state.preferences.slider_ranges[slider_name][1], reset_requested, range_changed
 
     def cleanup(self):
         self.tooltip_fbo.release()

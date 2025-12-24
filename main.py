@@ -7,6 +7,7 @@ from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver
 from utilities.gl_helpers import readback_rule
+from state import load_preferences, save_preferences
 
 
 class App:
@@ -35,6 +36,10 @@ class App:
         self.sim = Sim(self.ctx)
         self.camera = Camera(self.ctx, self.sim, self.window)
         self.ui = UI(self.window, self.ctx, self.sim.view_option_labels)
+
+        # Load and apply preferences
+        loaded_prefs = load_preferences()
+        self.ui.state.preferences = loaded_prefs
 
         # Create services (Orchestrator owns these)
         self.rule_manager = RuleManager()
@@ -82,14 +87,14 @@ class App:
         # Detect recording state changes
         if is_recording and not self.was_recording:
             # Recording just started - save user's speedmult
-            self.user_speedmult = ui_state.sim.speedmult
+            self.user_speedmult = ui_state.preferences.speedmult
         elif not is_recording and self.was_recording:
             # Recording just stopped - restore user's speedmult
-            ui_state.sim.speedmult = self.user_speedmult
+            ui_state.preferences.speedmult = self.user_speedmult
 
         # Lock speedmult while recording
         if is_recording:
-            ui_state.sim.speedmult = ui_state.recording.motion_blur_samples
+            ui_state.preferences.speedmult = ui_state.preferences.motion_blur_samples
 
         # Update recording state for next frame
         self.was_recording = is_recording
@@ -97,6 +102,7 @@ class App:
         # 5. Apply state to components
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
+        self.sim.apply_preferences(ui_state.preferences)
         self.camera.apply_state(ui_state.camera)
 
         # 6. Run simulation if going
@@ -265,8 +271,8 @@ class App:
 
     def run_simulation_frame(self, ui_state):
         """Run simulation step(s) with frame assembly and video recording."""
-        speedmult = ui_state.sim.speedmult
-        motion_blur = ui_state.sim.motion_blur
+        speedmult = ui_state.preferences.speedmult
+        motion_blur = ui_state.preferences.motion_blur
 
         if motion_blur:
             # Motion blur enabled: temporal accumulation with multiple render calls
@@ -294,9 +300,9 @@ class App:
                         self.video_service.process_frame(
                             self.camera.ctx,
                             assembled_tex,  # Already gamma-corrected and temporally complete
-                            ui_state.recording.max_frames,
-                            ui_state.recording.supersample_k,
-                            ui_state.recording.filename_prefix
+                            ui_state.preferences.max_frames,
+                            ui_state.preferences.supersample_k,
+                            ui_state.preferences.filename_prefix
                         )
         else:
             # Motion blur disabled: multiple physics steps, single render call
@@ -322,12 +328,16 @@ class App:
                 self.video_service.process_frame(
                     self.camera.ctx,
                     assembled_tex,
-                    ui_state.recording.max_frames,
-                    ui_state.recording.supersample_k,
-                    ui_state.recording.filename_prefix
+                    ui_state.preferences.max_frames,
+                    ui_state.preferences.supersample_k,
+                    ui_state.preferences.filename_prefix
                 )
 
     def cleanup(self):
+        # Save preferences before cleanup
+        ui_state = self.ui.get_state()
+        save_preferences(ui_state.preferences)
+
         self.video_service.cleanup()
         self.ui.cleanup()
         glfw.terminate()

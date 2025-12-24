@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from .sim_state import SimState
 from .camera_state import CameraState
 from .recording_state import RecordingState
+from .preferences_state import PreferencesState
 
 
 @dataclass
@@ -10,6 +11,7 @@ class UIState:
     sim: SimState = field(default_factory=SimState)
     camera: CameraState = field(default_factory=CameraState)
     recording: RecordingState = field(default_factory=RecordingState)
+    preferences: PreferencesState = field(default_factory=PreferencesState)
 
     # Input state (updated by callbacks)
     keys_pressed: set = field(default_factory=set)

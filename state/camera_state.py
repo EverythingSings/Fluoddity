@@ -10,4 +10,3 @@ class CameraState:
     BRIGHTNESS: float = 1.
     cam_brush_mode: bool = True
     HUE_SENSITIVITY: float = 0.5
-    COLOR_BY_COHORT: bool = False

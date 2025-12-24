@@ -119,7 +119,10 @@ class Sim:
         # Camera state uniforms
         if self._camera_state is not None:
             tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._camera_state.HUE_SENSITIVITY)
-            tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._camera_state.COLOR_BY_COHORT)
+
+        # Preferences uniforms
+        if hasattr(self, '_preferences') and self._preferences is not None:
+            tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._preferences.color_by_cohort)
 
         num_workgroups = (ENTITY_COUNT + 63) // 64
         ctx.memory_barrier()
@@ -183,6 +186,10 @@ class Sim:
     def apply_camera_state(self, camera_state) -> None:
         """Apply camera state from Orchestrator before update."""
         self._camera_state = camera_state
+
+    def apply_preferences(self, preferences) -> None:
+        """Apply preferences from Orchestrator before update."""
+        self._preferences = preferences
 
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""

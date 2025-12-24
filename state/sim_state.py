@@ -5,8 +5,6 @@ from dataclasses import dataclass
 class SimState:
     """State for simulation parameters that UI controls."""
     going: bool = True
-    speedmult: int = 1
-    motion_blur: bool = True  # Enable temporal accumulation for motion blur
     current_view_option: int = 2  # 0=can, 1=brush_tex, 2=cam_brush
 
     # Physics parameters
