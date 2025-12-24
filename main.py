@@ -202,6 +202,8 @@ class App:
                         self.rule_manager.push_rule(rule)
                         self.sim.apply_rule(rule)
                         print(f"Config loaded from {filepath}")
+                        # Update physics defaults for reset functionality
+                        self.ui.update_physics_defaults(filename)
                     else:
                         print(f"Failed to parse config from {filepath}")
                 else:

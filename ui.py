@@ -5,9 +5,16 @@ import time
 import numpy as np
 import moderngl
 from pathlib import Path
-from dataclasses import replace
+from dataclasses import replace, dataclass
 from state import UIState, SimState, CameraState, RecordingState
 from services.config_saver import ConfigSaver, PhysicsConfig
+
+
+@dataclass
+class PhysicsDefaults:
+    """Stores default physics values for reset functionality."""
+    values: dict[str, float]
+    source_filename: str | None  # None means program defaults
 
 
 def create_test_pattern(size=128):
@@ -86,11 +93,31 @@ class UI:
         # Overwrite confirmation state
         self.overwrite_confirm_filename: str | None = None
 
+        # Slider ranges for context menu (stores [min, max, default_min, default_max])
+        self.slider_ranges: dict[str, list[float]] = {}
+
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
             sim=SimState(),
             camera=CameraState(),
             recording=RecordingState()
+        )
+
+        # Initialize physics defaults with program defaults
+        self.current_physics_defaults = PhysicsDefaults(
+            values={
+                'AXIAL_FORCE': self.state.sim.AXIAL_FORCE,
+                'LATERAL_FORCE': self.state.sim.LATERAL_FORCE,
+                'SENSOR_GAIN': self.state.sim.SENSOR_GAIN,
+                'MUTATION_SCALE': self.state.sim.MUTATION_SCALE,
+                'DRAG': self.state.sim.DRAG,
+                'STRAFE_POWER': self.state.sim.STRAFE_POWER,
+                'SENSOR_ANGLE': self.state.sim.SENSOR_ANGLE,
+                'GLOBAL_FORCE_MULT': self.state.sim.GLOBAL_FORCE_MULT,
+                'SENSOR_DISTANCE': self.state.sim.SENSOR_DISTANCE,
+                'TRAIL_PERSISTENCE': self.state.sim.TRAIL_PERSISTENCE,
+            },
+            source_filename=None
         )
 
         # Input state (updated by callbacks)
@@ -327,6 +354,24 @@ class UI:
     def set_clipboard(self, text: str) -> None:
         """Set clipboard content (used by orchestrator for config save)."""
         glfw.set_clipboard_string(self.window, text)
+
+    def update_physics_defaults(self, filename: str) -> None:
+        """Update current physics defaults from current sim state (called after file load)."""
+        self.current_physics_defaults = PhysicsDefaults(
+            values={
+                'AXIAL_FORCE': self.state.sim.AXIAL_FORCE,
+                'LATERAL_FORCE': self.state.sim.LATERAL_FORCE,
+                'SENSOR_GAIN': self.state.sim.SENSOR_GAIN,
+                'MUTATION_SCALE': self.state.sim.MUTATION_SCALE,
+                'DRAG': self.state.sim.DRAG,
+                'STRAFE_POWER': self.state.sim.STRAFE_POWER,
+                'SENSOR_ANGLE': self.state.sim.SENSOR_ANGLE,
+                'GLOBAL_FORCE_MULT': self.state.sim.GLOBAL_FORCE_MULT,
+                'SENSOR_DISTANCE': self.state.sim.SENSOR_DISTANCE,
+                'TRAIL_PERSISTENCE': self.state.sim.TRAIL_PERSISTENCE,
+            },
+            source_filename=filename
+        )
 
     def render(self):
         """Render ImGui widgets - modifies self.state based on widget interactions."""
@@ -654,92 +699,102 @@ class UI:
                 imgui.close_current_popup()
             imgui.end_popup()
 
-        _, self.state.sim.AXIAL_FORCE = imgui.slider_float(
+        _, self.state.sim.AXIAL_FORCE = self.slider_float_with_range_menu(
             label="Axial Force",
-            v=self.state.sim.AXIAL_FORCE,
-            v_min=-1.0,
-            v_max=1.0,
+            param_name="AXIAL_FORCE",
+            value=self.state.sim.AXIAL_FORCE,
+            default_min=-1.0,
+            default_max=1.0,
         )
         self.render_custom_tooltip("Axial Force",
             "Controls the force applied in the direction particles are facing. Positive values push particles forward, negative values pull them backward.")
 
-        _, self.state.sim.LATERAL_FORCE = imgui.slider_float(
+        _, self.state.sim.LATERAL_FORCE = self.slider_float_with_range_menu(
             label="Lateral Force",
-            v=self.state.sim.LATERAL_FORCE,
-            v_min=-1.0,
-            v_max=1.0,
+            param_name="LATERAL_FORCE",
+            value=self.state.sim.LATERAL_FORCE,
+            default_min=-1.0,
+            default_max=1.0,
         )
         self.render_custom_tooltip("Lateral Force",
             "Controls the force applied perpendicular to the direction particles are facing. Affects sideways movement and strafing behavior.")
 
-        _, self.state.sim.SENSOR_GAIN = imgui.slider_float(
+        _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
             label="Sensor Gain",
-            v=self.state.sim.SENSOR_GAIN,
-            v_min=-1.0,
-            v_max=1.0,
+            param_name="SENSOR_GAIN",
+            value=self.state.sim.SENSOR_GAIN,
+            default_min=-1.0,
+            default_max=1.0,
         )
         self.render_custom_tooltip("Sensor Gain",
             "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to their neighbors.")
 
-        _, self.state.sim.MUTATION_SCALE = imgui.slider_float(
+        _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
             label="Mutation Scale",
-            v=self.state.sim.MUTATION_SCALE,
-            v_min=-1.0,
-            v_max=1.0,
+            param_name="MUTATION_SCALE",
+            value=self.state.sim.MUTATION_SCALE,
+            default_min=-1.0,
+            default_max=1.0,
         )
         self.render_custom_tooltip("Mutation Scale",
             "Controls the amount of random variation in particle behavior. Higher values introduce more chaos and unpredictability.")
 
-        _, self.state.sim.DRAG = imgui.slider_float(
+        _, self.state.sim.DRAG = self.slider_float_with_range_menu(
             label="Drag",
-            v=self.state.sim.DRAG,
-            v_min=-1.0,
-            v_max=1.0,
+            param_name="DRAG",
+            value=self.state.sim.DRAG,
+            default_min=-1.0,
+            default_max=1.0,
         )
         self.render_custom_tooltip("Drag",
             "Simulates air resistance and friction. Higher values slow particles down more quickly, lower values allow particles to maintain momentum.")
 
-        _, self.state.sim.STRAFE_POWER = imgui.slider_float(
+        _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
             label="Strafe Power",
-            v=self.state.sim.STRAFE_POWER,
-            v_min=0,
-            v_max=4.0,
+            param_name="STRAFE_POWER",
+            value=self.state.sim.STRAFE_POWER,
+            default_min=0.0,
+            default_max=4.0,
         )
         self.render_custom_tooltip("Strafe Power",
             "Amplifies the lateral movement force. Higher values enable more aggressive sideways motion and circular patterns.")
 
-        _, self.state.sim.SENSOR_ANGLE = imgui.slider_float(
+        _, self.state.sim.SENSOR_ANGLE = self.slider_float_with_range_menu(
             label="Sensor Angle",
-            v=self.state.sim.SENSOR_ANGLE,
-            v_min=-3,
-            v_max=3,
+            param_name="SENSOR_ANGLE",
+            value=self.state.sim.SENSOR_ANGLE,
+            default_min=-3.0,
+            default_max=3.0,
         )
         self.render_custom_tooltip("Sensor Angle",
             "Sets the angular offset of particle sensors from their forward direction. Affects how particles perceive their surroundings.")
 
-        _, self.state.sim.GLOBAL_FORCE_MULT = imgui.slider_float(
+        _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
             label="Global Force Multiplier",
-            v=self.state.sim.GLOBAL_FORCE_MULT,
-            v_min=0.0,
-            v_max=5.0,
+            param_name="GLOBAL_FORCE_MULT",
+            value=self.state.sim.GLOBAL_FORCE_MULT,
+            default_min=0.0,
+            default_max=5.0,
         )
         self.render_custom_tooltip("Global Force Multiplier",
             "Scales all forces applied to particles. Acts as a master speed control - higher values create faster, more energetic simulations.")
 
-        _, self.state.sim.SENSOR_DISTANCE = imgui.slider_float(
+        _, self.state.sim.SENSOR_DISTANCE = self.slider_float_with_range_menu(
             label="Sensor Distance",
-            v=self.state.sim.SENSOR_DISTANCE,
-            v_min=0.0,
-            v_max=5.0,
+            param_name="SENSOR_DISTANCE",
+            value=self.state.sim.SENSOR_DISTANCE,
+            default_min=0.0,
+            default_max=5.0,
         )
         self.render_custom_tooltip("Sensor Distance",
             "Determines how far ahead particles can sense their environment. Longer distances enable more anticipatory behavior.")
 
-        _, self.state.sim.TRAIL_PERSISTENCE = imgui.slider_float(
+        _, self.state.sim.TRAIL_PERSISTENCE = self.slider_float_with_range_menu(
             label="Trail Persistence",
-            v=self.state.sim.TRAIL_PERSISTENCE,
-            v_min=0.0,
-            v_max=1.0,
+            param_name="TRAIL_PERSISTENCE",
+            value=self.state.sim.TRAIL_PERSISTENCE,
+            default_min=0.0,
+            default_max=1.0,
         )
         self.render_custom_tooltip("Trail Persistence",
             "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly.")
@@ -917,6 +972,101 @@ class UI:
             self.state.sim.GLOBAL_FORCE_MULT = self.base_sim_state.GLOBAL_FORCE_MULT
             self.state.sim.SENSOR_DISTANCE = self.base_sim_state.SENSOR_DISTANCE
             self.state.sim.TRAIL_PERSISTENCE = self.base_sim_state.TRAIL_PERSISTENCE
+
+    def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f"):
+        """
+        Create a slider with an adjustable min/max context menu and reset to defaults.
+        Right-click the slider to adjust its range or reset value.
+
+        Args:
+            label: Display label for the slider
+            param_name: Parameter name (key in current_physics_defaults.values)
+            value: Current value
+            default_min: Default minimum value
+            default_max: Default maximum value
+            format: Display format string
+
+        Returns:
+            tuple: (changed, new_value)
+        """
+        # Initialize or get current range
+        if label not in self.slider_ranges:
+            self.slider_ranges[label] = [default_min, default_max, default_min, default_max]
+
+        min_val, max_val = self.slider_ranges[label][0], self.slider_ranges[label][1]
+
+        # Create the slider
+        changed, new_value = imgui.slider_float(label, value, min_val, max_val, format=format)
+
+        # Add context menu
+        _, _, reset_requested, _ = self.add_slider_context_menu(label, default_min, default_max)
+
+        # If reset was requested, get the default value from current_physics_defaults
+        if reset_requested:
+            new_value = self.current_physics_defaults.values.get(param_name, value)
+            changed = True
+
+        return changed, new_value
+
+    def add_slider_context_menu(self, slider_name, default_min, default_max):
+        """
+        Add a right-click context menu to adjust slider min/max values and reset to defaults.
+        Call this immediately after imgui.slider_float().
+
+        Args:
+            slider_name: Unique identifier for this slider
+            default_min: Default minimum value
+            default_max: Default maximum value
+
+        Returns:
+            tuple: (current_min, current_max, reset_requested, range_changed)
+        """
+        # Initialize slider range if not exists
+        if slider_name not in self.slider_ranges:
+            self.slider_ranges[slider_name] = [default_min, default_max, default_min, default_max]
+
+        min_val, max_val, def_min, def_max = self.slider_ranges[slider_name]
+        range_changed = False
+        reset_requested = False
+
+        # Create context menu (right-click on the previous item)
+        if imgui.begin_popup_context_item(f"{slider_name}_context"):
+            imgui.text(f"Adjust Range: {slider_name}")
+            imgui.separator()
+
+            # Min/Max input fields
+            changed_min, new_min = imgui.input_float(f"Min##{slider_name}", min_val)
+            changed_max, new_max = imgui.input_float(f"Max##{slider_name}", max_val)
+
+            if changed_min:
+                self.slider_ranges[slider_name][0] = new_min
+                range_changed = True
+            if changed_max:
+                self.slider_ranges[slider_name][1] = new_max
+                range_changed = True
+
+            imgui.separator()
+
+            # Reset range to default button
+            if imgui.button(f"Reset Range to Default##{slider_name}"):
+                self.slider_ranges[slider_name][0] = def_min
+                self.slider_ranges[slider_name][1] = def_max
+                range_changed = True
+
+            imgui.separator()
+
+            # Reset value button (uses current_physics_defaults)
+            if self.current_physics_defaults.source_filename:
+                button_label = f"Reset to '{self.current_physics_defaults.source_filename}'##{slider_name}"
+            else:
+                button_label = f"Reset to defaults##{slider_name}"
+
+            if imgui.button(button_label):
+                reset_requested = True
+
+            imgui.end_popup()
+
+        return self.slider_ranges[slider_name][0], self.slider_ranges[slider_name][1], reset_requested, range_changed
 
     def cleanup(self):
         self.tooltip_fbo.release()
