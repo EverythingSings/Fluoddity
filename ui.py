@@ -695,6 +695,19 @@ class UI:
                 imgui.close_current_popup()
             imgui.end_popup()
 
+        # Reset all sliders button
+        if self.current_physics_defaults.source_filename:
+            reset_button_label = f"Reset all sliders to '{self.current_physics_defaults.source_filename}'"
+        else:
+            reset_button_label = "Reset all sliders to defaults"
+
+        if imgui.button(reset_button_label):
+            # Reset all physics parameters to their default values
+            for param_name, default_value in self.current_physics_defaults.values.items():
+                setattr(self.state.sim, param_name, default_value)
+
+        imgui.separator()
+
         _, self.state.sim.AXIAL_FORCE = self.slider_float_with_range_menu(
             label="Axial Force",
             param_name="AXIAL_FORCE",
