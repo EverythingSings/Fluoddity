@@ -18,3 +18,7 @@ class SimState:
     GLOBAL_FORCE_MULT: float = 1.0
     SENSOR_DISTANCE: float = 1.0
     TRAIL_PERSISTENCE: float = 0.938
+
+    # Extra options
+    DISABLE_SYMMETRY: bool = False
+    ABSOLUTE_ORIENTATION: bool = False

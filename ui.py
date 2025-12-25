@@ -608,6 +608,19 @@ class UI:
                     imgui.end_menu()
 
                 imgui.end_menu()
+
+            # Extras menu
+            if imgui.begin_menu("Extras"):
+                _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
+                    "Disable Symmetry",
+                    self.state.sim.DISABLE_SYMMETRY
+                )
+                _, self.state.sim.ABSOLUTE_ORIENTATION = imgui.checkbox(
+                    "Absolute Orientation",
+                    self.state.sim.ABSOLUTE_ORIENTATION
+                )
+                imgui.end_menu()
+
             imgui.end_menu_bar()
 
         # Handle submenu close without selection
@@ -694,19 +707,6 @@ class UI:
                 self.delete_confirm_filename = None
                 imgui.close_current_popup()
             imgui.end_popup()
-
-        # Reset all sliders button
-        if self.current_physics_defaults.source_filename:
-            reset_button_label = f"Reset all sliders to '{self.current_physics_defaults.source_filename}'"
-        else:
-            reset_button_label = "Reset all sliders to defaults"
-
-        if imgui.button(reset_button_label):
-            # Reset all physics parameters to their default values
-            for param_name, default_value in self.current_physics_defaults.values.items():
-                setattr(self.state.sim, param_name, default_value)
-
-        imgui.separator()
 
         _, self.state.sim.AXIAL_FORCE = self.slider_float_with_range_menu(
             label="Axial Force",
@@ -807,6 +807,19 @@ class UI:
         )
         self.render_custom_tooltip("Trail Persistence",
             "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly.")
+
+        imgui.separator()
+
+        # Reset all sliders button
+        if self.current_physics_defaults.source_filename:
+            reset_button_label = f"Reset all sliders to '{self.current_physics_defaults.source_filename}'"
+        else:
+            reset_button_label = "Reset all sliders to defaults"
+
+        if imgui.button(reset_button_label):
+            # Reset all physics parameters to their default values
+            for param_name, default_value in self.current_physics_defaults.values.items():
+                setattr(self.state.sim, param_name, default_value)
 
         # Render the tooltip if window is hovered
         self.render_physics_tooltip()
@@ -967,6 +980,8 @@ class UI:
         self.state.sim.GLOBAL_FORCE_MULT = config.global_force_mult
         self.state.sim.SENSOR_DISTANCE = config.sensor_distance
         self.state.sim.TRAIL_PERSISTENCE = config.trail_persistence
+        self.state.sim.DISABLE_SYMMETRY = config.disable_symmetry
+        self.state.sim.ABSOLUTE_ORIENTATION = config.absolute_orientation
 
     def _restore_base_sim_state(self):
         """Restore sim state from saved base state."""
@@ -981,6 +996,8 @@ class UI:
             self.state.sim.GLOBAL_FORCE_MULT = self.base_sim_state.GLOBAL_FORCE_MULT
             self.state.sim.SENSOR_DISTANCE = self.base_sim_state.SENSOR_DISTANCE
             self.state.sim.TRAIL_PERSISTENCE = self.base_sim_state.TRAIL_PERSISTENCE
+            self.state.sim.DISABLE_SYMMETRY = self.base_sim_state.DISABLE_SYMMETRY
+            self.state.sim.ABSOLUTE_ORIENTATION = self.base_sim_state.ABSOLUTE_ORIENTATION
 
     def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f"):
         """

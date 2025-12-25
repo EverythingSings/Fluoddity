@@ -187,7 +187,7 @@ void main() {
     //Calculate position offsets for the two sensors.
     float sample_dist = .005 * SENSOR_DISTANCE;
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
-
+    if(ABSOLUTE_ORIENTATION){orientation = vec2(0,1);}
     vec2 left_sensor_offset = orientation*sample_dist;
     vec2 right_sensor_offset = orientation*sample_dist;
     pR(left_sensor_offset,SENSOR_ANGLE*PI);//rotate them opposite directions

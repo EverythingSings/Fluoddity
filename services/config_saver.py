@@ -19,7 +19,9 @@ PHYSICS_PARAMS = [
 ]
 
 # Version byte for future compatibility
-CONFIG_VERSION = 1
+# Version 1: Original format (10 floats + 80 floats)
+# Version 2: Adds DISABLE_SYMMETRY and ABSOLUTE_ORIENTATION booleans
+CONFIG_VERSION = 2
 
 
 @dataclass
@@ -36,10 +38,13 @@ class PhysicsConfig:
     global_force_mult: float
     sensor_distance: float
     trail_persistence: float
+    # Extra options (version 2+)
+    disable_symmetry: bool = False
+    absolute_orientation: bool = False
     # Rule data (10 centers * 8 floats = 80 floats)
-    rule: np.ndarray  # shape (10, 8)
+    rule: np.ndarray = None  # shape (10, 8)
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self, version: int = 2) -> bytes:
         """Serialize config to bytes."""
         # Pack physics params as 10 floats
         physics_bytes = struct.pack(
@@ -52,16 +57,30 @@ class PhysicsConfig:
         # Flatten and pack rule as 80 floats
         rule_flat = self.rule.flatten().astype(np.float32)
         rule_bytes = rule_flat.tobytes()
+
+        # Version 2: add booleans if requested
+        if version >= 2:
+            bool_bytes = struct.pack('??', self.disable_symmetry, self.absolute_orientation)
+            return physics_bytes + rule_bytes + bool_bytes
+
         return physics_bytes + rule_bytes
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'PhysicsConfig':
-        """Deserialize config from bytes."""
+        """Deserialize config from bytes. Supports version 1 (360 bytes) and version 2 (362 bytes)."""
         # Unpack physics params (10 floats = 40 bytes)
         physics = struct.unpack('10f', data[:40])
         # Unpack rule (80 floats = 320 bytes)
         rule_data = np.frombuffer(data[40:360], dtype=np.float32)
         rule = rule_data.reshape(10, 8)
+
+        # Version 2: check if we have extra boolean data
+        disable_symmetry = False
+        absolute_orientation = False
+        if len(data) >= 362:
+            # Version 2 format with booleans
+            disable_symmetry, absolute_orientation = struct.unpack('??', data[360:362])
+
         return cls(
             axial_force=physics[0],
             lateral_force=physics[1],
@@ -73,6 +92,8 @@ class PhysicsConfig:
             global_force_mult=physics[7],
             sensor_distance=physics[8],
             trail_persistence=physics[9],
+            disable_symmetry=disable_symmetry,
+            absolute_orientation=absolute_orientation,
             rule=rule.copy()
         )
 
@@ -106,6 +127,8 @@ class ConfigSaver:
             global_force_mult=sim_state.GLOBAL_FORCE_MULT,
             sensor_distance=sim_state.SENSOR_DISTANCE,
             trail_persistence=sim_state.TRAIL_PERSISTENCE,
+            disable_symmetry=sim_state.DISABLE_SYMMETRY,
+            absolute_orientation=sim_state.ABSOLUTE_ORIENTATION,
             rule=rule.copy()
         )
 
@@ -130,6 +153,8 @@ class ConfigSaver:
         sim_state.GLOBAL_FORCE_MULT = config.global_force_mult
         sim_state.SENSOR_DISTANCE = config.sensor_distance
         sim_state.TRAIL_PERSISTENCE = config.trail_persistence
+        sim_state.DISABLE_SYMMETRY = config.disable_symmetry
+        sim_state.ABSOLUTE_ORIENTATION = config.absolute_orientation
 
         return config.rule.copy()
 
@@ -137,12 +162,19 @@ class ConfigSaver:
         """
         Encode a PhysicsConfig to a shareable string.
 
-        Format: "SIM1:" + base64(zlib(bytes))
+        Format: "SIMn:" + base64(zlib(bytes))
+        Uses version 1 if both booleans are False (backward compatibility), otherwise version 2.
         """
-        raw_bytes = config.to_bytes()
+        # Use version 1 for backward compatibility if both extras are default
+        if not config.disable_symmetry and not config.absolute_orientation:
+            version = 1
+        else:
+            version = 2
+
+        raw_bytes = config.to_bytes(version)
         compressed = zlib.compress(raw_bytes, level=9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
-        return f"SIM{CONFIG_VERSION}:{encoded}"
+        return f"SIM{version}:{encoded}"
 
     def decode_config(self, config_string: str | bytes) -> PhysicsConfig | None:
         """
@@ -163,7 +195,7 @@ class ConfigSaver:
             colon_idx = config_string.index(':')
             version = int(config_string[3:colon_idx])
 
-            if version != CONFIG_VERSION:
+            if version not in [1, 2]:
                 print(f"Unsupported config version: {version}")
                 return None
 

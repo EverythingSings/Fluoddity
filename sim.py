@@ -115,6 +115,8 @@ class Sim:
         tryset(self.entity_update_program, 'SENSOR_ANGLE', self._state.SENSOR_ANGLE)
         tryset(self.entity_update_program, 'GLOBAL_FORCE_MULT', self._state.GLOBAL_FORCE_MULT)
         tryset(self.entity_update_program, 'SENSOR_DISTANCE', self._state.SENSOR_DISTANCE)
+        tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
+        tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
 
         # Camera state uniforms
         if self._camera_state is not None:
