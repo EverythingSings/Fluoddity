@@ -250,6 +250,7 @@ class App:
         if ui_state.request_clear_history_preview:
             if self.history_preview_rule_active:
                 prev_rule = self.rule_manager.pop_rule()
+                self.ui.history_window_labels.pop()  # Also remove the preview's label
                 self.sim.apply_rule(prev_rule)
                 self.history_preview_rule_active = False
 
@@ -265,6 +266,7 @@ class App:
             # Clear preview first
             if self.history_preview_rule_active:
                 self.rule_manager.pop_rule()
+                self.ui.history_window_labels.pop()  # Also remove the preview's label
                 self.history_preview_rule_active = False
 
             idx = ui_state.history_preview_index
@@ -284,6 +286,7 @@ class App:
             # Clear preview first
             if self.history_preview_rule_active:
                 self.rule_manager.pop_rule()
+                self.ui.history_window_labels.pop()  # Also remove the preview's label
                 self.history_preview_rule_active = False
 
             idx = ui_state.history_preview_index

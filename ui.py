@@ -69,7 +69,7 @@ class UI:
 
         # Rule history window state
         self.show_history_window = False
-        self.history_window_labels: list[tuple[str, str]] = []  # [(digit1_rgb, digit2_rgb), ...]
+        self.history_window_labels: list[tuple[int, str, str]] = []  # [(jersey_num, digit1_rgb, digit2_rgb), ...]
         self.currently_previewing_index: int | None = None
 
         # Tooltip state - track which slider was last hovered
@@ -886,34 +886,37 @@ class UI:
         while len(self.history_window_labels) > len(rule_history):
             self.history_window_labels.pop()
 
-        # Render rules (newest first)
+        # Determine how many rules to show (hide topmost if previewing)
+        num_rules_to_show = len(rule_history)
+        if self.currently_previewing_index is not None:
+            # Previewing - hide the topmost element (it's the preview copy)
+            num_rules_to_show -= 1
+
+        # Render rules (newest first, but skip the preview if active)
         hovered_this_frame = None
 
-        for i in range(len(rule_history) - 1, -1, -1):
-            # Generate 2-digit label from index
-            digit1 = (i // 10) % 10
-            digit2 = i % 10
-
-            # Get colors
-            color1_rgb, color2_rgb = self.history_window_labels[i]
+        for i in range(num_rules_to_show - 1, -1, -1):
+            # Get jersey number and colors
+            jersey_number, color1_rgb, color2_rgb = self.history_window_labels[i]
             color1 = self._parse_rgb_color(color1_rgb)
             color2 = self._parse_rgb_color(color2_rgb)
+
+            # Extract digits from jersey number
+            digit1 = jersey_number // 10
+            digit2 = jersey_number % 10
 
             # Render colored digits
             imgui.text_colored(imgui.ImVec4(*color1), str(digit1))
             imgui.same_line(spacing=0)
             imgui.text_colored(imgui.ImVec4(*color2), str(digit2))
-            imgui.same_line()
+            imgui.same_line(spacing=2)
 
-            # Selectable for rule
-            label_text = f" Rule {i}"
-            text_width = imgui.calc_text_size(label_text).x
-
+            # Invisible selectable for click/hover detection
             clicked, _ = imgui.selectable(
-                label_text,
+                f"##{i}",
                 False,
                 imgui.SelectableFlags_.none,
-                imgui.ImVec2(text_width, 0)
+                imgui.ImVec2(10, 0)  # Small width just for the hitbox
             )
 
             if imgui.is_item_hovered():
@@ -1122,13 +1125,17 @@ class UI:
             self.state.sim.DISABLE_SYMMETRY = self.base_sim_state.DISABLE_SYMMETRY
             self.state.sim.ABSOLUTE_ORIENTATION = self.base_sim_state.ABSOLUTE_ORIENTATION
 
-    def _generate_rule_label(self) -> tuple[str, str]:
-        """Generate 2-digit label with random colors.
+    def _generate_rule_label(self) -> tuple[int, str, str]:
+        """Generate random jersey number with colored digits.
 
         Returns:
-            tuple: (digit1_rgb_string, digit2_rgb_string) e.g., ("255,128,64", "64,255,128")
+            tuple: (jersey_number, digit1_rgb_string, digit2_rgb_string)
+                   e.g., (42, "255,128,64", "64,255,128")
         """
         import colorsys
+
+        # Generate random jersey number (00-99)
+        jersey_number = random.randint(0, 99)
 
         label_digits = []
         for _ in range(2):
@@ -1140,7 +1147,7 @@ class UI:
             r_int, g_int, b_int = int(r * 255), int(g * 255), int(b * 255)
             label_digits.append(f"{r_int},{g_int},{b_int}")
 
-        return (label_digits[0], label_digits[1])
+        return (jersey_number, label_digits[0], label_digits[1])
 
     def _parse_rgb_color(self, rgb_string: str) -> tuple[float, float, float, float]:
         """Parse RGB string to ImVec4 color."""
