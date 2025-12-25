@@ -44,3 +44,10 @@ class UIState:
     request_preview_config: bool = False  # Push rule for preview
     request_clear_preview: bool = False  # Pop preview rule
     preview_filename: str = ""  # Filename to preview
+
+    # Rule history window flags
+    request_preview_history_rule: bool = False
+    request_clear_history_preview: bool = False
+    request_load_history_rule: bool = False
+    request_delete_history_rule: bool = False
+    history_preview_index: int = -1

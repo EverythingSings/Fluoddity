@@ -67,6 +67,11 @@ class UI:
         # UI-only state
         self.show_demo_window = False
 
+        # Rule history window state
+        self.show_history_window = False
+        self.history_window_labels: list[tuple[str, str]] = []  # [(digit1_rgb, digit2_rgb), ...]
+        self.currently_previewing_index: int | None = None
+
         # Tooltip state - track which slider was last hovered
         self.last_hovered_slider = None
         self.last_hovered_description = ""
@@ -135,6 +140,14 @@ class UI:
         self._request_delete_file = False
         self._request_preview_config = False
         self._request_clear_preview = False
+
+        # Rule history window flags
+        self._request_preview_history_rule = False
+        self._request_clear_history_preview = False
+        self._request_load_history_rule = False
+        self._request_delete_history_rule = False
+        self._history_preview_index = -1
+
         self._save_filename = ""
         self._load_filename = ""
         self._delete_filename = ""
@@ -318,6 +331,13 @@ class UI:
         self.state.delete_filename = self._delete_filename
         self.state.preview_filename = self._preview_filename
 
+        # Transfer history window flags
+        self.state.request_preview_history_rule = self._request_preview_history_rule
+        self.state.request_clear_history_preview = self._request_clear_history_preview
+        self.state.request_load_history_rule = self._request_load_history_rule
+        self.state.request_delete_history_rule = self._request_delete_history_rule
+        self.state.history_preview_index = self._history_preview_index
+
         # Read clipboard content if load is requested
         if self._request_load_config:
             clipboard = glfw.get_clipboard_string(self.window)
@@ -343,6 +363,13 @@ class UI:
         self._load_filename = ""
         self._delete_filename = ""
         self._preview_filename = ""
+
+        # Reset history window flags
+        self._request_preview_history_rule = False
+        self._request_clear_history_preview = False
+        self._request_load_history_rule = False
+        self._request_delete_history_rule = False
+        self._history_preview_index = -1
 
         return self.state
 
@@ -379,6 +406,10 @@ class UI:
         imgui.new_frame()
 
         self.render_main_window()
+
+        # Render history window if visible
+        if self.show_history_window:
+            self.render_history_window()
 
         if self.show_demo_window:
             imgui.show_demo_window()
@@ -426,6 +457,10 @@ class UI:
         # Randomize Rule Seed button
         if imgui.button("Randomize Rule Seed"):
             self.state.preferences.rule_seed = random.random()
+
+        # Toggle History Window button
+        if imgui.button("Toggle History Window"):
+            self.show_history_window = not self.show_history_window
 
         imgui.text(f"Texture Size: {tex_size[0]}x{tex_size[1]}")
 
@@ -724,7 +759,7 @@ class UI:
             default_max=1.0,
         )
         self.render_custom_tooltip("Axial Force",
-            "Controls the force applied in the direction particles are facing. Positive values push particles forward, negative values pull them backward.")
+            "Controls the strength of forces applied parallel to the direction of travel: acceleration and braking")
 
         _, self.state.sim.LATERAL_FORCE = self.slider_float_with_range_menu(
             label="Lateral Force",
@@ -734,27 +769,27 @@ class UI:
             default_max=1.0,
         )
         self.render_custom_tooltip("Lateral Force",
-            "Controls the force applied perpendicular to the direction particles are facing. Affects sideways movement and strafing behavior.")
+            "Controls the strength of forces applied perpendicular to the direction of travel: turning left and right.")
 
         _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
             label="Strafe Power",
             param_name="STRAFE_POWER",
             value=self.state.sim.STRAFE_POWER,
             default_min=0.0,
-            default_max=4.0,
+            default_max=0.5,
         )
         self.render_custom_tooltip("Strafe Power",
-            "Amplifies the lateral movement force. Higher values enable more aggressive sideways motion and circular patterns.")
+            "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
 
         _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
             label="Global Force Mult",
             param_name="GLOBAL_FORCE_MULT",
             value=self.state.sim.GLOBAL_FORCE_MULT,
             default_min=0.0,
-            default_max=5.0,
+            default_max=2.0,
         )
         self.render_custom_tooltip("Global Force Mult",
-            "Scales all forces applied to particles. Acts as a master speed control - higher values create faster, more energetic simulations.")
+            "Scales axial and lateral forces applied to particles, and scales strafe power. Often tuned in the opposite direction to Sensor Gain and Drag to offset exploding/vanishing particle speed.")
 
         _, self.state.sim.DRAG = self.slider_float_with_range_menu(
             label="Drag",
@@ -764,47 +799,47 @@ class UI:
             default_max=1.0,
         )
         self.render_custom_tooltip("Drag",
-            "Simulates air resistance and friction. Higher values slow particles down more quickly, lower values allow particles to maintain momentum.")
+            "Each physics update, particle velocity is multiplied by drag like so:   vel = vel*drag + forces; So drag less than 1 means particles are being slowed down. Powerful (<0.5) drag values can prevent energetic systems from 'blowing up'")
 
         _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
             label="Mutation Scale",
             param_name="MUTATION_SCALE",
             value=self.state.sim.MUTATION_SCALE,
-            default_min=-1.0,
-            default_max=1.0,
+            default_min=-.5,
+            default_max=.5,
         )
         self.render_custom_tooltip("Mutation Scale",
-            "Controls the amount of random variation in particle behavior. Higher values introduce more chaos and unpredictability.")
+            "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
 
         _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
             label="Sensor Gain",
             param_name="SENSOR_GAIN",
             value=self.state.sim.SENSOR_GAIN,
-            default_min=-1.0,
-            default_max=1.0,
+            default_min=0,
+            default_max=5.0,
         )
         self.render_custom_tooltip("Sensor Gain",
-            "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to their neighbors.")
+            "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.")
 
         _, self.state.sim.SENSOR_ANGLE = self.slider_float_with_range_menu(
             label="Sensor Angle",
             param_name="SENSOR_ANGLE",
             value=self.state.sim.SENSOR_ANGLE,
-            default_min=-3.0,
-            default_max=3.0,
+            default_min=-1.0,
+            default_max=1.0,
         )
         self.render_custom_tooltip("Sensor Angle",
-            "Sets the angular offset of particle sensors from their forward direction. Affects how particles perceive their surroundings.")
+            "Sets the angular offset of particle sensors from their forward direction. Determines whether particles are 'looking ahead' or 'looking behind'.")
 
         _, self.state.sim.SENSOR_DISTANCE = self.slider_float_with_range_menu(
             label="Sensor Distance",
             param_name="SENSOR_DISTANCE",
             value=self.state.sim.SENSOR_DISTANCE,
             default_min=0.0,
-            default_max=5.0,
+            default_max=4.0,
         )
         self.render_custom_tooltip("Sensor Distance",
-            "Determines how far ahead particles can sense their environment. Longer distances enable more anticipatory behavior.")
+            "Determines distance between a particle's center and where it reads the trail information from Canvas. Longer distances tend to create larger scale patterns.")
 
         _, self.state.sim.TRAIL_PERSISTENCE = self.slider_float_with_range_menu(
             label="Trail Persistence",
@@ -814,7 +849,7 @@ class UI:
             default_max=1.0,
         )
         self.render_custom_tooltip("Trail Persistence",
-            "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly.")
+            "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly. Values close to 1.0 tend to create 'sharper' more stable patterns. ")
 
         imgui.separator()
 
@@ -831,6 +866,86 @@ class UI:
 
         # Render the tooltip if window is hovered
         self.render_physics_tooltip()
+
+        imgui.end()
+
+    def render_history_window(self):
+        """Render rule history window with preview."""
+        imgui.begin("Rule History")
+
+        rule_history = self._display_info.get('rule_history', [])
+
+        if not rule_history:
+            imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No rules in history")
+            imgui.end()
+            return
+
+        # Sync metadata with rule history
+        while len(self.history_window_labels) < len(rule_history):
+            self.history_window_labels.append(self._generate_rule_label())
+        while len(self.history_window_labels) > len(rule_history):
+            self.history_window_labels.pop()
+
+        # Render rules (newest first)
+        hovered_this_frame = None
+
+        for i in range(len(rule_history) - 1, -1, -1):
+            # Generate 2-digit label from index
+            digit1 = (i // 10) % 10
+            digit2 = i % 10
+
+            # Get colors
+            color1_rgb, color2_rgb = self.history_window_labels[i]
+            color1 = self._parse_rgb_color(color1_rgb)
+            color2 = self._parse_rgb_color(color2_rgb)
+
+            # Render colored digits
+            imgui.text_colored(imgui.ImVec4(*color1), str(digit1))
+            imgui.same_line(spacing=0)
+            imgui.text_colored(imgui.ImVec4(*color2), str(digit2))
+            imgui.same_line()
+
+            # Selectable for rule
+            label_text = f" Rule {i}"
+            text_width = imgui.calc_text_size(label_text).x
+
+            clicked, _ = imgui.selectable(
+                label_text,
+                False,
+                imgui.SelectableFlags_.none,
+                imgui.ImVec2(text_width, 0)
+            )
+
+            if imgui.is_item_hovered():
+                hovered_this_frame = i
+
+            # X button
+            imgui.same_line()
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+            if imgui.small_button(f"X##history_{i}"):
+                self._request_delete_history_rule = True
+                self._history_preview_index = i
+            imgui.pop_style_color(2)
+
+            if imgui.is_item_hovered():
+                hovered_this_frame = i
+
+            if clicked:
+                self._request_load_history_rule = True
+                self._history_preview_index = i
+
+        # Handle preview state changes
+        if hovered_this_frame != self.currently_previewing_index:
+            if self.currently_previewing_index is not None:
+                self._request_clear_history_preview = True
+
+            if hovered_this_frame is not None:
+                self._request_preview_history_rule = True
+                self._history_preview_index = hovered_this_frame
+                self.currently_previewing_index = hovered_this_frame
+            else:
+                self.currently_previewing_index = None
 
         imgui.end()
 
@@ -1006,6 +1121,31 @@ class UI:
             self.state.sim.TRAIL_PERSISTENCE = self.base_sim_state.TRAIL_PERSISTENCE
             self.state.sim.DISABLE_SYMMETRY = self.base_sim_state.DISABLE_SYMMETRY
             self.state.sim.ABSOLUTE_ORIENTATION = self.base_sim_state.ABSOLUTE_ORIENTATION
+
+    def _generate_rule_label(self) -> tuple[str, str]:
+        """Generate 2-digit label with random colors.
+
+        Returns:
+            tuple: (digit1_rgb_string, digit2_rgb_string) e.g., ("255,128,64", "64,255,128")
+        """
+        import colorsys
+
+        label_digits = []
+        for _ in range(2):
+            hue = random.randint(0, 255) / 255.0
+            sat = random.randint(0, 150) / 255.0
+            val = 1.0  # Brightness fixed at 255
+
+            r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
+            r_int, g_int, b_int = int(r * 255), int(g * 255), int(b * 255)
+            label_digits.append(f"{r_int},{g_int},{b_int}")
+
+        return (label_digits[0], label_digits[1])
+
+    def _parse_rgb_color(self, rgb_string: str) -> tuple[float, float, float, float]:
+        """Parse RGB string to ImVec4 color."""
+        r, g, b = map(int, rgb_string.split(','))
+        return (r / 255.0, g / 255.0, b / 255.0, 1.0)
 
     def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f"):
         """

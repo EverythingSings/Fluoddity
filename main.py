@@ -52,7 +52,8 @@ class App:
         self.configs_dir.mkdir(exist_ok=True)
 
         # Preview state
-        self.preview_rule_active = False
+        self.preview_rule_active = False  # File->load preview
+        self.history_preview_rule_active = False  # History window preview
 
         # Frame timing
         self.last_update_time = time.time()
@@ -118,6 +119,7 @@ class App:
             'frame_count': self.sim.frame_count,
             'tex_size': self.sim.view_tex.size,
             'recording_active': self.video_service.is_active(),
+            'rule_history': self.rule_manager.rule_history,
         })
         self.ui.render()
 
@@ -243,6 +245,54 @@ class App:
                         self.rule_manager.push_rule(config.rule)
                         self.sim.apply_rule(config.rule)
                         self.preview_rule_active = True
+
+        # Handle rule history preview - clear must happen BEFORE new preview
+        if ui_state.request_clear_history_preview:
+            if self.history_preview_rule_active:
+                prev_rule = self.rule_manager.pop_rule()
+                self.sim.apply_rule(prev_rule)
+                self.history_preview_rule_active = False
+
+        if ui_state.request_preview_history_rule:
+            idx = ui_state.history_preview_index
+            if 0 <= idx < len(self.rule_manager.rule_history):
+                rule_to_preview = self.rule_manager.rule_history[idx].copy()
+                self.rule_manager.push_rule(rule_to_preview)
+                self.sim.apply_rule(rule_to_preview)
+                self.history_preview_rule_active = True
+
+        if ui_state.request_load_history_rule:
+            # Clear preview first
+            if self.history_preview_rule_active:
+                self.rule_manager.pop_rule()
+                self.history_preview_rule_active = False
+
+            idx = ui_state.history_preview_index
+            if 0 <= idx < len(self.rule_manager.rule_history):
+                # Move rule to top with metadata
+                rule_to_load = self.rule_manager.rule_history[idx].copy()
+                label_to_preserve = self.ui.history_window_labels[idx]
+
+                self.rule_manager.rule_history.pop(idx)
+                self.ui.history_window_labels.pop(idx)
+
+                self.rule_manager.push_rule(rule_to_load)
+                self.ui.history_window_labels.append(label_to_preserve)
+                self.sim.apply_rule(rule_to_load)
+
+        if ui_state.request_delete_history_rule:
+            # Clear preview first
+            if self.history_preview_rule_active:
+                self.rule_manager.pop_rule()
+                self.history_preview_rule_active = False
+
+            idx = ui_state.history_preview_index
+            if 0 <= idx < len(self.rule_manager.rule_history):
+                self.rule_manager.rule_history.pop(idx)
+                self.ui.history_window_labels.pop(idx)
+
+                current_rule = self.rule_manager.get_current_rule()
+                self.sim.apply_rule(current_rule)
 
     def process_camera_input(self, ui_state):
         """Handle continuous WASD/QE input for camera."""
