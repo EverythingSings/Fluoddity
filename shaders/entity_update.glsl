@@ -34,6 +34,16 @@ uniform float SENSOR_GAIN;
 uniform float MUTATION_SCALE;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
+uniform bool DISABLE_SYMMETRY;
+uniform bool ABSOLUTE_ORIENTATION;
+////////////////////////////CONSTANTS
+#define COHORTS 64 //each cohort gets it's own rule and starting location.
+#define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer. 
+                            //Entities with index > ACTIVE_COUNT aren't rendered or updated
+
+
+
+
 ////////////////////////////////////
 //FOURIER NOISE IS IMPORTED INTO THIS SHADER
 //FROM fourier4_4.glsl
@@ -56,10 +66,6 @@ vec2 safenorm(vec2 p){
     return length(p)==0?vec2(0):normalize(p);
 }
 
-#define COHORTS 64 //each cohort gets it's own rule and starting location.
-#define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer. 
-                            //Entities with index > ACTIVE_COUNT aren't rendered or updated
-
 float get_cohort(uint index) {
     return float(COHORTS) * float(index) / float(ACTIVE_COUNT);
 }
@@ -73,7 +79,7 @@ void reset(uint index){
     vec4 color=vec4(0,0,1,.045);
     //set pos and vel to small random values
     vec2 pos=.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
-    vec2 vel=.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
+    vec2 vel=0.01*.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
 
     //position different cohorts at different places
     float spots=COHORTS;
@@ -102,39 +108,64 @@ void mutate_rule(inout Rule current_rule,float amount,float cohort){
     }
 }
 
+
+//Used to enforce left-right symmetry in the local coordinates vec2(forward, left)
+vec2 y_reflect(vec2 p){
+    return p*vec2(1,-1);
+}
+vec2 x_reflect(vec2 p){
+    return p*vec2(-1,1);
+}
+//reflect across the boundary [-1,1] to keep particle positions from leaving the canvas
+float edgeflect(float x){
+    return sign(x)*(1-abs(1-abs(x)));
+}
+
 //Somewhat arbitrary generator of functions with 4 float inputs and 4 float outputs,
 //varying rule should smoothly change the behavior of the function
 vec4 black_box(vec2 L,vec2 R,Rule rule){
     return (fourier_noise(rule.centers, vec4(L,R)));
 }
 
-//reflect across the y axis (bilateral symmetry in the local coordinates vec2(forward, left) )
-vec2 flect(vec2 p){
-    return p*vec2(1,-1);
-}
 
-//reflect across the boundary [-1,1] to keep things inside a square
-float edgeflect(float x){
-    return sign(x)*(1-abs(1-abs(x)));
-}
 
-vec4 sym(out vec2 strafe,vec2 L,vec2 R,vec2 axis,Rule rule){
-    vec2 n=safenorm(axis);
-    vec2 on=n;
-    pR(on,3.14159/2);
-    L=vec2(dot(L,n),dot(L,on));
-    R=vec2(dot(R,n),dot(R,on));
+//This function determines entity output by plugging sensor values into a noise function called black_box()
+//The calculation is performed twice, once in mirrored coordinates, and the two values are averaged.
+//This keeps entities from displaying clockwise/counterclockwise bias.
+//PARAMETERS:
+//--L and R: velocity field measurements from left sensor and right sensor.
+//--axis: forward vector that defines our orientation.
+//--rule: coefficients for the noise function that dictates entity behavior.
+//RETURNS:
+//--force: A "push" vector that will be added to entity.vel 
+//--strafe: A "hop" vector that will be added to entity.pos and have no effect on velocity
+//--color: vec2 to be used as parameters in a coloring function
+void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, out vec2 force, out vec2 strafe, out vec2 color){
+
+    //build a local coordinate frame where "axis" is forward.
+    vec2 forward=safenorm(axis);
+    vec2 left=vec2(forward.y,-forward.x);
+
+    //Convert L and R to local coordinates.
+    //Ie. decompose each into an axial component and a lateral component
+    L=vec2(dot(L,forward),dot(L,left));
+    R=vec2(dot(R,forward),dot(R,left));
+
+    //calculate black box noise values
     vec4 baseterm= black_box(L,R,rule);
-    vec4 mirrorterm=black_box(flect(R),flect(L),rule);
-    vec2 cols = baseterm.xy+(mirrorterm.xy); //basically just direct output of black_box
-    strafe = baseterm.zx + flect(mirrorterm.zx);
-    vec2 force = baseterm.xy+flect(mirrorterm.xy);
-    force=n*force.x*AXIAL_FORCE+on*force.y*LATERAL_FORCE;
-    force=force*.051*2.;
-    strafe = n*strafe.x*AXIAL_FORCE + on * strafe.y * LATERAL_FORCE;
-    force/=20;
-    strafe/=20;
-    return vec4(force,cols)/2;
+    vec4 mirrorterm=black_box(y_reflect(R),y_reflect(L),rule);
+    if(DISABLE_SYMMETRY){mirrorterm = vec4(0);}//disable symmetry by zeroing the mirror term
+
+    //Combine base and mirror terms
+    force = baseterm.xy+y_reflect(mirrorterm.xy);
+    strafe = baseterm.zw + y_reflect(mirrorterm.zw);
+
+    //Convert force and strafe back to world coordinates
+    force=forward*force.x*AXIAL_FORCE+left*force.y*LATERAL_FORCE;
+    strafe = forward*strafe.x*AXIAL_FORCE + left * strafe.y * LATERAL_FORCE;
+
+    color = baseterm.xy+(mirrorterm.xy); //Just an arbitrary function of blackbox output. Reuses force terms.
+    return;
 }
 
 void main() {
@@ -147,51 +178,65 @@ void main() {
         return;
     }
 
+    //frame_count == 0 signals a simulation reset
     if (frame_count==0){reset(index);return;}
 
     Entity e=entities[index];
     float cohort = get_cohort(index);
 
-    float samplen = .005 * SENSOR_DISTANCE;
-    vec2 vds = safenorm(e.vel)*samplen;
-    vec2 left_sensor_offset = vds;
-    vec2 right_sensor_offset = vds;
-    pR(left_sensor_offset,SENSOR_ANGLE*PI);
+    //Calculate position offsets for the two sensors.
+    float sample_dist = .005 * SENSOR_DISTANCE;
+    vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
+
+    vec2 left_sensor_offset = orientation*sample_dist;
+    vec2 right_sensor_offset = orientation*sample_dist;
+    pR(left_sensor_offset,SENSOR_ANGLE*PI);//rotate them opposite directions
     pR(right_sensor_offset,-SENSOR_ANGLE*PI);
 
+    //read the trails from canvas
     vec4 ltap = get_can(e.pos+left_sensor_offset);
     vec4 rtap = get_can(e.pos+right_sensor_offset);
 
     Rule current_rule=target_rule;
+    //if a few coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
         current_rule = Rule(generate_random_centers(floor(cohort)));
     }
+    //Each cohort gets a random mutation
     mutate_rule(current_rule,MUTATION_SCALE,floor(cohort));
 
-    float tap_scaling = 38.855*SENSOR_GAIN;
-    ltap *= tap_scaling;
-    rtap *= tap_scaling;
+    //rescale sensor values
+    float sensor_scaling = 38.855*SENSOR_GAIN;
+    ltap *= sensor_scaling;
+    rtap *= sensor_scaling;
 
+    //compute entity action
     vec2 strafe =vec2(0);
-    vec4 noiseval=sym(strafe,ltap.xy,rtap.xy,e.vel,current_rule);
+    vec2 force = vec2(0);
+    vec2 col_params = vec2(0);
+    calculate_entity_behavior(ltap.xy,rtap.xy,orientation,current_rule,force,strafe,col_params);
 
-    noiseval.xy *= GLOBAL_FORCE_MULT;
-    strafe *= GLOBAL_FORCE_MULT;
+    //rescale output forces
+    force *= GLOBAL_FORCE_MULT/400.;
+    strafe *= GLOBAL_FORCE_MULT/20.;
 
-    vec2 force=(noiseval.xy);
 
     //e.color is interpreted as vec4(hue,saturation,brightness,alpha)
     //We just set brightness to 1 and modulate hue and saturation
-    e.color.y = .75;
-    
-    e.color.x = HUE_SENSITIVITY*noiseval.z;//hue can be anything
-    e.color.y = sin(noiseval.w)/2.+.5;//saturation must be 0..1
-    if(COLOR_BY_COHORT) {e.color.x = hash(vec2(floor(cohort)));} //just assign a color to each cohort
+    e.color.x = HUE_SENSITIVITY*col_params.x;//hue can be anything
+    e.color.y = sin(col_params.y)/2.+.5;//saturation must be 0..1
+
+    if(COLOR_BY_COHORT) {e.color.x = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
     e.color.z=1;//brightness 1.
     e.color.w=0.045; //low alpha
 
+    //Accelerate: Apply drag and add force to e.vel,
     e.vel = e.vel*DRAG + force;
+    //Move: add e.vel and strafe to e.pos
+    e.pos += e.vel;
+    e.pos += strafe*STRAFE_POWER;
 
+    //reflect particles off canvas boundaries
     if(EDGE_BOUNCE){
         if (e.pos.x < -1.0 || e.pos.x > 1.0){
             e.vel.x=-e.vel.x;
@@ -203,9 +248,8 @@ void main() {
             e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
         }
     }
-    e.pos += e.vel;
-    e.pos += strafe*STRAFE_POWER;
 
+    //Commit new entity state to buffers
     entities[index]=e;
     rules[index] = current_rule;
 }

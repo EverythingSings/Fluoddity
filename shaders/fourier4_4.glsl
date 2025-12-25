@@ -15,7 +15,7 @@ vec4 fourier_noise(FourierCenter[10] centers, vec4 pos) {
 
         // Add per-center phase offset to break degeneracy at origin
         // Use a deterministic offset based on center index and amplitude values
-        float phase_offset = float(i) * 0.6283 + centers[i].amplitude.w * 3.14159;
+        float phase_offset =2*float(i) * 0.6283 + centers[i].amplitude.w * 3.14159;
 
         // Create basis functions from phase with offset
         // Using sin/cos pairs at fundamental and first harmonic for richer representation
