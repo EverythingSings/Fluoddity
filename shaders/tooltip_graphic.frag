@@ -101,11 +101,14 @@ void main() {
     }
 
     //sensor indicator(on bottom)
-    vec3 sensor_col = vec3(1,1,0);
-
+    float theta = SENSOR_ANGLE;
+    float flipped = (fract(theta/2.)*2.-1.)>0?-1:1;
+    theta*=flipped;
+    flipped *= sign(uv.x);
+    vec3 sensor_col =flipped<0? vec3(.3,.3,1):vec3(1,1,0);
     if(!SENSOR_MODE && !ANGLE_MODE && !DISTANCE_MODE) {
         sensor_col = mix(sensor_col, vec3(.5), .75);
-        fragColor.xyz = sd_sensor(uv, SENSOR_DISTANCE_SLIDER, 3.14159*SENSOR_ANGLE, abs(SENSOR_GAIN_SLIDER)) < 0 ? sensor_col : fragColor.xyz;
+        fragColor.xyz = sd_sensor(uv, SENSOR_DISTANCE_SLIDER, 3.14159*theta, abs(SENSOR_GAIN_SLIDER)) < 0 ? sensor_col : fragColor.xyz;
     }
        
     //axial indicator
@@ -125,6 +128,6 @@ void main() {
     //sensor indicator (on top)
 
     if(!SENSOR_MODE && !ANGLE_MODE && !DISTANCE_MODE) return;
-    fragColor.xyz = sd_sensor(uv, SENSOR_DISTANCE_SLIDER, 3.14159*SENSOR_ANGLE, abs(SENSOR_GAIN_SLIDER)) < 0 ? sensor_col : fragColor.xyz;
+    fragColor.xyz = sd_sensor(uv, SENSOR_DISTANCE_SLIDER, 3.14159*theta, abs(SENSOR_GAIN_SLIDER)) < 0 ? sensor_col : fragColor.xyz;
         
     }

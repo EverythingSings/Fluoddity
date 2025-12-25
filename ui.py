@@ -728,25 +728,25 @@ class UI:
         self.render_custom_tooltip("Lateral Force",
             "Controls the force applied perpendicular to the direction particles are facing. Affects sideways movement and strafing behavior.")
 
-        _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
-            label="Sensor Gain",
-            param_name="SENSOR_GAIN",
-            value=self.state.sim.SENSOR_GAIN,
-            default_min=-1.0,
-            default_max=1.0,
+        _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
+            label="Strafe Power",
+            param_name="STRAFE_POWER",
+            value=self.state.sim.STRAFE_POWER,
+            default_min=0.0,
+            default_max=4.0,
         )
-        self.render_custom_tooltip("Sensor Gain",
-            "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to their neighbors.")
+        self.render_custom_tooltip("Strafe Power",
+            "Amplifies the lateral movement force. Higher values enable more aggressive sideways motion and circular patterns.")
 
-        _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
-            label="Mutation Scale",
-            param_name="MUTATION_SCALE",
-            value=self.state.sim.MUTATION_SCALE,
-            default_min=-1.0,
-            default_max=1.0,
+        _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
+            label="Global Force Mult",
+            param_name="GLOBAL_FORCE_MULT",
+            value=self.state.sim.GLOBAL_FORCE_MULT,
+            default_min=0.0,
+            default_max=5.0,
         )
-        self.render_custom_tooltip("Mutation Scale",
-            "Controls the amount of random variation in particle behavior. Higher values introduce more chaos and unpredictability.")
+        self.render_custom_tooltip("Global Force Mult",
+            "Scales all forces applied to particles. Acts as a master speed control - higher values create faster, more energetic simulations.")
 
         _, self.state.sim.DRAG = self.slider_float_with_range_menu(
             label="Drag",
@@ -758,15 +758,25 @@ class UI:
         self.render_custom_tooltip("Drag",
             "Simulates air resistance and friction. Higher values slow particles down more quickly, lower values allow particles to maintain momentum.")
 
-        _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
-            label="Strafe Power",
-            param_name="STRAFE_POWER",
-            value=self.state.sim.STRAFE_POWER,
-            default_min=0.0,
-            default_max=4.0,
+        _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
+            label="Mutation Scale",
+            param_name="MUTATION_SCALE",
+            value=self.state.sim.MUTATION_SCALE,
+            default_min=-1.0,
+            default_max=1.0,
         )
-        self.render_custom_tooltip("Strafe Power",
-            "Amplifies the lateral movement force. Higher values enable more aggressive sideways motion and circular patterns.")
+        self.render_custom_tooltip("Mutation Scale",
+            "Controls the amount of random variation in particle behavior. Higher values introduce more chaos and unpredictability.")
+
+        _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
+            label="Sensor Gain",
+            param_name="SENSOR_GAIN",
+            value=self.state.sim.SENSOR_GAIN,
+            default_min=-1.0,
+            default_max=1.0,
+        )
+        self.render_custom_tooltip("Sensor Gain",
+            "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to their neighbors.")
 
         _, self.state.sim.SENSOR_ANGLE = self.slider_float_with_range_menu(
             label="Sensor Angle",
@@ -777,16 +787,6 @@ class UI:
         )
         self.render_custom_tooltip("Sensor Angle",
             "Sets the angular offset of particle sensors from their forward direction. Affects how particles perceive their surroundings.")
-
-        _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
-            label="Global Force Multiplier",
-            param_name="GLOBAL_FORCE_MULT",
-            value=self.state.sim.GLOBAL_FORCE_MULT,
-            default_min=0.0,
-            default_max=5.0,
-        )
-        self.render_custom_tooltip("Global Force Multiplier",
-            "Scales all forces applied to particles. Acts as a master speed control - higher values create faster, more energetic simulations.")
 
         _, self.state.sim.SENSOR_DISTANCE = self.slider_float_with_range_menu(
             label="Sensor Distance",
