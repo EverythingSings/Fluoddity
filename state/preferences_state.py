@@ -14,6 +14,7 @@ class PreferencesState:
     speedmult: int = 1
     motion_blur: bool = True
     color_by_cohort: bool = False
+    rule_seed: float = 0.0
 
     # UI preferences
     physics_tooltips_enabled: bool = True

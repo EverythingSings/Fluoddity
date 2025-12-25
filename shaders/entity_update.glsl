@@ -36,6 +36,8 @@ uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
 uniform bool ABSOLUTE_ORIENTATION;
+uniform float RULE_SEED;
+
 ////////////////////////////CONSTANTS
 #define COHORTS 64 //each cohort gets it's own rule and starting location.
 #define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer. 
@@ -98,12 +100,8 @@ void mutate_rule(inout Rule current_rule,float amount,float cohort){
     float seed = hash(current_rule.centers[4].frequency.xy+current_rule.centers[7].amplitude.ys+current_rule.centers[1].frequency.zw)+cohort;
 
     for(int i = 0; i < 10; i++) {
-        vec4 freq_mutation = amount * 0.5 * (-1.0 + 2.0 * hash4(vec2(i+seed,-i)));
-        current_rule.centers[i].frequency += freq_mutation;
-
         vec4 amp_mutation = amount * (-1.0 + 2.0 * hash4(-.5+vec2(-i+seed,i)));
         current_rule.centers[i].amplitude += amp_mutation;
-
         current_rule.centers[i].frequency *= 1 + amount * 0.5 * (hash(vec2(seed,i))-.5);
     }
 }
@@ -200,10 +198,10 @@ void main() {
     Rule current_rule=target_rule;
     //if a few coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
-        current_rule = Rule(generate_random_centers(floor(cohort)));
+        current_rule = Rule(generate_random_centers(RULE_SEED+floor(cohort)));
     }
     //Each cohort gets a random mutation
-    mutate_rule(current_rule,MUTATION_SCALE,floor(cohort));
+    mutate_rule(current_rule,MUTATION_SCALE,RULE_SEED+floor(cohort));
 
     //rescale sensor values
     float sensor_scaling = 38.855*SENSOR_GAIN;

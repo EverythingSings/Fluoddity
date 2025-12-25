@@ -2,6 +2,7 @@ import glfw
 from imgui_bundle import imgui
 from imgui_bundle.python_backends import glfw_backend
 import time
+import random
 import numpy as np
 import moderngl
 from pathlib import Path
@@ -268,6 +269,8 @@ class UI:
                 self._toggle_recording = True
             elif key == glfw.KEY_G:
                 self.state.sim.going = not self.state.sim.going
+            elif key == glfw.KEY_SPACE:
+                self.state.preferences.rule_seed = random.random()
             elif key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(window, True)
             elif key == glfw.KEY_F1:
@@ -420,6 +423,10 @@ class UI:
             self.state.preferences.color_by_cohort
         )
 
+        # Randomize Rule Seed button
+        if imgui.button("Randomize Rule Seed"):
+            self.state.preferences.rule_seed = random.random()
+
         imgui.text(f"Texture Size: {tex_size[0]}x{tex_size[1]}")
 
         # Lock speedmult to motion_blur_samples when recording video
@@ -510,6 +517,7 @@ class UI:
         imgui.text("Q/E - Zoom out/in")
         imgui.text("Ctrl+C - Copy config to clipboard")
         imgui.text("Ctrl+V - Paste config from clipboard")
+        imgui.text("Space - Randomize rule seed")
         imgui.text("F1 - Toggle ImGui Demo Window")
         imgui.text("ESC - Exit")
 
