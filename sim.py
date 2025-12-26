@@ -111,15 +111,15 @@ class Sim:
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
-        self._assign_physics_setting('AXIAL_FORCE_SETTING', self._state.AXIAL_FORCE, 'Axial Force', -1.0, 1.0)
-        self._assign_physics_setting('LATERAL_FORCE_SETTING', self._state.LATERAL_FORCE, 'Lateral Force', -1.0, 1.0)
-        self._assign_physics_setting('SENSOR_GAIN_SETTING', self._state.SENSOR_GAIN, 'Sensor Gain', 0.0, 5.0)
-        self._assign_physics_setting('MUTATION_SCALE_SETTING', self._state.MUTATION_SCALE, 'Mutation Scale', -0.5, 0.5)
-        self._assign_physics_setting('DRAG_SETTING', self._state.DRAG, 'Drag', -1.0, 1.0)
-        self._assign_physics_setting('STRAFE_POWER_SETTING', self._state.STRAFE_POWER, 'Strafe Power', 0.0, 0.5)
-        self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', -1.0, 1.0)
-        self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 0.0, 2.0)
-        self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 0.0, 4.0)
+        self._assign_physics_setting('AXIAL_FORCE_SETTING', self._state.AXIAL_FORCE, 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
+        self._assign_physics_setting('LATERAL_FORCE_SETTING', self._state.LATERAL_FORCE, 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
+        self._assign_physics_setting('SENSOR_GAIN_SETTING', self._state.SENSOR_GAIN, 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
+        self._assign_physics_setting('MUTATION_SCALE_SETTING', self._state.MUTATION_SCALE, 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
+        self._assign_physics_setting('DRAG_SETTING', self._state.DRAG, 'Drag', 'DRAG', -1.0, 1.0)
+        self._assign_physics_setting('STRAFE_POWER_SETTING', self._state.STRAFE_POWER, 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
+        self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
+        self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
+        self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
         tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
         tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
 
@@ -254,16 +254,16 @@ class Sim:
         # Average the results to keep within min/max range
         return result / active_sweeps if active_sweeps > 0 else slider_value
 
-    def _assign_physics_setting(self, uniform_name: str, slider_value: float, slider_label: str, default_min: float, default_max: float):
-        """Assign a PhysicsSetting struct uniform with dynamically fetched min/max ranges."""
+    def _assign_physics_setting(self, uniform_name: str, slider_value: float, slider_label: str, param_name: str, default_min: float, default_max: float):
+        """Assign a PhysicsSetting struct uniform with dynamically fetched min/max ranges and sweep states."""
         min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
 
         tryset(self.entity_update_program, f'{uniform_name}.slider_value', slider_value)
         tryset(self.entity_update_program, f'{uniform_name}.min_value', min_val)
         tryset(self.entity_update_program, f'{uniform_name}.max_value', max_val)
-        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', True)  # TODO SWEEP INTERFACE
-        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', True)  # TODO SWEEP INTERFACE
-        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', True)  # TODO SWEEP INTERFACE
+        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', self._state.x_sweeps.get(param_name, False))
+        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', self._state.y_sweeps.get(param_name, False))
+        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', self._state.cohort_sweeps.get(param_name, False))
 
     def apply_preferences(self, preferences) -> None:
         """Apply preferences from Orchestrator before update."""
@@ -283,3 +283,51 @@ class Sim:
     def get_rule_buffer(self) -> moderngl.Buffer:
         """Expose rule buffer for rule readback."""
         return self.rule_buffer
+
+    def update_sliders_from_particle(self, pos: tuple[float, float], cohort: float) -> None:
+        """Update all slider values based on effective values at a particle's position/cohort.
+
+        When a particle is clicked and parameter sweeps are active, this calculates what
+        the effective parameter values are at that particle's location and updates the
+        sliders to show those values.
+
+        Args:
+            pos: (x, y) world position of entity in [-1, 1] range
+            cohort: Normalized cohort value in [0, 1] range
+        """
+        # Define all 9 parameters with their state field, slider label, and default ranges
+        parameters = [
+            ('AXIAL_FORCE', 'Axial Force', -1.0, 1.0),
+            ('LATERAL_FORCE', 'Lateral Force', -1.0, 1.0),
+            ('SENSOR_GAIN', 'Sensor Gain', 0.0, 5.0),
+            ('MUTATION_SCALE', 'Mutation Scale', -0.5, 0.5),
+            ('DRAG', 'Drag', -1.0, 1.0),
+            ('STRAFE_POWER', 'Strafe Power', 0.0, 0.5),
+            ('SENSOR_ANGLE', 'Sensor Angle', -1.0, 1.0),
+            ('GLOBAL_FORCE_MULT', 'Global Force Mult', 0.0, 2.0),
+            ('SENSOR_DISTANCE', 'Sensor Distance', 0.0, 4.0),
+        ]
+
+        for param_name, slider_label, default_min, default_max in parameters:
+            # Get current slider value
+            current_value = getattr(self._state, param_name)
+
+            # Get sweep states for this parameter
+            x_sweep = self._state.x_sweeps.get(param_name, False)
+            y_sweep = self._state.y_sweeps.get(param_name, False)
+            cohort_sweep = self._state.cohort_sweeps.get(param_name, False)
+
+            # Only update if at least one sweep is active
+            if x_sweep or y_sweep or cohort_sweep:
+                # Get min/max range for this parameter
+                min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
+
+                # Calculate effective value at this particle's position/cohort
+                effective_value = self.calculate_setting(
+                    current_value, min_val, max_val,
+                    pos, cohort,
+                    x_sweep, y_sweep, cohort_sweep
+                )
+
+                # Update the slider value
+                setattr(self._state, param_name, effective_value)
