@@ -18,32 +18,6 @@ class PhysicsDefaults:
     source_filename: str | None  # None means program defaults
 
 
-def create_test_pattern(size=128):
-    """Create a simple test pattern texture data."""
-    data = np.zeros((size, size, 4), dtype=np.uint8)
-
-    # Create a checkerboard pattern with colored squares
-    square_size = size // 8
-    for y in range(size):
-        for x in range(size):
-            square_x = x // square_size
-            square_y = y // square_size
-
-            if (square_x + square_y) % 2 == 0:
-                # Red squares
-                data[y, x] = [255, 0, 0, 255]
-            else:
-                # Blue squares
-                data[y, x] = [0, 0, 255, 255]
-
-    # Add a green border
-    data[0, :] = [0, 255, 0, 255]  # Top
-    data[-1, :] = [0, 255, 0, 255]  # Bottom
-    data[:, 0] = [0, 255, 0, 255]  # Left
-    data[:, -1] = [0, 255, 0, 255]  # Right
-
-    return data
-
 
 class UI:
     """Passive UI - renders widgets, exposes state, handles no logic."""
@@ -53,9 +27,21 @@ class UI:
         self.ctx = ctx
         self.view_option_labels = view_option_labels
 
+
+
+
         # Initialize ImGui
         imgui.create_context()
         self.imgui_renderer = glfw_backend.GlfwRenderer(window)
+
+        io = imgui.get_io()
+
+        # Default font at normal size
+        io.fonts.add_font_default()
+
+        # Default font
+        font_config = imgui.ImFontConfig()
+        self.default_font = io.fonts.add_font_default(font_config)
 
         # Set up event callbacks
         self.setup_callbacks()
@@ -1324,8 +1310,8 @@ class UI:
         Args:
             param_name: Name of the parameter (e.g., 'AXIAL_FORCE')
         """
-        button_height = imgui.get_frame_height()
-        button_width = button_height * 1.3  # Wider than tall
+        button_height = imgui.get_frame_height() * 1.85  # Slightly taller to give range buttons more room
+        button_width = button_height * 1.  # Wider than tall
 
         # X button (Red)
         x_active = self.state.sim.x_sweeps.get(param_name, False)
@@ -1419,24 +1405,22 @@ class UI:
             default_min: Default minimum value
             default_max: Default maximum value
         """
-        button_height = imgui.get_frame_height() / 2.0  # Half height for stacked buttons
-        button_width = imgui.get_frame_height() * 1.3  # Same width as sweep buttons
-
-        # Add small vertical offset to center the button pair with the slider
-        # The buttons are half-height each, so total height equals frame height
-        # No offset needed since they should already be centered
+        # Match the height of the XYC sweep buttons (which are 1.35x frame height)
+        total_height = imgui.get_frame_height() * 1.43
+        button_height = total_height / 2.0  # Half height for stacked buttons
+        button_width = imgui.get_frame_height() * 1.23  # Same width as sweep buttons
 
         # Begin a group to keep buttons together
         imgui.begin_group()
-
-        # Widen button (^)
+        imgui.push_font(self.default_font,12)
+        # Widen button
         if imgui.button(f"^##widen_{param_name}", imgui.ImVec2(button_width, button_height)):
             self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=True)
 
-        # Narrow button (v) - directly below, no spacing
+        # Narrow button
         if imgui.button(f"v##narrow_{param_name}", imgui.ImVec2(button_width, button_height)):
             self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=False)
-
+        imgui.pop_font()
         imgui.end_group()
 
     def cleanup(self):
