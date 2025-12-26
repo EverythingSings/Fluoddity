@@ -111,15 +111,15 @@ class Sim:
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
-        tryset(self.entity_update_program, 'AXIAL_FORCE', self._state.AXIAL_FORCE)
-        tryset(self.entity_update_program, 'LATERAL_FORCE', self._state.LATERAL_FORCE)
-        tryset(self.entity_update_program, 'SENSOR_GAIN', self._state.SENSOR_GAIN)
-        tryset(self.entity_update_program, 'MUTATION_SCALE', self._state.MUTATION_SCALE)
-        tryset(self.entity_update_program, 'DRAG', self._state.DRAG)
-        tryset(self.entity_update_program, 'STRAFE_POWER', self._state.STRAFE_POWER)
-        tryset(self.entity_update_program, 'SENSOR_ANGLE', self._state.SENSOR_ANGLE)
-        tryset(self.entity_update_program, 'GLOBAL_FORCE_MULT', self._state.GLOBAL_FORCE_MULT)
-        tryset(self.entity_update_program, 'SENSOR_DISTANCE', self._state.SENSOR_DISTANCE)
+        self._assign_physics_setting('AXIAL_FORCE_SETTING', self._state.AXIAL_FORCE, 'Axial Force', -1.0, 1.0)
+        self._assign_physics_setting('LATERAL_FORCE_SETTING', self._state.LATERAL_FORCE, 'Lateral Force', -1.0, 1.0)
+        self._assign_physics_setting('SENSOR_GAIN_SETTING', self._state.SENSOR_GAIN, 'Sensor Gain', 0.0, 5.0)
+        self._assign_physics_setting('MUTATION_SCALE_SETTING', self._state.MUTATION_SCALE, 'Mutation Scale', -0.5, 0.5)
+        self._assign_physics_setting('DRAG_SETTING', self._state.DRAG, 'Drag', -1.0, 1.0)
+        self._assign_physics_setting('STRAFE_POWER_SETTING', self._state.STRAFE_POWER, 'Strafe Power', 0.0, 0.5)
+        self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', -1.0, 1.0)
+        self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 0.0, 2.0)
+        self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 0.0, 4.0)
         tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
         tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
 
@@ -194,6 +194,28 @@ class Sim:
     def apply_camera_state(self, camera_state) -> None:
         """Apply camera state from Orchestrator before update."""
         self._camera_state = camera_state
+
+    def _get_slider_range(self, slider_label: str, default_min: float, default_max: float) -> tuple[float, float]:
+        """Get the current min/max range for a slider from preferences."""
+        if self._preferences is None:
+            return (default_min, default_max)
+
+        if slider_label not in self._preferences.slider_ranges:
+            return (default_min, default_max)
+
+        return (self._preferences.slider_ranges[slider_label][0],
+                self._preferences.slider_ranges[slider_label][1])
+
+    def _assign_physics_setting(self, uniform_name: str, slider_value: float, slider_label: str, default_min: float, default_max: float):
+        """Assign a PhysicsSetting struct uniform with dynamically fetched min/max ranges."""
+        min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
+
+        tryset(self.entity_update_program, f'{uniform_name}.slider_value', slider_value)
+        tryset(self.entity_update_program, f'{uniform_name}.min_value', min_val)
+        tryset(self.entity_update_program, f'{uniform_name}.max_value', max_val)
+        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', False)  # TODO SWEEP INTERFACE
+        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', False)  # TODO SWEEP INTERFACE
+        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', False)  # TODO SWEEP INTERFACE
 
     def apply_preferences(self, preferences) -> None:
         """Apply preferences from Orchestrator before update."""

@@ -26,20 +26,20 @@ struct PhysicsSetting {
     bool x_sweep;
     bool y_sweep;
     bool cohort_sweep;
-}
+};
 uniform int frame_count;
 uniform Rule target_rule;
 uniform vec2 canvas_resolution;
 uniform sampler2D canvas;
-uniform float DRAG;
-uniform float STRAFE_POWER;
-uniform float SENSOR_ANGLE;
-uniform float GLOBAL_FORCE_MULT;
-uniform float SENSOR_DISTANCE;
-uniform float AXIAL_FORCE;
-uniform float LATERAL_FORCE;
-uniform float SENSOR_GAIN;
-uniform float MUTATION_SCALE;
+uniform PhysicsSetting DRAG_SETTING;
+uniform PhysicsSetting STRAFE_POWER_SETTING;
+uniform PhysicsSetting SENSOR_ANGLE_SETTING;
+uniform PhysicsSetting GLOBAL_FORCE_MULT_SETTING;
+uniform PhysicsSetting SENSOR_DISTANCE_SETTING;
+uniform PhysicsSetting AXIAL_FORCE_SETTING;
+uniform PhysicsSetting LATERAL_FORCE_SETTING;
+uniform PhysicsSetting SENSOR_GAIN_SETTING;
+uniform PhysicsSetting MUTATION_SCALE_SETTING;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
@@ -54,15 +54,15 @@ uniform float RULE_SEED;
 
 float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     //if no sweep modes are active, just return slider value
-    if(!(setting.y_sweep||setting.cohort_sweep||setting.x_sweep)) 
+    if(!(setting.y_sweep||setting.cohort_sweep||setting.x_sweep))
         {return setting.slider_value;}
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
     cohort = cohort / COHORTS; //convert to 0..1 for mixing
     float result = 0;
-    result += x_sweep? mix(min_value,max_value,pos.x):0;
-    result += y_sweep? mix(min_value,max_value,pos.y):0;
-    result += cohort_sweep? mix(min_value,max_value,cohort):0;
+    result += setting.x_sweep? mix(setting.min_value,setting.max_value,pos.x):0;
+    result += setting.y_sweep? mix(setting.min_value,setting.max_value,pos.y):0;
+    result += setting.cohort_sweep? mix(setting.min_value,setting.max_value,cohort):0;
     return result;
 }
 
@@ -155,11 +155,13 @@ vec4 black_box(vec2 L,vec2 R,Rule rule){
 //--L and R: velocity field measurements from left sensor and right sensor.
 //--axis: forward vector that defines our orientation.
 //--rule: coefficients for the noise function that dictates entity behavior.
+//--pos: entity position (for parameter sweeps)
+//--cohort: entity cohort (for parameter sweeps)
 //RETURNS:
-//--force: A "push" vector that will be added to entity.vel 
+//--force: A "push" vector that will be added to entity.vel
 //--strafe: A "hop" vector that will be added to entity.pos and have no effect on velocity
 //--color: vec2 to be used as parameters in a coloring function
-void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, out vec2 force, out vec2 strafe, out vec2 color){
+void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, vec2 pos, float cohort, out vec2 force, out vec2 strafe, out vec2 color){
 
     //build a local coordinate frame where "axis" is forward.
     vec2 forward=safenorm(axis);
@@ -180,8 +182,8 @@ void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, out vec2 fo
     strafe = baseterm.zw + y_reflect(mirrorterm.zw);
 
     //Convert force and strafe back to world coordinates
-    force=forward*force.x*AXIAL_FORCE+left*force.y*LATERAL_FORCE;
-    strafe = forward*strafe.x*AXIAL_FORCE + left * strafe.y * LATERAL_FORCE;
+    force=forward*force.x*calculate_setting(AXIAL_FORCE_SETTING,pos,cohort)+left*force.y*calculate_setting(LATERAL_FORCE_SETTING,pos,cohort);
+    strafe = forward*strafe.x*calculate_setting(AXIAL_FORCE_SETTING,pos,cohort) + left * strafe.y * calculate_setting(LATERAL_FORCE_SETTING,pos,cohort);
 
     color = baseterm.xy+(mirrorterm.xy); //Just an arbitrary function of blackbox output. Reuses force terms.
     return;
@@ -204,14 +206,14 @@ void main() {
     float cohort = get_cohort(index);
 
     //Calculate position offsets for the two sensors.
-    float sample_dist = .005 * SENSOR_DISTANCE;
+    float sample_dist = .005 * calculate_setting(SENSOR_DISTANCE_SETTING,e.pos,cohort);
     
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
     if(ABSOLUTE_ORIENTATION){orientation = vec2(0,1);}
     vec2 left_sensor_offset = orientation*sample_dist;
     vec2 right_sensor_offset = orientation*sample_dist;
-    pR(left_sensor_offset,SENSOR_ANGLE*PI);//rotate them opposite directions
-    pR(right_sensor_offset,-SENSOR_ANGLE*PI);
+    pR(left_sensor_offset,calculate_setting(SENSOR_ANGLE_SETTING,e.pos,cohort)*PI);//rotate them opposite directions
+    pR(right_sensor_offset,-calculate_setting(SENSOR_ANGLE_SETTING,e.pos,cohort)*PI);
 
     //read the trails from canvas
     vec4 ltap = get_can(e.pos+left_sensor_offset);
@@ -223,10 +225,10 @@ void main() {
         current_rule = Rule(generate_random_centers(RULE_SEED+floor(cohort)));
     }
     //Each cohort gets a random mutation
-    mutate_rule(current_rule,MUTATION_SCALE,RULE_SEED+floor(cohort));
+    mutate_rule(current_rule,calculate_setting(MUTATION_SCALE_SETTING,e.pos,cohort),RULE_SEED+floor(cohort));
 
     //rescale sensor values
-    float sensor_scaling = 38.855*SENSOR_GAIN;
+    float sensor_scaling = 38.855*calculate_setting(SENSOR_GAIN_SETTING,e.pos,cohort);
     ltap *= sensor_scaling;
     rtap *= sensor_scaling;
 
@@ -234,11 +236,11 @@ void main() {
     vec2 strafe =vec2(0);
     vec2 force = vec2(0);
     vec2 col_params = vec2(0);
-    calculate_entity_behavior(ltap.xy,rtap.xy,orientation,current_rule,force,strafe,col_params);
+    calculate_entity_behavior(ltap.xy,rtap.xy,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
 
     //rescale output forces
-    force *= GLOBAL_FORCE_MULT/400.;
-    strafe *= GLOBAL_FORCE_MULT/20.;
+    force *= calculate_setting(GLOBAL_FORCE_MULT_SETTING,e.pos,cohort)/400.;
+    strafe *= calculate_setting(GLOBAL_FORCE_MULT_SETTING,e.pos,cohort)/20.;
 
 
     //e.color is interpreted as vec4(hue,saturation,brightness,alpha)
@@ -251,10 +253,10 @@ void main() {
     e.color.w=0.045; //low alpha
 
     //Accelerate: Apply drag and add force to e.vel,
-    e.vel = e.vel*DRAG + force;
+    e.vel = e.vel*calculate_setting(DRAG_SETTING,e.pos,cohort) + force;
     //Move: add e.vel and strafe to e.pos
     e.pos += e.vel;
-    e.pos += strafe*STRAFE_POWER;
+    e.pos += strafe*calculate_setting(STRAFE_POWER_SETTING,e.pos,cohort);
 
     //reflect particles off canvas boundaries
     if(EDGE_BOUNCE){
