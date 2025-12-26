@@ -767,6 +767,8 @@ class UI:
             imgui.end_popup()
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("AXIAL_FORCE", "Axial Force", self.state.sim.AXIAL_FORCE, -1.0, 1.0)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("AXIAL_FORCE")
             imgui.same_line(spacing=8)
 
@@ -781,6 +783,8 @@ class UI:
             "Controls the strength of forces applied parallel to the direction of travel: acceleration and braking")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("LATERAL_FORCE", "Lateral Force", self.state.sim.LATERAL_FORCE, -1.0, 1.0)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("LATERAL_FORCE")
             imgui.same_line(spacing=8)
 
@@ -795,6 +799,8 @@ class UI:
             "Controls the strength of forces applied perpendicular to the direction of travel: turning left and right.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("STRAFE_POWER", "Strafe Power", self.state.sim.STRAFE_POWER, 0.0, 0.5)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("STRAFE_POWER")
             imgui.same_line(spacing=8)
 
@@ -809,6 +815,8 @@ class UI:
             "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("GLOBAL_FORCE_MULT", "Global Force Mult", self.state.sim.GLOBAL_FORCE_MULT, 0.0, 2.0)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("GLOBAL_FORCE_MULT")
             imgui.same_line(spacing=8)
 
@@ -823,6 +831,8 @@ class UI:
             "Scales axial and lateral forces applied to particles, and scales strafe power. Often tuned in the opposite direction to Sensor Gain and Drag to offset exploding/vanishing particle speed.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("DRAG")
             imgui.same_line(spacing=8)
 
@@ -837,6 +847,8 @@ class UI:
             "Each physics update, particle velocity is multiplied by drag like so:   vel = vel*drag + forces; So drag less than 1 means particles are being slowed down. Powerful (<0.5) drag values can prevent energetic systems from 'blowing up'")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("MUTATION_SCALE", "Mutation Scale", self.state.sim.MUTATION_SCALE, -0.5, 0.5)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("MUTATION_SCALE")
             imgui.same_line(spacing=8)
 
@@ -851,6 +863,8 @@ class UI:
             "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("SENSOR_GAIN", "Sensor Gain", self.state.sim.SENSOR_GAIN, 0.0, 5.0)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("SENSOR_GAIN")
             imgui.same_line(spacing=8)
 
@@ -865,6 +879,8 @@ class UI:
             "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("SENSOR_ANGLE")
             imgui.same_line(spacing=8)
 
@@ -879,6 +895,8 @@ class UI:
             "Sets the angular offset of particle sensors from their forward direction. Determines whether particles are 'looking ahead' or 'looking behind'.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_range_adjust_buttons("SENSOR_DISTANCE", "Sensor Distance", self.state.sim.SENSOR_DISTANCE, 0.0, 4.0)
+            imgui.same_line(spacing=2)
             self.render_sweep_buttons("SENSOR_DISTANCE")
             imgui.same_line(spacing=8)
 
@@ -1358,6 +1376,58 @@ class UI:
             self.state.sim.cohort_sweeps[param_name] = not c_active
 
         imgui.pop_style_color(3)
+
+    def adjust_slider_range(self, slider_label: str, current_value: float, default_min: float, default_max: float, widen: bool, strength: float = 2.0):
+        """Adjust the min/max range for a slider, widening or narrowing around current value.
+
+        Args:
+            slider_label: Label of the slider (e.g., 'Axial Force')
+            current_value: Current slider value (x in the formula)
+            default_min: Default minimum value
+            default_max: Default maximum value
+            widen: True to widen, False to narrow
+            strength: Strength parameter (S in formula when widening, 1/S when narrowing)
+        """
+        # Get current range
+        if slider_label in self.state.preferences.slider_ranges:
+            L, H, _, _ = self.state.preferences.slider_ranges[slider_label]
+        else:
+            L, H = default_min, default_max
+
+        # Calculate S based on widen/narrow
+        x = current_value
+        S = strength if widen else (1.0 / strength)
+
+        # Apply the formulas
+        # L' = x - S*( (x-L)/2. + (H-L)/4. )
+        # H' = L' + S*(H-L)
+        L_prime = x - S * ((x - L) / 2.0 + (H - L) / 4.0)
+        H_prime = L_prime + S * (H - L)
+
+        # Update the range in preferences
+        self.state.preferences.slider_ranges[slider_label] = [L_prime, H_prime,default_min,default_max]
+
+    def render_range_adjust_buttons(self, param_name: str, slider_label: str, current_value: float, default_min: float, default_max: float):
+        """Render widen/narrow buttons for adjusting slider range.
+
+        Args:
+            param_name: Name of the parameter (e.g., 'AXIAL_FORCE')
+            slider_label: Label of the slider (e.g., 'Axial Force')
+            current_value: Current slider value
+            default_min: Default minimum value
+            default_max: Default maximum value
+        """
+        button_height = imgui.get_frame_height() / 2.0  # Half height for stacked buttons
+        button_width = imgui.get_frame_height() * 1.3  # Same width as sweep buttons
+
+        # Start a group to stack buttons vertically
+        # Widen button (^)
+        if imgui.button(f"^##widen_{param_name}", imgui.ImVec2(button_width, button_height)):
+            self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=True)
+
+        # Narrow button (v) - directly below, no spacing
+        if imgui.button(f"v##narrow_{param_name}", imgui.ImVec2(button_width, button_height)):
+            self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=False)
 
     def cleanup(self):
         self.tooltip_fbo.release()
