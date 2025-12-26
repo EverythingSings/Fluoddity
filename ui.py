@@ -662,6 +662,21 @@ class UI:
                     "Absolute Orientation",
                     self.state.sim.ABSOLUTE_ORIENTATION
                 )
+
+                # Parameter Sweeps toggle
+                changed, new_value = imgui.checkbox(
+                    "Parameter Sweeps",
+                    self.state.sim.parameter_sweeps_enabled
+                )
+                if changed:
+                    self.state.sim.parameter_sweeps_enabled = new_value
+                    # If disabling, turn off all sweeps
+                    if not new_value:
+                        for param in self.state.sim.x_sweeps.keys():
+                            self.state.sim.x_sweeps[param] = False
+                            self.state.sim.y_sweeps[param] = False
+                            self.state.sim.cohort_sweeps[param] = False
+
                 imgui.end_menu()
 
             imgui.end_menu_bar()
@@ -751,6 +766,10 @@ class UI:
                 imgui.close_current_popup()
             imgui.end_popup()
 
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("AXIAL_FORCE")
+            imgui.same_line(spacing=8)
+
         _, self.state.sim.AXIAL_FORCE = self.slider_float_with_range_menu(
             label="Axial Force",
             param_name="AXIAL_FORCE",
@@ -760,6 +779,10 @@ class UI:
         )
         self.render_custom_tooltip("Axial Force",
             "Controls the strength of forces applied parallel to the direction of travel: acceleration and braking")
+
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("LATERAL_FORCE")
+            imgui.same_line(spacing=8)
 
         _, self.state.sim.LATERAL_FORCE = self.slider_float_with_range_menu(
             label="Lateral Force",
@@ -771,6 +794,10 @@ class UI:
         self.render_custom_tooltip("Lateral Force",
             "Controls the strength of forces applied perpendicular to the direction of travel: turning left and right.")
 
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("STRAFE_POWER")
+            imgui.same_line(spacing=8)
+
         _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
             label="Strafe Power",
             param_name="STRAFE_POWER",
@@ -780,6 +807,10 @@ class UI:
         )
         self.render_custom_tooltip("Strafe Power",
             "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
+
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("GLOBAL_FORCE_MULT")
+            imgui.same_line(spacing=8)
 
         _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
             label="Global Force Mult",
@@ -791,6 +822,10 @@ class UI:
         self.render_custom_tooltip("Global Force Mult",
             "Scales axial and lateral forces applied to particles, and scales strafe power. Often tuned in the opposite direction to Sensor Gain and Drag to offset exploding/vanishing particle speed.")
 
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("DRAG")
+            imgui.same_line(spacing=8)
+
         _, self.state.sim.DRAG = self.slider_float_with_range_menu(
             label="Drag",
             param_name="DRAG",
@@ -800,6 +835,10 @@ class UI:
         )
         self.render_custom_tooltip("Drag",
             "Each physics update, particle velocity is multiplied by drag like so:   vel = vel*drag + forces; So drag less than 1 means particles are being slowed down. Powerful (<0.5) drag values can prevent energetic systems from 'blowing up'")
+
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("MUTATION_SCALE")
+            imgui.same_line(spacing=8)
 
         _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
             label="Mutation Scale",
@@ -811,6 +850,10 @@ class UI:
         self.render_custom_tooltip("Mutation Scale",
             "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
 
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("SENSOR_GAIN")
+            imgui.same_line(spacing=8)
+
         _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
             label="Sensor Gain",
             param_name="SENSOR_GAIN",
@@ -821,6 +864,10 @@ class UI:
         self.render_custom_tooltip("Sensor Gain",
             "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.")
 
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("SENSOR_ANGLE")
+            imgui.same_line(spacing=8)
+
         _, self.state.sim.SENSOR_ANGLE = self.slider_float_with_range_menu(
             label="Sensor Angle",
             param_name="SENSOR_ANGLE",
@@ -830,6 +877,10 @@ class UI:
         )
         self.render_custom_tooltip("Sensor Angle",
             "Sets the angular offset of particle sensors from their forward direction. Determines whether particles are 'looking ahead' or 'looking behind'.")
+
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons("SENSOR_DISTANCE")
+            imgui.same_line(spacing=8)
 
         _, self.state.sim.SENSOR_DISTANCE = self.slider_float_with_range_menu(
             label="Sensor Distance",
@@ -1248,6 +1299,65 @@ class UI:
             imgui.end_popup()
 
         return self.state.preferences.slider_ranges[slider_name][0], self.state.preferences.slider_ranges[slider_name][1], reset_requested, range_changed
+
+    def render_sweep_buttons(self, param_name: str):
+        """Render X, Y, C sweep toggle buttons for a parameter.
+
+        Args:
+            param_name: Name of the parameter (e.g., 'AXIAL_FORCE')
+        """
+        button_height = imgui.get_frame_height()
+        button_width = button_height * 1.3  # Wider than tall
+
+        # X button (Red)
+        x_active = self.state.sim.x_sweeps.get(param_name, False)
+        if x_active:
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.6, 0.15, 0.15, 1.0))
+        else:
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.4, 0.1, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.6, 0.15, 0.15, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.3, 0.08, 0.08, 1.0))
+
+        if imgui.button(f"X##{param_name}_x", imgui.ImVec2(button_width, button_height)):
+            self.state.sim.x_sweeps[param_name] = not x_active
+
+        imgui.pop_style_color(3)
+        imgui.same_line(spacing=2)
+
+        # Y button (Green)
+        y_active = self.state.sim.y_sweeps.get(param_name, False)
+        if y_active:
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.2, 0.8, 0.2, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.3, 1.0, 0.3, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.15, 0.6, 0.15, 1.0))
+        else:
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.1, 0.4, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.15, 0.6, 0.15, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.08, 0.3, 0.08, 1.0))
+
+        if imgui.button(f"Y##{param_name}_y", imgui.ImVec2(button_width, button_height)):
+            self.state.sim.y_sweeps[param_name] = not y_active
+
+        imgui.pop_style_color(3)
+        imgui.same_line(spacing=2)
+
+        # C button (Yellow)
+        c_active = self.state.sim.cohort_sweeps.get(param_name, False)
+        if c_active:
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.9, 0.9, 0.2, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 1.0, 0.3, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.7, 0.7, 0.15, 1.0))
+        else:
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.4, 0.4, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.6, 0.6, 0.15, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.3, 0.3, 0.08, 1.0))
+
+        if imgui.button(f"C##{param_name}_c", imgui.ImVec2(button_width, button_height)):
+            self.state.sim.cohort_sweeps[param_name] = not c_active
+
+        imgui.pop_style_color(3)
 
     def cleanup(self):
         self.tooltip_fbo.release()
