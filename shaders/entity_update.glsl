@@ -7,7 +7,8 @@ struct Entity {
     vec2 pos;
     vec2 vel;
     float size;
-    float padding[3];  // Align to 16-byte boundary for vec4
+    float cohort;      // Normalized cohort value (0-1) for parameter sweep calculations
+    float padding[2];  // Align to 16-byte boundary for vec4
     vec4 color;
 };  // Total: 48 bytes (12 floats)
 struct Rule {
@@ -126,7 +127,7 @@ void reset(uint index){
     pos+=1.8*((gridcell)/spot_rows-.45);
 
     //store to persistent entity buffer
-    entities[index]=Entity(pos,vel,size,float[3](0,0,0),color);
+    entities[index]=Entity(pos,vel,size,cohort_val/COHORTS,float[2](0,0),color);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
@@ -209,7 +210,7 @@ void main() {
 
     // Inactive entities get zeroed out. Position offscreen so they don't accidentally get clicked on
     if (index >= ACTIVE_COUNT) {
-        entities[index] = Entity(vec2(10000), vec2(0), 0.0, float[3](0,0,0), vec4(0));
+        entities[index] = Entity(vec2(10000), vec2(0), 0.0, 0.0, float[2](0,0), vec4(0));
         return;
     }
 

@@ -10,7 +10,8 @@ struct Entity {
     vec2 pos;
     vec2 vel;
     float size;
-    float padding[3];  // Align to 16-byte boundary for vec4
+    float cohort;      // Normalized cohort value (0-1) for parameter sweep calculations
+    float padding[2];  // Align to 16-byte boundary for vec4
     vec4 color;
 };  // Total: 48 bytes (12 floats)
 layout(std430, binding = 0) buffer EntityBuffer {

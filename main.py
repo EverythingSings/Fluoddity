@@ -153,11 +153,13 @@ class App:
                 ui_state.mouse_pos,
                 self.sim.view_tex.size
             )
-            entity_id = self.entity_picker.find_nearest_entity(tex_coords)
-            print(entity_id)
+            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
+            print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
             rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
             self.rule_manager.push_rule(rule)
             self.sim.apply_rule(rule)
+            # TODO: When sweep UI is added, use entity_pos and entity_cohort with sim.calculate_setting()
+            # to set slider values based on the clicked particle's effective parameter values
 
         # Handle rule undo (right click)
         if ui_state.right_click_this_frame:

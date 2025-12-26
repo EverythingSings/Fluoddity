@@ -206,6 +206,54 @@ class Sim:
         return (self._preferences.slider_ranges[slider_label][0],
                 self._preferences.slider_ranges[slider_label][1])
 
+    def calculate_setting(self, slider_value: float, min_value: float, max_value: float,
+                         pos: tuple[float, float], cohort: float,
+                         x_sweep: bool, y_sweep: bool, cohort_sweep: bool) -> float:
+        """Python version of GLSL calculate_setting() function.
+
+        Calculates the effective parameter value based on sweeps and position/cohort.
+        Mirrors the shader function for use when clicking particles to set slider values.
+
+        Args:
+            slider_value: Base slider value when no sweeps are active
+            min_value: Minimum value for parameter sweeps
+            max_value: Maximum value for parameter sweeps
+            pos: (x, y) world position of entity in [-1, 1] range
+            cohort: Normalized cohort value in [0, 1] range
+            x_sweep: Whether x-position sweep is active
+            y_sweep: Whether y-position sweep is active
+            cohort_sweep: Whether cohort sweep is active
+
+        Returns:
+            Effective parameter value at the given position/cohort
+        """
+        # If no sweeps active, return slider value
+        if not (x_sweep or y_sweep or cohort_sweep):
+            return slider_value
+
+        # Convert pos from [-1, 1] to [0, 1] for mixing
+        pos_norm = ((pos[0] + 1) / 2, (pos[1] + 1) / 2)
+
+        # Accumulate sweep contributions
+        result = 0.0
+        active_sweeps = 0
+
+        if x_sweep:
+            # mix(min_value, max_value, pos_norm[0])
+            result += min_value + (max_value - min_value) * pos_norm[0]
+            active_sweeps += 1
+
+        if y_sweep:
+            result += min_value + (max_value - min_value) * pos_norm[1]
+            active_sweeps += 1
+
+        if cohort_sweep:
+            result += min_value + (max_value - min_value) * cohort
+            active_sweeps += 1
+
+        # Average the results to keep within min/max range
+        return result / active_sweeps if active_sweeps > 0 else slider_value
+
     def _assign_physics_setting(self, uniform_name: str, slider_value: float, slider_label: str, default_min: float, default_max: float):
         """Assign a PhysicsSetting struct uniform with dynamically fetched min/max ranges."""
         min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
@@ -213,9 +261,9 @@ class Sim:
         tryset(self.entity_update_program, f'{uniform_name}.slider_value', slider_value)
         tryset(self.entity_update_program, f'{uniform_name}.min_value', min_val)
         tryset(self.entity_update_program, f'{uniform_name}.max_value', max_val)
-        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', False)  # TODO SWEEP INTERFACE
-        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', False)  # TODO SWEEP INTERFACE
-        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', False)  # TODO SWEEP INTERFACE
+        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', True)  # TODO SWEEP INTERFACE
+        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', True)  # TODO SWEEP INTERFACE
+        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', True)  # TODO SWEEP INTERFACE
 
     def apply_preferences(self, preferences) -> None:
         """Apply preferences from Orchestrator before update."""
