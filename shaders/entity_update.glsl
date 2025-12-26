@@ -59,11 +59,25 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
     cohort = cohort / COHORTS; //convert to 0..1 for mixing
+
+    // Count active sweeps and accumulate results
     float result = 0;
-    result += setting.x_sweep? mix(setting.min_value,setting.max_value,pos.x):0;
-    result += setting.y_sweep? mix(setting.min_value,setting.max_value,pos.y):0;
-    result += setting.cohort_sweep? mix(setting.min_value,setting.max_value,cohort):0;
-    return result;
+    int active_sweeps = 0;
+    if(setting.x_sweep) {
+        result += mix(setting.min_value,setting.max_value,pos.x);
+        active_sweeps++;
+    }
+    if(setting.y_sweep) {
+        result += mix(setting.min_value,setting.max_value,pos.y);
+        active_sweeps++;
+    }
+    if(setting.cohort_sweep) {
+        result += mix(setting.min_value,setting.max_value,cohort);
+        active_sweeps++;
+    }
+
+    // Average the results to keep within min/max range
+    return active_sweeps > 0 ? result / float(active_sweeps) : setting.slider_value;
 }
 
 
