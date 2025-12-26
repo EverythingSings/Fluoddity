@@ -19,6 +19,14 @@ layout(std430, binding = 0) buffer EntityBuffer {
 layout(std430, binding = 2) buffer RuleBuffer {
     Rule rules[];
 };
+struct PhysicsSetting {
+    float slider_value;
+    float min_value;
+    float max_value;
+    bool x_sweep;
+    bool y_sweep;
+    bool cohort_sweep;
+}
 uniform int frame_count;
 uniform Rule target_rule;
 uniform vec2 canvas_resolution;
@@ -37,12 +45,26 @@ uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
 uniform bool ABSOLUTE_ORIENTATION;
 uniform float RULE_SEED;
+
+
 ////////////////////////////CONSTANTS
 #define COHORTS 64 //each cohort gets it's own rule and starting location.
 #define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer. 
                             //Entities with index > ACTIVE_COUNT aren't rendered or updated
 
-
+float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
+    //if no sweep modes are active, just return slider value
+    if(!(setting.y_sweep||setting.cohort_sweep||setting.x_sweep)) 
+        {return setting.slider_value;}
+    //otherwise calculate parameter sweeps
+    pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
+    cohort = cohort / COHORTS; //convert to 0..1 for mixing
+    float result = 0;
+    result += x_sweep? mix(min_value,max_value,pos.x):0;
+    result += y_sweep? mix(min_value,max_value,pos.y):0;
+    result += cohort_sweep? mix(min_value,max_value,cohort):0;
+    return result;
+}
 
 
 ////////////////////////////////////
