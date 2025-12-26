@@ -1388,9 +1388,11 @@ class UI:
             widen: True to widen, False to narrow
             strength: Strength parameter (S in formula when widening, 1/S when narrowing)
         """
-        # Get current range
+        # Get current range - handle both 2-element and 4-element formats
         if slider_label in self.state.preferences.slider_ranges:
-            L, H, _, _ = self.state.preferences.slider_ranges[slider_label]
+            range_data = self.state.preferences.slider_ranges[slider_label]
+            # slider_ranges can be [L, H] or [L, H, default_min, default_max]
+            L, H = range_data[0], range_data[1]
         else:
             L, H = default_min, default_max
 
@@ -1420,7 +1422,13 @@ class UI:
         button_height = imgui.get_frame_height() / 2.0  # Half height for stacked buttons
         button_width = imgui.get_frame_height() * 1.3  # Same width as sweep buttons
 
-        # Start a group to stack buttons vertically
+        # Add small vertical offset to center the button pair with the slider
+        # The buttons are half-height each, so total height equals frame height
+        # No offset needed since they should already be centered
+
+        # Begin a group to keep buttons together
+        imgui.begin_group()
+
         # Widen button (^)
         if imgui.button(f"^##widen_{param_name}", imgui.ImVec2(button_width, button_height)):
             self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=True)
@@ -1428,6 +1436,8 @@ class UI:
         # Narrow button (v) - directly below, no spacing
         if imgui.button(f"v##narrow_{param_name}", imgui.ImVec2(button_width, button_height)):
             self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=False)
+
+        imgui.end_group()
 
     def cleanup(self):
         self.tooltip_fbo.release()
