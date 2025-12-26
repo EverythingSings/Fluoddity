@@ -5,10 +5,10 @@ from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, t
 from state import SimState
 
 # Global constants
-ENTITY_COUNT = 1024*1024
+ENTITY_COUNT = 600000
 SIZE_OF_ENTITY_STRUCT = 4*12  # 4 bytes per 32bit value. 12 values (pos:2, vel:2, size:1, padding:3, color:4)
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
-CANVAS_SHAPE = (1024, 1024)
+CANVAS_SHAPE = (1024, 1024) # Changing canvas size can significantly alter particle behavior. Presets all assume 1024 x 1024 
 
 class Sim:
     def __init__(self, ctx: moderngl.Context):
@@ -103,7 +103,12 @@ class Sim:
 
         self.canvas_vao = self.ctx.vertex_array(self.canvas_update_program, [])
 
+
+    
     def entity_update(self, ctx: moderngl.Context):
+        '''
+        Run a single physics update on all particles
+        '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
         tryset(self.entity_update_program, 'AXIAL_FORCE', self._state.AXIAL_FORCE)

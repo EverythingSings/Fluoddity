@@ -37,7 +37,6 @@ uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
 uniform bool ABSOLUTE_ORIENTATION;
 uniform float RULE_SEED;
-
 ////////////////////////////CONSTANTS
 #define COHORTS 64 //each cohort gets it's own rule and starting location.
 #define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer. 
@@ -184,6 +183,7 @@ void main() {
 
     //Calculate position offsets for the two sensors.
     float sample_dist = .005 * SENSOR_DISTANCE;
+    
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
     if(ABSOLUTE_ORIENTATION){orientation = vec2(0,1);}
     vec2 left_sensor_offset = orientation*sample_dist;
