@@ -822,7 +822,7 @@ class UI:
 
         if self.state.sim.parameter_sweeps_enabled:
             self.render_aligned_label("Drag:")
-            self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0)
+            self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("DRAG")
             imgui.same_line(spacing=8)
@@ -873,7 +873,7 @@ class UI:
 
         if self.state.sim.parameter_sweeps_enabled:
             self.render_aligned_label("Sensor Angle:")
-            self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0)
+            self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("SENSOR_ANGLE")
             imgui.same_line(spacing=8)
@@ -1433,7 +1433,7 @@ class UI:
 
         imgui.pop_style_color(3)
 
-    def adjust_slider_range(self, slider_label: str, current_value: float, default_min: float, default_max: float, widen: bool, strength: float = 2.0):
+    def adjust_slider_range(self, slider_label: str, current_value: float, default_min: float, default_max: float, widen: bool, strength: float = 2.0, hard_min: float = None, hard_max: float = None):
         """Adjust the min/max range for a slider, widening or narrowing around current value.
 
         Args:
@@ -1443,6 +1443,8 @@ class UI:
             default_max: Default maximum value
             widen: True to widen, False to narrow
             strength: Strength parameter (S in formula when widening, 1/S when narrowing)
+            hard_min: Optional hard minimum limit (e.g., -1.0 for Drag/Sensor Angle)
+            hard_max: Optional hard maximum limit (e.g., 1.0 for Drag/Sensor Angle)
         """
         # Get current range - handle both 2-element and 4-element formats
         if slider_label in self.state.preferences.slider_ranges:
@@ -1462,10 +1464,16 @@ class UI:
         L_prime = x - S * ((x - L) / 2.0 + (H - L) / 4.0)
         H_prime = L_prime + S * (H - L)
 
+        # Apply hard limits if specified (for sliders like Drag and Sensor Angle)
+        if hard_min is not None:
+            L_prime = max(L_prime, hard_min)
+        if hard_max is not None:
+            H_prime = min(H_prime, hard_max)
+
         # Update the range in preferences
         self.state.preferences.slider_ranges[slider_label] = [L_prime, H_prime,default_min,default_max]
 
-    def render_range_adjust_buttons(self, param_name: str, slider_label: str, current_value: float, default_min: float, default_max: float):
+    def render_range_adjust_buttons(self, param_name: str, slider_label: str, current_value: float, default_min: float, default_max: float, hard_min: float = None, hard_max: float = None):
         """Render widen/narrow buttons for adjusting slider range.
 
         Args:
@@ -1474,6 +1482,8 @@ class UI:
             current_value: Current slider value
             default_min: Default minimum value
             default_max: Default maximum value
+            hard_min: Optional hard minimum limit (e.g., -1.0 for Drag/Sensor Angle)
+            hard_max: Optional hard maximum limit (e.g., 1.0 for Drag/Sensor Angle)
         """
         # Match the height of the XYC sweep buttons (which are 1.35x frame height)
         total_height = imgui.get_frame_height() * 1.43
@@ -1485,11 +1495,11 @@ class UI:
         imgui.push_font(self.default_font,12)
         # Widen button
         if imgui.button(f"^##widen_{param_name}", imgui.ImVec2(button_width, button_height)):
-            self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=True)
+            self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=True, hard_min=hard_min, hard_max=hard_max)
 
         # Narrow button
         if imgui.button(f"v##narrow_{param_name}", imgui.ImVec2(button_width, button_height)):
-            self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=False)
+            self.adjust_slider_range(slider_label, current_value, default_min, default_max, widen=False, hard_min=hard_min, hard_max=hard_max)
         imgui.pop_font()
         imgui.end_group()
 
