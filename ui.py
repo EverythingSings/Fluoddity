@@ -917,16 +917,21 @@ class UI:
 
         imgui.separator()
 
-        # Reset all sliders button
+        # Reset all slider values button
         if self.current_physics_defaults.source_filename:
-            reset_button_label = f"Reset all sliders to '{self.current_physics_defaults.source_filename}'"
+            reset_button_label = f"Reset all slider values to '{self.current_physics_defaults.source_filename}'"
         else:
-            reset_button_label = "Reset all sliders to defaults"
+            reset_button_label = "Reset all slider values to defaults"
 
         if imgui.button(reset_button_label):
             # Reset all physics parameters to their default values
             for param_name, default_value in self.current_physics_defaults.values.items():
                 setattr(self.state.sim, param_name, default_value)
+
+        # Reset all slider ranges button
+        if imgui.button("Reset all slider ranges to defaults"):
+            # Clear all custom slider ranges, reverting to defaults
+            self.state.preferences.slider_ranges.clear()
 
         # Render the tooltip if window is hovered
         self.render_physics_tooltip()
@@ -1314,24 +1319,27 @@ class UI:
         return self.state.preferences.slider_ranges[slider_name][0], self.state.preferences.slider_ranges[slider_name][1], reset_requested, range_changed
 
     def render_aligned_label(self, label_text: str):
-        """Render a label aligned to the longest label width for consistent button positioning.
+        """Render a right-justified label aligned to the longest label width for consistent button positioning.
 
         Args:
             label_text: The label text to display (e.g., "Axial Force:")
         """
         # Calculate the width of the longest label to ensure alignment
         longest_label = "Global Force Mult:"
-        label_width = imgui.calc_text_size(longest_label).x
+        longest_width = imgui.calc_text_size(longest_label).x
+        current_width = imgui.calc_text_size(label_text).x
 
-        # Render the label
+        # Calculate where to start the label so it ends at the same X position (right-justified)
+        label_start_x = imgui.get_style().window_padding.x + longest_width - current_width
+
+        # Position cursor for right-justified label
+        imgui.set_cursor_pos_x(label_start_x)
         imgui.text(label_text)
         imgui.same_line()
 
-        # Position cursor at consistent X location
-        current_x = imgui.get_cursor_pos_x()
-        target_x = imgui.get_style().window_padding.x + label_width + 8
-        if current_x < target_x:
-            imgui.set_cursor_pos_x(target_x)
+        # Position cursor at consistent X location for buttons
+        target_x = imgui.get_style().window_padding.x + longest_width + 8
+        imgui.set_cursor_pos_x(target_x)
 
     def render_sweep_buttons(self, param_name: str):
         """Render X, Y, C sweep toggle buttons for a parameter.
@@ -1339,7 +1347,7 @@ class UI:
         Args:
             param_name: Name of the parameter (e.g., 'AXIAL_FORCE')
         """
-        button_height = imgui.get_frame_height() * 1.85  # Slightly taller to give range buttons more room
+        button_height = imgui.get_frame_height() * 1.75  # Slightly taller to give range buttons more room
         button_width = button_height * 1.  # Wider than tall
 
         # X button (Red)

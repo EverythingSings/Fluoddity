@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -22,3 +22,40 @@ class SimState:
     # Extra options
     DISABLE_SYMMETRY: bool = False
     ABSOLUTE_ORIENTATION: bool = False
+
+    # Parameter sweep settings
+    parameter_sweeps_enabled: bool = False
+    # Dictionary mapping parameter names to their sweep states (x, y, cohort)
+    x_sweeps: dict[str, bool] = field(default_factory=lambda: {
+        'AXIAL_FORCE': False,
+        'LATERAL_FORCE': False,
+        'SENSOR_GAIN': False,
+        'MUTATION_SCALE': False,
+        'DRAG': False,
+        'STRAFE_POWER': False,
+        'SENSOR_ANGLE': False,
+        'GLOBAL_FORCE_MULT': False,
+        'SENSOR_DISTANCE': False,
+    })
+    y_sweeps: dict[str, bool] = field(default_factory=lambda: {
+        'AXIAL_FORCE': False,
+        'LATERAL_FORCE': False,
+        'SENSOR_GAIN': False,
+        'MUTATION_SCALE': False,
+        'DRAG': False,
+        'STRAFE_POWER': False,
+        'SENSOR_ANGLE': False,
+        'GLOBAL_FORCE_MULT': False,
+        'SENSOR_DISTANCE': False,
+    })
+    cohort_sweeps: dict[str, bool] = field(default_factory=lambda: {
+        'AXIAL_FORCE': False,
+        'LATERAL_FORCE': False,
+        'SENSOR_GAIN': False,
+        'MUTATION_SCALE': False,
+        'DRAG': False,
+        'STRAFE_POWER': False,
+        'SENSOR_ANGLE': False,
+        'GLOBAL_FORCE_MULT': False,
+        'SENSOR_DISTANCE': False,
+    })
