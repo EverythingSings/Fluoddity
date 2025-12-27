@@ -11,9 +11,9 @@ out vec4 fragColor;
 // Arrow visualization parameters
 const float GRID_COLS = 16.0;
 const float GRID_ROWS = 16.0;
-const float ARROW_THICKNESS = 0.038;
+const float ARROW_THICKNESS = 0.08;
 const float HEAD_LENGTH = 0.35;
-const float HEAD_WIDTH = 0.15;
+const float HEAD_WIDTH = 0.25;
 const vec3 ARROW_COLOR = vec3(0.2, 0.6, 1.0);
 
 // Transform screen UV to world space coordinates using camera transform
@@ -37,10 +37,11 @@ vec2 screen_to_world(vec2 screen_uv) {
     scale_x /= cam_zoom;
     scale_y /= cam_zoom;
 
-    // Apply inverse camera transform
+    // Apply camera transform (same as camera.py's screen_to_tex)
+    // world = (ndc + offset) / scale
     vec2 world_pos;
-    world_pos.x = ndc.x * scale_x - cam_pos.x / cam_zoom;
-    world_pos.y = ndc.y * scale_y + cam_pos.y / cam_zoom;
+    world_pos.x = (ndc.x + cam_pos.x / cam_zoom) / scale_x;
+    world_pos.y = (ndc.y - cam_pos.y / cam_zoom) / scale_y;
 
     return world_pos;
 }
@@ -56,7 +57,7 @@ vec2 get_velocity(vec2 world_pos) {
     }
 
     vec4 canvas_sample = texture(canvas_texture, canvas_uv);
-    return canvas_sample.xy*100.;  // Velocity is stored in RG channels
+    return canvas_sample.xy*500.;  // Velocity is stored in RG channels
 }
 
 // Signed distance to a line segment
@@ -92,7 +93,8 @@ float safe_magnitude(vec2 v) {
 }
 
 // Render an arrow
-float render_arrow(vec2 local_pos, vec2 velocity, vec2 cell_size) {
+// local_pos is in cell-local coords (roughly [-0.5, 0.5])
+float render_arrow(vec2 local_pos, vec2 velocity) {
     float mag = safe_magnitude(velocity);
 
     // Skip if magnitude too small
@@ -100,14 +102,13 @@ float render_arrow(vec2 local_pos, vec2 velocity, vec2 cell_size) {
         return 0.0;
     }
 
-    // Arrow length proportional to magnitude
-    float max_arrow_length = 0.5 * min(cell_size.x, cell_size.y);
-    float arrow_length = mag * max_arrow_length;
-    arrow_length=.5;
+    // Arrow length proportional to magnitude (max 0.5 to fit in cell)
+    float arrow_length = mag * 0.5;
+
     // Normalize direction
     vec2 dir = normalize(velocity);
 
-    // Arrow geometry
+    // Arrow geometry in local space
     vec2 base = vec2(0.0);
     vec2 tip = dir * arrow_length;
 
@@ -116,13 +117,13 @@ float render_arrow(vec2 local_pos, vec2 velocity, vec2 cell_size) {
     vec2 shaft_end = tip - dir * head_len;
 
     vec2 perp = vec2(-dir.y, dir.x);
-    float head_half_width = min(cell_size.x, cell_size.y) * HEAD_WIDTH * 0.5;
+    float head_half_width = HEAD_WIDTH * 0.5;
 
     vec2 head_left = shaft_end + perp * head_half_width;
     vec2 head_right = shaft_end - perp * head_half_width;
 
     // Distances
-    float thickness = min(cell_size.x, cell_size.y) * ARROW_THICKNESS * 0.5;
+    float thickness = ARROW_THICKNESS * 0.5;
     float d_shaft = sd_segment(local_pos, base, shaft_end) - thickness;
     float d_head = sd_triangle(local_pos, tip, head_left, head_right);
 
@@ -130,7 +131,7 @@ float render_arrow(vec2 local_pos, vec2 velocity, vec2 cell_size) {
 
     // Anti-aliased edge
     float pixel_size = 2.0 / window_size.y / GRID_ROWS;
-    float aa = d<.01?1:0;//smoothstep(pixel_size, -pixel_size, d);
+    float aa = smoothstep(pixel_size, -pixel_size, d);
 
     return aa;
 }
@@ -157,9 +158,8 @@ void main() {
     // Sample velocity at cell center
     vec2 velocity = get_velocity(cell_center_world);
 
-    // Render arrow
-    vec2 normalized_cell_size = vec2(1.0 / GRID_COLS * window_size.x / window_size.y, 1.0 / GRID_ROWS);
-    float arrow_mask = render_arrow(local_pos, velocity, normalized_cell_size);
+    // Render arrow (local_pos is already in cell-local coords)
+    float arrow_mask = render_arrow(local_pos, velocity);
 
     // Output with alpha
     fragColor = vec4(ARROW_COLOR * arrow_mask, arrow_mask);
