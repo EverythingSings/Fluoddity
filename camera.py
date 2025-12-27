@@ -129,7 +129,7 @@ class Camera:
                 raw_tex,
                 total_samples=1,
                 current_sample_index=0,
-                view_mode = current_view_option
+                view_mode=current_view_option
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

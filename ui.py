@@ -440,6 +440,12 @@ class UI:
             self.state.preferences.color_by_cohort
         )
 
+        # Debug arrows checkbox
+        _, self.state.preferences.debug_arrows = imgui.checkbox(
+            "Debug Arrows",
+            self.state.preferences.debug_arrows
+        )
+
         # Randomize Rule Seed button
         if imgui.button("Randomize Rule Seed"):
             self.state.preferences.rule_seed = random.random()

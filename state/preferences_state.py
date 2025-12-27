@@ -18,6 +18,7 @@ class PreferencesState:
 
     # UI preferences
     physics_tooltips_enabled: bool = True
+    debug_arrows: bool = False  # Visual debug overlay for velocity field
 
     # Recording preferences
     max_frames: int = 1800  # 150 * 12

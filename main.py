@@ -5,7 +5,7 @@ from pathlib import Path
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService
 from utilities.gl_helpers import readback_rule
 from state import load_preferences, save_preferences
 
@@ -48,6 +48,7 @@ class App:
         self.entity_picker = EntityPicker(self.sim.get_entity_buffer(), entity_stride)
         self.video_service = VideoRecorderService()
         self.config_saver = ConfigSaver()
+        self.arrow_debug_service = ArrowDebugService(self.ctx)
         self.configs_dir = Path("physics_configs")
         self.configs_dir.mkdir(exist_ok=True)
 
@@ -112,6 +113,17 @@ class App:
 
         # 7. Render camera view
         self.camera.render(sim_going=ui_state.sim.going,current_view_option=ui_state.sim.current_view_option)
+
+        # 7.5. Render arrow debug overlay if enabled
+        if ui_state.preferences.debug_arrows:
+            width, height = glfw.get_framebuffer_size(self.window)
+            self.arrow_debug_service.render(
+                canvas_texture=self.sim.can,
+                cam_pos=tuple(self.camera.position),
+                cam_zoom=self.camera.zoom,
+                canvas_resolution=self.sim.can.size,
+                window_size=(width, height)
+            )
 
         # 8. Update UI display info and render
         self.ui.update_display_info({
@@ -343,7 +355,7 @@ class App:
                     raw_view_tex,
                     total_samples=speedmult,
                     current_sample_index=step,
-                    view_mode = ui_state.sim.current_view_option
+                    view_mode=ui_state.sim.current_view_option
                 )
 
                 # Only process when accumulation cycle completes
@@ -373,7 +385,7 @@ class App:
                 raw_view_tex,
                 total_samples=1,
                 current_sample_index=0,
-                view_mode = ui_state.sim.current_view_option
+                view_mode=ui_state.sim.current_view_option
             )
 
             self.camera.assembled_texture = assembled_tex
