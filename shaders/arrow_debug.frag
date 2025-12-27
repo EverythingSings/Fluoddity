@@ -4,6 +4,7 @@ uniform vec2 cam_pos;
 uniform float cam_zoom;
 uniform vec2 canvas_resolution;
 uniform vec2 window_size;
+uniform float arrow_sensitivity;
 
 in vec2 uv;
 out vec4 fragColor;
@@ -57,7 +58,7 @@ vec2 get_velocity(vec2 world_pos) {
     }
 
     vec4 canvas_sample = texture(canvas_texture, canvas_uv);
-    return canvas_sample.xy*500.;  // Velocity is stored in RG channels
+    return canvas_sample.xy * pow(2.0, arrow_sensitivity);  // Velocity is stored in RG channels
 }
 
 // Signed distance to a line segment

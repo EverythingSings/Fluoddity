@@ -122,7 +122,8 @@ class App:
                 cam_pos=tuple(self.camera.position),
                 cam_zoom=self.camera.zoom,
                 canvas_resolution=self.sim.can.size,
-                window_size=(width, height)
+                window_size=(width, height),
+                arrow_sensitivity=ui_state.preferences.arrow_sensitivity
             )
 
         # 8. Update UI display info and render

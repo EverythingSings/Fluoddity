@@ -446,6 +446,17 @@ class UI:
             self.state.preferences.debug_arrows
         )
 
+        # Arrow sensitivity slider (only show when debug arrows enabled)
+        if self.state.preferences.debug_arrows:
+            imgui.indent(20)
+            _, self.state.preferences.arrow_sensitivity = imgui.slider_float(
+                "Arrow Sensitivity",
+                self.state.preferences.arrow_sensitivity,
+                1.0, 20.0,
+                format="%.1f"
+            )
+            imgui.unindent(20)
+
         # Randomize Rule Seed button
         if imgui.button("Randomize Rule Seed"):
             self.state.preferences.rule_seed = random.random()
