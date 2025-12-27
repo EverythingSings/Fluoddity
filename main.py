@@ -63,6 +63,10 @@ class App:
         self.user_speedmult = 1
         self.was_recording = False
 
+        # Mouse tracking for draw trail mode
+        self.prev_mouse_tex_coords = (0.0, 0.0)
+        self.mouse_button_state = False  # Track if left mouse button is currently pressed
+
     def run(self):
         while not glfw.window_should_close(self.window):
             glfw.poll_events()
@@ -160,24 +164,26 @@ class App:
             self.rule_manager.clear()
             self.sim.apply_rule(None)
 
-        # Handle entity clicking (left click)
-        if ui_state.left_click_this_frame:
-            tex_coords = self.camera.screen_to_tex(
-                ui_state.mouse_pos,
-                self.sim.view_tex.size
-            )
-            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
-            print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
-            rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
-            self.rule_manager.push_rule(rule)
-            self.sim.apply_rule(rule)
-            # Update sliders to show effective parameter values at this particle's location
-            self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+        # Handle entity clicking and rule undo (only in Select Particle mode)
+        if ui_state.preferences.mouse_mode == "Select Particle":
+            # Handle entity clicking (left click)
+            if ui_state.left_click_this_frame:
+                tex_coords = self.camera.screen_to_tex(
+                    ui_state.mouse_pos,
+                    self.sim.view_tex.size
+                )
+                entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
+                print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
+                rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
+                self.rule_manager.push_rule(rule)
+                self.sim.apply_rule(rule)
+                # Update sliders to show effective parameter values at this particle's location
+                self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
 
-        # Handle rule undo (right click)
-        if ui_state.right_click_this_frame:
-            prev_rule = self.rule_manager.pop_rule()
-            self.sim.apply_rule(prev_rule)
+            # Handle rule undo (right click)
+            if ui_state.right_click_this_frame:
+                prev_rule = self.rule_manager.pop_rule()
+                self.sim.apply_rule(prev_rule)
 
         # Handle config save (Ctrl+C)
         if ui_state.request_save_config:
@@ -342,11 +348,37 @@ class App:
         speedmult = ui_state.preferences.speedmult
         motion_blur = ui_state.preferences.motion_blur
 
+        # Calculate draw mode parameters
+        draw_mode = ui_state.preferences.mouse_mode == "Draw Trail"
+        mouse_tex_coords = (0.0, 0.0)
+        draw_power_value = 0.0
+
+        if draw_mode:
+            # Convert screen mouse position to texture coordinates (0-1 range)
+            mouse_tex_coords = self.camera.screen_to_tex(
+                ui_state.mouse_pos,
+                self.sim.can.size
+            )
+
+            # Check if left mouse button is currently pressed (not just clicked this frame)
+            left_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
+
+            # Only set draw_power if button is pressed
+            if left_button_pressed:
+                draw_power_value = ui_state.preferences.draw_power
+
         if motion_blur:
             # Motion blur enabled: temporal accumulation with multiple render calls
             # Run simulation steps and accumulate frames
             for step in range(speedmult):
-                self.sim.update(self.ctx)
+                self.sim.update(
+                    self.ctx,
+                    draw_mode=draw_mode,
+                    mouse_pos=mouse_tex_coords,
+                    prev_mouse_pos=self.prev_mouse_tex_coords,
+                    draw_size=ui_state.preferences.draw_size,
+                    draw_power=draw_power_value
+                )
 
                 # Generate raw view texture (PRE-gamma correction)
                 raw_view_tex = self.camera.generate_view_texture()
@@ -376,7 +408,14 @@ class App:
             # Motion blur disabled: multiple physics steps, single render call
             # Run all simulation updates
             for step in range(speedmult):
-                self.sim.update(self.ctx)
+                self.sim.update(
+                    self.ctx,
+                    draw_mode=draw_mode,
+                    mouse_pos=mouse_tex_coords,
+                    prev_mouse_pos=self.prev_mouse_tex_coords,
+                    draw_size=ui_state.preferences.draw_size,
+                    draw_power=draw_power_value
+                )
 
             # Generate view texture only once at the end
             raw_view_tex = self.camera.generate_view_texture()
@@ -400,6 +439,10 @@ class App:
                     ui_state.preferences.supersample_k,
                     ui_state.preferences.filename_prefix
                 )
+
+        # Update previous mouse position for next frame
+        if draw_mode:
+            self.prev_mouse_tex_coords = mouse_tex_coords
 
     def cleanup(self):
         # Save preferences before cleanup

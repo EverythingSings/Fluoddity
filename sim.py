@@ -147,7 +147,8 @@ class Sim:
 
         self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=ENTITY_COUNT, vertices=4)
 
-    def can_update(self, ctx: moderngl.Context):
+    def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
+                   prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0):
         # Assign TRAIL_PERSISTENCE as a PhysicsSetting struct
         min_val, max_val = self._get_slider_range('Trail Persistence', 0.0, 1.0)
         tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.slider_value', self._state.TRAIL_PERSISTENCE)
@@ -160,10 +161,19 @@ class Sim:
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
 
+        # Set draw mode uniforms if in draw mode
+        tryset(self.canvas_update_program, 'draw_mode', draw_mode)
+        if draw_mode and mouse_pos is not None and prev_mouse_pos is not None:
+            tryset(self.canvas_update_program, 'mouse', mouse_pos)
+            tryset(self.canvas_update_program, 'previous_mouse', prev_mouse_pos)
+            tryset(self.canvas_update_program, 'draw_size', draw_size)
+            tryset(self.canvas_update_program, 'draw_power', draw_power)
+
         self.canvas.use()
         self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
-    def update(self, ctx):
+    def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
+               prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0):
         self.can.use(location=1)
         self.brush_tex.use(location=3)
 
@@ -175,7 +185,7 @@ class Sim:
         self.entity_update(ctx)
 
         ctx.disable(moderngl.BLEND)
-        self.can_update(ctx)
+        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power)
         self.frame_count += 1
 
     def reset(self):

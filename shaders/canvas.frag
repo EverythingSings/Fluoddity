@@ -6,6 +6,13 @@ uniform sampler2D brush_tex;
 uniform sampler2D can_tex;
 out vec4 can_out;
 
+// Draw trail mode uniforms
+uniform bool draw_mode;
+uniform vec2 mouse;
+uniform vec2 previous_mouse;
+uniform float draw_size;
+uniform float draw_power;
+
 // SYNCHRONIZED: This struct must match entity_update.glsl
 // Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag
 struct PhysicsSetting {
@@ -85,6 +92,14 @@ vec4 getBlur(vec2 pos, sampler2D sam) {
     return (getCan(pos, sam) * K + nc + sc + wc + ec) / (4. + K);
 }
 
+// Gaussian kernel for draw trail mode
+float draw_kernel(float distance, float size) {
+    // Gaussian: exp(-distance^2 / (2 * sigma^2))
+    // Using size as sigma
+    float sigma = size;
+    return exp(-distance * distance / (2.0 * sigma * sigma));
+}
+
 void main() {
     vec4 brush_color = texture(brush_tex, texcoord);
     vec4 can_color = getBlur(texcoord, can_tex);
@@ -94,4 +109,17 @@ void main() {
     float trail_persistence = calculate_setting(TRAIL_PERSISTENCE_SETTING, world_pos, 0.0);
 
     can_out = can_color * trail_persistence + (1 - trail_persistence) * brush_color;
+
+    // Draw trail mode: add velocity based on mouse drag
+    if (draw_mode && draw_power > 0.0) {
+        // Calculate distance from current texcoord to mouse position
+        float distance_to_mouse = length(texcoord - mouse);
+
+        // Calculate velocity to add based on mouse movement
+        vec2 mouse_velocity = (mouse - previous_mouse) * draw_power;
+
+        // Apply Gaussian kernel and add to velocity channels (RG)
+        float kernel_weight = draw_kernel(distance_to_mouse, draw_size);
+        can_out.xy += mouse_velocity * kernel_weight;
+    }
 }

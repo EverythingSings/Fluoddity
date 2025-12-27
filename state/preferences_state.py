@@ -20,6 +20,9 @@ class PreferencesState:
     physics_tooltips_enabled: bool = True
     debug_arrows: bool = False  # Visual debug overlay for velocity field
     arrow_sensitivity: float = 9.0  # Velocity scale for debug arrows (pow(2, x))
+    mouse_mode: str = "Select Particle"  # "Select Particle" or "Draw Trail"
+    draw_size: float = 0.1  # Gaussian kernel width for trail drawing
+    draw_power: float = 1.0  # Velocity strength when drawing trails
 
     # Recording preferences
     max_frames: int = 1800  # 150 * 12

@@ -440,6 +440,30 @@ class UI:
             self.state.preferences.color_by_cohort
         )
 
+        # Mouse mode combo box
+        mouse_modes = ["Select Particle", "Draw Trail"]
+        current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
+        clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
+        if clicked:
+            self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
+
+        # Draw mode sliders (only show when in Draw Trail mode)
+        if self.state.preferences.mouse_mode == "Draw Trail":
+            imgui.indent(20)
+            _, self.state.preferences.draw_size = imgui.slider_float(
+                "Draw Size",
+                self.state.preferences.draw_size,
+                0.01, 0.5,
+                format="%.3f"
+            )
+            _, self.state.preferences.draw_power = imgui.slider_float(
+                "Draw Power",
+                self.state.preferences.draw_power,
+                0.1, 5.0,
+                format="%.2f"
+            )
+            imgui.unindent(20)
+
         # Debug arrows checkbox
         _, self.state.preferences.debug_arrows = imgui.checkbox(
             "Debug Arrows",
