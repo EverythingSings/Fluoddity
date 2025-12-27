@@ -20,6 +20,8 @@ layout(std430, binding = 0) buffer EntityBuffer {
 layout(std430, binding = 2) buffer RuleBuffer {
     Rule rules[];
 };
+// SYNCHRONIZED: This struct must match canvas.frag
+// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag
 struct PhysicsSetting {
     float slider_value;
     float min_value;
@@ -50,9 +52,11 @@ uniform float RULE_SEED;
 
 ////////////////////////////CONSTANTS
 #define COHORTS 64 //each cohort gets it's own rule and starting location.
-#define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer. 
+#define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer.
                             //Entities with index > ACTIVE_COUNT aren't rendered or updated
 
+// SYNCHRONIZED: This function must match canvas.frag and sim.py::calculate_setting
+// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
 float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     //if no sweep modes are active, just return slider value
     if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0)

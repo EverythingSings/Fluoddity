@@ -148,7 +148,15 @@ class Sim:
         self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=ENTITY_COUNT, vertices=4)
 
     def can_update(self, ctx: moderngl.Context):
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE', self._state.TRAIL_PERSISTENCE)
+        # Assign TRAIL_PERSISTENCE as a PhysicsSetting struct
+        min_val, max_val = self._get_slider_range('Trail Persistence', 0.0, 1.0)
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.slider_value', self._state.TRAIL_PERSISTENCE)
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.min_value', min_val)
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.max_value', max_val)
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
 
@@ -210,6 +218,9 @@ class Sim:
                          pos: tuple[float, float], cohort: float,
                          x_sweep: float, y_sweep: float, cohort_sweep: float) -> float:
         """Python version of GLSL calculate_setting() function.
+
+        SYNCHRONIZED: This function must match entity_update.glsl and canvas.frag
+        Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
 
         Calculates the effective parameter value based on sweeps and position/cohort.
         Mirrors the shader function for use when clicking particles to set slider values.
@@ -306,7 +317,7 @@ class Sim:
             pos: (x, y) world position of entity in [-1, 1] range
             cohort: Normalized cohort value in [0, 1] range
         """
-        # Define all 9 parameters with their state field, slider label, and default ranges
+        # Define all 10 parameters with their state field, slider label, and default ranges
         parameters = [
             ('AXIAL_FORCE', 'Axial Force', -1.0, 1.0),
             ('LATERAL_FORCE', 'Lateral Force', -1.0, 1.0),
@@ -317,6 +328,7 @@ class Sim:
             ('SENSOR_ANGLE', 'Sensor Angle', -1.0, 1.0),
             ('GLOBAL_FORCE_MULT', 'Global Force Mult', 0.0, 2.0),
             ('SENSOR_DISTANCE', 'Sensor Distance', 0.0, 4.0),
+            ('TRAIL_PERSISTENCE', 'Trail Persistence', 0.0, 1.0),
         ]
 
         for param_name, slider_label, default_min, default_max in parameters:

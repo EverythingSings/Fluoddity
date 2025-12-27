@@ -905,6 +905,13 @@ class UI:
         self.render_custom_tooltip("Sensor Distance",
             "Determines distance between a particle's center and where it reads the trail information from Canvas. Longer distances tend to create larger scale patterns.")
 
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Trail Persistence:")
+            self.render_range_adjust_buttons("TRAIL_PERSISTENCE", "Trail Persistence", self.state.sim.TRAIL_PERSISTENCE, 0.0, 1.0)
+            imgui.same_line(spacing=2)
+            self.render_sweep_buttons("TRAIL_PERSISTENCE")
+            imgui.same_line(spacing=8)
+
         _, self.state.sim.TRAIL_PERSISTENCE = self.slider_float_with_range_menu(
             label="Trail Persistence",
             param_name="TRAIL_PERSISTENCE",
@@ -1362,8 +1369,8 @@ class UI:
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.6, 0.15, 0.15, 1.0))
         elif x_mode == -1.0:  # Inverse sweep - dark red (lowlight)
-            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.3, 0.05, 0.05, 1.0))
-            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.4, 0.1, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.3*.3, 0.05*.3, 0.05*.3, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.4*.3, 0.1*.3, 0.1*.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.2, 0.03, 0.03, 1.0))
         else:  # Off - dim red
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.4, 0.1, 0.1, 1.0))
@@ -1386,8 +1393,8 @@ class UI:
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.3, 1.0, 0.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.15, 0.6, 0.15, 1.0))
         elif y_mode == -1.0:  # Inverse sweep - dark green (lowlight)
-            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.05, 0.3, 0.05, 1.0))
-            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.1, 0.4, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.05*.3, 0.3*.3, 0.05*.3, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.1*.3, 0.4*.3, 0.1*.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.03, 0.2, 0.03, 1.0))
         else:  # Off - dim green
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.1, 0.4, 0.1, 1.0))
@@ -1410,9 +1417,9 @@ class UI:
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 1.0, 0.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.7, 0.7, 0.15, 1.0))
         elif c_mode == -1.0:  # Inverse sweep - dark yellow/brown (lowlight)
-            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.3, 0.3, 0.05, 1.0))
-            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.4, 0.4, 0.1, 1.0))
-            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.2, 0.2, 0.03, 1.0))
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.3*.3, 0.3*.3, 0.05*.3, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.4*.3, 0.4*.3, 0.1*.3, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.2*.3, 0.2*.3, 0.03*.3, 1.0))
         else:  # Off - dim yellow
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.4, 0.4, 0.1, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.6, 0.6, 0.15, 1.0))

@@ -4,8 +4,67 @@ in vec2 texcoord;
 
 uniform sampler2D brush_tex;
 uniform sampler2D can_tex;
-uniform float TRAIL_PERSISTENCE;
 out vec4 can_out;
+
+// SYNCHRONIZED: This struct must match entity_update.glsl
+// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag
+struct PhysicsSetting {
+    float slider_value;
+    float min_value;
+    float max_value;
+    float x_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
+    float y_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
+    float cohort_sweep; // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
+};
+
+uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
+
+#define COHORTS 64
+
+// SYNCHRONIZED: This function must match entity_update.glsl and sim.py::calculate_setting
+// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
+float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
+    //if no sweep modes are active, just return slider value
+    if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0)
+        {return setting.slider_value;}
+    //otherwise calculate parameter sweeps
+    pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
+    cohort = cohort / COHORTS; //convert to 0..1 for mixing
+
+    // Count active sweeps and accumulate results
+    float result = 0;
+    int active_sweeps = 0;
+    if(setting.x_sweep != 0.0) {
+        // For inverse sweep (x_sweep < 0), swap min and max
+        if(setting.x_sweep > 0.0) {
+            result += mix(setting.min_value, setting.max_value, pos.x);
+        } else {
+            result += mix(setting.max_value, setting.min_value, pos.x);
+        }
+        active_sweeps++;
+    }
+    if(setting.y_sweep != 0.0) {
+        // For inverse sweep (y_sweep < 0), swap min and max
+        if(setting.y_sweep > 0.0) {
+            result += mix(setting.min_value, setting.max_value, pos.y);
+        } else {
+            result += mix(setting.max_value, setting.min_value, pos.y);
+        }
+        active_sweeps++;
+    }
+    if(setting.cohort_sweep != 0.0) {
+        // For inverse sweep (cohort_sweep < 0), swap min and max
+        if(setting.cohort_sweep > 0.0) {
+            result += mix(setting.min_value, setting.max_value, cohort);
+        } else {
+            result += mix(setting.max_value, setting.min_value, cohort);
+        }
+        active_sweeps++;
+    }
+
+    // Average the results to keep within min/max range
+    return active_sweeps > 0 ? result / float(active_sweeps) : setting.slider_value;
+}
 
 vec4 getCan(vec2 p, sampler2D sam) {
     return texture(sam, p);
@@ -29,5 +88,10 @@ vec4 getBlur(vec2 pos, sampler2D sam) {
 void main() {
     vec4 brush_color = texture(brush_tex, texcoord);
     vec4 can_color = getBlur(texcoord, can_tex);
-    can_out = can_color * TRAIL_PERSISTENCE + (1 - TRAIL_PERSISTENCE) * brush_color;
+
+    // Convert texcoord from [0,1] to [-1,1] for position-based sweeps
+    vec2 world_pos = texcoord * 2.0 - 1.0;
+    float trail_persistence = calculate_setting(TRAIL_PERSISTENCE_SETTING, world_pos, 0.0);
+
+    can_out = can_color * trail_persistence + (1 - trail_persistence) * brush_color;
 }

@@ -37,6 +37,7 @@ class SimState:
         'SENSOR_ANGLE': 0.0,
         'GLOBAL_FORCE_MULT': 0.0,
         'SENSOR_DISTANCE': 0.0,
+        'TRAIL_PERSISTENCE': 0.0,
     })
     y_sweeps: dict[str, float] = field(default_factory=lambda: {
         'AXIAL_FORCE': 0.0,
@@ -48,6 +49,7 @@ class SimState:
         'SENSOR_ANGLE': 0.0,
         'GLOBAL_FORCE_MULT': 0.0,
         'SENSOR_DISTANCE': 0.0,
+        'TRAIL_PERSISTENCE': 0.0,
     })
     cohort_sweeps: dict[str, float] = field(default_factory=lambda: {
         'AXIAL_FORCE': 0.0,
@@ -59,4 +61,5 @@ class SimState:
         'SENSOR_ANGLE': 0.0,
         'GLOBAL_FORCE_MULT': 0.0,
         'SENSOR_DISTANCE': 0.0,
+        'TRAIL_PERSISTENCE': 0.0,
     })
