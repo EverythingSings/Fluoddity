@@ -116,7 +116,7 @@ void main() {
         float distance_to_mouse = length(texcoord - mouse);
 
         // Calculate velocity to add based on mouse movement
-        vec2 mouse_velocity = (mouse - previous_mouse) * draw_power;
+        vec2 mouse_velocity = (mouse - previous_mouse) * draw_power/5;
 
         // Apply Gaussian kernel and add to velocity channels (RG)
         float kernel_weight = draw_kernel(distance_to_mouse, draw_size);

@@ -270,6 +270,12 @@ class UI:
                 self.state.sim.going = not self.state.sim.going
             elif key == glfw.KEY_SPACE:
                 self.state.preferences.rule_seed = random.random()
+            elif key == glfw.KEY_T:
+                # Toggle mouse mode between Select Particle and Draw Trail
+                if self.state.preferences.mouse_mode == "Select Particle":
+                    self.state.preferences.mouse_mode = "Draw Trail"
+                else:
+                    self.state.preferences.mouse_mode = "Select Particle"
             elif key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(window, True)
             elif key == glfw.KEY_F1:
