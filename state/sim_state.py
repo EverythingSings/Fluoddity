@@ -25,37 +25,38 @@ class SimState:
 
     # Parameter sweep settings
     parameter_sweeps_enabled: bool = False
-    # Dictionary mapping parameter names to their sweep states (x, y, cohort)
-    x_sweeps: dict[str, bool] = field(default_factory=lambda: {
-        'AXIAL_FORCE': False,
-        'LATERAL_FORCE': False,
-        'SENSOR_GAIN': False,
-        'MUTATION_SCALE': False,
-        'DRAG': False,
-        'STRAFE_POWER': False,
-        'SENSOR_ANGLE': False,
-        'GLOBAL_FORCE_MULT': False,
-        'SENSOR_DISTANCE': False,
+    # Dictionary mapping parameter names to their sweep modes
+    # 0.0 = no sweep, 1.0 = normal sweep (min to max), -1.0 = inverse sweep (max to min)
+    x_sweeps: dict[str, float] = field(default_factory=lambda: {
+        'AXIAL_FORCE': 0.0,
+        'LATERAL_FORCE': 0.0,
+        'SENSOR_GAIN': 0.0,
+        'MUTATION_SCALE': 0.0,
+        'DRAG': 0.0,
+        'STRAFE_POWER': 0.0,
+        'SENSOR_ANGLE': 0.0,
+        'GLOBAL_FORCE_MULT': 0.0,
+        'SENSOR_DISTANCE': 0.0,
     })
-    y_sweeps: dict[str, bool] = field(default_factory=lambda: {
-        'AXIAL_FORCE': False,
-        'LATERAL_FORCE': False,
-        'SENSOR_GAIN': False,
-        'MUTATION_SCALE': False,
-        'DRAG': False,
-        'STRAFE_POWER': False,
-        'SENSOR_ANGLE': False,
-        'GLOBAL_FORCE_MULT': False,
-        'SENSOR_DISTANCE': False,
+    y_sweeps: dict[str, float] = field(default_factory=lambda: {
+        'AXIAL_FORCE': 0.0,
+        'LATERAL_FORCE': 0.0,
+        'SENSOR_GAIN': 0.0,
+        'MUTATION_SCALE': 0.0,
+        'DRAG': 0.0,
+        'STRAFE_POWER': 0.0,
+        'SENSOR_ANGLE': 0.0,
+        'GLOBAL_FORCE_MULT': 0.0,
+        'SENSOR_DISTANCE': 0.0,
     })
-    cohort_sweeps: dict[str, bool] = field(default_factory=lambda: {
-        'AXIAL_FORCE': False,
-        'LATERAL_FORCE': False,
-        'SENSOR_GAIN': False,
-        'MUTATION_SCALE': False,
-        'DRAG': False,
-        'STRAFE_POWER': False,
-        'SENSOR_ANGLE': False,
-        'GLOBAL_FORCE_MULT': False,
-        'SENSOR_DISTANCE': False,
+    cohort_sweeps: dict[str, float] = field(default_factory=lambda: {
+        'AXIAL_FORCE': 0.0,
+        'LATERAL_FORCE': 0.0,
+        'SENSOR_GAIN': 0.0,
+        'MUTATION_SCALE': 0.0,
+        'DRAG': 0.0,
+        'STRAFE_POWER': 0.0,
+        'SENSOR_ANGLE': 0.0,
+        'GLOBAL_FORCE_MULT': 0.0,
+        'SENSOR_DISTANCE': 0.0,
     })

@@ -1344,6 +1344,11 @@ class UI:
     def render_sweep_buttons(self, param_name: str):
         """Render X, Y, C sweep toggle buttons for a parameter.
 
+        Left-click cycles: off -> normal -> off
+        Right-click cycles: off -> inverse -> off
+
+        Sweep modes: 0.0 = off, 1.0 = normal (highlight), -1.0 = inverse (lowlight)
+
         Args:
             param_name: Name of the parameter (e.g., 'AXIAL_FORCE')
         """
@@ -1351,52 +1356,73 @@ class UI:
         button_width = button_height * 1.  # Wider than tall
 
         # X button (Red)
-        x_active = self.state.sim.x_sweeps.get(param_name, False)
-        if x_active:
+        x_mode = self.state.sim.x_sweeps.get(param_name, 0.0)
+        if x_mode == 1.0:  # Normal sweep - bright red (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.6, 0.15, 0.15, 1.0))
-        else:
+        elif x_mode == -1.0:  # Inverse sweep - dark red (lowlight)
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.3, 0.05, 0.05, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.4, 0.1, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.2, 0.03, 0.03, 1.0))
+        else:  # Off - dim red
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.4, 0.1, 0.1, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.6, 0.15, 0.15, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.3, 0.08, 0.08, 1.0))
 
-        if imgui.button(f"X##{param_name}_x", imgui.ImVec2(button_width, button_height)):
-            self.state.sim.x_sweeps[param_name] = not x_active
+        imgui.button(f"X##{param_name}_x", imgui.ImVec2(button_width, button_height))
+        if imgui.is_item_clicked(imgui.MouseButton_.left):
+            self.state.sim.x_sweeps[param_name] = 1.0 if x_mode == 0.0 else 0.0
+        elif imgui.is_item_clicked(imgui.MouseButton_.right):
+            self.state.sim.x_sweeps[param_name] = -1.0 if x_mode == 0.0 else 0.0
 
         imgui.pop_style_color(3)
         imgui.same_line(spacing=2)
 
         # Y button (Green)
-        y_active = self.state.sim.y_sweeps.get(param_name, False)
-        if y_active:
+        y_mode = self.state.sim.y_sweeps.get(param_name, 0.0)
+        if y_mode == 1.0:  # Normal sweep - bright green (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.2, 0.8, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.3, 1.0, 0.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.15, 0.6, 0.15, 1.0))
-        else:
+        elif y_mode == -1.0:  # Inverse sweep - dark green (lowlight)
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.05, 0.3, 0.05, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.1, 0.4, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.03, 0.2, 0.03, 1.0))
+        else:  # Off - dim green
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.1, 0.4, 0.1, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.15, 0.6, 0.15, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.08, 0.3, 0.08, 1.0))
 
-        if imgui.button(f"Y##{param_name}_y", imgui.ImVec2(button_width, button_height)):
-            self.state.sim.y_sweeps[param_name] = not y_active
+        imgui.button(f"Y##{param_name}_y", imgui.ImVec2(button_width, button_height))
+        if imgui.is_item_clicked(imgui.MouseButton_.left):
+            self.state.sim.y_sweeps[param_name] = 1.0 if y_mode == 0.0 else 0.0
+        elif imgui.is_item_clicked(imgui.MouseButton_.right):
+            self.state.sim.y_sweeps[param_name] = -1.0 if y_mode == 0.0 else 0.0
 
         imgui.pop_style_color(3)
         imgui.same_line(spacing=2)
 
         # C button (Yellow)
-        c_active = self.state.sim.cohort_sweeps.get(param_name, False)
-        if c_active:
+        c_mode = self.state.sim.cohort_sweeps.get(param_name, 0.0)
+        if c_mode == 1.0:  # Normal sweep - bright yellow (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.9, 0.9, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 1.0, 0.3, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.7, 0.7, 0.15, 1.0))
-        else:
+        elif c_mode == -1.0:  # Inverse sweep - dark yellow/brown (lowlight)
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.3, 0.3, 0.05, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.4, 0.4, 0.1, 1.0))
+            imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.2, 0.2, 0.03, 1.0))
+        else:  # Off - dim yellow
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.4, 0.4, 0.1, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.6, 0.6, 0.15, 1.0))
             imgui.push_style_color(imgui.Col_.button_active, imgui.ImVec4(0.3, 0.3, 0.08, 1.0))
 
-        if imgui.button(f"C##{param_name}_c", imgui.ImVec2(button_width, button_height)):
-            self.state.sim.cohort_sweeps[param_name] = not c_active
+        imgui.button(f"C##{param_name}_c", imgui.ImVec2(button_width, button_height))
+        if imgui.is_item_clicked(imgui.MouseButton_.left):
+            self.state.sim.cohort_sweeps[param_name] = 1.0 if c_mode == 0.0 else 0.0
+        elif imgui.is_item_clicked(imgui.MouseButton_.right):
+            self.state.sim.cohort_sweeps[param_name] = -1.0 if c_mode == 0.0 else 0.0
 
         imgui.pop_style_color(3)
 

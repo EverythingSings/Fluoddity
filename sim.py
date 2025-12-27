@@ -208,7 +208,7 @@ class Sim:
 
     def calculate_setting(self, slider_value: float, min_value: float, max_value: float,
                          pos: tuple[float, float], cohort: float,
-                         x_sweep: bool, y_sweep: bool, cohort_sweep: bool) -> float:
+                         x_sweep: float, y_sweep: float, cohort_sweep: float) -> float:
         """Python version of GLSL calculate_setting() function.
 
         Calculates the effective parameter value based on sweeps and position/cohort.
@@ -220,15 +220,15 @@ class Sim:
             max_value: Maximum value for parameter sweeps
             pos: (x, y) world position of entity in [-1, 1] range
             cohort: Normalized cohort value in [0, 1] range
-            x_sweep: Whether x-position sweep is active
-            y_sweep: Whether y-position sweep is active
-            cohort_sweep: Whether cohort sweep is active
+            x_sweep: Sweep mode (0.0 = off, 1.0 = normal, -1.0 = inverse)
+            y_sweep: Sweep mode (0.0 = off, 1.0 = normal, -1.0 = inverse)
+            cohort_sweep: Sweep mode (0.0 = off, 1.0 = normal, -1.0 = inverse)
 
         Returns:
             Effective parameter value at the given position/cohort
         """
         # If no sweeps active, return slider value
-        if not (x_sweep or y_sweep or cohort_sweep):
+        if x_sweep == 0.0 and y_sweep == 0.0 and cohort_sweep == 0.0:
             return slider_value
 
         # Convert pos from [-1, 1] to [0, 1] for mixing
@@ -238,17 +238,28 @@ class Sim:
         result = 0.0
         active_sweeps = 0
 
-        if x_sweep:
-            # mix(min_value, max_value, pos_norm[0])
-            result += min_value + (max_value - min_value) * pos_norm[0]
+        if x_sweep != 0.0:
+            # For inverse sweep (x_sweep < 0), swap min and max
+            if x_sweep > 0.0:
+                result += min_value + (max_value - min_value) * pos_norm[0]
+            else:
+                result += max_value + (min_value - max_value) * pos_norm[0]
             active_sweeps += 1
 
-        if y_sweep:
-            result += min_value + (max_value - min_value) * pos_norm[1]
+        if y_sweep != 0.0:
+            # For inverse sweep (y_sweep < 0), swap min and max
+            if y_sweep > 0.0:
+                result += min_value + (max_value - min_value) * pos_norm[1]
+            else:
+                result += max_value + (min_value - max_value) * pos_norm[1]
             active_sweeps += 1
 
-        if cohort_sweep:
-            result += min_value + (max_value - min_value) * cohort
+        if cohort_sweep != 0.0:
+            # For inverse sweep (cohort_sweep < 0), swap min and max
+            if cohort_sweep > 0.0:
+                result += min_value + (max_value - min_value) * cohort
+            else:
+                result += max_value + (min_value - max_value) * cohort
             active_sweeps += 1
 
         # Average the results to keep within min/max range
@@ -261,9 +272,9 @@ class Sim:
         tryset(self.entity_update_program, f'{uniform_name}.slider_value', slider_value)
         tryset(self.entity_update_program, f'{uniform_name}.min_value', min_val)
         tryset(self.entity_update_program, f'{uniform_name}.max_value', max_val)
-        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', self._state.x_sweeps.get(param_name, False))
-        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', self._state.y_sweeps.get(param_name, False))
-        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', self._state.cohort_sweeps.get(param_name, False))
+        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', self._state.x_sweeps.get(param_name, 0.0))
+        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', self._state.y_sweeps.get(param_name, 0.0))
+        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', self._state.cohort_sweeps.get(param_name, 0.0))
 
     def apply_preferences(self, preferences) -> None:
         """Apply preferences from Orchestrator before update."""
@@ -313,12 +324,12 @@ class Sim:
             current_value = getattr(self._state, param_name)
 
             # Get sweep states for this parameter
-            x_sweep = self._state.x_sweeps.get(param_name, False)
-            y_sweep = self._state.y_sweeps.get(param_name, False)
-            cohort_sweep = self._state.cohort_sweeps.get(param_name, False)
+            x_sweep = self._state.x_sweeps.get(param_name, 0.0)
+            y_sweep = self._state.y_sweeps.get(param_name, 0.0)
+            cohort_sweep = self._state.cohort_sweeps.get(param_name, 0.0)
 
             # Only update if at least one sweep is active
-            if x_sweep or y_sweep or cohort_sweep:
+            if x_sweep != 0.0 or y_sweep != 0.0 or cohort_sweep != 0.0:
                 # Get min/max range for this parameter
                 min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
 

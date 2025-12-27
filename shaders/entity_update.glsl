@@ -24,9 +24,9 @@ struct PhysicsSetting {
     float slider_value;
     float min_value;
     float max_value;
-    bool x_sweep;
-    bool y_sweep;
-    bool cohort_sweep;
+    float x_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
+    float y_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
+    float cohort_sweep; // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
 };
 uniform int frame_count;
 uniform Rule target_rule;
@@ -55,7 +55,7 @@ uniform float RULE_SEED;
 
 float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     //if no sweep modes are active, just return slider value
-    if(!(setting.y_sweep||setting.cohort_sweep||setting.x_sweep))
+    if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0)
         {return setting.slider_value;}
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
@@ -64,16 +64,31 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     // Count active sweeps and accumulate results
     float result = 0;
     int active_sweeps = 0;
-    if(setting.x_sweep) {
-        result += mix(setting.min_value,setting.max_value,pos.x);
+    if(setting.x_sweep != 0.0) {
+        // For inverse sweep (x_sweep < 0), swap min and max
+        if(setting.x_sweep > 0.0) {
+            result += mix(setting.min_value, setting.max_value, pos.x);
+        } else {
+            result += mix(setting.max_value, setting.min_value, pos.x);
+        }
         active_sweeps++;
     }
-    if(setting.y_sweep) {
-        result += mix(setting.min_value,setting.max_value,pos.y);
+    if(setting.y_sweep != 0.0) {
+        // For inverse sweep (y_sweep < 0), swap min and max
+        if(setting.y_sweep > 0.0) {
+            result += mix(setting.min_value, setting.max_value, pos.y);
+        } else {
+            result += mix(setting.max_value, setting.min_value, pos.y);
+        }
         active_sweeps++;
     }
-    if(setting.cohort_sweep) {
-        result += mix(setting.min_value,setting.max_value,cohort);
+    if(setting.cohort_sweep != 0.0) {
+        // For inverse sweep (cohort_sweep < 0), swap min and max
+        if(setting.cohort_sweep > 0.0) {
+            result += mix(setting.min_value, setting.max_value, cohort);
+        } else {
+            result += mix(setting.max_value, setting.min_value, cohort);
+        }
         active_sweeps++;
     }
 
