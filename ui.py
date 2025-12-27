@@ -753,6 +753,7 @@ class UI:
             imgui.end_popup()
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Axial Force:")
             self.render_range_adjust_buttons("AXIAL_FORCE", "Axial Force", self.state.sim.AXIAL_FORCE, -1.0, 1.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("AXIAL_FORCE")
@@ -769,6 +770,7 @@ class UI:
             "Controls the strength of forces applied parallel to the direction of travel: acceleration and braking")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Lateral Force:")
             self.render_range_adjust_buttons("LATERAL_FORCE", "Lateral Force", self.state.sim.LATERAL_FORCE, -1.0, 1.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("LATERAL_FORCE")
@@ -785,6 +787,7 @@ class UI:
             "Controls the strength of forces applied perpendicular to the direction of travel: turning left and right.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Strafe Power:")
             self.render_range_adjust_buttons("STRAFE_POWER", "Strafe Power", self.state.sim.STRAFE_POWER, 0.0, 0.5)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("STRAFE_POWER")
@@ -801,6 +804,7 @@ class UI:
             "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Global Force Mult:")
             self.render_range_adjust_buttons("GLOBAL_FORCE_MULT", "Global Force Mult", self.state.sim.GLOBAL_FORCE_MULT, 0.0, 2.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("GLOBAL_FORCE_MULT")
@@ -817,6 +821,7 @@ class UI:
             "Scales axial and lateral forces applied to particles, and scales strafe power. Often tuned in the opposite direction to Sensor Gain and Drag to offset exploding/vanishing particle speed.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Drag:")
             self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("DRAG")
@@ -833,6 +838,7 @@ class UI:
             "Each physics update, particle velocity is multiplied by drag like so:   vel = vel*drag + forces; So drag less than 1 means particles are being slowed down. Powerful (<0.5) drag values can prevent energetic systems from 'blowing up'")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Mutation Scale:")
             self.render_range_adjust_buttons("MUTATION_SCALE", "Mutation Scale", self.state.sim.MUTATION_SCALE, -0.5, 0.5)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("MUTATION_SCALE")
@@ -849,6 +855,7 @@ class UI:
             "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Sensor Gain:")
             self.render_range_adjust_buttons("SENSOR_GAIN", "Sensor Gain", self.state.sim.SENSOR_GAIN, 0.0, 5.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("SENSOR_GAIN")
@@ -865,6 +872,7 @@ class UI:
             "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Sensor Angle:")
             self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("SENSOR_ANGLE")
@@ -881,6 +889,7 @@ class UI:
             "Sets the angular offset of particle sensors from their forward direction. Determines whether particles are 'looking ahead' or 'looking behind'.")
 
         if self.state.sim.parameter_sweeps_enabled:
+            self.render_aligned_label("Sensor Distance:")
             self.render_range_adjust_buttons("SENSOR_DISTANCE", "Sensor Distance", self.state.sim.SENSOR_DISTANCE, 0.0, 4.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("SENSOR_DISTANCE")
@@ -1303,6 +1312,26 @@ class UI:
             imgui.end_popup()
 
         return self.state.preferences.slider_ranges[slider_name][0], self.state.preferences.slider_ranges[slider_name][1], reset_requested, range_changed
+
+    def render_aligned_label(self, label_text: str):
+        """Render a label aligned to the longest label width for consistent button positioning.
+
+        Args:
+            label_text: The label text to display (e.g., "Axial Force:")
+        """
+        # Calculate the width of the longest label to ensure alignment
+        longest_label = "Global Force Mult:"
+        label_width = imgui.calc_text_size(longest_label).x
+
+        # Render the label
+        imgui.text(label_text)
+        imgui.same_line()
+
+        # Position cursor at consistent X location
+        current_x = imgui.get_cursor_pos_x()
+        target_x = imgui.get_style().window_padding.x + label_width + 8
+        if current_x < target_x:
+            imgui.set_cursor_pos_x(target_x)
 
     def render_sweep_buttons(self, param_name: str):
         """Render X, Y, C sweep toggle buttons for a parameter.
