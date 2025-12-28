@@ -154,9 +154,15 @@ class Sim:
         tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.slider_value', self._state.TRAIL_PERSISTENCE)
         tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.min_value', min_val)
         tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.max_value', max_val)
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_PERSISTENCE', 0.0))
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_PERSISTENCE', 0.0))
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+        # Only apply sweeps if parameter sweeps UI is enabled
+        if self._state.parameter_sweeps_enabled:
+            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+        else:
+            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', 0.0)
+            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', 0.0)
+            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', 0.0)
 
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
@@ -293,9 +299,15 @@ class Sim:
         tryset(self.entity_update_program, f'{uniform_name}.slider_value', slider_value)
         tryset(self.entity_update_program, f'{uniform_name}.min_value', min_val)
         tryset(self.entity_update_program, f'{uniform_name}.max_value', max_val)
-        tryset(self.entity_update_program, f'{uniform_name}.x_sweep', self._state.x_sweeps.get(param_name, 0.0))
-        tryset(self.entity_update_program, f'{uniform_name}.y_sweep', self._state.y_sweeps.get(param_name, 0.0))
-        tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', self._state.cohort_sweeps.get(param_name, 0.0))
+        # Only apply sweeps if parameter sweeps UI is enabled
+        if self._state.parameter_sweeps_enabled:
+            tryset(self.entity_update_program, f'{uniform_name}.x_sweep', self._state.x_sweeps.get(param_name, 0.0))
+            tryset(self.entity_update_program, f'{uniform_name}.y_sweep', self._state.y_sweeps.get(param_name, 0.0))
+            tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', self._state.cohort_sweeps.get(param_name, 0.0))
+        else:
+            tryset(self.entity_update_program, f'{uniform_name}.x_sweep', 0.0)
+            tryset(self.entity_update_program, f'{uniform_name}.y_sweep', 0.0)
+            tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', 0.0)
 
     def apply_preferences(self, preferences) -> None:
         """Apply preferences from Orchestrator before update."""
@@ -345,10 +357,15 @@ class Sim:
             # Get current slider value
             current_value = getattr(self._state, param_name)
 
-            # Get sweep states for this parameter
-            x_sweep = self._state.x_sweeps.get(param_name, 0.0)
-            y_sweep = self._state.y_sweeps.get(param_name, 0.0)
-            cohort_sweep = self._state.cohort_sweeps.get(param_name, 0.0)
+            # Get sweep states for this parameter (only if parameter sweeps UI is enabled)
+            if self._state.parameter_sweeps_enabled:
+                x_sweep = self._state.x_sweeps.get(param_name, 0.0)
+                y_sweep = self._state.y_sweeps.get(param_name, 0.0)
+                cohort_sweep = self._state.cohort_sweeps.get(param_name, 0.0)
+            else:
+                x_sweep = 0.0
+                y_sweep = 0.0
+                cohort_sweep = 0.0
 
             # Only update if at least one sweep is active
             if x_sweep != 0.0 or y_sweep != 0.0 or cohort_sweep != 0.0:

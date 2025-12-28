@@ -24,6 +24,11 @@ class PreferencesState:
     draw_size: float = 0.1  # Gaussian kernel width for trail drawing
     draw_power: float = 1.0  # Velocity strength when drawing trails
 
+    # Parameter sweep settings (stores sweep state: 0.0=off, 1.0=normal, -1.0=inverse)
+    x_sweeps: dict[str, float] = field(default_factory=dict)
+    y_sweeps: dict[str, float] = field(default_factory=dict)
+    cohort_sweeps: dict[str, float] = field(default_factory=dict)
+
     # Recording preferences
     max_frames: int = 1800  # 150 * 12
     motion_blur_samples: int = 12

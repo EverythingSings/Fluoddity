@@ -276,6 +276,9 @@ class UI:
                     self.state.preferences.mouse_mode = "Draw Trail"
                 else:
                     self.state.preferences.mouse_mode = "Select Particle"
+            elif key == glfw.KEY_TAB:
+                # Toggle parameter sweeps
+                self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
             elif key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(window, True)
             elif key == glfw.KEY_F1:
@@ -362,6 +365,12 @@ class UI:
         self._request_load_history_rule = False
         self._request_delete_history_rule = False
         self._history_preview_index = -1
+
+        # Copy parameter sweeps from preferences to sim state
+        # Sweeps are stored in preferences but sim accesses them via sim state
+        self.state.sim.x_sweeps = self.state.preferences.x_sweeps.copy()
+        self.state.sim.y_sweeps = self.state.preferences.y_sweeps.copy()
+        self.state.sim.cohort_sweeps = self.state.preferences.cohort_sweeps.copy()
 
         return self.state
 
@@ -685,6 +694,40 @@ class UI:
 
                 imgui.end_menu()
 
+            # Reset menu
+            if imgui.begin_menu("Reset..."):
+                # Reset all slider values to filename
+                if self.current_physics_defaults.source_filename:
+                    reset_label = f"Reset all slider values to '{self.current_physics_defaults.source_filename}'"
+                else:
+                    reset_label = "Reset all slider values to defaults"
+
+                if imgui.menu_item(reset_label, "", False)[0]:
+                    # Reset all physics parameters to their default values
+                    for param_name, default_value in self.current_physics_defaults.values.items():
+                        setattr(self.state.sim, param_name, default_value)
+
+                # Reset all slider ranges
+                if imgui.menu_item("Reset all slider ranges to defaults", "", False)[0]:
+                    # Clear all custom slider ranges, reverting to defaults
+                    self.state.preferences.slider_ranges.clear()
+
+                # Reset all parameter sweeps
+                if imgui.menu_item("Reset all parameter sweeps", "", False)[0]:
+                    # Turn off all parameter sweeps
+                    for param in list(self.state.preferences.x_sweeps.keys()):
+                        self.state.preferences.x_sweeps[param] = 0.0
+                        self.state.preferences.y_sweeps[param] = 0.0
+                        self.state.preferences.cohort_sweeps[param] = 0.0
+
+                # Reset all UI settings
+                if imgui.menu_item("Reset all UI settings", "", False)[0]:
+                    # Reset preferences to defaults (equivalent to deleting preferences.config)
+                    from state.preferences_state import PreferencesState
+                    self.state.preferences = PreferencesState()
+
+                imgui.end_menu()
+
             # Extras menu
             if imgui.begin_menu("Extras"):
                 _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
@@ -697,18 +740,10 @@ class UI:
                 )
 
                 # Parameter Sweeps toggle
-                changed, new_value = imgui.checkbox(
+                _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
                     "Parameter Sweeps",
                     self.state.sim.parameter_sweeps_enabled
                 )
-                if changed:
-                    self.state.sim.parameter_sweeps_enabled = new_value
-                    # If disabling, turn off all sweeps
-                    if not new_value:
-                        for param in self.state.sim.x_sweeps.keys():
-                            self.state.sim.x_sweeps[param] = False
-                            self.state.sim.y_sweeps[param] = False
-                            self.state.sim.cohort_sweeps[param] = False
 
                 imgui.end_menu()
 
@@ -954,7 +989,7 @@ class UI:
 
         if self.state.sim.parameter_sweeps_enabled:
             self.render_aligned_label("Trail Persistence:")
-            self.render_range_adjust_buttons("TRAIL_PERSISTENCE", "Trail Persistence", self.state.sim.TRAIL_PERSISTENCE, 0.0, 1.0)
+            self.render_range_adjust_buttons("TRAIL_PERSISTENCE", "Trail Persistence", self.state.sim.TRAIL_PERSISTENCE, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
             imgui.same_line(spacing=2)
             self.render_sweep_buttons("TRAIL_PERSISTENCE")
             imgui.same_line(spacing=8)
@@ -970,22 +1005,6 @@ class UI:
             "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly. Values close to 1.0 tend to create 'sharper' more stable patterns. ")
 
         imgui.separator()
-
-        # Reset all slider values button
-        if self.current_physics_defaults.source_filename:
-            reset_button_label = f"Reset all slider values to '{self.current_physics_defaults.source_filename}'"
-        else:
-            reset_button_label = "Reset all slider values to defaults"
-
-        if imgui.button(reset_button_label):
-            # Reset all physics parameters to their default values
-            for param_name, default_value in self.current_physics_defaults.values.items():
-                setattr(self.state.sim, param_name, default_value)
-
-        # Reset all slider ranges button
-        if imgui.button("Reset all slider ranges to defaults"):
-            # Clear all custom slider ranges, reverting to defaults
-            self.state.preferences.slider_ranges.clear()
 
         # Render the tooltip if window is hovered
         self.render_physics_tooltip()
@@ -1410,7 +1429,7 @@ class UI:
         button_width = button_height * 1.  # Wider than tall
 
         # X button (Red)
-        x_mode = self.state.sim.x_sweeps.get(param_name, 0.0)
+        x_mode = self.state.preferences.x_sweeps.get(param_name, 0.0)
         if x_mode == 1.0:  # Normal sweep - bright red (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
@@ -1426,15 +1445,15 @@ class UI:
 
         imgui.button(f"X##{param_name}_x", imgui.ImVec2(button_width, button_height))
         if imgui.is_item_clicked(imgui.MouseButton_.left):
-            self.state.sim.x_sweeps[param_name] = 1.0 if x_mode == 0.0 else 0.0
+            self.state.preferences.x_sweeps[param_name] = 1.0 if x_mode == 0.0 else 0.0
         elif imgui.is_item_clicked(imgui.MouseButton_.right):
-            self.state.sim.x_sweeps[param_name] = -1.0 if x_mode == 0.0 else 0.0
+            self.state.preferences.x_sweeps[param_name] = -1.0 if x_mode == 0.0 else 0.0
 
         imgui.pop_style_color(3)
         imgui.same_line(spacing=2)
 
         # Y button (Green)
-        y_mode = self.state.sim.y_sweeps.get(param_name, 0.0)
+        y_mode = self.state.preferences.y_sweeps.get(param_name, 0.0)
         if y_mode == 1.0:  # Normal sweep - bright green (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.2, 0.8, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.3, 1.0, 0.3, 1.0))
@@ -1450,15 +1469,15 @@ class UI:
 
         imgui.button(f"Y##{param_name}_y", imgui.ImVec2(button_width, button_height))
         if imgui.is_item_clicked(imgui.MouseButton_.left):
-            self.state.sim.y_sweeps[param_name] = 1.0 if y_mode == 0.0 else 0.0
+            self.state.preferences.y_sweeps[param_name] = 1.0 if y_mode == 0.0 else 0.0
         elif imgui.is_item_clicked(imgui.MouseButton_.right):
-            self.state.sim.y_sweeps[param_name] = -1.0 if y_mode == 0.0 else 0.0
+            self.state.preferences.y_sweeps[param_name] = -1.0 if y_mode == 0.0 else 0.0
 
         imgui.pop_style_color(3)
         imgui.same_line(spacing=2)
 
         # C button (Yellow)
-        c_mode = self.state.sim.cohort_sweeps.get(param_name, 0.0)
+        c_mode = self.state.preferences.cohort_sweeps.get(param_name, 0.0)
         if c_mode == 1.0:  # Normal sweep - bright yellow (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.9, 0.9, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 1.0, 0.3, 1.0))
@@ -1474,9 +1493,9 @@ class UI:
 
         imgui.button(f"C##{param_name}_c", imgui.ImVec2(button_width, button_height))
         if imgui.is_item_clicked(imgui.MouseButton_.left):
-            self.state.sim.cohort_sweeps[param_name] = 1.0 if c_mode == 0.0 else 0.0
+            self.state.preferences.cohort_sweeps[param_name] = 1.0 if c_mode == 0.0 else 0.0
         elif imgui.is_item_clicked(imgui.MouseButton_.right):
-            self.state.sim.cohort_sweeps[param_name] = -1.0 if c_mode == 0.0 else 0.0
+            self.state.preferences.cohort_sweeps[param_name] = -1.0 if c_mode == 0.0 else 0.0
 
         imgui.pop_style_color(3)
 
