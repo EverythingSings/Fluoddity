@@ -17,12 +17,18 @@ class PreferencesState:
     rule_seed: float = 0.0
 
     # UI preferences
+    show_preferences_window: bool = True  # Whether preferences window is visible
     physics_tooltips_enabled: bool = True
     debug_arrows: bool = False  # Visual debug overlay for velocity field
     arrow_sensitivity: float = 9.0  # Velocity scale for debug arrows (pow(2, x))
     mouse_mode: str = "Select Particle"  # "Select Particle" or "Draw Trail"
     draw_size: float = 0.1  # Gaussian kernel width for trail drawing
     draw_power: float = 1.0  # Velocity strength when drawing trails
+
+    # Physics slider group collapsed states (True = expanded/open, False = collapsed)
+    physics_group_basics: bool = True  # Default: open (trail sensors + mutation)
+    physics_group_forces: bool = True  # Default: open (global force mult, drag)
+    physics_group_advanced: bool = False  # Default: collapsed
 
     # Parameter sweep settings (stores sweep state: 0.0=off, 1.0=normal, -1.0=inverse)
     x_sweeps: dict[str, float] = field(default_factory=dict)

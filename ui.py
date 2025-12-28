@@ -52,7 +52,6 @@ class UI:
 
         # UI-only state
         self.show_demo_window = False
-        self.show_preferences_window = True  # Preferences window (formerly Simulation Controls)
         self.show_controls_window = False  # Help controls window
         self.show_video_recording_window = False  # Video recording controls window
 
@@ -409,10 +408,13 @@ class UI:
 
         imgui.new_frame()
 
+        # Main application menu bar
+        self.render_main_menu_bar()
+
         self.render_physics_settings_window()
 
         # Render Preferences window if visible
-        if self.show_preferences_window:
+        if self.state.preferences.show_preferences_window:
             self.render_preferences_window()
 
         # Render Controls help window if visible
@@ -433,6 +435,180 @@ class UI:
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
 
+    def render_main_menu_bar(self):
+        """Render the main application menu bar at the top of the window."""
+        load_submenu_open = False
+
+        if imgui.begin_main_menu_bar():
+            if imgui.begin_menu("File"):
+                if imgui.menu_item("Save...", "", False)[0]:
+                    self.save_popup_open = True
+                    # Default to last loaded filename
+                    self.save_filename_buffer = self.last_loaded_filename
+
+                # Load submenu with preview
+                if imgui.begin_menu("Load"):
+                    load_submenu_open = True
+
+                    # First frame submenu opens: cache configs and store base state
+                    if not self.load_submenu_was_open:
+                        self._cache_all_configs()
+                        self.base_sim_state = replace(self.state.sim)
+                        self.currently_previewing = None
+
+                    if not self.config_files:
+                        imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files")
+                    else:
+                        # Calculate max filename width to size the submenu properly
+                        max_text_width = 0.0
+                        for fn in self.config_files:
+                            text_size = imgui.calc_text_size(fn)
+                            if text_size.x > max_text_width:
+                                max_text_width = text_size.x
+
+                        # Add padding for the X button (25px) and some margin
+                        total_width = max_text_width + 40
+
+                        hovered_this_frame = None
+                        for filename in self.config_files:
+                            # Selectable for filename with calculated width
+                            clicked, _ = imgui.selectable(
+                                filename, False,
+                                imgui.SelectableFlags_.no_auto_close_popups,
+                                imgui.ImVec2(max_text_width + 10, 0)
+                            )
+
+                            # Check if filename is hovered
+                            if imgui.is_item_hovered():
+                                hovered_this_frame = filename
+
+                            # X button on same line (right after the selectable)
+                            imgui.same_line()
+                            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+                            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+                            if imgui.small_button(f"X##{filename}"):
+                                self.delete_confirm_filename = filename
+                            imgui.pop_style_color(2)
+
+                            # Also check hover on X button for preview
+                            if imgui.is_item_hovered():
+                                hovered_this_frame = filename
+
+                            if clicked:
+                                # Finalize selection
+                                self._load_filename = filename
+                                self._request_load_file = True
+                                self.last_loaded_filename = filename
+                                self.base_sim_state = None
+                                self.currently_previewing = None
+                                imgui.close_current_popup()
+
+                        # Handle preview on hover
+                        if hovered_this_frame != self.currently_previewing:
+                            # First, clear any existing preview
+                            if self.currently_previewing:
+                                self._request_clear_preview = True
+
+                            if hovered_this_frame and hovered_this_frame in self.cached_configs:
+                                # Apply preview config (physics locally, rule via orchestrator)
+                                config = self.cached_configs[hovered_this_frame]
+                                self._apply_config_to_sim_state(config)
+                                self._request_preview_config = True
+                                self._preview_filename = hovered_this_frame
+                                self.currently_previewing = hovered_this_frame
+                            elif hovered_this_frame is None and self.base_sim_state:
+                                # Revert to base state
+                                self._restore_base_sim_state()
+                                self.currently_previewing = None
+
+                    imgui.end_menu()
+
+                imgui.end_menu()
+
+            # Preferences toggle button
+            if imgui.menu_item("Preferences", "", self.state.preferences.show_preferences_window)[0]:
+                self.state.preferences.show_preferences_window = not self.state.preferences.show_preferences_window
+
+            # Reset menu
+            if imgui.begin_menu("Reset..."):
+                # Reset all slider values to filename
+                if self.current_physics_defaults.source_filename:
+                    reset_label = f"Reset all slider values to '{self.current_physics_defaults.source_filename}'"
+                else:
+                    reset_label = "Reset all slider values to defaults"
+
+                if imgui.menu_item(reset_label, "", False)[0]:
+                    # Reset all physics parameters to their default values
+                    for param_name, default_value in self.current_physics_defaults.values.items():
+                        setattr(self.state.sim, param_name, default_value)
+
+                # Reset all slider ranges
+                if imgui.menu_item("Reset all slider ranges to defaults", "", False)[0]:
+                    # Clear all custom slider ranges, reverting to defaults
+                    self.state.preferences.slider_ranges.clear()
+
+                # Reset all parameter sweeps
+                if imgui.menu_item("Reset all parameter sweeps", "", False)[0]:
+                    # Turn off all parameter sweeps
+                    for param in list(self.state.preferences.x_sweeps.keys()):
+                        self.state.preferences.x_sweeps[param] = 0.0
+                        self.state.preferences.y_sweeps[param] = 0.0
+                        self.state.preferences.cohort_sweeps[param] = 0.0
+
+                # Reset all UI settings
+                if imgui.menu_item("Reset all UI settings", "", False)[0]:
+                    # Reset preferences to defaults (equivalent to deleting preferences.config)
+                    from state.preferences_state import PreferencesState
+                    self.state.preferences = PreferencesState()
+
+                imgui.end_menu()
+
+            # Help menu
+            if imgui.begin_menu("Help"):
+                if imgui.menu_item("View Controls", "", self.show_controls_window)[0]:
+                    self.show_controls_window = not self.show_controls_window
+                imgui.end_menu()
+
+            # Extras menu
+            if imgui.begin_menu("Extras"):
+                _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
+                    "Disable Symmetry",
+                    self.state.sim.DISABLE_SYMMETRY
+                )
+                _, self.state.sim.ABSOLUTE_ORIENTATION = imgui.checkbox(
+                    "Absolute Orientation",
+                    self.state.sim.ABSOLUTE_ORIENTATION
+                )
+
+                # Parameter Sweeps toggle
+                _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
+                    "Parameter Sweeps",
+                    self.state.sim.parameter_sweeps_enabled
+                )
+
+                imgui.separator()
+
+                # Video Recording Controls
+                if imgui.menu_item("Video Recording Controls", "", self.show_video_recording_window)[0]:
+                    self.show_video_recording_window = not self.show_video_recording_window
+
+                imgui.end_menu()
+
+            imgui.end_main_menu_bar()
+
+        # Handle submenu close without selection
+        if self.load_submenu_was_open and not load_submenu_open:
+            # Submenu just closed
+            if self.base_sim_state:
+                self._restore_base_sim_state()
+            if self.currently_previewing:
+                self._request_clear_preview = True
+            self.base_sim_state = None
+            self.currently_previewing = None
+            self.cached_configs = {}
+
+        self.load_submenu_was_open = load_submenu_open
+
     def render_preferences_window(self):
         """Render the Preferences window (closeable)."""
         recording_active = self._display_info.get('recording_active', False)
@@ -442,33 +618,34 @@ class UI:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
 
         # Use p_open to allow closing with X button
-        expanded, self.show_preferences_window = imgui.begin("Preferences", True)
+        expanded, self.state.preferences.show_preferences_window = imgui.begin("Preferences", True)
 
         if expanded:
-            # === No heading: Speed Mult and Motion Blur ===
+            # === Physics Update Frequency section ===
+            imgui.text("Physics Update Frequency")
 
             # Lock speedmult to motion_blur_samples when recording video
             if recording_active:
                 locked_value = self.state.preferences.motion_blur_samples
                 imgui.begin_disabled()
                 imgui.slider_int(
-                    label=f"Physics Update Frequency Multiplier (locked to x{locked_value})",
+                    label="Rate",
                     v=locked_value,
                     v_min=1,
-                    v_max=6
+                    v_max=6,
+                    format=f"x{locked_value} ({locked_value * 60}hz) [locked]"
                 )
                 imgui.end_disabled()
             else:
-                # Custom format for speed mult: "x1 (60hz)", "x2 (120hz)", etc.
-                speed_labels = ["x1 (60hz)", "x2 (120hz)", "x3 (180hz)", "x4 (240hz)", "x5 (300hz)", "x6 (360hz)"]
-                current_idx = self.state.preferences.speedmult - 1  # Convert 1-6 to 0-5
-                changed, new_idx = imgui.combo(
-                    "Physics Update Frequency Multiplier",
-                    current_idx,
-                    speed_labels
+                # Slider with custom format showing multiplier and hz
+                current_hz = self.state.preferences.speedmult * 60
+                _, self.state.preferences.speedmult = imgui.slider_int(
+                    label="Rate",
+                    v=self.state.preferences.speedmult,
+                    v_min=1,
+                    v_max=6,
+                    format=f"x%d ({current_hz}hz)"
                 )
-                if changed:
-                    self.state.preferences.speedmult = new_idx + 1  # Convert back to 1-6
 
             # Motion blur checkbox (lock during recording)
             if recording_active:
@@ -682,180 +859,8 @@ class UI:
             imgui.pop_style_color()
 
     def render_physics_settings_window(self):
-        """Render the Physics Settings window with menu bar and sliders."""
-        imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
-
-        # Menu bar
-        load_submenu_open = False
-        if imgui.begin_menu_bar():
-            if imgui.begin_menu("File"):
-                if imgui.menu_item("Save...", "", False)[0]:
-                    self.save_popup_open = True
-                    # Default to last loaded filename
-                    self.save_filename_buffer = self.last_loaded_filename
-
-                # Load submenu with preview
-                if imgui.begin_menu("Load"):
-                    load_submenu_open = True
-
-                    # First frame submenu opens: cache configs and store base state
-                    if not self.load_submenu_was_open:
-                        self._cache_all_configs()
-                        self.base_sim_state = replace(self.state.sim)
-                        self.currently_previewing = None
-
-                    if not self.config_files:
-                        imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files")
-                    else:
-                        # Calculate max filename width to size the submenu properly
-                        max_text_width = 0.0
-                        for fn in self.config_files:
-                            text_size = imgui.calc_text_size(fn)
-                            if text_size.x > max_text_width:
-                                max_text_width = text_size.x
-
-                        # Add padding for the X button (25px) and some margin
-                        total_width = max_text_width + 40
-
-                        hovered_this_frame = None
-                        for filename in self.config_files:
-                            # Selectable for filename with calculated width
-                            clicked, _ = imgui.selectable(
-                                filename, False,
-                                imgui.SelectableFlags_.no_auto_close_popups,
-                                imgui.ImVec2(max_text_width + 10, 0)
-                            )
-
-                            # Check if filename is hovered
-                            if imgui.is_item_hovered():
-                                hovered_this_frame = filename
-
-                            # X button on same line (right after the selectable)
-                            imgui.same_line()
-                            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
-                            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
-                            if imgui.small_button(f"X##{filename}"):
-                                self.delete_confirm_filename = filename
-                            imgui.pop_style_color(2)
-
-                            # Also check hover on X button for preview
-                            if imgui.is_item_hovered():
-                                hovered_this_frame = filename
-
-                            if clicked:
-                                # Finalize selection
-                                self._load_filename = filename
-                                self._request_load_file = True
-                                self.last_loaded_filename = filename
-                                self.base_sim_state = None
-                                self.currently_previewing = None
-                                imgui.close_current_popup()
-
-                        # Handle preview on hover
-                        if hovered_this_frame != self.currently_previewing:
-                            # First, clear any existing preview
-                            if self.currently_previewing:
-                                self._request_clear_preview = True
-
-                            if hovered_this_frame and hovered_this_frame in self.cached_configs:
-                                # Apply preview config (physics locally, rule via orchestrator)
-                                config = self.cached_configs[hovered_this_frame]
-                                self._apply_config_to_sim_state(config)
-                                self._request_preview_config = True
-                                self._preview_filename = hovered_this_frame
-                                self.currently_previewing = hovered_this_frame
-                            elif hovered_this_frame is None and self.base_sim_state:
-                                # Revert to base state
-                                self._restore_base_sim_state()
-                                self.currently_previewing = None
-
-                    imgui.end_menu()
-
-                imgui.end_menu()
-
-            # Preferences toggle button
-            if imgui.menu_item("Preferences", "", self.show_preferences_window)[0]:
-                self.show_preferences_window = not self.show_preferences_window
-
-            # Reset menu
-            if imgui.begin_menu("Reset..."):
-                # Reset all slider values to filename
-                if self.current_physics_defaults.source_filename:
-                    reset_label = f"Reset all slider values to '{self.current_physics_defaults.source_filename}'"
-                else:
-                    reset_label = "Reset all slider values to defaults"
-
-                if imgui.menu_item(reset_label, "", False)[0]:
-                    # Reset all physics parameters to their default values
-                    for param_name, default_value in self.current_physics_defaults.values.items():
-                        setattr(self.state.sim, param_name, default_value)
-
-                # Reset all slider ranges
-                if imgui.menu_item("Reset all slider ranges to defaults", "", False)[0]:
-                    # Clear all custom slider ranges, reverting to defaults
-                    self.state.preferences.slider_ranges.clear()
-
-                # Reset all parameter sweeps
-                if imgui.menu_item("Reset all parameter sweeps", "", False)[0]:
-                    # Turn off all parameter sweeps
-                    for param in list(self.state.preferences.x_sweeps.keys()):
-                        self.state.preferences.x_sweeps[param] = 0.0
-                        self.state.preferences.y_sweeps[param] = 0.0
-                        self.state.preferences.cohort_sweeps[param] = 0.0
-
-                # Reset all UI settings
-                if imgui.menu_item("Reset all UI settings", "", False)[0]:
-                    # Reset preferences to defaults (equivalent to deleting preferences.config)
-                    from state.preferences_state import PreferencesState
-                    self.state.preferences = PreferencesState()
-
-                imgui.end_menu()
-
-            # Help menu
-            if imgui.begin_menu("Help"):
-                if imgui.menu_item("View Controls", "", self.show_controls_window)[0]:
-                    self.show_controls_window = not self.show_controls_window
-                imgui.end_menu()
-
-            # Extras menu
-            if imgui.begin_menu("Extras"):
-                _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
-                    "Disable Symmetry",
-                    self.state.sim.DISABLE_SYMMETRY
-                )
-                _, self.state.sim.ABSOLUTE_ORIENTATION = imgui.checkbox(
-                    "Absolute Orientation",
-                    self.state.sim.ABSOLUTE_ORIENTATION
-                )
-
-                # Parameter Sweeps toggle
-                _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
-                    "Parameter Sweeps",
-                    self.state.sim.parameter_sweeps_enabled
-                )
-
-                imgui.separator()
-
-                # Video Recording Controls
-                if imgui.menu_item("Video Recording Controls", "", self.show_video_recording_window)[0]:
-                    self.show_video_recording_window = not self.show_video_recording_window
-
-                imgui.end_menu()
-
-            imgui.end_menu_bar()
-
-        # Handle submenu close without selection
-        if self.load_submenu_was_open and not load_submenu_open:
-            # Submenu just closed
-            if self.base_sim_state:
-                self._restore_base_sim_state()
-            if self.currently_previewing:
-                self._request_clear_preview = True
-            self.base_sim_state = None
-            self.currently_previewing = None
-            self.cached_configs = {}
-
-        self.load_submenu_was_open = load_submenu_open
+        """Render the Physics Settings window with sliders."""
+        imgui.begin('Physics Settings')
 
         # Save popup modal
         if self.save_popup_open:
@@ -929,175 +934,196 @@ class UI:
                 imgui.close_current_popup()
             imgui.end_popup()
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Axial Force:")
-            self.render_range_adjust_buttons("AXIAL_FORCE", "Axial Force", self.state.sim.AXIAL_FORCE, -1.0, 1.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("AXIAL_FORCE")
-            imgui.same_line(spacing=8)
+        # === Basics Group (Trail sensors and rule mutation) ===
+        imgui.set_next_item_open(self.state.preferences.physics_group_basics)
+        if imgui.collapsing_header("Basics - Trail sensors and rule mutation"):
+            self.state.preferences.physics_group_basics = True
 
-        _, self.state.sim.AXIAL_FORCE = self.slider_float_with_range_menu(
-            label="Axial Force",
-            param_name="AXIAL_FORCE",
-            value=self.state.sim.AXIAL_FORCE,
-            default_min=-1.0,
-            default_max=1.0,
-        )
-        self.render_custom_tooltip("Axial Force",
-            "Controls the strength of forces applied parallel to the direction of travel: acceleration and braking")
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Sensor Gain:")
+                self.render_range_adjust_buttons("SENSOR_GAIN", "Sensor Gain", self.state.sim.SENSOR_GAIN, 0.0, 5.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("SENSOR_GAIN")
+                imgui.same_line(spacing=8)
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Lateral Force:")
-            self.render_range_adjust_buttons("LATERAL_FORCE", "Lateral Force", self.state.sim.LATERAL_FORCE, -1.0, 1.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("LATERAL_FORCE")
-            imgui.same_line(spacing=8)
+            _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
+                label="Sensor Gain",
+                param_name="SENSOR_GAIN",
+                value=self.state.sim.SENSOR_GAIN,
+                default_min=0,
+                default_max=5.0,
+            )
+            self.render_custom_tooltip("Sensor Gain",
+                "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.")
 
-        _, self.state.sim.LATERAL_FORCE = self.slider_float_with_range_menu(
-            label="Lateral Force",
-            param_name="LATERAL_FORCE",
-            value=self.state.sim.LATERAL_FORCE,
-            default_min=-1.0,
-            default_max=1.0,
-        )
-        self.render_custom_tooltip("Lateral Force",
-            "Controls the strength of forces applied perpendicular to the direction of travel: turning left and right.")
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Sensor Angle:")
+                self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("SENSOR_ANGLE")
+                imgui.same_line(spacing=8)
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Strafe Power:")
-            self.render_range_adjust_buttons("STRAFE_POWER", "Strafe Power", self.state.sim.STRAFE_POWER, 0.0, 0.5)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("STRAFE_POWER")
-            imgui.same_line(spacing=8)
+            _, self.state.sim.SENSOR_ANGLE = self.slider_float_with_range_menu(
+                label="Sensor Angle",
+                param_name="SENSOR_ANGLE",
+                value=self.state.sim.SENSOR_ANGLE,
+                default_min=-1.0,
+                default_max=1.0,
+            )
+            self.render_custom_tooltip("Sensor Angle",
+                "Sets the angular offset of particle sensors from their forward direction. Determines whether particles are 'looking ahead' or 'looking behind'.")
 
-        _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
-            label="Strafe Power",
-            param_name="STRAFE_POWER",
-            value=self.state.sim.STRAFE_POWER,
-            default_min=0.0,
-            default_max=0.5,
-        )
-        self.render_custom_tooltip("Strafe Power",
-            "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Sensor Distance:")
+                self.render_range_adjust_buttons("SENSOR_DISTANCE", "Sensor Distance", self.state.sim.SENSOR_DISTANCE, 0.0, 4.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("SENSOR_DISTANCE")
+                imgui.same_line(spacing=8)
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Global Force Mult:")
-            self.render_range_adjust_buttons("GLOBAL_FORCE_MULT", "Global Force Mult", self.state.sim.GLOBAL_FORCE_MULT, 0.0, 2.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("GLOBAL_FORCE_MULT")
-            imgui.same_line(spacing=8)
+            _, self.state.sim.SENSOR_DISTANCE = self.slider_float_with_range_menu(
+                label="Sensor Distance",
+                param_name="SENSOR_DISTANCE",
+                value=self.state.sim.SENSOR_DISTANCE,
+                default_min=0.0,
+                default_max=4.0,
+            )
+            self.render_custom_tooltip("Sensor Distance",
+                "Determines distance between a particle's center and where it reads the trail information from Canvas. Longer distances tend to create larger scale patterns.")
 
-        _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
-            label="Global Force Mult",
-            param_name="GLOBAL_FORCE_MULT",
-            value=self.state.sim.GLOBAL_FORCE_MULT,
-            default_min=0.0,
-            default_max=2.0,
-        )
-        self.render_custom_tooltip("Global Force Mult",
-            "Scales axial and lateral forces applied to particles, and scales strafe power. Often tuned in the opposite direction to Sensor Gain and Drag to offset exploding/vanishing particle speed.")
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Mutation Scale:")
+                self.render_range_adjust_buttons("MUTATION_SCALE", "Mutation Scale", self.state.sim.MUTATION_SCALE, -0.5, 0.5)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("MUTATION_SCALE")
+                imgui.same_line(spacing=8)
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Drag:")
-            self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("DRAG")
-            imgui.same_line(spacing=8)
+            _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
+                label="Mutation Scale",
+                param_name="MUTATION_SCALE",
+                value=self.state.sim.MUTATION_SCALE,
+                default_min=-.5,
+                default_max=.5,
+            )
+            self.render_custom_tooltip("Mutation Scale",
+                "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
+        else:
+            self.state.preferences.physics_group_basics = False
 
-        _, self.state.sim.DRAG = self.slider_float_with_range_menu(
-            label="Drag",
-            param_name="DRAG",
-            value=self.state.sim.DRAG,
-            default_min=-1.0,
-            default_max=1.0,
-        )
-        self.render_custom_tooltip("Drag",
-            "Each physics update, particle velocity is multiplied by drag like so:   vel = vel*drag + forces; So drag less than 1 means particles are being slowed down. Powerful (<0.5) drag values can prevent energetic systems from 'blowing up'")
+        # === Forces Group ===
+        imgui.set_next_item_open(self.state.preferences.physics_group_forces)
+        if imgui.collapsing_header("Forces"):
+            self.state.preferences.physics_group_forces = True
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Mutation Scale:")
-            self.render_range_adjust_buttons("MUTATION_SCALE", "Mutation Scale", self.state.sim.MUTATION_SCALE, -0.5, 0.5)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("MUTATION_SCALE")
-            imgui.same_line(spacing=8)
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Global Force Mult:")
+                self.render_range_adjust_buttons("GLOBAL_FORCE_MULT", "Global Force Mult", self.state.sim.GLOBAL_FORCE_MULT, 0.0, 2.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("GLOBAL_FORCE_MULT")
+                imgui.same_line(spacing=8)
 
-        _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
-            label="Mutation Scale",
-            param_name="MUTATION_SCALE",
-            value=self.state.sim.MUTATION_SCALE,
-            default_min=-.5,
-            default_max=.5,
-        )
-        self.render_custom_tooltip("Mutation Scale",
-            "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
+            _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
+                label="Global Force Mult",
+                param_name="GLOBAL_FORCE_MULT",
+                value=self.state.sim.GLOBAL_FORCE_MULT,
+                default_min=0.0,
+                default_max=2.0,
+            )
+            self.render_custom_tooltip("Global Force Mult",
+                "Scales axial and lateral forces applied to particles, and scales strafe power. Often tuned in the opposite direction to Sensor Gain and Drag to offset exploding/vanishing particle speed.")
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Sensor Gain:")
-            self.render_range_adjust_buttons("SENSOR_GAIN", "Sensor Gain", self.state.sim.SENSOR_GAIN, 0.0, 5.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("SENSOR_GAIN")
-            imgui.same_line(spacing=8)
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Drag:")
+                self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("DRAG")
+                imgui.same_line(spacing=8)
 
-        _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
-            label="Sensor Gain",
-            param_name="SENSOR_GAIN",
-            value=self.state.sim.SENSOR_GAIN,
-            default_min=0,
-            default_max=5.0,
-        )
-        self.render_custom_tooltip("Sensor Gain",
-            "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.")
+            _, self.state.sim.DRAG = self.slider_float_with_range_menu(
+                label="Drag",
+                param_name="DRAG",
+                value=self.state.sim.DRAG,
+                default_min=-1.0,
+                default_max=1.0,
+            )
+            self.render_custom_tooltip("Drag",
+                "Each physics update, particle velocity is multiplied by drag like so:   vel = vel*drag + forces; So drag less than 1 means particles are being slowed down. Powerful (<0.5) drag values can prevent energetic systems from 'blowing up'")
+        else:
+            self.state.preferences.physics_group_forces = False
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Sensor Angle:")
-            self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("SENSOR_ANGLE")
-            imgui.same_line(spacing=8)
+        # === Advanced Group ===
+        imgui.set_next_item_open(self.state.preferences.physics_group_advanced)
+        if imgui.collapsing_header("Advanced"):
+            self.state.preferences.physics_group_advanced = True
 
-        _, self.state.sim.SENSOR_ANGLE = self.slider_float_with_range_menu(
-            label="Sensor Angle",
-            param_name="SENSOR_ANGLE",
-            value=self.state.sim.SENSOR_ANGLE,
-            default_min=-1.0,
-            default_max=1.0,
-        )
-        self.render_custom_tooltip("Sensor Angle",
-            "Sets the angular offset of particle sensors from their forward direction. Determines whether particles are 'looking ahead' or 'looking behind'.")
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Axial Force:")
+                self.render_range_adjust_buttons("AXIAL_FORCE", "Axial Force", self.state.sim.AXIAL_FORCE, -1.0, 1.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("AXIAL_FORCE")
+                imgui.same_line(spacing=8)
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Sensor Distance:")
-            self.render_range_adjust_buttons("SENSOR_DISTANCE", "Sensor Distance", self.state.sim.SENSOR_DISTANCE, 0.0, 4.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("SENSOR_DISTANCE")
-            imgui.same_line(spacing=8)
+            _, self.state.sim.AXIAL_FORCE = self.slider_float_with_range_menu(
+                label="Axial Force",
+                param_name="AXIAL_FORCE",
+                value=self.state.sim.AXIAL_FORCE,
+                default_min=-1.0,
+                default_max=1.0,
+            )
+            self.render_custom_tooltip("Axial Force",
+                "Controls the strength of forces applied parallel to the direction of travel: acceleration and braking")
 
-        _, self.state.sim.SENSOR_DISTANCE = self.slider_float_with_range_menu(
-            label="Sensor Distance",
-            param_name="SENSOR_DISTANCE",
-            value=self.state.sim.SENSOR_DISTANCE,
-            default_min=0.0,
-            default_max=4.0,
-        )
-        self.render_custom_tooltip("Sensor Distance",
-            "Determines distance between a particle's center and where it reads the trail information from Canvas. Longer distances tend to create larger scale patterns.")
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Lateral Force:")
+                self.render_range_adjust_buttons("LATERAL_FORCE", "Lateral Force", self.state.sim.LATERAL_FORCE, -1.0, 1.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("LATERAL_FORCE")
+                imgui.same_line(spacing=8)
 
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_aligned_label("Trail Persistence:")
-            self.render_range_adjust_buttons("TRAIL_PERSISTENCE", "Trail Persistence", self.state.sim.TRAIL_PERSISTENCE, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
-            imgui.same_line(spacing=2)
-            self.render_sweep_buttons("TRAIL_PERSISTENCE")
-            imgui.same_line(spacing=8)
+            _, self.state.sim.LATERAL_FORCE = self.slider_float_with_range_menu(
+                label="Lateral Force",
+                param_name="LATERAL_FORCE",
+                value=self.state.sim.LATERAL_FORCE,
+                default_min=-1.0,
+                default_max=1.0,
+            )
+            self.render_custom_tooltip("Lateral Force",
+                "Controls the strength of forces applied perpendicular to the direction of travel: turning left and right.")
 
-        _, self.state.sim.TRAIL_PERSISTENCE = self.slider_float_with_range_menu(
-            label="Trail Persistence",
-            param_name="TRAIL_PERSISTENCE",
-            value=self.state.sim.TRAIL_PERSISTENCE,
-            default_min=0.0,
-            default_max=1.0,
-        )
-        self.render_custom_tooltip("Trail Persistence",
-            "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly. Values close to 1.0 tend to create 'sharper' more stable patterns. ")
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Strafe Power:")
+                self.render_range_adjust_buttons("STRAFE_POWER", "Strafe Power", self.state.sim.STRAFE_POWER, 0.0, 0.5)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("STRAFE_POWER")
+                imgui.same_line(spacing=8)
+
+            _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
+                label="Strafe Power",
+                param_name="STRAFE_POWER",
+                value=self.state.sim.STRAFE_POWER,
+                default_min=0.0,
+                default_max=0.5,
+            )
+            self.render_custom_tooltip("Strafe Power",
+                "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
+
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Trail Persistence:")
+                self.render_range_adjust_buttons("TRAIL_PERSISTENCE", "Trail Persistence", self.state.sim.TRAIL_PERSISTENCE, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("TRAIL_PERSISTENCE")
+                imgui.same_line(spacing=8)
+
+            _, self.state.sim.TRAIL_PERSISTENCE = self.slider_float_with_range_menu(
+                label="Trail Persistence",
+                param_name="TRAIL_PERSISTENCE",
+                value=self.state.sim.TRAIL_PERSISTENCE,
+                default_min=0.0,
+                default_max=1.0,
+            )
+            self.render_custom_tooltip("Trail Persistence",
+                "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly. Values close to 1.0 tend to create 'sharper' more stable patterns. ")
+        else:
+            self.state.preferences.physics_group_advanced = False
 
         imgui.separator()
 
