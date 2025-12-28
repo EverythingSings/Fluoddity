@@ -52,6 +52,9 @@ class UI:
 
         # UI-only state
         self.show_demo_window = False
+        self.show_preferences_window = True  # Preferences window (formerly Simulation Controls)
+        self.show_controls_window = False  # Help controls window
+        self.show_video_recording_window = False  # Video recording controls window
 
         # Rule history window state
         self.show_history_window = False
@@ -406,7 +409,19 @@ class UI:
 
         imgui.new_frame()
 
-        self.render_main_window()
+        self.render_physics_settings_window()
+
+        # Render Preferences window if visible
+        if self.show_preferences_window:
+            self.render_preferences_window()
+
+        # Render Controls help window if visible
+        if self.show_controls_window:
+            self.render_controls_window()
+
+        # Render Video Recording window if visible
+        if self.show_video_recording_window:
+            self.render_video_recording_window()
 
         # Render history window if visible
         if self.show_history_window:
@@ -418,185 +433,146 @@ class UI:
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
 
-    def render_main_window(self):
-        # Display info from orchestrator
-        sim_time = self._display_info.get('time', 0.0)
-        frame_count = self._display_info.get('frame_count', 0)
-        tex_size = self._display_info.get('tex_size', (1024, 1024))
+    def render_preferences_window(self):
+        """Render the Preferences window (closeable)."""
         recording_active = self._display_info.get('recording_active', False)
 
         # Apply red tint to window background when recording
         if recording_active:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
 
-        imgui.begin("Simulation Controls")
+        # Use p_open to allow closing with X button
+        expanded, self.show_preferences_window = imgui.begin("Preferences", True)
 
-        imgui.text(f"Simulation Time: {sim_time:.2f}, Frame: {frame_count}")
+        if expanded:
+            # === No heading: Speed Mult and Motion Blur ===
 
-        # Brightness slider
-        _, self.state.camera.BRIGHTNESS = imgui.slider_float(
-            label="Brightness",
-            v=self.state.camera.BRIGHTNESS,
-            v_min=0.0,
-            v_max=4.0,
-        )
-
-        # Hue sensitivity slider
-        _, self.state.camera.HUE_SENSITIVITY = imgui.slider_float(
-            label="Hue Sensitivity",
-            v=self.state.camera.HUE_SENSITIVITY,
-            v_min=-1.0,
-            v_max=1.0,
-        )
-
-        # Color by cohort checkbox
-        _, self.state.preferences.color_by_cohort = imgui.checkbox(
-            "Color by Cohort",
-            self.state.preferences.color_by_cohort
-        )
-
-        # Mouse mode combo box
-        mouse_modes = ["Select Particle", "Draw Trail"]
-        current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
-        clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
-        if clicked:
-            self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
-
-        # Draw mode sliders (only show when in Draw Trail mode)
-        if self.state.preferences.mouse_mode == "Draw Trail":
-            imgui.indent(20)
-            _, self.state.preferences.draw_size = imgui.slider_float(
-                "Draw Size",
-                self.state.preferences.draw_size,
-                0.01, 0.5,
-                format="%.3f"
-            )
-            _, self.state.preferences.draw_power = imgui.slider_float(
-                "Draw Power",
-                self.state.preferences.draw_power,
-                0.1, 5.0,
-                format="%.2f"
-            )
-            imgui.unindent(20)
-
-        # Debug arrows checkbox
-        _, self.state.preferences.debug_arrows = imgui.checkbox(
-            "Debug Arrows",
-            self.state.preferences.debug_arrows
-        )
-
-        # Arrow sensitivity slider (only show when debug arrows enabled)
-        if self.state.preferences.debug_arrows:
-            imgui.indent(20)
-            _, self.state.preferences.arrow_sensitivity = imgui.slider_float(
-                "Arrow Sensitivity",
-                self.state.preferences.arrow_sensitivity,
-                1.0, 20.0,
-                format="%.1f"
-            )
-            imgui.unindent(20)
-
-        # Randomize Rule Seed button
-        if imgui.button("Randomize Rule Seed"):
-            self.state.preferences.rule_seed = random.random()
-
-        # Toggle History Window button
-        if imgui.button("Toggle History Window"):
-            self.show_history_window = not self.show_history_window
-
-        imgui.text(f"Texture Size: {tex_size[0]}x{tex_size[1]}")
-
-        # Lock speedmult to motion_blur_samples when recording video
-        if recording_active:
-            locked_value = self.state.preferences.motion_blur_samples
-            imgui.begin_disabled()
-            imgui.slider_int(
-                label=f"Speed Mult (locked to {locked_value})",
-                v=locked_value,
-                v_min=1,
-                v_max=6
-            )
-            imgui.end_disabled()
-        else:
-            _, self.state.preferences.speedmult = imgui.slider_int(
-                label="Speed Mult",
-                v=self.state.preferences.speedmult,
-                v_min=1,
-                v_max=6,
-            )
-
-        # Motion blur checkbox (lock during recording)
-        if recording_active:
-            imgui.begin_disabled()
-
-        _, self.state.preferences.motion_blur = imgui.checkbox(
-            "Motion Blur",
-            self.state.preferences.motion_blur
-        )
-
-        if recording_active:
-            imgui.end_disabled()
-
-        # View dropdown
-        changed, self.state.sim.current_view_option = imgui.combo(
-            label="Current View",
-            current_item=self.state.sim.current_view_option,
-            items=self.view_option_labels + ['cam_brush']
-        )
-
-        if changed:
-            if self.state.sim.current_view_option == len(self.view_option_labels):
-                self.state.camera.cam_brush_mode = True
+            # Lock speedmult to motion_blur_samples when recording video
+            if recording_active:
+                locked_value = self.state.preferences.motion_blur_samples
+                imgui.begin_disabled()
+                imgui.slider_int(
+                    label=f"Physics Update Frequency Multiplier (locked to x{locked_value})",
+                    v=locked_value,
+                    v_min=1,
+                    v_max=6
+                )
+                imgui.end_disabled()
             else:
-                self.state.camera.cam_brush_mode = False
-                print(f"Selected: {self.view_option_labels[self.state.sim.current_view_option]}")
+                # Custom format for speed mult: "x1 (60hz)", "x2 (120hz)", etc.
+                speed_labels = ["x1 (60hz)", "x2 (120hz)", "x3 (180hz)", "x4 (240hz)", "x5 (300hz)", "x6 (360hz)"]
+                current_idx = self.state.preferences.speedmult - 1  # Convert 1-6 to 0-5
+                changed, new_idx = imgui.combo(
+                    "Physics Update Frequency Multiplier",
+                    current_idx,
+                    speed_labels
+                )
+                if changed:
+                    self.state.preferences.speedmult = new_idx + 1  # Convert back to 1-6
 
-        imgui.separator()
-        imgui.text("Camera:")
-        imgui.text(f"Position: ({self.state.camera.position[0]:.1f}, {self.state.camera.position[1]:.1f})")
-        imgui.text(f"Zoom: {self.state.camera.zoom:.2f}")
+            # Motion blur checkbox (lock during recording)
+            if recording_active:
+                imgui.begin_disabled()
 
-        imgui.separator()
-        _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox("Physics tooltips", self.state.preferences.physics_tooltips_enabled)
-
-        imgui.separator()
-        imgui.text("Screen Recording (speedmult locked to motion blur samples):")
-        _, self.state.preferences.max_frames = imgui.input_int('Max Frames', self.state.preferences.max_frames)
-
-        # Lock motion_blur_samples during recording
-        if recording_active:
-            imgui.begin_disabled()
-
-        _, self.state.preferences.motion_blur_samples = imgui.input_int(
-            'Motion Blur Samples',
-            self.state.preferences.motion_blur_samples
-        )
-
-        if recording_active:
-            imgui.end_disabled()
-            imgui.text_colored(
-                imgui.ImVec4(1.0, 0.8, 0.0, 1.0),
-                "(Locked during recording)"
+            _, self.state.preferences.motion_blur = imgui.checkbox(
+                "Motion Blur",
+                self.state.preferences.motion_blur
             )
 
-        _, self.state.preferences.supersample_k = imgui.input_int('Supersample Kernel Width', self.state.preferences.supersample_k)
+            if recording_active:
+                imgui.end_disabled()
 
-        # Filename prefix input
-        _, self.state.preferences.filename_prefix = imgui.input_text(
-            'Filename Prefix (empty = "animation")',
-            self.state.preferences.filename_prefix,
-            256
-        )
+            imgui.separator()
 
-        imgui.separator()
-        imgui.text("Controls:")
-        imgui.text("WASD - Move camera")
-        imgui.text("Q/E - Zoom out/in")
-        imgui.text("Ctrl+C - Copy config to clipboard")
-        imgui.text("Ctrl+V - Paste config from clipboard")
-        imgui.text("Space - Randomize rule seed")
-        imgui.text("F1 - Toggle ImGui Demo Window")
-        imgui.text("ESC - Exit")
+            # === Mouse Interaction section ===
+            imgui.text("Mouse Interaction (Press 'T' to toggle)")
+
+            # Mouse mode combo box
+            mouse_modes = ["Select Particle", "Draw Trail"]
+            current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
+            clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
+            if clicked:
+                self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
+
+            # Draw mode sliders (only show when in Draw Trail mode)
+            if self.state.preferences.mouse_mode == "Draw Trail":
+                imgui.indent(20)
+                _, self.state.preferences.draw_size = imgui.slider_float(
+                    "Draw Size",
+                    self.state.preferences.draw_size,
+                    0.01, 0.5,
+                    format="%.3f"
+                )
+                _, self.state.preferences.draw_power = imgui.slider_float(
+                    "Draw Power",
+                    self.state.preferences.draw_power,
+                    0.1, 5.0,
+                    format="%.2f"
+                )
+                imgui.unindent(20)
+
+            imgui.separator()
+
+            # === Appearance section ===
+            imgui.text("Appearance")
+
+            # Brightness slider
+            _, self.state.camera.BRIGHTNESS = imgui.slider_float(
+                label="Brightness",
+                v=self.state.camera.BRIGHTNESS,
+                v_min=0.0,
+                v_max=4.0,
+            )
+
+            # Hue sensitivity slider
+            _, self.state.camera.HUE_SENSITIVITY = imgui.slider_float(
+                label="Hue Sensitivity",
+                v=self.state.camera.HUE_SENSITIVITY,
+                v_min=-1.0,
+                v_max=1.0,
+            )
+
+            # View dropdown
+            changed, self.state.sim.current_view_option = imgui.combo(
+                label="Current View",
+                current_item=self.state.sim.current_view_option,
+                items=self.view_option_labels + ['cam_brush']
+            )
+
+            if changed:
+                if self.state.sim.current_view_option == len(self.view_option_labels):
+                    self.state.camera.cam_brush_mode = True
+                else:
+                    self.state.camera.cam_brush_mode = False
+
+            # Color by cohort checkbox
+            _, self.state.preferences.color_by_cohort = imgui.checkbox(
+                "Color by Cohort",
+                self.state.preferences.color_by_cohort
+            )
+
+            # Physics tooltips checkbox
+            _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
+                "Physics Tooltips",
+                self.state.preferences.physics_tooltips_enabled
+            )
+
+            # View Trail Arrows checkbox (renamed from Debug Arrows)
+            _, self.state.preferences.debug_arrows = imgui.checkbox(
+                "View Trail Arrows",
+                self.state.preferences.debug_arrows
+            )
+
+            # Arrow sensitivity slider (only show when debug arrows enabled)
+            if self.state.preferences.debug_arrows:
+                imgui.indent(20)
+                _, self.state.preferences.arrow_sensitivity = imgui.slider_float(
+                    "Arrow Sensitivity",
+                    self.state.preferences.arrow_sensitivity,
+                    1.0, 20.0,
+                    format="%.1f"
+                )
+                imgui.unindent(20)
 
         imgui.end()
 
@@ -604,6 +580,109 @@ class UI:
         if recording_active:
             imgui.pop_style_color()
 
+    def render_controls_window(self):
+        """Render the Controls help window (closeable)."""
+        expanded, self.show_controls_window = imgui.begin("Controls", True)
+
+        if expanded:
+            imgui.text("Keyboard Controls")
+            imgui.separator()
+
+            imgui.bullet_text("WASD - Move camera")
+            imgui.bullet_text("Q/E - Zoom out/in")
+            imgui.bullet_text("Ctrl+C - Copy config to clipboard")
+            imgui.bullet_text("Ctrl+V - Paste config from clipboard")
+            imgui.bullet_text("Space - Randomize rule seed")
+            imgui.bullet_text("Escape - Exit application")
+            imgui.bullet_text("P - Toggle video recording")
+            imgui.bullet_text("G - Pause/resume simulation")
+            imgui.bullet_text("R (hold) - Reset particles to center")
+            imgui.bullet_text("F - Toggle parameter sweeps")
+            imgui.bullet_text("V - Reload shaders")
+            imgui.bullet_text("T - Toggle mouse mode")
+            imgui.bullet_text("Z (hold) - Full reset (particles + canvas)")
+
+            imgui.spacing()
+            imgui.text("Mouse Controls")
+            imgui.separator()
+
+            imgui.text("Select Particle mode:")
+            imgui.indent(20)
+            imgui.bullet_text("Left click - Push active rule (select particle)")
+            imgui.bullet_text("Right click - Pop active rule (revert)")
+            imgui.unindent(20)
+
+            imgui.text("Draw Trail mode:")
+            imgui.indent(20)
+            imgui.bullet_text("Click and drag - Draw trails on the canvas")
+            imgui.unindent(20)
+
+            imgui.spacing()
+            imgui.text("Physics Slider Tips")
+            imgui.separator()
+
+            imgui.bullet_text("Right-click slider - Context menu to adjust range")
+            imgui.bullet_text("Ctrl+click slider - Enter custom value directly")
+
+        imgui.end()
+
+    def render_video_recording_window(self):
+        """Render the Video Recording controls window (closeable)."""
+        recording_active = self._display_info.get('recording_active', False)
+
+        # Apply red tint when recording
+        if recording_active:
+            imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
+
+        expanded, self.show_video_recording_window = imgui.begin("Video Recording", True)
+
+        if expanded:
+            if recording_active:
+                imgui.text_colored(imgui.ImVec4(1.0, 0.3, 0.3, 1.0), "RECORDING IN PROGRESS")
+                imgui.text("Press P to stop recording")
+                imgui.separator()
+
+            imgui.text("Speed mult locked to motion blur samples during recording")
+            imgui.spacing()
+
+            _, self.state.preferences.max_frames = imgui.input_int('Max Frames', self.state.preferences.max_frames)
+
+            # Lock motion_blur_samples during recording
+            if recording_active:
+                imgui.begin_disabled()
+
+            _, self.state.preferences.motion_blur_samples = imgui.input_int(
+                'Motion Blur Samples',
+                self.state.preferences.motion_blur_samples
+            )
+
+            if recording_active:
+                imgui.end_disabled()
+                imgui.text_colored(
+                    imgui.ImVec4(1.0, 0.8, 0.0, 1.0),
+                    "(Locked during recording)"
+                )
+
+            _, self.state.preferences.supersample_k = imgui.input_int('Supersample Kernel Width', self.state.preferences.supersample_k)
+
+            # Filename prefix input
+            _, self.state.preferences.filename_prefix = imgui.input_text(
+                'Filename Prefix (empty = "animation")',
+                self.state.preferences.filename_prefix,
+                256
+            )
+
+            imgui.spacing()
+            imgui.separator()
+            imgui.text("Press P to start/stop recording")
+
+        imgui.end()
+
+        if recording_active:
+            imgui.pop_style_color()
+
+    def render_physics_settings_window(self):
+        """Render the Physics Settings window with menu bar and sliders."""
         imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
 
         # Menu bar
@@ -694,6 +773,10 @@ class UI:
 
                 imgui.end_menu()
 
+            # Preferences toggle button
+            if imgui.menu_item("Preferences", "", self.show_preferences_window)[0]:
+                self.show_preferences_window = not self.show_preferences_window
+
             # Reset menu
             if imgui.begin_menu("Reset..."):
                 # Reset all slider values to filename
@@ -728,6 +811,12 @@ class UI:
 
                 imgui.end_menu()
 
+            # Help menu
+            if imgui.begin_menu("Help"):
+                if imgui.menu_item("View Controls", "", self.show_controls_window)[0]:
+                    self.show_controls_window = not self.show_controls_window
+                imgui.end_menu()
+
             # Extras menu
             if imgui.begin_menu("Extras"):
                 _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
@@ -744,6 +833,12 @@ class UI:
                     "Parameter Sweeps",
                     self.state.sim.parameter_sweeps_enabled
                 )
+
+                imgui.separator()
+
+                # Video Recording Controls
+                if imgui.menu_item("Video Recording Controls", "", self.show_video_recording_window)[0]:
+                    self.show_video_recording_window = not self.show_video_recording_window
 
                 imgui.end_menu()
 

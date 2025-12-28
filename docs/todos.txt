@@ -1,10 +1,7 @@
 Rewrite slider tooltips
 write tooltips for some sim controls
 tune slider ranges
-Remove arbitrary constants, move all constants to the slider level.
-update adding_ui_slider_params to support save-load and optional tooltip_graphic integration
 
-funny display when sensor angle < 0
 "Rain" "Edge kill" physics options
 
 Orientation mode: 
