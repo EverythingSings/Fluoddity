@@ -276,7 +276,7 @@ class UI:
                     self.state.preferences.mouse_mode = "Draw Trail"
                 else:
                     self.state.preferences.mouse_mode = "Select Particle"
-            elif key == glfw.KEY_TAB:
+            elif key == glfw.KEY_F:
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
             elif key == glfw.KEY_ESCAPE:
