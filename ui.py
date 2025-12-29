@@ -575,6 +575,32 @@ class UI:
 
             # Extras menu
             if imgui.begin_menu("Extras"):
+                # Simulation settings at top
+                boundary_options = ["Bounce", "Reset", "Wrap"]
+                imgui.set_next_item_width(100)
+                _, self.state.sim.boundary_conditions = imgui.combo(
+                    "Boundary Conditions",
+                    self.state.sim.boundary_conditions,
+                    boundary_options
+                )
+
+                initial_options = ["Grid", "Random", "Ring"]
+                imgui.set_next_item_width(100)
+                _, self.state.sim.initial_conditions = imgui.combo(
+                    "Initial Conditions",
+                    self.state.sim.initial_conditions,
+                    initial_options
+                )
+
+                imgui.set_next_item_width(100)
+                _, self.state.sim.num_cohorts = imgui.slider_int(
+                    "Number of Cohorts",
+                    self.state.sim.num_cohorts,
+                    1, 144
+                )
+
+                imgui.separator()
+
                 _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
                     "Disable Symmetry",
                     self.state.sim.DISABLE_SYMMETRY
@@ -1373,6 +1399,9 @@ class UI:
         self.state.sim.TRAIL_PERSISTENCE = config.trail_persistence
         self.state.sim.DISABLE_SYMMETRY = config.disable_symmetry
         self.state.sim.ABSOLUTE_ORIENTATION = config.absolute_orientation
+        self.state.sim.boundary_conditions = config.boundary_conditions
+        self.state.sim.initial_conditions = config.initial_conditions
+        self.state.sim.num_cohorts = config.num_cohorts
 
     def _restore_base_sim_state(self):
         """Restore sim state from saved base state."""
@@ -1389,6 +1418,9 @@ class UI:
             self.state.sim.TRAIL_PERSISTENCE = self.base_sim_state.TRAIL_PERSISTENCE
             self.state.sim.DISABLE_SYMMETRY = self.base_sim_state.DISABLE_SYMMETRY
             self.state.sim.ABSOLUTE_ORIENTATION = self.base_sim_state.ABSOLUTE_ORIENTATION
+            self.state.sim.boundary_conditions = self.base_sim_state.boundary_conditions
+            self.state.sim.initial_conditions = self.base_sim_state.initial_conditions
+            self.state.sim.num_cohorts = self.base_sim_state.num_cohorts
 
     def _generate_rule_label(self) -> tuple[int, str, str]:
         """Generate random jersey number with colored digits.

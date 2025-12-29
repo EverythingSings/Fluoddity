@@ -47,12 +47,12 @@ uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
 uniform bool ABSOLUTE_ORIENTATION;//orient physics around y axis instead of particle velocity
-uniform int EDGE_MODE; //0-1-2 == BOUNCE-RESET-WRAP
-uniform int RESET_MODE;
+uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
+uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
+uniform int COHORTS; //each cohort gets its own rule and starting location 
 uniform float RULE_SEED;
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
-#define COHORTS 4096 //each cohort gets it's own rule and starting location.
 #define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer.
                             //Entities with index > ACTIVE_COUNT aren't rendered or updated
 
@@ -135,23 +135,36 @@ void reset(uint index){
 
     float size=index<ACTIVE_COUNT?.0015: 0;
     float cohort_val = get_cohort(index);
-    
+
     vec4 color=vec4(0,0,1,.045);
     //set pos and vel to random values on a small disk
-    vec2 pos=.01*.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
+    vec2 pos=.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
     vec2 vel=0.01*.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
 
-    //position different cohorts at different places
-    float spots=COHORTS;
-    float spot_rows=ceil(sqrt(spots));
-    vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
-    pR(pos,floor(cohort_val)*3.1415*2*spots);
-    pos+=1.8*((gridcell)/spot_rows+ (1/2.*(1/spot_rows-1)));
-    //shift so that gridcell == (spot_rows-1)/2 has pos+=0
-    //(1/2-1/(2*spot_rows )+shft == 0
-    //shft = 1/2*(1/spot_rows-1)
+    //RESET_MODE: 0=Grid, 1=Random, 2=Ring
+    if(RESET_MODE == 0) {
+        //GRID: position different cohorts at different places in a grid
+        float spots=COHORTS;
+        float spot_rows=ceil(sqrt(spots));
+        vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
+        pR(pos,floor(cohort_val)*3.1415*2*spots);
+        pos+=1.8*((gridcell)/spot_rows+ (1/2.*(1/spot_rows-1)));
+    }
+    else if(RESET_MODE == 1) {
+        //RANDOM: scatter cohorts randomly across the canvas
+        pos+= vec2(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0))) * 2.0 - 1.0;
+        pos *= 0.9; // Keep slightly inside boundaries
+    }
+    else if(RESET_MODE == 2) {
+        //RING: arrange cohorts in a ring pattern
+        float angle = cohort_val / float(COHORTS) * 2.0 * PI;
+        float radius = 0.5;
+        pos += vec2(cos(angle), sin(angle)) * radius;
+        //pos += 0.02 * vec2(hash(vec2(cohort_val)), hash(vec2(cohort_val + 1.0))); // Small jitter
+    }
+
     //store to persistent entity buffer
-    entities[index]=Entity(pos,vel,size,cohort_val/COHORTS,float[2](0,0),color);
+    entities[index]=Entity(pos,vel,size,cohort_val/float(COHORTS),float[2](0,0),color);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
@@ -297,8 +310,8 @@ void main() {
     e.pos += e.vel;
     e.pos += strafe*calculate_setting(STRAFE_POWER_SETTING,e.pos,cohort);
 
-    //EDGE_MODE:  0-1-2 == BOUNCE-RESET-WRAP
-    if(EDGE_MODE==0){
+    //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
+    if(BOUNDARY_CONDITIONS_MODE==0){
         //reflect particles off canvas boundaries
         if (e.pos.x < -1.0 || e.pos.x > 1.0){
             e.vel.x=-e.vel.x;
@@ -310,14 +323,14 @@ void main() {
             e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
         }
     }
-    else if(EDGE_MODE==1){
+    else if(BOUNDARY_CONDITIONS_MODE==1){
         //reset to initial conditions
         if(e.pos.x<-1.||e.pos.x>1.||e.pos.y<-1||e.pos.y>1.){
             reset(index);
             return;//reset expects to be the last thing we do. It handles entity buffer storage
         }
     }
-    else if(EDGE_MODE==2){
+    else if(BOUNDARY_CONDITIONS_MODE==2){
         //wrap from from -1 to 1
         e.pos = 2*(fract(e.pos/2-.5)-.5);
     }

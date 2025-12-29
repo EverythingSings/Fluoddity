@@ -19,9 +19,10 @@ PHYSICS_PARAMS = [
 ]
 
 # Version byte for future compatibility
-# Version 1: Original format (10 floats + 80 floats)
-# Version 2: Adds DISABLE_SYMMETRY and ABSOLUTE_ORIENTATION booleans
-CONFIG_VERSION = 2
+# Version 1: Original format (10 floats + 80 floats = 360 bytes)
+# Version 2: Adds DISABLE_SYMMETRY and ABSOLUTE_ORIENTATION booleans (362 bytes)
+# Version 3: Adds boundary_conditions, initial_conditions, num_cohorts (362 + 3*4 = 374 bytes)
+CONFIG_VERSION = 3
 
 
 @dataclass
@@ -41,10 +42,14 @@ class PhysicsConfig:
     # Extra options (version 2+)
     disable_symmetry: bool = False
     absolute_orientation: bool = False
+    # Simulation settings (version 3+)
+    boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap
+    initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring
+    num_cohorts: int = 64         # 1-144
     # Rule data (10 centers * 8 floats = 80 floats)
     rule: np.ndarray = None  # shape (10, 8)
 
-    def to_bytes(self, version: int = 2) -> bytes:
+    def to_bytes(self, version: int = 3) -> bytes:
         """Serialize config to bytes."""
         # Pack physics params as 10 floats
         physics_bytes = struct.pack(
@@ -58,28 +63,42 @@ class PhysicsConfig:
         rule_flat = self.rule.flatten().astype(np.float32)
         rule_bytes = rule_flat.tobytes()
 
-        # Version 2: add booleans if requested
-        if version >= 2:
-            bool_bytes = struct.pack('??', self.disable_symmetry, self.absolute_orientation)
+        # Version 1: just physics + rule
+        if version == 1:
+            return physics_bytes + rule_bytes
+
+        # Version 2: add booleans
+        bool_bytes = struct.pack('??', self.disable_symmetry, self.absolute_orientation)
+        if version == 2:
             return physics_bytes + rule_bytes + bool_bytes
 
-        return physics_bytes + rule_bytes
+        # Version 3: add simulation settings (3 ints)
+        sim_bytes = struct.pack('3i', self.boundary_conditions, self.initial_conditions, self.num_cohorts)
+        return physics_bytes + rule_bytes + bool_bytes + sim_bytes
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'PhysicsConfig':
-        """Deserialize config from bytes. Supports version 1 (360 bytes) and version 2 (362 bytes)."""
+        """Deserialize config from bytes. Supports version 1 (360), 2 (362), and 3 (374 bytes)."""
         # Unpack physics params (10 floats = 40 bytes)
         physics = struct.unpack('10f', data[:40])
         # Unpack rule (80 floats = 320 bytes)
         rule_data = np.frombuffer(data[40:360], dtype=np.float32)
         rule = rule_data.reshape(10, 8)
 
-        # Version 2: check if we have extra boolean data
+        # Default values for backward compatibility
         disable_symmetry = False
         absolute_orientation = False
+        boundary_conditions = 0  # Bounce
+        initial_conditions = 0   # Grid
+        num_cohorts = 64
+
+        # Version 2+: check if we have extra boolean data
         if len(data) >= 362:
-            # Version 2 format with booleans
             disable_symmetry, absolute_orientation = struct.unpack('??', data[360:362])
+
+        # Version 3: check if we have simulation settings
+        if len(data) >= 374:
+            boundary_conditions, initial_conditions, num_cohorts = struct.unpack('3i', data[362:374])
 
         return cls(
             axial_force=physics[0],
@@ -94,6 +113,9 @@ class PhysicsConfig:
             trail_persistence=physics[9],
             disable_symmetry=disable_symmetry,
             absolute_orientation=absolute_orientation,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            num_cohorts=num_cohorts,
             rule=rule.copy()
         )
 
@@ -129,6 +151,9 @@ class ConfigSaver:
             trail_persistence=sim_state.TRAIL_PERSISTENCE,
             disable_symmetry=sim_state.DISABLE_SYMMETRY,
             absolute_orientation=sim_state.ABSOLUTE_ORIENTATION,
+            boundary_conditions=sim_state.boundary_conditions,
+            initial_conditions=sim_state.initial_conditions,
+            num_cohorts=sim_state.num_cohorts,
             rule=rule.copy()
         )
 
@@ -155,6 +180,9 @@ class ConfigSaver:
         sim_state.TRAIL_PERSISTENCE = config.trail_persistence
         sim_state.DISABLE_SYMMETRY = config.disable_symmetry
         sim_state.ABSOLUTE_ORIENTATION = config.absolute_orientation
+        sim_state.boundary_conditions = config.boundary_conditions
+        sim_state.initial_conditions = config.initial_conditions
+        sim_state.num_cohorts = config.num_cohorts
 
         return config.rule.copy()
 
@@ -163,13 +191,27 @@ class ConfigSaver:
         Encode a PhysicsConfig to a shareable string.
 
         Format: "SIMn:" + base64(zlib(bytes))
-        Uses version 1 if both booleans are False (backward compatibility), otherwise version 2.
+        Uses minimal version needed for backward compatibility:
+        - Version 1: All extras are default (360 bytes)
+        - Version 2: Only booleans are non-default (362 bytes)
+        - Version 3: Simulation settings are non-default (374 bytes)
         """
-        # Use version 1 for backward compatibility if both extras are default
-        if not config.disable_symmetry and not config.absolute_orientation:
+        # Check if simulation settings are non-default
+        sim_settings_default = (
+            config.boundary_conditions == 0 and
+            config.initial_conditions == 0 and
+            config.num_cohorts == 64
+        )
+        # Check if booleans are default
+        booleans_default = not config.disable_symmetry and not config.absolute_orientation
+
+        # Use minimal version for backward compatibility
+        if sim_settings_default and booleans_default:
             version = 1
-        else:
+        elif sim_settings_default:
             version = 2
+        else:
+            version = 3
 
         raw_bytes = config.to_bytes(version)
         compressed = zlib.compress(raw_bytes, level=9)
@@ -195,7 +237,7 @@ class ConfigSaver:
             colon_idx = config_string.index(':')
             version = int(config_string[3:colon_idx])
 
-            if version not in [1, 2]:
+            if version not in [1, 2, 3]:
                 print(f"Unsupported config version: {version}")
                 return None
 

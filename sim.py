@@ -122,6 +122,9 @@ class Sim:
         self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
         tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
         tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
+        tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
+        tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
+        tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
 
         # Camera state uniforms
         if self._camera_state is not None:
