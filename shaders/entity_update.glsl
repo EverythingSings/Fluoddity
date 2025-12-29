@@ -1,5 +1,5 @@
 #version 450
-#define EDGE_BOUNCE true
+
 layout(local_size_x = 64) in;
 
 //SAME STRUCT USED IN BRUSH.VERT AND CAM_BRUSH.VERT
@@ -32,9 +32,9 @@ struct PhysicsSetting {
 };
 uniform int frame_count;
 uniform Rule target_rule;
+uniform sampler2D canvas; //trails canvas
 uniform vec2 canvas_resolution;
-uniform sampler2D canvas;
-uniform PhysicsSetting DRAG_SETTING;
+uniform PhysicsSetting DRAG_SETTING; 
 uniform PhysicsSetting STRAFE_POWER_SETTING;
 uniform PhysicsSetting SENSOR_ANGLE_SETTING;
 uniform PhysicsSetting GLOBAL_FORCE_MULT_SETTING;
@@ -46,15 +46,18 @@ uniform PhysicsSetting MUTATION_SCALE_SETTING;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
-uniform bool ABSOLUTE_ORIENTATION;
+uniform bool ABSOLUTE_ORIENTATION;//orient physics around y axis instead of particle velocity
+uniform int EDGE_MODE; //0-1-2 == BOUNCE-RESET-WRAP
+uniform int RESET_MODE;
 uniform float RULE_SEED;
-
-
 ////////////////////////////CONSTANTS
-#define COHORTS 64 //each cohort gets it's own rule and starting location.
+#define PI 3.1415926
+#define COHORTS 4096 //each cohort gets it's own rule and starting location.
 #define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer.
                             //Entities with index > ACTIVE_COUNT aren't rendered or updated
 
+//Calculate the actual setting value for this particle. When sweeps are
+//active, physics settings can depend on entity position and cohort
 // SYNCHRONIZED: This function must match canvas.frag and sim.py::calculate_setting
 // Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
 float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
@@ -63,7 +66,7 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
         {return setting.slider_value;}
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
-    cohort = cohort / COHORTS; //convert to 0..1 for mixing
+    cohort = cohort / float(COHORTS); //convert to 0..1 for mixing
 
     // Count active sweeps and accumulate results
     float result = 0;
@@ -111,7 +114,7 @@ void pR(inout vec2 p, float a) {
 	p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
 }
 
-#define PI 3.1415926
+
 //convert p to texture coords and retrieve canvas
 vec4 get_can(vec2 p){
     vec2 res=textureSize(canvas,0);
@@ -134,8 +137,8 @@ void reset(uint index){
     float cohort_val = get_cohort(index);
     
     vec4 color=vec4(0,0,1,.045);
-    //set pos and vel to small random values
-    vec2 pos=.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
+    //set pos and vel to random values on a small disk
+    vec2 pos=.01*.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
     vec2 vel=0.01*.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
 
     //position different cohorts at different places
@@ -143,8 +146,10 @@ void reset(uint index){
     float spot_rows=ceil(sqrt(spots));
     vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
     pR(pos,floor(cohort_val)*3.1415*2*spots);
-    pos+=1.8*((gridcell)/spot_rows-.45);
-
+    pos+=1.8*((gridcell)/spot_rows+ (1/2.*(1/spot_rows-1)));
+    //shift so that gridcell == (spot_rows-1)/2 has pos+=0
+    //(1/2-1/(2*spot_rows )+shft == 0
+    //shft = 1/2*(1/spot_rows-1)
     //store to persistent entity buffer
     entities[index]=Entity(pos,vel,size,cohort_val/COHORTS,float[2](0,0),color);
 }
@@ -292,8 +297,9 @@ void main() {
     e.pos += e.vel;
     e.pos += strafe*calculate_setting(STRAFE_POWER_SETTING,e.pos,cohort);
 
-    //reflect particles off canvas boundaries
-    if(EDGE_BOUNCE){
+    //EDGE_MODE:  0-1-2 == BOUNCE-RESET-WRAP
+    if(EDGE_MODE==0){
+        //reflect particles off canvas boundaries
         if (e.pos.x < -1.0 || e.pos.x > 1.0){
             e.vel.x=-e.vel.x;
             e.pos.x=edgeflect(e.pos.x);
@@ -303,6 +309,17 @@ void main() {
             e.vel.y=-e.vel.y;
             e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
         }
+    }
+    else if(EDGE_MODE==1){
+        //reset to initial conditions
+        if(e.pos.x<-1.||e.pos.x>1.||e.pos.y<-1||e.pos.y>1.){
+            reset(index);
+            return;//reset expects to be the last thing we do. It handles entity buffer storage
+        }
+    }
+    else if(EDGE_MODE==2){
+        //wrap from from -1 to 1
+        e.pos = 2*(fract(e.pos/2-.5)-.5);
     }
 
     //Commit new entity state to buffers

@@ -360,11 +360,8 @@ class App:
                 self.sim.can.size
             )
 
-            # Check if left mouse button is currently pressed (not just clicked this frame)
-            left_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
-
-            # Only set draw_power if button is pressed
-            if left_button_pressed:
+            # Only set draw_power if button is pressed (respects imgui capture)
+            if ui_state.mouse_left_held:
                 draw_power_value = ui_state.preferences.draw_power
 
         if motion_blur:

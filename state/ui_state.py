@@ -21,6 +21,9 @@ class UIState:
     left_click_this_frame: bool = False
     right_click_this_frame: bool = False
 
+    # Continuous mouse state (respects imgui capture)
+    mouse_left_held: bool = False
+
     # One-shot command flags (reset after get_state)
     request_reload: bool = False
     request_reset: bool = False

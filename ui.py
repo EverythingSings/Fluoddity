@@ -312,6 +312,10 @@ class UI:
         self.state.mouse_pos = self._mouse_pos
         self.state.left_click_this_frame = self._left_click_pending
         self.state.right_click_this_frame = self._right_click_pending
+
+        # Continuous mouse state (for draw trail mode) - respects imgui capture
+        left_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
+        self.state.mouse_left_held = left_button_pressed and not imgui.get_io().want_capture_mouse
         self.state.request_reload = self._request_reload
         self.state.request_reset = self._request_reset
         self.state.request_full_reset = self._request_full_reset
@@ -936,9 +940,11 @@ class UI:
 
         # === Basics Group (Trail sensors and rule mutation) ===
         imgui.set_next_item_open(self.state.preferences.physics_group_basics)
-        if imgui.collapsing_header("Basics - Trail sensors and rule mutation"):
-            self.state.preferences.physics_group_basics = True
-
+        basics_open = imgui.collapsing_header("Basics - Trail sensors and rule mutation")
+        # Only update state when user clicks the header (not when window state changes)
+        if imgui.is_item_clicked():
+            self.state.preferences.physics_group_basics = not self.state.preferences.physics_group_basics
+        if basics_open:
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_aligned_label("Sensor Gain:")
                 self.render_range_adjust_buttons("SENSOR_GAIN", "Sensor Gain", self.state.sim.SENSOR_GAIN, 0.0, 5.0)
@@ -1006,14 +1012,13 @@ class UI:
             )
             self.render_custom_tooltip("Mutation Scale",
                 "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
-        else:
-            self.state.preferences.physics_group_basics = False
 
         # === Forces Group ===
         imgui.set_next_item_open(self.state.preferences.physics_group_forces)
-        if imgui.collapsing_header("Forces"):
-            self.state.preferences.physics_group_forces = True
-
+        forces_open = imgui.collapsing_header("Forces")
+        if imgui.is_item_clicked():
+            self.state.preferences.physics_group_forces = not self.state.preferences.physics_group_forces
+        if forces_open:
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_aligned_label("Global Force Mult:")
                 self.render_range_adjust_buttons("GLOBAL_FORCE_MULT", "Global Force Mult", self.state.sim.GLOBAL_FORCE_MULT, 0.0, 2.0)
@@ -1047,14 +1052,13 @@ class UI:
             )
             self.render_custom_tooltip("Drag",
                 "Each physics update, particle velocity is multiplied by drag like so:   vel = vel*drag + forces; So drag less than 1 means particles are being slowed down. Powerful (<0.5) drag values can prevent energetic systems from 'blowing up'")
-        else:
-            self.state.preferences.physics_group_forces = False
 
         # === Advanced Group ===
         imgui.set_next_item_open(self.state.preferences.physics_group_advanced)
-        if imgui.collapsing_header("Advanced"):
-            self.state.preferences.physics_group_advanced = True
-
+        advanced_open = imgui.collapsing_header("Advanced")
+        if imgui.is_item_clicked():
+            self.state.preferences.physics_group_advanced = not self.state.preferences.physics_group_advanced
+        if advanced_open:
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_aligned_label("Axial Force:")
                 self.render_range_adjust_buttons("AXIAL_FORCE", "Axial Force", self.state.sim.AXIAL_FORCE, -1.0, 1.0)
@@ -1122,8 +1126,6 @@ class UI:
             )
             self.render_custom_tooltip("Trail Persistence",
                 "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly. Values close to 1.0 tend to create 'sharper' more stable patterns. ")
-        else:
-            self.state.preferences.physics_group_advanced = False
 
         imgui.separator()
 

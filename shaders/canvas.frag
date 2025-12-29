@@ -120,6 +120,6 @@ void main() {
 
         // Apply Gaussian kernel and add to velocity channels (RG)
         float kernel_weight = draw_kernel(distance_to_mouse, draw_size);
-        can_out.xy += mouse_velocity * kernel_weight;
+        can_out.xy += mouse_velocity * kernel_weight/draw_size*(1-trail_persistence);
     }
 }
