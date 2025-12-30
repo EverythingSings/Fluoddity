@@ -53,6 +53,8 @@ class UI:
         # UI-only state
         self.show_demo_window = False
         self.show_controls_window = False  # Help controls window
+        self.show_parameter_sweeps_window = False  # Help parameter sweeps window
+        self.show_tutorial_window = False  # Help tutorial window
         self.show_video_recording_window = False  # Video recording controls window
 
         # Rule history window state
@@ -426,6 +428,14 @@ class UI:
         if self.show_controls_window:
             self.render_controls_window()
 
+        # Render Parameter Sweeps help window if visible
+        if self.show_parameter_sweeps_window:
+            self.render_parameter_sweeps_window()
+
+        # Render Tutorial help window if visible
+        if self.show_tutorial_window:
+            self.render_tutorial_window()
+
         # Render Video Recording window if visible
         if self.show_video_recording_window:
             self.render_video_recording_window()
@@ -573,8 +583,12 @@ class UI:
 
             # Help menu
             if imgui.begin_menu("Help"):
-                if imgui.menu_item("View Controls", "", self.show_controls_window)[0]:
+                if imgui.menu_item("Controls", "", self.show_controls_window)[0]:
                     self.show_controls_window = not self.show_controls_window
+                if imgui.menu_item("Parameter Sweeps", "", self.show_parameter_sweeps_window)[0]:
+                    self.show_parameter_sweeps_window = not self.show_parameter_sweeps_window
+                if imgui.menu_item("Tutorial", "", self.show_tutorial_window)[0]:
+                    self.show_tutorial_window = not self.show_tutorial_window
                 imgui.end_menu()
 
             # Extras menu
@@ -807,6 +821,98 @@ class UI:
 
             imgui.bullet_text("Right-click slider - Context menu to adjust range")
             imgui.bullet_text("Ctrl+click slider - Enter custom value directly")
+
+        imgui.end()
+
+    def render_parameter_sweeps_window(self):
+        """Render the Parameter Sweeps help window (closeable)."""
+        expanded, self.show_parameter_sweeps_window = imgui.begin("Parameter Sweeps", True)
+
+        if expanded:
+            imgui.text_wrapped(
+                "Parameter sweeps let you vary physics settings across the screen, "
+                "creating a grid where each position uses different parameter values."
+            )
+
+            imgui.spacing()
+            imgui.text("How to Use")
+            imgui.separator()
+
+            imgui.bullet_text("Enable sweeps: Extras -> Parameter Sweeps (or press F)")
+            imgui.bullet_text("Configure in Physics Settings -> Additional Settings")
+            imgui.bullet_text("Each parameter can sweep on X-axis, Y-axis, or by Cohort")
+
+            imgui.spacing()
+            imgui.text("Sweep Directions")
+            imgui.separator()
+
+            imgui.bullet_text("Normal (->): Left/bottom = min, Right/top = max")
+            imgui.bullet_text("Inverse (<-): Left/bottom = max, Right/top = min")
+            imgui.bullet_text("Off: Parameter uses its slider value everywhere")
+
+            imgui.spacing()
+            imgui.text("Tips")
+            imgui.separator()
+
+            imgui.text_wrapped(
+                "Combine X and Y sweeps on different parameters to explore "
+                "2D parameter spaces. For example, sweep Axial Force on X and "
+                "Lateral Force on Y to see how they interact."
+            )
+            imgui.spacing()
+            imgui.text_wrapped(
+                "Cohort sweeps vary parameters across particle groups rather than "
+                "screen position, useful for seeing how different cohorts behave "
+                "with different settings."
+            )
+
+        imgui.end()
+
+    def render_tutorial_window(self):
+        """Render the Tutorial help window (closeable)."""
+        expanded, self.show_tutorial_window = imgui.begin("Tutorial", True)
+
+        if expanded:
+            imgui.text("Getting Started")
+            imgui.separator()
+
+            imgui.text_wrapped(
+                "This is a particle simulation where agents follow trails left by others. "
+                "Click anywhere to select a particle and set it as your 'target' - "
+                "all particles will then chase behaviors similar to that one."
+            )
+
+            imgui.spacing()
+            imgui.text("Core Workflow")
+            imgui.separator()
+
+            imgui.bullet_text("Left-click: Select a particle as the new target")
+            imgui.bullet_text("Right-click: Undo (revert to previous target)")
+            imgui.bullet_text("Space: Randomize the rule seed for new behaviors")
+            imgui.bullet_text("Z: Reset to no target (particles stop chasing)")
+
+            imgui.spacing()
+            imgui.text("Physics Controls")
+            imgui.separator()
+
+            imgui.text_wrapped(
+                "The Physics Settings window lets you tune how particles move. "
+                "Key parameters:"
+            )
+            imgui.bullet_text("Axial/Lateral Force: How strongly particles turn")
+            imgui.bullet_text("Sensor Gain: How much trail intensity matters")
+            imgui.bullet_text("Trail Persistence: How long trails last")
+            imgui.bullet_text("Drag: Resistance to movement")
+
+            imgui.spacing()
+            imgui.text("Saving Your Work")
+            imgui.separator()
+
+            imgui.text_wrapped(
+                "Use File -> Save to store interesting configurations. "
+                "Ctrl+C copies the current config to clipboard for easy sharing. "
+                "Ctrl+V pastes a config from clipboard."
+            )
 
         imgui.end()
 
@@ -1471,6 +1577,7 @@ class UI:
         self.state.sim.boundary_conditions = config.boundary_conditions
         self.state.sim.initial_conditions = config.initial_conditions
         self.state.sim.num_cohorts = config.num_cohorts
+        self.state.sim.rule_seed = config.rule_seed
 
     def _restore_base_sim_state(self):
         """Restore sim state from saved base state."""
@@ -1490,6 +1597,7 @@ class UI:
             self.state.sim.boundary_conditions = self.base_sim_state.boundary_conditions
             self.state.sim.initial_conditions = self.base_sim_state.initial_conditions
             self.state.sim.num_cohorts = self.base_sim_state.num_cohorts
+            self.state.sim.rule_seed = self.base_sim_state.rule_seed
 
     def _generate_rule_label(self) -> tuple[int, str, str]:
         """Generate random jersey number with colored digits.
