@@ -281,6 +281,9 @@ class UI:
             elif key == glfw.KEY_F:
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
+            elif key == glfw.KEY_Z:
+                # Full reset (one-shot, not hold)
+                self._request_full_reset = True
             elif key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(window, True)
             elif key == glfw.KEY_F1:
@@ -301,11 +304,9 @@ class UI:
                 self._request_reload = True
                 self.pending_resize_time = None
 
-        # Check for R/Z key holds (reset commands)
+        # Check for R key hold (reset command - continuous)
         if glfw.KEY_R in self._keys_pressed:
             self._request_reset = True
-        if glfw.KEY_Z in self._keys_pressed:
-            self._request_full_reset = True
 
         # Build state snapshot
         self.state.keys_pressed = self._keys_pressed.copy()
@@ -1172,10 +1173,12 @@ class UI:
             return
 
         # Sync metadata with rule history
+        # When adding new rules, append new labels
         while len(self.history_window_labels) < len(rule_history):
             self.history_window_labels.append(self._generate_rule_label())
+        # When removing old rules (from beginning), remove old labels (from beginning)
         while len(self.history_window_labels) > len(rule_history):
-            self.history_window_labels.pop()
+            self.history_window_labels.pop(0)
 
         # Determine how many rules to show (hide topmost if previewing)
         num_rules_to_show = len(rule_history)

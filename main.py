@@ -158,11 +158,11 @@ class App:
         if ui_state.request_reset:
             self.sim.reset()
 
-        # Full reset (Z key) - also clears rules
+        # Full reset (Z key) - push zero rule (undoable) and reset entities
         if ui_state.request_full_reset:
             self.sim.reset()
-            self.rule_manager.clear()
-            self.sim.apply_rule(None)
+            zero_rule = self.rule_manager.push_zero_rule()
+            self.sim.apply_rule(zero_rule)
 
         # Handle entity clicking and rule undo (only in Select Particle mode)
         if ui_state.preferences.mouse_mode == "Select Particle":

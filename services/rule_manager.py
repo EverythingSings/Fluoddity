@@ -1,5 +1,8 @@
 import numpy as np
 
+# Maximum number of rules to keep in history
+MAX_HISTORY_SIZE = 200
+
 
 class RuleManager:
     """Owns rule_history and all rule operations."""
@@ -8,8 +11,20 @@ class RuleManager:
         self.rule_history: list[np.ndarray] = []
 
     def push_rule(self, rule: np.ndarray) -> None:
-        """Add a new rule to history."""
+        """Add a new rule to history, trimming oldest if exceeds limit."""
         self.rule_history.append(rule)
+        self._trim_history()
+
+    def _trim_history(self) -> None:
+        """Remove oldest rules if history exceeds MAX_HISTORY_SIZE."""
+        while len(self.rule_history) > MAX_HISTORY_SIZE:
+            self.rule_history.pop(0)
+
+    def push_zero_rule(self) -> np.ndarray:
+        """Push a zero rule (no target) to history. Returns the zero rule."""
+        zero_rule = np.zeros((10, 8), dtype=np.float32)
+        self.push_rule(zero_rule)
+        return zero_rule
 
     def pop_rule(self) -> np.ndarray | None:
         """Remove and return the previous rule, or None if empty."""
