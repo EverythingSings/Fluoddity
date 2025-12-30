@@ -133,7 +133,9 @@ class Sim:
         # Preferences uniforms
         if hasattr(self, '_preferences') and self._preferences is not None:
             tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._preferences.color_by_cohort)
-            tryset(self.entity_update_program, 'RULE_SEED', self._preferences.rule_seed)
+
+        # Rule seed from sim state (saved with physics configs)
+        tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
 
         num_workgroups = (ENTITY_COUNT + 63) // 64
         ctx.memory_barrier()

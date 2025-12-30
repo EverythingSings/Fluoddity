@@ -271,7 +271,7 @@ class UI:
             elif key == glfw.KEY_G:
                 self.state.sim.going = not self.state.sim.going
             elif key == glfw.KEY_SPACE:
-                self.state.preferences.rule_seed = random.random()
+                self.state.sim.rule_seed = random.random()
             elif key == glfw.KEY_T:
                 # Toggle mouse mode between Select Particle and Draw Trail
                 if self.state.preferences.mouse_mode == "Select Particle":

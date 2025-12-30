@@ -27,6 +27,7 @@ class SimState:
     boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap (default: Bounce)
     initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring (default: Grid)
     num_cohorts: int = 64         # Number of cohorts (1-144, default: 64)
+    rule_seed: float = 0.42       # Seed for procedural rule generation (fixed default for reproducibility)
 
     # Parameter sweep settings
     parameter_sweeps_enabled: bool = False

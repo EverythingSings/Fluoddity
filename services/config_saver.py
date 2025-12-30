@@ -22,7 +22,11 @@ PHYSICS_PARAMS = [
 # Version 1: Original format (10 floats + 80 floats = 360 bytes)
 # Version 2: Adds DISABLE_SYMMETRY and ABSOLUTE_ORIENTATION booleans (362 bytes)
 # Version 3: Adds boundary_conditions, initial_conditions, num_cohorts (362 + 3*4 = 374 bytes)
-CONFIG_VERSION = 3
+# Version 4: Adds rule_seed float (374 + 4 = 378 bytes)
+CONFIG_VERSION = 4
+
+# Default rule_seed for backward compatibility (fixed value for reproducibility)
+DEFAULT_RULE_SEED = 0.42
 
 
 @dataclass
@@ -46,10 +50,12 @@ class PhysicsConfig:
     boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap
     initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring
     num_cohorts: int = 64         # 1-144
+    # Rule seed (version 4+)
+    rule_seed: float = DEFAULT_RULE_SEED  # Seed for procedural rule generation
     # Rule data (10 centers * 8 floats = 80 floats)
     rule: np.ndarray = None  # shape (10, 8)
 
-    def to_bytes(self, version: int = 3) -> bytes:
+    def to_bytes(self, version: int = 4) -> bytes:
         """Serialize config to bytes."""
         # Pack physics params as 10 floats
         physics_bytes = struct.pack(
@@ -74,11 +80,16 @@ class PhysicsConfig:
 
         # Version 3: add simulation settings (3 ints)
         sim_bytes = struct.pack('3i', self.boundary_conditions, self.initial_conditions, self.num_cohorts)
-        return physics_bytes + rule_bytes + bool_bytes + sim_bytes
+        if version == 3:
+            return physics_bytes + rule_bytes + bool_bytes + sim_bytes
+
+        # Version 4: add rule_seed (1 float)
+        seed_bytes = struct.pack('f', self.rule_seed)
+        return physics_bytes + rule_bytes + bool_bytes + sim_bytes + seed_bytes
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'PhysicsConfig':
-        """Deserialize config from bytes. Supports version 1 (360), 2 (362), and 3 (374 bytes)."""
+        """Deserialize config from bytes. Supports version 1 (360), 2 (362), 3 (374), and 4 (378 bytes)."""
         # Unpack physics params (10 floats = 40 bytes)
         physics = struct.unpack('10f', data[:40])
         # Unpack rule (80 floats = 320 bytes)
@@ -91,14 +102,19 @@ class PhysicsConfig:
         boundary_conditions = 0  # Bounce
         initial_conditions = 0   # Grid
         num_cohorts = 64
+        rule_seed = DEFAULT_RULE_SEED  # Fixed default for reproducibility
 
         # Version 2+: check if we have extra boolean data
         if len(data) >= 362:
             disable_symmetry, absolute_orientation = struct.unpack('??', data[360:362])
 
-        # Version 3: check if we have simulation settings
+        # Version 3+: check if we have simulation settings
         if len(data) >= 374:
             boundary_conditions, initial_conditions, num_cohorts = struct.unpack('3i', data[362:374])
+
+        # Version 4+: check if we have rule_seed
+        if len(data) >= 378:
+            rule_seed, = struct.unpack('f', data[374:378])
 
         return cls(
             axial_force=physics[0],
@@ -116,6 +132,7 @@ class PhysicsConfig:
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             num_cohorts=num_cohorts,
+            rule_seed=rule_seed,
             rule=rule.copy()
         )
 
@@ -154,6 +171,7 @@ class ConfigSaver:
             boundary_conditions=sim_state.boundary_conditions,
             initial_conditions=sim_state.initial_conditions,
             num_cohorts=sim_state.num_cohorts,
+            rule_seed=sim_state.rule_seed,
             rule=rule.copy()
         )
 
@@ -183,6 +201,7 @@ class ConfigSaver:
         sim_state.boundary_conditions = config.boundary_conditions
         sim_state.initial_conditions = config.initial_conditions
         sim_state.num_cohorts = config.num_cohorts
+        sim_state.rule_seed = config.rule_seed
 
         return config.rule.copy()
 
@@ -195,7 +214,10 @@ class ConfigSaver:
         - Version 1: All extras are default (360 bytes)
         - Version 2: Only booleans are non-default (362 bytes)
         - Version 3: Simulation settings are non-default (374 bytes)
+        - Version 4: Rule seed is non-default (378 bytes)
         """
+        # Check if rule_seed is non-default
+        rule_seed_default = config.rule_seed == DEFAULT_RULE_SEED
         # Check if simulation settings are non-default
         sim_settings_default = (
             config.boundary_conditions == 0 and
@@ -206,12 +228,14 @@ class ConfigSaver:
         booleans_default = not config.disable_symmetry and not config.absolute_orientation
 
         # Use minimal version for backward compatibility
-        if sim_settings_default and booleans_default:
-            version = 1
-        elif sim_settings_default:
+        if not rule_seed_default:
+            version = 4
+        elif not sim_settings_default:
+            version = 3
+        elif not booleans_default:
             version = 2
         else:
-            version = 3
+            version = 1
 
         raw_bytes = config.to_bytes(version)
         compressed = zlib.compress(raw_bytes, level=9)
@@ -237,7 +261,7 @@ class ConfigSaver:
             colon_idx = config_string.index(':')
             version = int(config_string[3:colon_idx])
 
-            if version not in [1, 2, 3]:
+            if version not in [1, 2, 3, 4]:
                 print(f"Unsupported config version: {version}")
                 return None
 
