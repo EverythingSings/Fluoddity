@@ -450,6 +450,7 @@ class UI:
                     self.save_popup_open = True
                     # Default to last loaded filename
                     self.save_filename_buffer = self.last_loaded_filename
+                self._delayed_tooltip("Save the current physics settings including particle rules.")
 
                 # Load submenu with preview
                 if imgui.begin_menu("Load"):
@@ -536,11 +537,11 @@ class UI:
 
             # Reset menu
             if imgui.begin_menu("Reset..."):
-                # Reset all slider values to filename
+                # Reset all physics slider values to filename
                 if self.current_physics_defaults.source_filename:
-                    reset_label = f"Reset all slider values to '{self.current_physics_defaults.source_filename}'"
+                    reset_label = f"Reset all Physics slider values to '{self.current_physics_defaults.source_filename}'"
                 else:
-                    reset_label = "Reset all slider values to defaults"
+                    reset_label = "Reset all Physics slider values to defaults"
 
                 if imgui.menu_item(reset_label, "", False)[0]:
                     # Reset all physics parameters to their default values
@@ -559,12 +560,14 @@ class UI:
                         self.state.preferences.x_sweeps[param] = 0.0
                         self.state.preferences.y_sweeps[param] = 0.0
                         self.state.preferences.cohort_sweeps[param] = 0.0
+                self._delayed_tooltip("Set all parameter sweeps to 'off'.")
 
                 # Reset all UI settings
                 if imgui.menu_item("Reset all UI settings", "", False)[0]:
                     # Reset preferences to defaults (equivalent to deleting preferences.config)
                     from state.preferences_state import PreferencesState
                     self.state.preferences = PreferencesState()
+                self._delayed_tooltip("Restore all preferences and ui state to factory settings. Equivalent to deleting preferences.config, or running this program for the first time. Physics config saves are not affected.")
 
                 imgui.end_menu()
 
@@ -576,46 +579,12 @@ class UI:
 
             # Extras menu
             if imgui.begin_menu("Extras"):
-                # Simulation settings at top
-                boundary_options = ["Bounce", "Reset", "Wrap"]
-                imgui.set_next_item_width(100)
-                _, self.state.sim.boundary_conditions = imgui.combo(
-                    "Boundary Conditions",
-                    self.state.sim.boundary_conditions,
-                    boundary_options
-                )
-
-                initial_options = ["Grid", "Random", "Ring"]
-                imgui.set_next_item_width(100)
-                _, self.state.sim.initial_conditions = imgui.combo(
-                    "Initial Conditions",
-                    self.state.sim.initial_conditions,
-                    initial_options
-                )
-
-                imgui.set_next_item_width(100)
-                _, self.state.sim.num_cohorts = imgui.slider_int(
-                    "Number of Cohorts",
-                    self.state.sim.num_cohorts,
-                    1, 144
-                )
-
-                imgui.separator()
-
-                _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
-                    "Disable Symmetry",
-                    self.state.sim.DISABLE_SYMMETRY
-                )
-                _, self.state.sim.ABSOLUTE_ORIENTATION = imgui.checkbox(
-                    "Absolute Orientation",
-                    self.state.sim.ABSOLUTE_ORIENTATION
-                )
-
                 # Parameter Sweeps toggle
                 _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
                     "Parameter Sweeps",
                     self.state.sim.parameter_sweeps_enabled
                 )
+                self._delayed_tooltip("Parameter sweeps allow you to vary the physics settings across the canvas. See Help -> Parameter Sweeps for more")
 
                 imgui.separator()
 
@@ -686,6 +655,7 @@ class UI:
                 "Motion Blur",
                 self.state.preferences.motion_blur
             )
+            self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each render frame and blended together for faster physics. Motion blur can be costly for high frequencies, try turning it off if things feel sluggish.")
 
             if recording_active:
                 imgui.end_disabled()
@@ -701,6 +671,7 @@ class UI:
             clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
             if clicked:
                 self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
+            self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on. In Draw trail mode, click and drag to leave trails on the canvas. see Help->Controls for more")
 
             # Draw mode sliders (only show when in Draw Trail mode)
             if self.state.preferences.mouse_mode == "Draw Trail":
@@ -758,18 +729,21 @@ class UI:
                 "Color by Cohort",
                 self.state.preferences.color_by_cohort
             )
+            self._delayed_tooltip("Color by cohort gives each cohort a unique static color. When unchecked, particles can change color according to their rules. Hue sensistivity determines how sensitive they are to rule output.")
 
             # Physics tooltips checkbox
             _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
                 "Physics Tooltips",
                 self.state.preferences.physics_tooltips_enabled
             )
+            self._delayed_tooltip("Enable verbose tooltip and vector diagram for physics sliders.")
 
             # View Trail Arrows checkbox (renamed from Debug Arrows)
             _, self.state.preferences.debug_arrows = imgui.checkbox(
                 "View Trail Arrows",
                 self.state.preferences.debug_arrows
             )
+            self._delayed_tooltip("Render a grid of arrows to help visualize canvas' vector field.")
 
             # Arrow sensitivity slider (only show when debug arrows enabled)
             if self.state.preferences.debug_arrows:
@@ -808,7 +782,7 @@ class UI:
             imgui.bullet_text("F - Toggle parameter sweeps")
             imgui.bullet_text("V - Reload shaders")
             imgui.bullet_text("T - Toggle mouse mode")
-            imgui.bullet_text("Z (hold) - Full reset (particles + canvas)")
+            imgui.bullet_text("Z - Full reset (push zero rule + reset particles)")
 
             imgui.spacing()
             imgui.text("Mouse Controls")
@@ -850,18 +824,35 @@ class UI:
                 imgui.text("Press P to stop recording")
                 imgui.separator()
 
-            imgui.text("Speed mult locked to motion blur samples during recording")
+            imgui.text("Press P to start/stop recording")
             imgui.spacing()
 
-            _, self.state.preferences.max_frames = imgui.input_int('Max Frames', self.state.preferences.max_frames)
+            # Video Length (in seconds) - converts to/from max_frames internally
+            video_length_seconds = self.state.preferences.max_frames / 60.0
+            changed, new_length = imgui.drag_float(
+                'Video Length',
+                video_length_seconds,
+                v_speed=0.5,
+                v_min=1.0,
+                v_max=300.0,
+                format="%.0f seconds"
+            )
+            if changed:
+                self.state.preferences.max_frames = int(new_length * 60)
+            self._delayed_tooltip("After Video reaches this length, the recording will be stopped")
 
             # Lock motion_blur_samples during recording
             if recording_active:
                 imgui.begin_disabled()
 
-            _, self.state.preferences.motion_blur_samples = imgui.input_int(
-                'Motion Blur Samples',
-                self.state.preferences.motion_blur_samples
+            # Video Physics Frequency (was Motion Blur Samples)
+            current_hz = self.state.preferences.motion_blur_samples * 60
+            _, self.state.preferences.motion_blur_samples = imgui.slider_int(
+                'Video Physics Frequency',
+                self.state.preferences.motion_blur_samples,
+                v_min=1,
+                v_max=12,
+                format=f"x%d ({current_hz}hz)"
             )
 
             if recording_active:
@@ -871,27 +862,83 @@ class UI:
                     "(Locked during recording)"
                 )
 
-            _, self.state.preferences.supersample_k = imgui.input_int('Supersample Kernel Width', self.state.preferences.supersample_k)
+            # Downsample Resolution Factor (was Supersample Kernel Width)
+            _, self.state.preferences.supersample_k = imgui.input_int('Downsample Resolution Factor', self.state.preferences.supersample_k)
+            self._delayed_tooltip("Set to '2' to render a video at half resolution.")
 
-            # Filename prefix input
+            # Filename input
             _, self.state.preferences.filename_prefix = imgui.input_text(
-                'Filename Prefix (empty = "animation")',
+                'Filename',
                 self.state.preferences.filename_prefix,
                 256
             )
-
-            imgui.spacing()
-            imgui.separator()
-            imgui.text("Press P to start/stop recording")
+            self._delayed_tooltip("Defaults to 'animation' if left empty. All filenames get timestamps appended")
 
         imgui.end()
 
         if recording_active:
             imgui.pop_style_color()
 
+    def _delayed_tooltip(self, text: str):
+        """Show tooltip with delay, requiring mouse to be stationary."""
+        # HoveredFlags_.delay_normal provides medium delay, stationary provides "mouse must be still"
+        if imgui.is_item_hovered(imgui.HoveredFlags_.delay_normal | imgui.HoveredFlags_.stationary):
+            imgui.set_tooltip(text)
+
     def render_physics_settings_window(self):
         """Render the Physics Settings window with sliders."""
-        imgui.begin('Physics Settings')
+        imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
+
+        # Additional Settings menu bar
+        if imgui.begin_menu_bar():
+            if imgui.begin_menu("Additional Settings"):
+                # Boundary Conditions
+                boundary_options = ["Bounce", "Reset", "Wrap"]
+                imgui.set_next_item_width(100)
+                _, self.state.sim.boundary_conditions = imgui.combo(
+                    "Boundary Conditions",
+                    self.state.sim.boundary_conditions,
+                    boundary_options
+                )
+                self._delayed_tooltip("Do particles leaving the canvas -bounce off the edges-, -reset to their initial conditions-, or -wrap seamlessly to the other side-?")
+
+                # Initial Conditions
+                initial_options = ["Grid", "Random", "Ring"]
+                imgui.set_next_item_width(100)
+                _, self.state.sim.initial_conditions = imgui.combo(
+                    "Initial Conditions",
+                    self.state.sim.initial_conditions,
+                    initial_options
+                )
+                self._delayed_tooltip("Do particles start -in a grid, organized by cohort-, -randomly distributed across the whole canvas-, -In a ring, organized by cohort-?")
+
+                # Number of Cohorts
+                imgui.set_next_item_width(100)
+                _, self.state.sim.num_cohorts = imgui.slider_int(
+                    "Number of Cohorts",
+                    self.state.sim.num_cohorts,
+                    1, 144
+                )
+                self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior and there can be mutations between different cohorts.")
+
+                imgui.separator()
+
+                # Disable Symmetry
+                _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
+                    "Disable Symmetry",
+                    self.state.sim.DISABLE_SYMMETRY
+                )
+                self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior, leading to clockwise/counterclockwise bias. Turn it on to see why we go through trouble of calculating \"mirror world\" behavior in entity_update.glsl")
+
+                # Absolute Orientation
+                _, self.state.sim.ABSOLUTE_ORIENTATION = imgui.checkbox(
+                    "Absolute Orientation",
+                    self.state.sim.ABSOLUTE_ORIENTATION
+                )
+                self._delayed_tooltip("Calculate rule behavior in local coordinates defined by y axis rather than particle velocity. Turn it on to see why we go through the trouble of calculating particle behavior in local coordinates in entity_update.glsl")
+
+                imgui.end_menu()
+            imgui.end_menu_bar()
 
         # Save popup modal
         if self.save_popup_open:
