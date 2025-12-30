@@ -152,6 +152,8 @@ class Sim:
 
     def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                    prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0):
+        # Boundary conditions mode for wrap behavior
+        tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         # Assign TRAIL_PERSISTENCE as a PhysicsSetting struct
         min_val, max_val = self._get_slider_range('Trail Persistence', 0.0, 1.0)
         tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.slider_value', self._state.TRAIL_PERSISTENCE)

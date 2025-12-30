@@ -13,6 +13,9 @@ uniform vec2 previous_mouse;
 uniform float draw_size;
 uniform float draw_power;
 
+// Boundary conditions
+uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
+
 // SYNCHRONIZED: This struct must match entity_update.glsl
 // Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag
 struct PhysicsSetting {
@@ -74,7 +77,8 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
 }
 
 vec4 getCan(vec2 p, sampler2D sam) {
-    return texture(sam, p);
+    vec2 uv = (BOUNDARY_CONDITIONS_MODE == 2) ? fract(p) : p;
+    return texture(sam, uv);
 }
 
 vec4 getBlur(vec2 pos, sampler2D sam) {

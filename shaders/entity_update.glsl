@@ -119,7 +119,9 @@ void pR(inout vec2 p, float a) {
 vec4 get_can(vec2 p){
     vec2 res=textureSize(canvas,0);
     vec2 aspect=vec2(1,res.x/res.y);
-    return texture(canvas,(p/2*aspect+.5));
+    vec2 uv = p/2*aspect+.5;
+    if(BOUNDARY_CONDITIONS_MODE == 2) uv = fract(uv);
+    return texture(canvas, uv);
 }
 
 vec2 safenorm(vec2 p){
@@ -151,9 +153,8 @@ void reset(uint index){
         pos+=1.8*((gridcell)/spot_rows+ (1/2.*(1/spot_rows-1)));
     }
     else if(RESET_MODE == 1) {
-        //RANDOM: scatter cohorts randomly across the canvas
+        //RANDOM: scatter cohorts randomly across the canvas, homogenous start
         pos+= vec2(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0))) * 2.0 - 1.0;
-        pos *= 0.9; // Keep slightly inside boundaries
     }
     else if(RESET_MODE == 2) {
         //RING: arrange cohorts in a ring pattern
