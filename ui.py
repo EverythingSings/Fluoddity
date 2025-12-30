@@ -646,6 +646,7 @@ class UI:
                     v_max=6,
                     format=f"x%d ({current_hz}hz)"
                 )
+            self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
 
             # Motion blur checkbox (lock during recording)
             if recording_active:
@@ -710,12 +711,13 @@ class UI:
                 v_min=-1.0,
                 v_max=1.0,
             )
+            self._delayed_tooltip("Color by cohort gives each cohort a unique static color.\nWhen unchecked, particles can change color according to their rules.\nHue sensistivity determines how sensitive they are to rule output.")
 
             # View dropdown
             changed, self.state.sim.current_view_option = imgui.combo(
                 label="Current View",
                 current_item=self.state.sim.current_view_option,
-                items=self.view_option_labels + ['cam_brush']
+                items=self.view_option_labels + ['Camera (Particles rendered as dots)']
             )
 
             if changed:
@@ -854,6 +856,7 @@ class UI:
                 v_max=12,
                 format=f"x%d ({current_hz}hz)"
             )
+            self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
 
             if recording_active:
                 imgui.end_disabled()
@@ -892,25 +895,41 @@ class UI:
         # Additional Settings menu bar
         if imgui.begin_menu_bar():
             if imgui.begin_menu("Additional Settings"):
-                # Boundary Conditions
+                # Boundary Conditions (with per-option tooltips)
                 boundary_options = ["Bounce", "Reset", "Wrap"]
+                boundary_tooltips = [
+                    "Particles bounce off the edges of the canvas",
+                    "Particles are reset to their initial conditions when leaving the canvas",
+                    "Particles wrap seamlessly to the other side of the canvas"
+                ]
                 imgui.set_next_item_width(100)
-                _, self.state.sim.boundary_conditions = imgui.combo(
-                    "Boundary Conditions",
-                    self.state.sim.boundary_conditions,
-                    boundary_options
-                )
-                self._delayed_tooltip("Do particles leaving the canvas -bounce off the edges-, -reset to their initial conditions-, or -wrap seamlessly to the other side-?")
+                if imgui.begin_combo("Boundary Conditions", boundary_options[self.state.sim.boundary_conditions]):
+                    for i, option in enumerate(boundary_options):
+                        is_selected = (self.state.sim.boundary_conditions == i)
+                        if imgui.selectable(option, is_selected)[0]:
+                            self.state.sim.boundary_conditions = i
+                        self._delayed_tooltip(boundary_tooltips[i])
+                        if is_selected:
+                            imgui.set_item_default_focus()
+                    imgui.end_combo()
 
-                # Initial Conditions
+                # Initial Conditions (with per-option tooltips)
                 initial_options = ["Grid", "Random", "Ring"]
+                initial_tooltips = [
+                    "Particles start in a grid, organized by cohort",
+                    "Particles are spread uniformly across the canvas",
+                    "Particles start distributed around a circle, organized by cohort"
+                ]
                 imgui.set_next_item_width(100)
-                _, self.state.sim.initial_conditions = imgui.combo(
-                    "Initial Conditions",
-                    self.state.sim.initial_conditions,
-                    initial_options
-                )
-                self._delayed_tooltip("Do particles start -in a grid, organized by cohort-, -randomly distributed across the whole canvas-, -In a ring, organized by cohort-?")
+                if imgui.begin_combo("Initial Conditions", initial_options[self.state.sim.initial_conditions]):
+                    for i, option in enumerate(initial_options):
+                        is_selected = (self.state.sim.initial_conditions == i)
+                        if imgui.selectable(option, is_selected)[0]:
+                            self.state.sim.initial_conditions = i
+                        self._delayed_tooltip(initial_tooltips[i])
+                        if is_selected:
+                            imgui.set_item_default_focus()
+                    imgui.end_combo()
 
                 # Number of Cohorts
                 imgui.set_next_item_width(100)

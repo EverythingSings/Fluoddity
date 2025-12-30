@@ -22,7 +22,7 @@ class Sim:
 
         # View options (for UI combo box)
         self.view_options = [self.can, self.brush_tex]
-        self.view_option_labels = ['can', 'brush_tex']
+        self.view_option_labels = ['Canvas (Persistent particle trails)', 'Brush (Trails laid down this frame)']
 
         # Current state (will be updated by apply_state each frame)
         self._state = SimState()
