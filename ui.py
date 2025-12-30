@@ -567,7 +567,7 @@ class UI:
                     # Reset preferences to defaults (equivalent to deleting preferences.config)
                     from state.preferences_state import PreferencesState
                     self.state.preferences = PreferencesState()
-                self._delayed_tooltip("Restore all preferences and ui state to factory settings. Equivalent to deleting preferences.config, or running this program for the first time. Physics config saves are not affected.")
+                self._delayed_tooltip("Restore all preferences and ui state to factory settings. \nEquivalent to deleting preferences.config, or running this\nprogram for the first time. Physics config saves are not affected.")
 
                 imgui.end_menu()
 
@@ -584,7 +584,7 @@ class UI:
                     "Parameter Sweeps",
                     self.state.sim.parameter_sweeps_enabled
                 )
-                self._delayed_tooltip("Parameter sweeps allow you to vary the physics settings across the canvas. See Help -> Parameter Sweeps for more")
+                self._delayed_tooltip("Parameter sweeps allow you to vary the physics settings across the canvas.\nSee Help -> Parameter Sweeps for more")
 
                 imgui.separator()
 
@@ -655,7 +655,7 @@ class UI:
                 "Motion Blur",
                 self.state.preferences.motion_blur
             )
-            self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each render frame and blended together for faster physics. Motion blur can be costly for high frequencies, try turning it off if things feel sluggish.")
+            self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
 
             if recording_active:
                 imgui.end_disabled()
@@ -671,7 +671,7 @@ class UI:
             clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
             if clicked:
                 self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
-            self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on. In Draw trail mode, click and drag to leave trails on the canvas. see Help->Controls for more")
+            self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
 
             # Draw mode sliders (only show when in Draw Trail mode)
             if self.state.preferences.mouse_mode == "Draw Trail":
@@ -729,7 +729,7 @@ class UI:
                 "Color by Cohort",
                 self.state.preferences.color_by_cohort
             )
-            self._delayed_tooltip("Color by cohort gives each cohort a unique static color. When unchecked, particles can change color according to their rules. Hue sensistivity determines how sensitive they are to rule output.")
+            self._delayed_tooltip("Color by cohort gives each cohort a unique static color.\nWhen unchecked, particles can change color according to their rules.\nHue sensistivity determines how sensitive they are to rule output.")
 
             # Physics tooltips checkbox
             _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
@@ -919,7 +919,7 @@ class UI:
                     self.state.sim.num_cohorts,
                     1, 144
                 )
-                self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior and there can be mutations between different cohorts.")
+                self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
 
                 imgui.separator()
 
@@ -928,14 +928,14 @@ class UI:
                     "Disable Symmetry",
                     self.state.sim.DISABLE_SYMMETRY
                 )
-                self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior, leading to clockwise/counterclockwise bias. Turn it on to see why we go through trouble of calculating \"mirror world\" behavior in entity_update.glsl")
+                self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior,\nleading to clockwise/counterclockwise bias.\nTurn it on to see why we go through trouble\nof calculating \"mirror world\" behavior in entity_update.glsl")
 
                 # Absolute Orientation
                 _, self.state.sim.ABSOLUTE_ORIENTATION = imgui.checkbox(
                     "Absolute Orientation",
                     self.state.sim.ABSOLUTE_ORIENTATION
                 )
-                self._delayed_tooltip("Calculate rule behavior in local coordinates defined by y axis rather than particle velocity. Turn it on to see why we go through the trouble of calculating particle behavior in local coordinates in entity_update.glsl")
+                self._delayed_tooltip("Calculate rule behavior in local coordinates defined by y axis\nrather than particle velocity. Turn it on to see why we go through the\ntrouble of calculating particle behavior in local coordinates in entity_update.glsl")
 
                 imgui.end_menu()
             imgui.end_menu_bar()
