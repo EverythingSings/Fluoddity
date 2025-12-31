@@ -472,6 +472,12 @@ class UI:
 
         if imgui.begin_main_menu_bar():
             if imgui.begin_menu("File"):
+                if imgui.menu_item("New (Press Z)", "", False)[0]:
+                    self._request_full_reset = True
+                self._delayed_tooltip("Reset to default physics with a blank rule.\nEquivalent to pressing Z.")
+
+                imgui.separator()
+
                 if imgui.menu_item("Save...", "", False)[0]:
                     self.save_popup_open = True
                     # Default to last loaded filename
@@ -1460,7 +1466,7 @@ class UI:
         self.tooltip_program['ANGLE_MODE'] = (self.last_hovered_slider == "Sensor Angle")
         self.tooltip_program['DISTANCE_MODE'] = (self.last_hovered_slider == "Sensor Distance")
         self.tooltip_program['TRAIL_MODE'] = (self.last_hovered_slider == "Trail Persistence")
-        self.tooltip_program['GLOBAL_MODE'] = (self.last_hovered_slider == "Global Force Multiplier")
+        self.tooltip_program['GLOBAL_MODE'] = (self.last_hovered_slider == "Global Force Mult")
         self.tooltip_program['STRAFE_MODE'] = (self.last_hovered_slider == "Strafe Power")
         self.tooltip_program['MUTATION_MODE'] = (self.last_hovered_slider == "Mutation Scale")
 
