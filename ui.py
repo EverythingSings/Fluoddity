@@ -288,6 +288,15 @@ class UI:
             elif key == glfw.KEY_F:
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
+                # If disabling sweeps while in preview mode, exit preview and restore sweeps
+                if not self.state.sim.parameter_sweeps_enabled and self.state.sim.sweep_preview_active:
+                    self.state.sim.sweep_preview_active = False
+                    self.state.sim.x_sweeps = self.state.sim.saved_x_sweeps.copy()
+                    self.state.sim.y_sweeps = self.state.sim.saved_y_sweeps.copy()
+                    self.state.sim.cohort_sweeps = self.state.sim.saved_cohort_sweeps.copy()
+                    self.state.preferences.x_sweeps = self.state.sim.saved_x_sweeps.copy()
+                    self.state.preferences.y_sweeps = self.state.sim.saved_y_sweeps.copy()
+                    self.state.preferences.cohort_sweeps = self.state.sim.saved_cohort_sweeps.copy()
             elif key == glfw.KEY_Z:
                 # Full reset (one-shot, not hold)
                 self._request_full_reset = True
@@ -1003,6 +1012,11 @@ class UI:
 
     def render_physics_settings_window(self):
         """Render the Physics Settings window with sliders."""
+        # Apply bluish background when in sweep preview mode
+        if self.state.sim.sweep_preview_active:
+            imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.15, 0.20, 0.35, 0.94))
+            imgui.push_style_color(imgui.Col_.title_bg_active, imgui.ImVec4(0.20, 0.30, 0.50, 1.0))
+
         imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
 
         # Additional Settings menu bar
@@ -1339,6 +1353,10 @@ class UI:
         self.render_physics_tooltip()
 
         imgui.end()
+
+        # Pop sweep preview style colors (pushed before imgui.begin)
+        if self.state.sim.sweep_preview_active:
+            imgui.pop_style_color(2)
 
     def render_history_window(self):
         """Render rule history window with preview."""

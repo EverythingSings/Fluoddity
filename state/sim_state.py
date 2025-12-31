@@ -31,6 +31,12 @@ class SimState:
 
     # Parameter sweep settings
     parameter_sweeps_enabled: bool = False
+    # Sweep preview mode: temporarily disable sweeps to see base physics
+    sweep_preview_active: bool = False
+    # Saved sweep state for restore when exiting preview
+    saved_x_sweeps: dict[str, float] = field(default_factory=dict)
+    saved_y_sweeps: dict[str, float] = field(default_factory=dict)
+    saved_cohort_sweeps: dict[str, float] = field(default_factory=dict)
     # Dictionary mapping parameter names to their sweep modes
     # 0.0 = no sweep, 1.0 = normal sweep (min to max), -1.0 = inverse sweep (max to min)
     x_sweeps: dict[str, float] = field(default_factory=lambda: {

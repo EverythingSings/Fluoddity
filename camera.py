@@ -116,7 +116,9 @@ class Camera:
         self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
 
-    def render(self, sim_going: bool = True,current_view_option = 2):
+    def render(self, sim_going: bool = True, current_view_option: int = 2,
+                sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
+                sweep_reticle_visible: bool = False, screen_aspect: float = 1.0):
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
         if sim_going and self.assembled_texture is not None:
@@ -129,7 +131,11 @@ class Camera:
                 raw_tex,
                 total_samples=1,
                 current_sample_index=0,
-                view_mode=current_view_option
+                view_mode=current_view_option,
+                sweep_mode=sweep_mode,
+                sweep_reticle_pos=sweep_reticle_pos,
+                sweep_reticle_visible=sweep_reticle_visible,
+                screen_aspect=screen_aspect
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

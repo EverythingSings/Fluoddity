@@ -111,12 +111,43 @@ class App:
         self.sim.apply_preferences(ui_state.preferences)
         self.camera.apply_state(ui_state.camera)
 
+        # 5.5. Calculate sweep reticle info (needed for both running and paused states)
+        sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
+
+        # Hide reticle when in sweep preview mode
+        if ui_state.sim.sweep_preview_active:
+            sweep_reticle_visible = False
+
+        # Transform reticle from texture UV to screen UV (accounting for camera)
+        width, height = glfw.get_framebuffer_size(self.window)
+        screen_aspect = width / height if height > 0 else 1.0
+
+        if sweep_reticle_visible:
+            # Convert texture coords to screen pixels
+            screen_x, screen_y = self.camera.tex_to_screen(
+                (sweep_reticle_x, sweep_reticle_y),
+                self.sim.view_tex.size
+            )
+            # Convert screen pixels to screen UV (0-1)
+            sweep_reticle_x = screen_x / width
+            sweep_reticle_y = screen_y / height
+
+        sweep_mode = ui_state.sim.parameter_sweeps_enabled and not ui_state.sim.sweep_preview_active
+        sweep_reticle_pos = (sweep_reticle_x, sweep_reticle_y)
+
         # 6. Run simulation if going
         if ui_state.sim.going:
-            self.run_simulation_frame(ui_state)
+            self.run_simulation_frame(ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible, screen_aspect)
 
         # 7. Render camera view
-        self.camera.render(sim_going=ui_state.sim.going,current_view_option=ui_state.sim.current_view_option)
+        self.camera.render(
+            sim_going=ui_state.sim.going,
+            current_view_option=ui_state.sim.current_view_option,
+            sweep_mode=sweep_mode,
+            sweep_reticle_pos=sweep_reticle_pos,
+            sweep_reticle_visible=sweep_reticle_visible,
+            screen_aspect=screen_aspect
+        )
 
         # 7.5. Render arrow debug overlay if enabled
         if ui_state.preferences.debug_arrows:
@@ -166,8 +197,20 @@ class App:
 
         # Handle entity clicking and rule undo (only in Select Particle mode)
         if ui_state.preferences.mouse_mode == "Select Particle":
-            # Handle entity clicking (left click)
-            if ui_state.left_click_this_frame:
+            # Handle sweep preview mode: any click exits preview and restores sweeps
+            if ui_state.sim.sweep_preview_active:
+                if ui_state.left_click_this_frame or ui_state.right_click_this_frame:
+                    # Exit sweep preview mode and restore saved sweeps
+                    ui_state.sim.sweep_preview_active = False
+                    ui_state.sim.x_sweeps = ui_state.sim.saved_x_sweeps.copy()
+                    ui_state.sim.y_sweeps = ui_state.sim.saved_y_sweeps.copy()
+                    ui_state.sim.cohort_sweeps = ui_state.sim.saved_cohort_sweeps.copy()
+                    # Also update preferences so UI state stays in sync
+                    ui_state.preferences.x_sweeps = ui_state.sim.saved_x_sweeps.copy()
+                    ui_state.preferences.y_sweeps = ui_state.sim.saved_y_sweeps.copy()
+                    ui_state.preferences.cohort_sweeps = ui_state.sim.saved_cohort_sweeps.copy()
+            elif ui_state.left_click_this_frame:
+                # Handle entity clicking (left click)
                 tex_coords = self.camera.screen_to_tex(
                     ui_state.mouse_pos,
                     self.sim.view_tex.size
@@ -197,11 +240,29 @@ class App:
                     self.sim.apply_rule(rule)
                     # Update sliders to show effective parameter values at this particle's location
                     self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
-
-            # Handle rule undo (right click)
-            if ui_state.right_click_this_frame:
-                prev_rule = self.rule_manager.pop_rule()
-                self.sim.apply_rule(prev_rule)
+            elif ui_state.right_click_this_frame:
+                # Right click behavior depends on sweep mode
+                if ui_state.sim.parameter_sweeps_enabled and self.sim.has_active_xy_sweep():
+                    # Enter sweep preview mode: save sweeps and clear them
+                    ui_state.sim.sweep_preview_active = True
+                    ui_state.sim.saved_x_sweeps = ui_state.sim.x_sweeps.copy()
+                    ui_state.sim.saved_y_sweeps = ui_state.sim.y_sweeps.copy()
+                    ui_state.sim.saved_cohort_sweeps = ui_state.sim.cohort_sweeps.copy()
+                    # Clear all sweeps
+                    for key in ui_state.sim.x_sweeps:
+                        ui_state.sim.x_sweeps[key] = 0.0
+                    for key in ui_state.sim.y_sweeps:
+                        ui_state.sim.y_sweeps[key] = 0.0
+                    for key in ui_state.sim.cohort_sweeps:
+                        ui_state.sim.cohort_sweeps[key] = 0.0
+                    # Also update preferences so UI state stays in sync
+                    ui_state.preferences.x_sweeps = ui_state.sim.x_sweeps.copy()
+                    ui_state.preferences.y_sweeps = ui_state.sim.y_sweeps.copy()
+                    ui_state.preferences.cohort_sweeps = ui_state.sim.cohort_sweeps.copy()
+                else:
+                    # Normal mode: pop rule from history
+                    prev_rule = self.rule_manager.pop_rule()
+                    self.sim.apply_rule(prev_rule)
 
         # Handle config save (Ctrl+C)
         if ui_state.request_save_config:
@@ -413,7 +474,8 @@ class App:
             ui_state.camera.position[0] = (new_x_ndc_adj - x_ndc) * new_zoom
             ui_state.camera.position[1] = -(new_y_ndc_adj - y_ndc) * new_zoom
 
-    def run_simulation_frame(self, ui_state):
+    def run_simulation_frame(self, ui_state, sweep_mode: bool, sweep_reticle_pos: tuple,
+                              sweep_reticle_visible: bool, screen_aspect: float):
         """Run simulation step(s) with frame assembly and video recording."""
         speedmult = ui_state.preferences.speedmult
         motion_blur = ui_state.preferences.motion_blur
@@ -435,24 +497,6 @@ class App:
             # Only set draw_power if button is pressed (respects imgui capture)
             if ui_state.mouse_left_held:
                 draw_power_value = ui_state.preferences.draw_power
-
-        # Get sweep reticle info for overlay
-        sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
-
-        # Transform reticle from texture UV to screen UV (accounting for camera)
-        if sweep_reticle_visible:
-            # Convert texture coords to screen pixels
-            screen_x, screen_y = self.camera.tex_to_screen(
-                (sweep_reticle_x, sweep_reticle_y),
-                self.sim.view_tex.size
-            )
-            # Convert screen pixels to screen UV (0-1)
-            width, height = glfw.get_framebuffer_size(self.window)
-            sweep_reticle_x = screen_x / width
-            sweep_reticle_y = screen_y / height
-            screen_aspect = width / height
-        else:
-            screen_aspect = 1.0
 
         if motion_blur:
             # Motion blur enabled: temporal accumulation with multiple render calls
@@ -476,8 +520,8 @@ class App:
                     total_samples=speedmult,
                     current_sample_index=step,
                     view_mode=ui_state.sim.current_view_option,
-                    sweep_mode=ui_state.sim.parameter_sweeps_enabled,
-                    sweep_reticle_pos=(sweep_reticle_x, sweep_reticle_y),
+                    sweep_mode=sweep_mode,
+                    sweep_reticle_pos=sweep_reticle_pos,
                     sweep_reticle_visible=sweep_reticle_visible,
                     screen_aspect=screen_aspect
                 )
@@ -517,8 +561,8 @@ class App:
                 total_samples=1,
                 current_sample_index=0,
                 view_mode=ui_state.sim.current_view_option,
-                sweep_mode=ui_state.sim.parameter_sweeps_enabled,
-                sweep_reticle_pos=(sweep_reticle_x, sweep_reticle_y),
+                sweep_mode=sweep_mode,
+                sweep_reticle_pos=sweep_reticle_pos,
                 sweep_reticle_visible=sweep_reticle_visible,
                 screen_aspect=screen_aspect
             )
