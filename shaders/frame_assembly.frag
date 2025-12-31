@@ -84,8 +84,9 @@ void main() {
         if (len > 0.0) {
             fragColor.xyz /= pow(len, 0.575);
         }
+
+    }
         if(PARAMETER_SWEEP_MODE){
             fragColor.xyz += sweep_overlay(uv);
         }
-    }
 }
