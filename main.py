@@ -172,13 +172,31 @@ class App:
                     ui_state.mouse_pos,
                     self.sim.view_tex.size
                 )
-                entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
-                print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
-                rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
-                self.rule_manager.push_rule(rule)
-                self.sim.apply_rule(rule)
-                # Update sliders to show effective parameter values at this particle's location
-                self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+
+                # When parameter sweeps are active, behavior changes:
+                # - If cohort sweep active: need entity picker for cohort info
+                # - If only X/Y sweeps: can resolve from position alone (no entity readback)
+                # - In all sweep cases: only update sliders, don't pick a new rule
+                if ui_state.sim.parameter_sweeps_enabled and self.sim.has_active_xy_sweep():
+                    # Convert tex coords to world pos for sweep calculation
+                    world_pos = (tex_coords[0] * 2 - 1, tex_coords[1] * 2 - 1)
+
+                    if self.sim.has_active_cohort_sweep():
+                        # Need entity picker for cohort info
+                        entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
+                        self.sim.update_sliders_from_particle(world_pos, entity_cohort)
+                    else:
+                        # No cohort sweep - can update from position alone
+                        self.sim.update_sliders_from_position(world_pos)
+                else:
+                    # Normal mode: pick entity and apply rule
+                    entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
+                    print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
+                    rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
+                    self.rule_manager.push_rule(rule)
+                    self.sim.apply_rule(rule)
+                    # Update sliders to show effective parameter values at this particle's location
+                    self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
 
             # Handle rule undo (right click)
             if ui_state.right_click_this_frame:
@@ -319,7 +337,7 @@ class App:
                 self.sim.apply_rule(current_rule)
 
     def process_camera_input(self, ui_state):
-        """Handle continuous WASD/QE input for camera."""
+        """Handle continuous WASD/QE input for camera and scroll zoom."""
         current_time = time.time()
         dt = current_time - self.last_update_time
         self.last_update_time = current_time
@@ -343,13 +361,67 @@ class App:
         if glfw.KEY_Q in keys:
             ui_state.camera.zoom *= (1.0 + zoom_speed)
 
+        # Handle scroll zoom (zoom around mouse pointer - "Factorio-style")
+        if ui_state.scroll_delta != 0.0:
+            # Get window dimensions
+            width, height = glfw.get_framebuffer_size(self.window)
+
+            # Convert mouse to NDC
+            x_screen, y_screen = ui_state.mouse_pos
+            x_ndc = (x_screen / width) * 2 - 1
+            y_ndc = (1 - y_screen / height) * 2 - 1
+
+            # Calculate aspect ratios
+            tex_size = self.sim.view_tex.size
+            tex_aspect = tex_size[0] / tex_size[1]
+            window_aspect = width / height
+
+            if tex_aspect > window_aspect:
+                scale_x = 1.0
+                scale_y = window_aspect / tex_aspect
+            else:
+                scale_x = tex_aspect / window_aspect
+                scale_y = 1.0
+
+            # Get world position under mouse BEFORE zoom
+            old_zoom = ui_state.camera.zoom
+            old_pos = ui_state.camera.position.copy()
+
+            scale_x_old = scale_x / old_zoom
+            scale_y_old = scale_y / old_zoom
+            x_ndc_adj = x_ndc + old_pos[0] / old_zoom
+            y_ndc_adj = y_ndc - old_pos[1] / old_zoom
+            world_x = x_ndc_adj / scale_x_old
+            world_y = y_ndc_adj / scale_y_old
+
+            # Apply zoom (scroll up = zoom in = smaller zoom value)
+            scroll_zoom_speed = 0.1
+            zoom_factor = 1.0 - ui_state.scroll_delta * scroll_zoom_speed
+            zoom_factor = max(0.5, min(2.0, zoom_factor))  # Clamp zoom step
+            new_zoom = old_zoom * zoom_factor
+            ui_state.camera.zoom = new_zoom
+
+            # Calculate where the world point would now appear in NDC
+            scale_x_new = scale_x / new_zoom
+            scale_y_new = scale_y / new_zoom
+            new_x_ndc_adj = world_x * scale_x_new
+            new_y_ndc_adj = world_y * scale_y_new
+
+            # Adjust camera position so the world point stays at the same screen position
+            # We want: new_x_ndc_adj = x_ndc + new_pos[0] / new_zoom
+            # So: new_pos[0] = (new_x_ndc_adj - x_ndc) * new_zoom
+            ui_state.camera.position[0] = (new_x_ndc_adj - x_ndc) * new_zoom
+            ui_state.camera.position[1] = -(new_y_ndc_adj - y_ndc) * new_zoom
+
     def run_simulation_frame(self, ui_state):
         """Run simulation step(s) with frame assembly and video recording."""
         speedmult = ui_state.preferences.speedmult
         motion_blur = ui_state.preferences.motion_blur
 
         # Calculate draw mode parameters
-        draw_mode = ui_state.preferences.mouse_mode == "Draw Trail"
+        # Disable trail drawing when parameter sweeps are active
+        draw_mode = (ui_state.preferences.mouse_mode == "Draw Trail" and
+                     not ui_state.sim.parameter_sweeps_enabled)
         mouse_tex_coords = (0.0, 0.0)
         draw_power_value = 0.0
 
@@ -363,6 +435,24 @@ class App:
             # Only set draw_power if button is pressed (respects imgui capture)
             if ui_state.mouse_left_held:
                 draw_power_value = ui_state.preferences.draw_power
+
+        # Get sweep reticle info for overlay
+        sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
+
+        # Transform reticle from texture UV to screen UV (accounting for camera)
+        if sweep_reticle_visible:
+            # Convert texture coords to screen pixels
+            screen_x, screen_y = self.camera.tex_to_screen(
+                (sweep_reticle_x, sweep_reticle_y),
+                self.sim.view_tex.size
+            )
+            # Convert screen pixels to screen UV (0-1)
+            width, height = glfw.get_framebuffer_size(self.window)
+            sweep_reticle_x = screen_x / width
+            sweep_reticle_y = screen_y / height
+            screen_aspect = width / height
+        else:
+            screen_aspect = 1.0
 
         if motion_blur:
             # Motion blur enabled: temporal accumulation with multiple render calls
@@ -385,7 +475,11 @@ class App:
                     raw_view_tex,
                     total_samples=speedmult,
                     current_sample_index=step,
-                    view_mode=ui_state.sim.current_view_option
+                    view_mode=ui_state.sim.current_view_option,
+                    sweep_mode=ui_state.sim.parameter_sweeps_enabled,
+                    sweep_reticle_pos=(sweep_reticle_x, sweep_reticle_y),
+                    sweep_reticle_visible=sweep_reticle_visible,
+                    screen_aspect=screen_aspect
                 )
 
                 # Only process when accumulation cycle completes
@@ -422,7 +516,11 @@ class App:
                 raw_view_tex,
                 total_samples=1,
                 current_sample_index=0,
-                view_mode=ui_state.sim.current_view_option
+                view_mode=ui_state.sim.current_view_option,
+                sweep_mode=ui_state.sim.parameter_sweeps_enabled,
+                sweep_reticle_pos=(sweep_reticle_x, sweep_reticle_y),
+                sweep_reticle_visible=sweep_reticle_visible,
+                screen_aspect=screen_aspect
             )
 
             self.camera.assembled_texture = assembled_tex

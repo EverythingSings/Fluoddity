@@ -24,6 +24,9 @@ class UIState:
     # Continuous mouse state (respects imgui capture)
     mouse_left_held: bool = False
 
+    # Scroll input (for zoom-around-pointer)
+    scroll_delta: float = 0.0
+
     # One-shot command flags (reset after get_state)
     request_reload: bool = False
     request_reset: bool = False

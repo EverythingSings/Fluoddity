@@ -388,3 +388,113 @@ class Sim:
 
                 # Update the slider value
                 setattr(self._state, param_name, effective_value)
+
+    def has_active_cohort_sweep(self) -> bool:
+        """Check if any cohort sweep is active."""
+        if not self._state.parameter_sweeps_enabled:
+            return False
+        return any(v != 0.0 for v in self._state.cohort_sweeps.values())
+
+    def has_active_xy_sweep(self) -> bool:
+        """Check if any X or Y sweep is active."""
+        if not self._state.parameter_sweeps_enabled:
+            return False
+        has_x = any(v != 0.0 for v in self._state.x_sweeps.values())
+        has_y = any(v != 0.0 for v in self._state.y_sweeps.values())
+        return has_x or has_y
+
+    def update_sliders_from_position(self, pos: tuple[float, float]) -> None:
+        """Update slider values based on position only (no cohort info needed).
+
+        Used when clicking in parameter sweep mode without a cohort sweep active.
+        Uses cohort=0.5 as a neutral value.
+
+        Args:
+            pos: (x, y) world position in [-1, 1] range
+        """
+        self.update_sliders_from_particle(pos, cohort=0.5)
+
+    def get_sweep_reticle_position(self) -> tuple[float, float, bool]:
+        """Calculate the reticle position based on current slider values and active sweeps.
+
+        The reticle shows where on the screen the current slider values correspond to.
+        This is the location where physics doesn't change when toggling sweeps.
+
+        Returns:
+            (x, y, visible): UV coordinates (0-1) and whether reticle should be visible.
+                             Returns (0.5, 0.5, False) if no X/Y sweeps are active.
+        """
+        if not self._state.parameter_sweeps_enabled:
+            return (0.5, 0.5, False)
+
+        # Find the active X and Y sweep parameters
+        x_param = None
+        x_sweep_mode = 0.0
+        y_param = None
+        y_sweep_mode = 0.0
+
+        for param_name in self._state.x_sweeps:
+            mode = self._state.x_sweeps.get(param_name, 0.0)
+            if mode != 0.0:
+                x_param = param_name
+                x_sweep_mode = mode
+                break
+
+        for param_name in self._state.y_sweeps:
+            mode = self._state.y_sweeps.get(param_name, 0.0)
+            if mode != 0.0:
+                y_param = param_name
+                y_sweep_mode = mode
+                break
+
+        # If no X or Y sweep is active, don't show reticle
+        if x_param is None and y_param is None:
+            return (0.5, 0.5, False)
+
+        # Parameter definitions for getting slider ranges
+        param_ranges = {
+            'AXIAL_FORCE': ('Axial Force', -1.0, 1.0),
+            'LATERAL_FORCE': ('Lateral Force', -1.0, 1.0),
+            'SENSOR_GAIN': ('Sensor Gain', 0.0, 5.0),
+            'MUTATION_SCALE': ('Mutation Scale', -0.5, 0.5),
+            'DRAG': ('Drag', -1.0, 1.0),
+            'STRAFE_POWER': ('Strafe Power', 0.0, 0.5),
+            'SENSOR_ANGLE': ('Sensor Angle', -1.0, 1.0),
+            'GLOBAL_FORCE_MULT': ('Global Force Mult', 0.0, 2.0),
+            'SENSOR_DISTANCE': ('Sensor Distance', 0.0, 4.0),
+            'TRAIL_PERSISTENCE': ('Trail Persistence', 0.0, 1.0),
+        }
+
+        # Calculate X position
+        if x_param is not None:
+            slider_label, default_min, default_max = param_ranges[x_param]
+            min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
+            slider_value = getattr(self._state, x_param)
+            # Invert the sweep formula: pos_norm = (slider_value - min) / (max - min)
+            if max_val != min_val:
+                x_norm = (slider_value - min_val) / (max_val - min_val)
+            else:
+                x_norm = 0.5
+            # For inverse sweep, flip the position
+            if x_sweep_mode < 0:
+                x_norm = 1.0 - x_norm
+            reticle_x = x_norm
+        else:
+            reticle_x = 0.5  # No X sweep - use center
+
+        # Calculate Y position
+        if y_param is not None:
+            slider_label, default_min, default_max = param_ranges[y_param]
+            min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
+            slider_value = getattr(self._state, y_param)
+            if max_val != min_val:
+                y_norm = (slider_value - min_val) / (max_val - min_val)
+            else:
+                y_norm = 0.5
+            if y_sweep_mode < 0:
+                y_norm = 1.0 - y_norm
+            reticle_y = y_norm
+        else:
+            reticle_y = 0.5  # No Y sweep - use center
+
+        return (reticle_x, reticle_y, True)

@@ -67,7 +67,9 @@ class FrameAssembler:
         self.width, self.height = texture.size
         self.resources = None
 
-    def assemble_frame(self, input_texture, total_samples, current_sample_index, view_mode=0):
+    def assemble_frame(self, input_texture, total_samples, current_sample_index, view_mode=0,
+                       sweep_mode=False, sweep_reticle_pos=(0.5, 0.5), sweep_reticle_visible=False,
+                       screen_aspect=1.0):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -76,6 +78,10 @@ class FrameAssembler:
             total_samples: Number of frames in accumulation cycle
             current_sample_index: 0-indexed sample number (0 to total_samples-1)
             view_mode: Current view mode (0=can, 1=brush_tex, 2=cam_brush)
+            sweep_mode: Whether parameter sweeps are active
+            sweep_reticle_pos: (x, y) screen UV position of sweep reticle
+            sweep_reticle_visible: Whether to show the reticle
+            screen_aspect: Screen width/height ratio for proper circle rendering
 
         Returns:
             The assembled texture if final sample, None if still accumulating
@@ -115,6 +121,10 @@ class FrameAssembler:
         self.resources['shader']['is_first_frame'] = is_first_frame
         self.resources['shader']['final_sample'] = final_sample
         tryset(self.resources['shader'], 'view_mode', view_mode)
+        tryset(self.resources['shader'], 'PARAMETER_SWEEP_MODE', sweep_mode)
+        tryset(self.resources['shader'], 'sweep_reticle_pos', sweep_reticle_pos)
+        tryset(self.resources['shader'], 'sweep_reticle_visible', sweep_reticle_visible)
+        tryset(self.resources['shader'], 'screen_aspect', screen_aspect)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()
