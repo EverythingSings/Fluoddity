@@ -114,8 +114,8 @@ class App:
         # 5.5. Calculate sweep reticle info (needed for both running and paused states)
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
 
-        # Hide reticle when in sweep preview mode
-        if ui_state.sim.sweep_preview_active:
+        # Hide reticle when in sweep preview mode or when recording video
+        if ui_state.sim.sweep_preview_active or is_recording:
             sweep_reticle_visible = False
 
         # Transform reticle from texture UV to screen UV (accounting for camera)
