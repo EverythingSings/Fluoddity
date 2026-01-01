@@ -615,15 +615,6 @@ class UI:
 
             # Extras menu
             if imgui.begin_menu("Extras"):
-                # Parameter Sweeps toggle
-                _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
-                    "Parameter Sweeps",
-                    self.state.sim.parameter_sweeps_enabled
-                )
-                self._delayed_tooltip("Parameter sweeps allow you to vary the physics settings across the canvas.\nSee Help -> Parameter Sweeps for more")
-
-                imgui.separator()
-
                 # Video Recording Controls
                 if imgui.menu_item("Video Recording Controls", "", self.show_video_recording_window)[0]:
                     self.show_video_recording_window = not self.show_video_recording_window
@@ -729,25 +720,8 @@ class UI:
 
             imgui.separator()
 
-            # === Appearance section ===
-            imgui.text("Appearance")
-
-            # Brightness slider
-            _, self.state.camera.BRIGHTNESS = imgui.slider_float(
-                label="Brightness",
-                v=self.state.camera.BRIGHTNESS,
-                v_min=0.0,
-                v_max=4.0,
-            )
-
-            # Hue sensitivity slider
-            _, self.state.camera.HUE_SENSITIVITY = imgui.slider_float(
-                label="Hue Sensitivity",
-                v=self.state.camera.HUE_SENSITIVITY,
-                v_min=-1.0,
-                v_max=1.0,
-            )
-            self._delayed_tooltip("Color by cohort gives each cohort a unique static color.\nWhen unchecked, particles can change color according to their rules.\nHue sensistivity determines how sensitive they are to rule output.")
+            # === View section ===
+            imgui.text("View")
 
             # View dropdown
             changed, self.state.sim.current_view_option = imgui.combo(
@@ -761,13 +735,6 @@ class UI:
                     self.state.camera.cam_brush_mode = True
                 else:
                     self.state.camera.cam_brush_mode = False
-
-            # Color by cohort checkbox
-            _, self.state.preferences.color_by_cohort = imgui.checkbox(
-                "Color by Cohort",
-                self.state.preferences.color_by_cohort
-            )
-            self._delayed_tooltip("Color by cohort gives each cohort a unique static color.\nWhen unchecked, particles can change color according to their rules.\nHue sensistivity determines how sensitive they are to rule output.")
 
             # Physics tooltips checkbox
             _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
@@ -1089,7 +1056,63 @@ class UI:
                 )
                 self._delayed_tooltip("Calculate rule behavior in local coordinates defined by y axis\nrather than particle velocity. Turn it on to see why we go through the\ntrouble of calculating particle behavior in local coordinates in entity_update.glsl")
 
+                imgui.separator()
+
+                # Parameter Sweeps toggle (moved from Extras menu)
+                _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
+                    "Parameter Sweeps",
+                    self.state.sim.parameter_sweeps_enabled
+                )
+                self._delayed_tooltip("Enable parameter sweeps to vary physics across the canvas.\nPress F to toggle. See Help -> Parameter Sweeps for details.")
+
                 imgui.end_menu()
+
+            # Appearance menu
+            if imgui.begin_menu("Appearance"):
+                # Brightness / Ink Weight slider
+                label = "Ink Weight" if self.state.sim.watercolor_mode else "Brightness"
+                _, self.state.sim.brightness = imgui.slider_float(
+                    label, self.state.sim.brightness, 0.0, 4.0
+                )
+                self._delayed_tooltip("Controls the overall brightness/intensity of the output.")
+
+                # Color by cohort checkbox
+                _, self.state.sim.color_by_cohort = imgui.checkbox(
+                    "Color by Cohort",
+                    self.state.sim.color_by_cohort
+                )
+                self._delayed_tooltip("Colors particles based on their cohort assignment\nrather than their velocity direction.")
+
+                # Hue Sensitivity (only if not color by cohort)
+                if not self.state.sim.color_by_cohort:
+                    _, self.state.sim.hue_sensitivity = imgui.slider_float(
+                        "Hue Sensitivity", self.state.sim.hue_sensitivity, -1.0, 1.0
+                    )
+                    self._delayed_tooltip("Controls color variation based on particle velocity.")
+
+                imgui.separator()
+
+                # Watercolor Mode checkbox
+                _, self.state.sim.watercolor_mode = imgui.checkbox(
+                    "Watercolor Mode",
+                    self.state.sim.watercolor_mode
+                )
+                self._delayed_tooltip("Enable watercolor rendering effect.")
+
+                # Emboss Intensity slider
+                _, self.state.sim.emboss_intensity = imgui.slider_float(
+                    "Emboss Intensity", self.state.sim.emboss_intensity, -1.0, 1.0
+                )
+                self._delayed_tooltip("Intensity of emboss lighting effect. Negative values invert.")
+
+                # Emboss Smoothness slider
+                _, self.state.sim.emboss_smoothness = imgui.slider_float(
+                    "Emboss Smoothness", self.state.sim.emboss_smoothness, 0.001, 1.0
+                )
+                self._delayed_tooltip("Controls the smoothness of emboss sampling.")
+
+                imgui.end_menu()
+
             imgui.end_menu_bar()
 
         # Save popup modal
@@ -1592,7 +1615,7 @@ class UI:
                     self.cached_configs[filename] = config
 
     def _apply_config_to_sim_state(self, config: PhysicsConfig):
-        """Apply a config's physics settings to the current sim state."""
+        """Apply a config's physics and appearance settings to the current sim state."""
         self.state.sim.AXIAL_FORCE = config.axial_force
         self.state.sim.LATERAL_FORCE = config.lateral_force
         self.state.sim.SENSOR_GAIN = config.sensor_gain
@@ -1609,6 +1632,43 @@ class UI:
         self.state.sim.initial_conditions = config.initial_conditions
         self.state.sim.num_cohorts = config.num_cohorts
         self.state.sim.rule_seed = config.rule_seed
+        # Appearance settings
+        self.state.sim.brightness = config.brightness
+        self.state.sim.hue_sensitivity = config.hue_sensitivity
+        self.state.sim.color_by_cohort = config.color_by_cohort
+        self.state.sim.watercolor_mode = config.watercolor_mode
+        self.state.sim.emboss_intensity = config.emboss_intensity
+        self.state.sim.emboss_smoothness = config.emboss_smoothness
+        # Sweep settings
+        self.state.sim.parameter_sweeps_enabled = config.parameter_sweeps_enabled
+        # Apply sweep data using config_saver helper
+        self.config_saver._apply_sweep_to_state(
+            config.x_sweep_data, self.state.sim.x_sweeps,
+            self.state.preferences.slider_ranges,
+            {'AXIAL_FORCE': 'Axial Force', 'LATERAL_FORCE': 'Lateral Force',
+             'SENSOR_GAIN': 'Sensor Gain', 'MUTATION_SCALE': 'Mutation Scale',
+             'DRAG': 'Drag', 'STRAFE_POWER': 'Strafe Power',
+             'SENSOR_ANGLE': 'Sensor Angle', 'GLOBAL_FORCE_MULT': 'Global Force Mult',
+             'SENSOR_DISTANCE': 'Sensor Distance', 'TRAIL_PERSISTENCE': 'Trail Persistence'}
+        )
+        self.config_saver._apply_sweep_to_state(
+            config.y_sweep_data, self.state.sim.y_sweeps,
+            self.state.preferences.slider_ranges,
+            {'AXIAL_FORCE': 'Axial Force', 'LATERAL_FORCE': 'Lateral Force',
+             'SENSOR_GAIN': 'Sensor Gain', 'MUTATION_SCALE': 'Mutation Scale',
+             'DRAG': 'Drag', 'STRAFE_POWER': 'Strafe Power',
+             'SENSOR_ANGLE': 'Sensor Angle', 'GLOBAL_FORCE_MULT': 'Global Force Mult',
+             'SENSOR_DISTANCE': 'Sensor Distance', 'TRAIL_PERSISTENCE': 'Trail Persistence'}
+        )
+        self.config_saver._apply_sweep_to_state(
+            config.cohort_sweep_data, self.state.sim.cohort_sweeps,
+            self.state.preferences.slider_ranges,
+            {'AXIAL_FORCE': 'Axial Force', 'LATERAL_FORCE': 'Lateral Force',
+             'SENSOR_GAIN': 'Sensor Gain', 'MUTATION_SCALE': 'Mutation Scale',
+             'DRAG': 'Drag', 'STRAFE_POWER': 'Strafe Power',
+             'SENSOR_ANGLE': 'Sensor Angle', 'GLOBAL_FORCE_MULT': 'Global Force Mult',
+             'SENSOR_DISTANCE': 'Sensor Distance', 'TRAIL_PERSISTENCE': 'Trail Persistence'}
+        )
 
     def _restore_base_sim_state(self):
         """Restore sim state from saved base state."""
@@ -1629,6 +1689,22 @@ class UI:
             self.state.sim.initial_conditions = self.base_sim_state.initial_conditions
             self.state.sim.num_cohorts = self.base_sim_state.num_cohorts
             self.state.sim.rule_seed = self.base_sim_state.rule_seed
+            # Appearance settings
+            self.state.sim.brightness = self.base_sim_state.brightness
+            self.state.sim.hue_sensitivity = self.base_sim_state.hue_sensitivity
+            self.state.sim.color_by_cohort = self.base_sim_state.color_by_cohort
+            self.state.sim.watercolor_mode = self.base_sim_state.watercolor_mode
+            self.state.sim.emboss_intensity = self.base_sim_state.emboss_intensity
+            self.state.sim.emboss_smoothness = self.base_sim_state.emboss_smoothness
+            # Sweep settings
+            self.state.sim.parameter_sweeps_enabled = self.base_sim_state.parameter_sweeps_enabled
+            # Restore sweep dicts (deep copy)
+            for key in self.state.sim.x_sweeps:
+                self.state.sim.x_sweeps[key] = self.base_sim_state.x_sweeps.get(key, 0.0)
+            for key in self.state.sim.y_sweeps:
+                self.state.sim.y_sweeps[key] = self.base_sim_state.y_sweeps.get(key, 0.0)
+            for key in self.state.sim.cohort_sweeps:
+                self.state.sim.cohort_sweeps[key] = self.base_sim_state.cohort_sweeps.get(key, 0.0)
 
     def _generate_rule_label(self) -> tuple[int, str, str]:
         """Generate random jersey number with colored digits.

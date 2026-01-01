@@ -110,6 +110,8 @@ class App:
         self.sim.apply_camera_state(ui_state.camera)
         self.sim.apply_preferences(ui_state.preferences)
         self.camera.apply_state(ui_state.camera)
+        # Sync brightness from sim_state (appearance settings now in physics config)
+        self.camera.BRIGHTNESS = ui_state.sim.brightness
 
         # 5.5. Calculate sweep reticle info (needed for both running and paused states)
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
@@ -267,7 +269,9 @@ class App:
         # Handle config save (Ctrl+C)
         if ui_state.request_save_config:
             current_rule = self.rule_manager.get_current_rule()
-            config_string = self.config_saver.save_to_string(ui_state.sim, current_rule)
+            config_string = self.config_saver.save_to_string(
+                ui_state.sim, current_rule, ui_state.preferences.slider_ranges
+            )
             self.ui.set_clipboard(config_string)
             print(f"Config copied to clipboard ({len(config_string)} chars)")
 
@@ -275,7 +279,9 @@ class App:
         if ui_state.request_load_config:
             config_string = ui_state.clipboard_text
             if config_string:
-                rule = self.config_saver.load_from_string(config_string, ui_state.sim)
+                rule = self.config_saver.load_from_string(
+                    config_string, ui_state.sim, ui_state.preferences.slider_ranges
+                )
                 if rule is not None:
                     self.rule_manager.push_rule(rule)
                     self.sim.apply_rule(rule)
@@ -288,7 +294,9 @@ class App:
             filename = ui_state.save_filename
             if filename:
                 current_rule = self.rule_manager.get_current_rule()
-                config_string = self.config_saver.save_to_string(ui_state.sim, current_rule)
+                config_string = self.config_saver.save_to_string(
+                    ui_state.sim, current_rule, ui_state.preferences.slider_ranges
+                )
                 filepath = self.configs_dir / f"{filename}.txt"
                 filepath.write_text(config_string)
                 print(f"Config saved to {filepath}")
@@ -305,7 +313,9 @@ class App:
                 filepath = self.configs_dir / f"{filename}.txt"
                 if filepath.exists():
                     config_string = filepath.read_text()
-                    rule = self.config_saver.load_from_string(config_string, ui_state.sim)
+                    rule = self.config_saver.load_from_string(
+                        config_string, ui_state.sim, ui_state.preferences.slider_ranges
+                    )
                     if rule is not None:
                         self.rule_manager.push_rule(rule)
                         self.sim.apply_rule(rule)

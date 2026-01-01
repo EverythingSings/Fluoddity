@@ -23,7 +23,8 @@ PHYSICS_PARAMS = [
 # Version 2: Adds DISABLE_SYMMETRY and ABSOLUTE_ORIENTATION booleans (362 bytes)
 # Version 3: Adds boundary_conditions, initial_conditions, num_cohorts (362 + 3*4 = 374 bytes)
 # Version 4: Adds rule_seed float (374 + 4 = 378 bytes)
-CONFIG_VERSION = 4
+# Version 5: Adds appearance settings + parameter sweep data (variable length)
+CONFIG_VERSION = 5
 
 # Default rule_seed for backward compatibility (fixed value for reproducibility)
 DEFAULT_RULE_SEED = 0.42
@@ -55,7 +56,22 @@ class PhysicsConfig:
     # Rule data (10 centers * 8 floats = 80 floats)
     rule: np.ndarray = None  # shape (10, 8)
 
-    def to_bytes(self, version: int = 4) -> bytes:
+    # Appearance settings (version 5+)
+    brightness: float = 1.0
+    hue_sensitivity: float = 0.5
+    color_by_cohort: bool = False
+    watercolor_mode: bool = False
+    emboss_intensity: float = 0.0
+    emboss_smoothness: float = 0.001
+
+    # Parameter sweep settings (version 5+)
+    parameter_sweeps_enabled: bool = False
+    # Active sweeps: (param_name, direction, cur_min, cur_max) or None
+    x_sweep_data: tuple | None = None
+    y_sweep_data: tuple | None = None
+    cohort_sweep_data: tuple | None = None
+
+    def to_bytes(self, version: int = 5) -> bytes:
         """Serialize config to bytes."""
         # Pack physics params as 10 floats
         physics_bytes = struct.pack(
@@ -85,11 +101,49 @@ class PhysicsConfig:
 
         # Version 4: add rule_seed (1 float)
         seed_bytes = struct.pack('f', self.rule_seed)
-        return physics_bytes + rule_bytes + bool_bytes + sim_bytes + seed_bytes
+        if version == 4:
+            return physics_bytes + rule_bytes + bool_bytes + sim_bytes + seed_bytes
+
+        # Version 5: add appearance settings + sweep data
+        # Use little-endian format '<ff??ff' to avoid alignment padding (18 bytes, not 20)
+        appearance_bytes = struct.pack(
+            '<ff??ff',
+            self.brightness, self.hue_sensitivity,
+            self.color_by_cohort, self.watercolor_mode,
+            self.emboss_intensity, self.emboss_smoothness
+        )
+        sweep_enabled_bytes = struct.pack('?', self.parameter_sweeps_enabled)
+        sweep_bytes = (
+            self._encode_sweep(self.x_sweep_data) +
+            self._encode_sweep(self.y_sweep_data) +
+            self._encode_sweep(self.cohort_sweep_data)
+        )
+        return physics_bytes + rule_bytes + bool_bytes + sim_bytes + seed_bytes + appearance_bytes + sweep_enabled_bytes + sweep_bytes
+
+    def _encode_sweep(self, sweep: tuple | None) -> bytes:
+        """Encode a single sweep as bytes."""
+        if sweep is None:
+            return struct.pack('B', 0)  # 0 = no sweep
+        param_name, direction, cur_min, cur_max = sweep
+        name_bytes = param_name.encode('utf-8')
+        return struct.pack('B', len(name_bytes)) + name_bytes + struct.pack('3f', direction, cur_min, cur_max)
+
+    @classmethod
+    def _decode_sweep(cls, data: bytes, offset: int) -> tuple[tuple | None, int]:
+        """Decode a single sweep from bytes. Returns (sweep_data, new_offset)."""
+        name_len = struct.unpack('B', data[offset:offset + 1])[0]
+        offset += 1
+        if name_len == 0:
+            return None, offset
+        param_name = data[offset:offset + name_len].decode('utf-8')
+        offset += name_len
+        direction, cur_min, cur_max = struct.unpack('3f', data[offset:offset + 12])
+        offset += 12
+        return (param_name, direction, cur_min, cur_max), offset
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'PhysicsConfig':
-        """Deserialize config from bytes. Supports version 1 (360), 2 (362), 3 (374), and 4 (378 bytes)."""
+        """Deserialize config from bytes. Supports versions 1-5."""
         # Unpack physics params (10 floats = 40 bytes)
         physics = struct.unpack('10f', data[:40])
         # Unpack rule (80 floats = 320 bytes)
@@ -104,6 +158,18 @@ class PhysicsConfig:
         num_cohorts = 64
         rule_seed = DEFAULT_RULE_SEED  # Fixed default for reproducibility
 
+        # Version 5 defaults
+        brightness = 1.0
+        hue_sensitivity = 0.5
+        color_by_cohort = False
+        watercolor_mode = False
+        emboss_intensity = 0.0
+        emboss_smoothness = 0.001
+        parameter_sweeps_enabled = False
+        x_sweep_data = None
+        y_sweep_data = None
+        cohort_sweep_data = None
+
         # Version 2+: check if we have extra boolean data
         if len(data) >= 362:
             disable_symmetry, absolute_orientation = struct.unpack('??', data[360:362])
@@ -115,6 +181,18 @@ class PhysicsConfig:
         # Version 4+: check if we have rule_seed
         if len(data) >= 378:
             rule_seed, = struct.unpack('f', data[374:378])
+
+        # Version 5+: check if we have appearance and sweep data
+        if len(data) >= 397:  # 378 + 18 (appearance) + 1 (sweep enabled)
+            # Use little-endian format '<ff??ff' to avoid alignment padding (18 bytes, not 20)
+            brightness, hue_sensitivity, color_by_cohort, watercolor_mode, \
+                emboss_intensity, emboss_smoothness = struct.unpack('<ff??ff', data[378:396])
+            parameter_sweeps_enabled, = struct.unpack('?', data[396:397])
+            # Decode sweeps (variable length)
+            offset = 397
+            x_sweep_data, offset = cls._decode_sweep(data, offset)
+            y_sweep_data, offset = cls._decode_sweep(data, offset)
+            cohort_sweep_data, offset = cls._decode_sweep(data, offset)
 
         return cls(
             axial_force=physics[0],
@@ -133,7 +211,17 @@ class PhysicsConfig:
             initial_conditions=initial_conditions,
             num_cohorts=num_cohorts,
             rule_seed=rule_seed,
-            rule=rule.copy()
+            rule=rule.copy(),
+            brightness=brightness,
+            hue_sensitivity=hue_sensitivity,
+            color_by_cohort=color_by_cohort,
+            watercolor_mode=watercolor_mode,
+            emboss_intensity=emboss_intensity,
+            emboss_smoothness=emboss_smoothness,
+            parameter_sweeps_enabled=parameter_sweeps_enabled,
+            x_sweep_data=x_sweep_data,
+            y_sweep_data=y_sweep_data,
+            cohort_sweep_data=cohort_sweep_data
         )
 
 
@@ -143,17 +231,54 @@ class ConfigSaver:
     def __init__(self):
         pass
 
-    def create_config(self, sim_state: SimState, rule: np.ndarray | None) -> PhysicsConfig:
+    def _extract_active_sweep(self, sweeps: dict[str, float], slider_ranges: dict[str, list[float]],
+                               param_to_label: dict[str, str]) -> tuple | None:
+        """Extract active sweep data (param_name, direction, cur_min, cur_max) or None."""
+        for param_name, direction in sweeps.items():
+            if direction != 0.0:
+                # Found an active sweep - get its slider range
+                label = param_to_label.get(param_name, param_name)
+                if label in slider_ranges:
+                    cur_min, cur_max = slider_ranges[label][:2]
+                else:
+                    # Use defaults if no custom range
+                    cur_min, cur_max = 0.0, 1.0
+                return (param_name, direction, cur_min, cur_max)
+        return None
+
+    def create_config(self, sim_state: SimState, rule: np.ndarray | None,
+                      slider_ranges: dict[str, list[float]] | None = None) -> PhysicsConfig:
         """
         Create a PhysicsConfig from current state.
 
         Args:
             sim_state: Current simulation state with physics parameters
             rule: Current rule from RuleManager (None = use zeros)
+            slider_ranges: Optional slider range customizations for sweep data
         """
         # Use zero rule if none provided
         if rule is None:
             rule = np.zeros((10, 8), dtype=np.float32)
+
+        # Map parameter names to slider labels
+        param_to_label = {
+            'AXIAL_FORCE': 'Axial Force',
+            'LATERAL_FORCE': 'Lateral Force',
+            'SENSOR_GAIN': 'Sensor Gain',
+            'MUTATION_SCALE': 'Mutation Scale',
+            'DRAG': 'Drag',
+            'STRAFE_POWER': 'Strafe Power',
+            'SENSOR_ANGLE': 'Sensor Angle',
+            'GLOBAL_FORCE_MULT': 'Global Force Mult',
+            'SENSOR_DISTANCE': 'Sensor Distance',
+            'TRAIL_PERSISTENCE': 'Trail Persistence',
+        }
+
+        # Extract active sweeps
+        ranges = slider_ranges or {}
+        x_sweep = self._extract_active_sweep(sim_state.x_sweeps, ranges, param_to_label)
+        y_sweep = self._extract_active_sweep(sim_state.y_sweeps, ranges, param_to_label)
+        cohort_sweep = self._extract_active_sweep(sim_state.cohort_sweeps, ranges, param_to_label)
 
         return PhysicsConfig(
             axial_force=sim_state.AXIAL_FORCE,
@@ -172,16 +297,49 @@ class ConfigSaver:
             initial_conditions=sim_state.initial_conditions,
             num_cohorts=sim_state.num_cohorts,
             rule_seed=sim_state.rule_seed,
-            rule=rule.copy()
+            rule=rule.copy(),
+            brightness=sim_state.brightness,
+            hue_sensitivity=sim_state.hue_sensitivity,
+            color_by_cohort=sim_state.color_by_cohort,
+            watercolor_mode=sim_state.watercolor_mode,
+            emboss_intensity=sim_state.emboss_intensity,
+            emboss_smoothness=sim_state.emboss_smoothness,
+            parameter_sweeps_enabled=sim_state.parameter_sweeps_enabled,
+            x_sweep_data=x_sweep,
+            y_sweep_data=y_sweep,
+            cohort_sweep_data=cohort_sweep
         )
 
-    def apply_config(self, config: PhysicsConfig, sim_state: SimState) -> np.ndarray:
+    def _apply_sweep_to_state(self, sweep_data: tuple | None, sweeps_dict: dict[str, float],
+                               slider_ranges: dict[str, list[float]], param_to_label: dict[str, str]) -> None:
+        """Apply sweep data to state, updating sweep dict and slider ranges."""
+        # Clear all sweeps first
+        for key in sweeps_dict:
+            sweeps_dict[key] = 0.0
+
+        if sweep_data is not None:
+            param_name, direction, cur_min, cur_max = sweep_data
+            if param_name in sweeps_dict:
+                sweeps_dict[param_name] = direction
+                # Update slider range for this parameter
+                label = param_to_label.get(param_name, param_name)
+                if label in slider_ranges:
+                    # Keep default min/max, update current min/max
+                    slider_ranges[label][0] = cur_min
+                    slider_ranges[label][1] = cur_max
+                else:
+                    # Create new range entry
+                    slider_ranges[label] = [cur_min, cur_max, cur_min, cur_max]
+
+    def apply_config(self, config: PhysicsConfig, sim_state: SimState,
+                     slider_ranges: dict[str, list[float]] | None = None) -> np.ndarray:
         """
         Apply a PhysicsConfig to the simulation state.
 
         Args:
             config: The config to apply
             sim_state: SimState to update (modified in place)
+            slider_ranges: Optional slider ranges to update with sweep ranges
 
         Returns:
             The rule to push to RuleManager
@@ -203,6 +361,36 @@ class ConfigSaver:
         sim_state.num_cohorts = config.num_cohorts
         sim_state.rule_seed = config.rule_seed
 
+        # Apply appearance settings
+        sim_state.brightness = config.brightness
+        sim_state.hue_sensitivity = config.hue_sensitivity
+        sim_state.color_by_cohort = config.color_by_cohort
+        sim_state.watercolor_mode = config.watercolor_mode
+        sim_state.emboss_intensity = config.emboss_intensity
+        sim_state.emboss_smoothness = config.emboss_smoothness
+
+        # Apply sweep settings
+        sim_state.parameter_sweeps_enabled = config.parameter_sweeps_enabled
+
+        # Map parameter names to slider labels
+        param_to_label = {
+            'AXIAL_FORCE': 'Axial Force',
+            'LATERAL_FORCE': 'Lateral Force',
+            'SENSOR_GAIN': 'Sensor Gain',
+            'MUTATION_SCALE': 'Mutation Scale',
+            'DRAG': 'Drag',
+            'STRAFE_POWER': 'Strafe Power',
+            'SENSOR_ANGLE': 'Sensor Angle',
+            'GLOBAL_FORCE_MULT': 'Global Force Mult',
+            'SENSOR_DISTANCE': 'Sensor Distance',
+            'TRAIL_PERSISTENCE': 'Trail Persistence',
+        }
+
+        ranges = slider_ranges if slider_ranges is not None else {}
+        self._apply_sweep_to_state(config.x_sweep_data, sim_state.x_sweeps, ranges, param_to_label)
+        self._apply_sweep_to_state(config.y_sweep_data, sim_state.y_sweeps, ranges, param_to_label)
+        self._apply_sweep_to_state(config.cohort_sweep_data, sim_state.cohort_sweeps, ranges, param_to_label)
+
         return config.rule.copy()
 
     def encode_config(self, config: PhysicsConfig) -> str:
@@ -215,7 +403,23 @@ class ConfigSaver:
         - Version 2: Only booleans are non-default (362 bytes)
         - Version 3: Simulation settings are non-default (374 bytes)
         - Version 4: Rule seed is non-default (378 bytes)
+        - Version 5: Appearance or sweep settings are non-default (variable)
         """
+        # Check if version 5 features are non-default
+        appearance_default = (
+            config.brightness == 1.0 and
+            config.hue_sensitivity == 0.5 and
+            not config.color_by_cohort and
+            not config.watercolor_mode and
+            config.emboss_intensity == 0.0 and
+            config.emboss_smoothness == 0.001
+        )
+        sweeps_default = (
+            not config.parameter_sweeps_enabled and
+            config.x_sweep_data is None and
+            config.y_sweep_data is None and
+            config.cohort_sweep_data is None
+        )
         # Check if rule_seed is non-default
         rule_seed_default = config.rule_seed == DEFAULT_RULE_SEED
         # Check if simulation settings are non-default
@@ -228,7 +432,9 @@ class ConfigSaver:
         booleans_default = not config.disable_symmetry and not config.absolute_orientation
 
         # Use minimal version for backward compatibility
-        if not rule_seed_default:
+        if not appearance_default or not sweeps_default:
+            version = 5
+        elif not rule_seed_default:
             version = 4
         elif not sim_settings_default:
             version = 3
@@ -261,7 +467,7 @@ class ConfigSaver:
             colon_idx = config_string.index(':')
             version = int(config_string[3:colon_idx])
 
-            if version not in [1, 2, 3, 4]:
+            if version not in [1, 2, 3, 4, 5]:
                 print(f"Unsupported config version: {version}")
                 return None
 
@@ -276,14 +482,16 @@ class ConfigSaver:
             print(f"Failed to decode config: {e}")
             return None
 
-    def save_to_string(self, sim_state: SimState, rule: np.ndarray | None) -> str:
+    def save_to_string(self, sim_state: SimState, rule: np.ndarray | None,
+                       slider_ranges: dict[str, list[float]] | None = None) -> str:
         """
         Convenience method: create config and encode to string.
         """
-        config = self.create_config(sim_state, rule)
+        config = self.create_config(sim_state, rule, slider_ranges)
         return self.encode_config(config)
 
-    def load_from_string(self, config_string: str, sim_state: SimState) -> np.ndarray | None:
+    def load_from_string(self, config_string: str, sim_state: SimState,
+                         slider_ranges: dict[str, list[float]] | None = None) -> np.ndarray | None:
         """
         Convenience method: decode string and apply to state.
 
@@ -292,4 +500,4 @@ class ConfigSaver:
         config = self.decode_config(config_string)
         if config is None:
             return None
-        return self.apply_config(config, sim_state)
+        return self.apply_config(config, sim_state, slider_ranges)

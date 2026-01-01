@@ -13,7 +13,6 @@ class PreferencesState:
     # Camera/rendering preferences
     speedmult: int = 1
     motion_blur: bool = True
-    color_by_cohort: bool = False
     rule_seed: float = 0.0
 
     # UI preferences
@@ -57,7 +56,10 @@ def load_preferences(filepath: Path | str = "preferences.config") -> Preferences
 
     try:
         data = json.loads(filepath.read_text())
-        return PreferencesState(**data)
+        # Filter out any fields that are no longer in PreferencesState (backward compat)
+        valid_fields = set(PreferencesState.__dataclass_fields__.keys())
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return PreferencesState(**filtered_data)
     except (json.JSONDecodeError, TypeError) as e:
         print(f"Warning: Failed to load preferences from {filepath}: {e}")
         print("Using default preferences")

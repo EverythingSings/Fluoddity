@@ -126,13 +126,9 @@ class Sim:
         tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
         tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
 
-        # Camera state uniforms
-        if self._camera_state is not None:
-            tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._camera_state.HUE_SENSITIVITY)
-
-        # Preferences uniforms
-        if hasattr(self, '_preferences') and self._preferences is not None:
-            tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._preferences.color_by_cohort)
+        # Appearance settings from sim state (now part of physics config)
+        tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
+        tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._state.color_by_cohort)
 
         # Rule seed from sim state (saved with physics configs)
         tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)

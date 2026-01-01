@@ -29,6 +29,14 @@ class SimState:
     num_cohorts: int = 64         # Number of cohorts (1-144, default: 64)
     rule_seed: float = 0.42       # Seed for procedural rule generation (fixed default for reproducibility)
 
+    # Appearance settings (saved with physics config)
+    brightness: float = 1.0
+    hue_sensitivity: float = 0.5
+    color_by_cohort: bool = False
+    watercolor_mode: bool = False
+    emboss_intensity: float = 0.0
+    emboss_smoothness: float = 0.001
+
     # Parameter sweep settings
     parameter_sweeps_enabled: bool = False
     # Sweep preview mode: temporarily disable sweeps to see base physics
