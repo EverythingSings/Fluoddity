@@ -1072,12 +1072,18 @@ class UI:
 
             # Appearance menu
             if imgui.begin_menu("Appearance"):
-                # Brightness / Ink Weight slider
-                label = "Ink Weight" if self.state.sim.watercolor_mode else "Brightness"
+                # Brightness slider (always visible)
                 _, self.state.sim.brightness = imgui.slider_float(
-                    label, self.state.sim.brightness, 0.0, 4.0
+                    "Brightness", self.state.sim.brightness, 0.0, 4.0
                 )
-                self._delayed_tooltip("Controls the overall brightness/intensity of the output.")
+                self._delayed_tooltip("Controls the overall brightness of the output.")
+
+                # Ink Weight slider (only in watercolor mode)
+                if self.state.sim.watercolor_mode:
+                    _, self.state.sim.ink_weight = imgui.slider_float(
+                        "Ink Weight", self.state.sim.ink_weight, 0.0, 4.0
+                    )
+                    self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
 
                 # Color by cohort checkbox
                 _, self.state.sim.color_by_cohort = imgui.checkbox(
@@ -1642,6 +1648,7 @@ class UI:
         self.state.sim.rule_seed = config.rule_seed
         # Appearance settings
         self.state.sim.brightness = config.brightness
+        self.state.sim.ink_weight = config.ink_weight
         self.state.sim.hue_sensitivity = config.hue_sensitivity
         self.state.sim.color_by_cohort = config.color_by_cohort
         # Use watercolor override if provided, otherwise use config's value
@@ -1704,6 +1711,7 @@ class UI:
             self.state.sim.rule_seed = self.base_sim_state.rule_seed
             # Appearance settings
             self.state.sim.brightness = self.base_sim_state.brightness
+            self.state.sim.ink_weight = self.base_sim_state.ink_weight
             self.state.sim.hue_sensitivity = self.base_sim_state.hue_sensitivity
             self.state.sim.color_by_cohort = self.base_sim_state.color_by_cohort
             # Use watercolor override if provided, otherwise use base state's value

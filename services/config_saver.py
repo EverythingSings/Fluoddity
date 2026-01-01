@@ -58,6 +58,7 @@ class PhysicsConfig:
 
     # Appearance settings (version 5+)
     brightness: float = 1.0
+    ink_weight: float = 1.0  # Watercolor mode: controls optical density in exp()
     hue_sensitivity: float = 0.5
     color_by_cohort: bool = True  # Default True so old saves use cohort coloring
     watercolor_mode: bool = False
@@ -105,10 +106,10 @@ class PhysicsConfig:
             return physics_bytes + rule_bytes + bool_bytes + sim_bytes + seed_bytes
 
         # Version 5: add appearance settings + sweep data
-        # Use little-endian format '<ff??ff' to avoid alignment padding (18 bytes, not 20)
+        # Use little-endian format '<fff??ff' to avoid alignment padding (22 bytes)
         appearance_bytes = struct.pack(
-            '<ff??ff',
-            self.brightness, self.hue_sensitivity,
+            '<fff??ff',
+            self.brightness, self.ink_weight, self.hue_sensitivity,
             self.color_by_cohort, self.watercolor_mode,
             self.emboss_intensity, self.emboss_smoothness
         )
@@ -160,6 +161,7 @@ class PhysicsConfig:
 
         # Version 5 defaults (color_by_cohort=True so old saves use cohort coloring)
         brightness = 1.0
+        ink_weight = 1.0
         hue_sensitivity = 0.5
         color_by_cohort = True
         watercolor_mode = False
@@ -183,10 +185,20 @@ class PhysicsConfig:
             rule_seed, = struct.unpack('f', data[374:378])
 
         # Version 5+: check if we have appearance and sweep data
-        if len(data) >= 397:  # 378 + 18 (appearance) + 1 (sweep enabled)
-            # Use little-endian format '<ff??ff' to avoid alignment padding (18 bytes, not 20)
+        # New format: 22 bytes (fff??ff) with ink_weight
+        if len(data) >= 401:  # 378 + 22 (appearance) + 1 (sweep enabled)
+            brightness, ink_weight, hue_sensitivity, color_by_cohort, watercolor_mode, \
+                emboss_intensity, emboss_smoothness = struct.unpack('<fff??ff', data[378:400])
+            parameter_sweeps_enabled, = struct.unpack('?', data[400:401])
+            # Decode sweeps (variable length)
+            offset = 401
+            x_sweep_data, offset = cls._decode_sweep(data, offset)
+            y_sweep_data, offset = cls._decode_sweep(data, offset)
+            cohort_sweep_data, offset = cls._decode_sweep(data, offset)
+        elif len(data) >= 397:  # Old format: 18 bytes (ff??ff) without ink_weight
             brightness, hue_sensitivity, color_by_cohort, watercolor_mode, \
                 emboss_intensity, emboss_smoothness = struct.unpack('<ff??ff', data[378:396])
+            ink_weight = 1.0  # Default for old format
             parameter_sweeps_enabled, = struct.unpack('?', data[396:397])
             # Decode sweeps (variable length)
             offset = 397
@@ -213,6 +225,7 @@ class PhysicsConfig:
             rule_seed=rule_seed,
             rule=rule.copy(),
             brightness=brightness,
+            ink_weight=ink_weight,
             hue_sensitivity=hue_sensitivity,
             color_by_cohort=color_by_cohort,
             watercolor_mode=watercolor_mode,
@@ -299,6 +312,7 @@ class ConfigSaver:
             rule_seed=sim_state.rule_seed,
             rule=rule.copy(),
             brightness=sim_state.brightness,
+            ink_weight=sim_state.ink_weight,
             hue_sensitivity=sim_state.hue_sensitivity,
             color_by_cohort=sim_state.color_by_cohort,
             watercolor_mode=sim_state.watercolor_mode,
@@ -363,6 +377,7 @@ class ConfigSaver:
 
         # Apply appearance settings
         sim_state.brightness = config.brightness
+        sim_state.ink_weight = config.ink_weight
         sim_state.hue_sensitivity = config.hue_sensitivity
         sim_state.color_by_cohort = config.color_by_cohort
         sim_state.watercolor_mode = config.watercolor_mode
@@ -408,6 +423,7 @@ class ConfigSaver:
         # Check if version 5 features are non-default
         appearance_default = (
             config.brightness == 1.0 and
+            config.ink_weight == 1.0 and
             config.hue_sensitivity == 0.5 and
             config.color_by_cohort and  # Default is True
             not config.watercolor_mode and

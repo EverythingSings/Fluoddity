@@ -11,6 +11,7 @@ class Camera:
         self.sim = sim
         self.window = window
         self.BRIGHTNESS = 1
+        self.ink_weight = 1
         self.cam_brush_mode = True
         self.watercolor_mode = False
 
@@ -120,8 +121,9 @@ class Camera:
     def render(self, sim_going: bool = True, current_view_option: int = 2,
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
                 sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
-                watercolor_mode: bool = False):
+                watercolor_mode: bool = False, ink_weight: float = 1.0):
         self.watercolor_mode = watercolor_mode
+        self.ink_weight = ink_weight
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
         if sim_going and self.assembled_texture is not None:
@@ -140,6 +142,7 @@ class Camera:
                 sweep_reticle_visible=sweep_reticle_visible,
                 screen_aspect=screen_aspect,
                 brightness=self.BRIGHTNESS,
+                ink_weight=self.ink_weight,
                 watercolor_mode=watercolor_mode
             )
             # assemble_frame returns the texture immediately when total_samples=1

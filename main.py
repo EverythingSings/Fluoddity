@@ -150,7 +150,8 @@ class App:
             sweep_reticle_pos=sweep_reticle_pos,
             sweep_reticle_visible=sweep_reticle_visible,
             screen_aspect=screen_aspect,
-            watercolor_mode=ui_state.sim.watercolor_mode
+            watercolor_mode=ui_state.sim.watercolor_mode,
+            ink_weight=ui_state.sim.ink_weight
         )
 
         # 7.5. Render arrow debug overlay if enabled
@@ -543,6 +544,7 @@ class App:
                     sweep_reticle_visible=sweep_reticle_visible,
                     screen_aspect=screen_aspect,
                     brightness=self.camera.BRIGHTNESS,
+                    ink_weight=ui_state.sim.ink_weight,
                     watercolor_mode=ui_state.sim.watercolor_mode
                 )
 
@@ -586,6 +588,7 @@ class App:
                 sweep_reticle_visible=sweep_reticle_visible,
                 screen_aspect=screen_aspect,
                 brightness=self.camera.BRIGHTNESS,
+                ink_weight=ui_state.sim.ink_weight,
                 watercolor_mode=ui_state.sim.watercolor_mode
             )
 

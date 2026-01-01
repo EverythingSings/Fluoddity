@@ -69,7 +69,7 @@ class FrameAssembler:
 
     def assemble_frame(self, input_texture, total_samples, current_sample_index, view_mode=0,
                        sweep_mode=False, sweep_reticle_pos=(0.5, 0.5), sweep_reticle_visible=False,
-                       screen_aspect=1.0, brightness=1.0, watercolor_mode=False):
+                       screen_aspect=1.0, brightness=1.0, ink_weight=1.0, watercolor_mode=False):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -82,7 +82,8 @@ class FrameAssembler:
             sweep_reticle_pos: (x, y) screen UV position of sweep reticle
             sweep_reticle_visible: Whether to show the reticle
             screen_aspect: Screen width/height ratio for proper circle rendering
-            brightness: Global brightness multiplier (or ink weight in watercolor mode)
+            brightness: Global brightness multiplier (applied before gamma)
+            ink_weight: Watercolor mode optical density control
             watercolor_mode: Whether to use watercolor rendering
 
         Returns:
@@ -128,6 +129,7 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'sweep_reticle_visible', sweep_reticle_visible)
         tryset(self.resources['shader'], 'screen_aspect', screen_aspect)
         tryset(self.resources['shader'], 'BRIGHTNESS', brightness)
+        tryset(self.resources['shader'], 'INK_WEIGHT', ink_weight)
         tryset(self.resources['shader'], 'WATERCOLOR_MODE', watercolor_mode)
 
         # Render to accumulation buffer

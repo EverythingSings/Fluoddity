@@ -8,7 +8,8 @@ uniform bool PARAMETER_SWEEP_MODE;  // Whether parameter sweeps are active
 uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 range)
 uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
-uniform float BRIGHTNESS;           // Global brightness multiplier (or ink weight in watercolor mode)
+uniform float BRIGHTNESS;           // Global brightness multiplier (applied before gamma)
+uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()
 uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
 
 in vec2 uv;
@@ -65,14 +66,10 @@ void main() {
     // Sample the input frame
     vec3 current_color = texture(input_frame, uv).rgb;
 
-    // Apply brightness/ink weight
+    // In watercolor mode, convert from log-space optical density to linear transmission
     if (WATERCOLOR_MODE) {
-        // Watercolor: convert from log-space optical density to linear transmission
-        // BRIGHTNESS acts as ink weight - higher = darker/more opaque
-        current_color = exp(BRIGHTNESS * current_color);
-    } else {
-        // Normal mode: simple brightness multiplier
-        current_color *= BRIGHTNESS;
+        // INK_WEIGHT controls optical density - higher = darker/more opaque
+        current_color = exp(INK_WEIGHT * current_color);
     }
 
     // Divide by number of samples (for averaging)
@@ -92,6 +89,8 @@ void main() {
         if(view_mode !=2){
             fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
         }
+        // Apply brightness multiplier before gamma correction
+        fragColor.xyz *= BRIGHTNESS;
         float len = length(fragColor.xyz);
         if (len > 0.0) {
             fragColor.xyz /= pow(len, 0.575);
