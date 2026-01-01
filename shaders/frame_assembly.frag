@@ -69,7 +69,8 @@ void main() {
     // In watercolor mode, convert from log-space optical density to linear transmission
     if (WATERCOLOR_MODE) {
         // INK_WEIGHT controls optical density - higher = darker/more opaque
-        current_color = exp(INK_WEIGHT * current_color);
+        #define INK_CONSTANT 10
+        current_color = exp(INK_WEIGHT*INK_CONSTANT * current_color);
     }
 
     // Divide by number of samples (for averaging)
@@ -90,7 +91,8 @@ void main() {
             fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
         }
         // Apply brightness multiplier before gamma correction
-        fragColor.xyz *= BRIGHTNESS;
+        #define BRIGHTNESS_CONSTANT 2.
+        fragColor.xyz *= BRIGHTNESS*BRIGHTNESS_CONSTANT;
         float len = length(fragColor.xyz);
         if (len > 0.0) {
             fragColor.xyz /= pow(len, 0.575);

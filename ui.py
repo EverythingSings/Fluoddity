@@ -275,7 +275,14 @@ class UI:
             elif ctrl_pressed and key == glfw.KEY_V:
                 self._request_load_config = True
             elif key == glfw.KEY_V:
+                # Toggle watercolor mode
+                self.state.sim.watercolor_mode = not self.state.sim.watercolor_mode
+            elif key == glfw.KEY_U:
+                # Reload shaders
                 self._request_reload = True
+            elif key == glfw.KEY_H:
+                # Show tutorial
+                self.show_tutorial_window = not self.show_tutorial_window
             elif key == glfw.KEY_P:
                 self._toggle_recording = True
             elif key == glfw.KEY_G:
@@ -505,9 +512,10 @@ class UI:
                     # Use locked watercolor mode
                     current_menu_watercolor = self.load_menu_watercolor_mode
 
-                    # Header showing right-click hint
+                    # Header showing right-click hint (compact two-line format)
                     mode_text = "Watercolor ON" if current_menu_watercolor else "Watercolor OFF"
-                    imgui.text_disabled(f"Right-click toggles Watercolor ({mode_text})")
+                    imgui.text_disabled("Right-click toggles:")
+                    imgui.text_disabled(f"({mode_text})")
                     imgui.separator()
 
                     # Check for right-click anywhere in the menu to toggle watercolor
@@ -785,7 +793,9 @@ class UI:
             imgui.bullet_text("G - Pause/resume simulation")
             imgui.bullet_text("R (hold) - Reset particles to center")
             imgui.bullet_text("F - Toggle parameter sweeps")
-            imgui.bullet_text("V - Reload shaders")
+            imgui.bullet_text("V - Toggle watercolor mode")
+            imgui.bullet_text("U - Reload shaders")
+            imgui.bullet_text("H - Show tutorial")
             imgui.bullet_text("T - Toggle mouse mode")
             imgui.bullet_text("Z - Full reset (push zero rule + reset particles)")
 
@@ -1069,13 +1079,6 @@ class UI:
 
             # Appearance menu
             if imgui.begin_menu("Appearance"):
-                # Ink Weight slider (only in watercolor mode)
-                if self.state.sim.watercolor_mode:
-                    _, self.state.sim.ink_weight = imgui.slider_float(
-                        "Ink Weight", self.state.sim.ink_weight, 0.0, 4.0
-                    )
-                    self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
-
                 # Color by cohort checkbox
                 _, self.state.sim.color_by_cohort = imgui.checkbox(
                     "Color by Cohort",
@@ -1094,9 +1097,16 @@ class UI:
 
                 # Watercolor Mode checkbox
                 _, self.state.sim.watercolor_mode = imgui.checkbox(
-                    "Watercolor Mode",
+                    "Watercolor Mode (V)",
                     self.state.sim.watercolor_mode
                 )
+
+                # Ink Weight slider (only in watercolor mode, placed right after checkbox)
+                if self.state.sim.watercolor_mode:
+                    _, self.state.sim.ink_weight = imgui.slider_float(
+                        "Ink Weight", self.state.sim.ink_weight, 0.0, 4.0
+                    )
+                    self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
                 self._delayed_tooltip("Enable watercolor rendering effect.")
 
                 # Emboss Intensity slider
