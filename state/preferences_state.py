@@ -14,6 +14,7 @@ class PreferencesState:
     speedmult: int = 1
     motion_blur: bool = True
     rule_seed: float = 0.0
+    brightness: float = 1.0  # Global brightness multiplier
 
     # UI preferences
     show_preferences_window: bool = True  # Whether preferences window is visible

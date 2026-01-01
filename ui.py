@@ -489,54 +489,37 @@ class UI:
                     self.save_filename_buffer = self.last_loaded_filename
                 self._delayed_tooltip("Save the current physics settings including particle rules.")
 
-                # Load submenu with preview (standard mode - no watercolor)
+                # Load submenu with preview - locks to current watercolor mode
+                # Right-click toggles watercolor mode
                 if imgui.begin_menu("Load"):
                     load_submenu_open = True
-                    current_menu_watercolor = False
 
                     # First frame submenu opens: cache configs and store base state
                     if not self.load_submenu_was_open:
                         self._cache_all_configs()
                         self.base_sim_state = replace(self.state.sim)
                         self.currently_previewing = None
-                        self.load_menu_watercolor_mode = current_menu_watercolor
+                        # Lock to current watercolor mode when menu opens
+                        self.load_menu_watercolor_mode = self.state.sim.watercolor_mode
 
-                    # Lock watercolor mode to menu's mode
-                    self.state.sim.watercolor_mode = current_menu_watercolor
+                    # Use locked watercolor mode
+                    current_menu_watercolor = self.load_menu_watercolor_mode
 
-                    hovered_this_frame = self._render_load_submenu_content(current_menu_watercolor)
+                    # Header showing right-click hint
+                    mode_text = "Watercolor ON" if current_menu_watercolor else "Watercolor OFF"
+                    imgui.text_disabled(f"Right-click toggles Watercolor ({mode_text})")
+                    imgui.separator()
 
-                    # Handle preview on hover
-                    if hovered_this_frame != self.currently_previewing:
-                        # First, clear any existing preview
-                        if self.currently_previewing:
-                            self._request_clear_preview = True
-
-                        if hovered_this_frame and hovered_this_frame in self.cached_configs:
-                            # Apply preview config with watercolor override
-                            config = self.cached_configs[hovered_this_frame]
+                    # Check for right-click anywhere in the menu to toggle watercolor
+                    if imgui.is_window_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                        self.load_menu_watercolor_mode = not self.load_menu_watercolor_mode
+                        current_menu_watercolor = self.load_menu_watercolor_mode
+                        # Update any current preview with new watercolor mode
+                        if self.currently_previewing and self.currently_previewing in self.cached_configs:
+                            config = self.cached_configs[self.currently_previewing]
                             self._apply_config_to_sim_state(config, watercolor_override=current_menu_watercolor)
-                            self._request_preview_config = True
-                            self._preview_filename = hovered_this_frame
-                            self.currently_previewing = hovered_this_frame
-                        elif hovered_this_frame is None and self.base_sim_state:
-                            # Revert to base state with watercolor override
+                        elif self.base_sim_state:
                             self._restore_base_sim_state(watercolor_override=current_menu_watercolor)
-                            self.currently_previewing = None
-
-                    imgui.end_menu()
-
-                # Load (Watercolor) submenu with preview
-                if imgui.begin_menu("Load (Watercolor)"):
-                    load_submenu_open = True
-                    current_menu_watercolor = True
-
-                    # First frame submenu opens: cache configs and store base state
-                    if not self.load_submenu_was_open:
-                        self._cache_all_configs()
-                        self.base_sim_state = replace(self.state.sim)
-                        self.currently_previewing = None
-                        self.load_menu_watercolor_mode = current_menu_watercolor
 
                     # Lock watercolor mode to menu's mode
                     self.state.sim.watercolor_mode = current_menu_watercolor
@@ -763,6 +746,20 @@ class UI:
                     format="%.1f"
                 )
                 imgui.unindent(20)
+
+            imgui.separator()
+
+            # === Appearance section ===
+            imgui.text("Appearance")
+
+            # Brightness slider
+            _, self.state.preferences.brightness = imgui.slider_float(
+                "Brightness",
+                self.state.preferences.brightness,
+                0.0, 4.0,
+                format="%.2f"
+            )
+            self._delayed_tooltip("Global brightness multiplier for the output.")
 
         imgui.end()
 
@@ -1072,12 +1069,6 @@ class UI:
 
             # Appearance menu
             if imgui.begin_menu("Appearance"):
-                # Brightness slider (always visible)
-                _, self.state.sim.brightness = imgui.slider_float(
-                    "Brightness", self.state.sim.brightness, 0.0, 4.0
-                )
-                self._delayed_tooltip("Controls the overall brightness of the output.")
-
                 # Ink Weight slider (only in watercolor mode)
                 if self.state.sim.watercolor_mode:
                     _, self.state.sim.ink_weight = imgui.slider_float(
@@ -1646,8 +1637,7 @@ class UI:
         self.state.sim.initial_conditions = config.initial_conditions
         self.state.sim.num_cohorts = config.num_cohorts
         self.state.sim.rule_seed = config.rule_seed
-        # Appearance settings
-        self.state.sim.brightness = config.brightness
+        # Appearance settings (brightness not applied - it's in preferences)
         self.state.sim.ink_weight = config.ink_weight
         self.state.sim.hue_sensitivity = config.hue_sensitivity
         self.state.sim.color_by_cohort = config.color_by_cohort
@@ -1709,8 +1699,7 @@ class UI:
             self.state.sim.initial_conditions = self.base_sim_state.initial_conditions
             self.state.sim.num_cohorts = self.base_sim_state.num_cohorts
             self.state.sim.rule_seed = self.base_sim_state.rule_seed
-            # Appearance settings
-            self.state.sim.brightness = self.base_sim_state.brightness
+            # Appearance settings (brightness not restored - it's in preferences)
             self.state.sim.ink_weight = self.base_sim_state.ink_weight
             self.state.sim.hue_sensitivity = self.base_sim_state.hue_sensitivity
             self.state.sim.color_by_cohort = self.base_sim_state.color_by_cohort

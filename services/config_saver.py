@@ -57,7 +57,8 @@ class PhysicsConfig:
     rule: np.ndarray = None  # shape (10, 8)
 
     # Appearance settings (version 5+)
-    brightness: float = 1.0
+    # Note: brightness is kept in format for backward compat but not used (now in preferences)
+    brightness: float = 1.0  # Placeholder for backward compat, always 1.0
     ink_weight: float = 1.0  # Watercolor mode: controls optical density in exp()
     hue_sensitivity: float = 0.5
     color_by_cohort: bool = True  # Default True so old saves use cohort coloring
@@ -311,7 +312,7 @@ class ConfigSaver:
             num_cohorts=sim_state.num_cohorts,
             rule_seed=sim_state.rule_seed,
             rule=rule.copy(),
-            brightness=sim_state.brightness,
+            brightness=1.0,  # Placeholder for backward compat (brightness now in preferences)
             ink_weight=sim_state.ink_weight,
             hue_sensitivity=sim_state.hue_sensitivity,
             color_by_cohort=sim_state.color_by_cohort,
@@ -375,8 +376,7 @@ class ConfigSaver:
         sim_state.num_cohorts = config.num_cohorts
         sim_state.rule_seed = config.rule_seed
 
-        # Apply appearance settings
-        sim_state.brightness = config.brightness
+        # Apply appearance settings (brightness not applied - it's now in preferences)
         sim_state.ink_weight = config.ink_weight
         sim_state.hue_sensitivity = config.hue_sensitivity
         sim_state.color_by_cohort = config.color_by_cohort
@@ -421,8 +421,8 @@ class ConfigSaver:
         - Version 5: Appearance or sweep settings are non-default (variable)
         """
         # Check if version 5 features are non-default
+        # Note: brightness is always 1.0 (now in preferences), not checked
         appearance_default = (
-            config.brightness == 1.0 and
             config.ink_weight == 1.0 and
             config.hue_sensitivity == 0.5 and
             config.color_by_cohort and  # Default is True

@@ -110,8 +110,8 @@ class App:
         self.sim.apply_camera_state(ui_state.camera)
         self.sim.apply_preferences(ui_state.preferences)
         self.camera.apply_state(ui_state.camera)
-        # Sync brightness from sim_state (appearance settings now in physics config)
-        self.camera.BRIGHTNESS = ui_state.sim.brightness
+        # Sync brightness from preferences
+        self.camera.BRIGHTNESS = ui_state.preferences.brightness
 
         # 5.5. Calculate sweep reticle info (needed for both running and paused states)
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
