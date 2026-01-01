@@ -121,7 +121,9 @@ class Camera:
     def render(self, sim_going: bool = True, current_view_option: int = 2,
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
                 sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
-                watercolor_mode: bool = False, ink_weight: float = 1.0):
+                watercolor_mode: bool = False, ink_weight: float = 1.0,
+                brush_tex=None, canvas_tex=None,
+                emboss_intensity: float = 0.0, emboss_smoothness: float = 0.001):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
         # ALWAYS use assembled texture when simulation is running
@@ -143,7 +145,13 @@ class Camera:
                 screen_aspect=screen_aspect,
                 brightness=self.BRIGHTNESS,
                 ink_weight=self.ink_weight,
-                watercolor_mode=watercolor_mode
+                watercolor_mode=watercolor_mode,
+                brush_tex=brush_tex,
+                canvas_tex=canvas_tex,
+                camera_position=tuple(self.position),
+                camera_zoom=self.zoom,
+                emboss_intensity=emboss_intensity,
+                emboss_smoothness=emboss_smoothness
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

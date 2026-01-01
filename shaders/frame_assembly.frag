@@ -1,6 +1,8 @@
 #version 330 core
 uniform sampler2D input_frame;
 uniform sampler2D accumulation_buffer;
+uniform sampler2D brush_tex;        // Brush texture for emboss
+uniform sampler2D canvas_tex;       // Canvas texture for emboss
 uniform bool is_first_frame;
 uniform bool final_sample;
 uniform int view_mode;  // 0=can, 1=brush_tex, 2=cam_brush
@@ -11,6 +13,14 @@ uniform float screen_aspect;        // Screen width/height for aspect-correct ci
 uniform float BRIGHTNESS;           // Global brightness multiplier (applied before gamma)
 uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()
 uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
+
+// Camera state for screen-to-canvas UV conversion
+uniform vec2 camera_position;       // Camera position in world space
+uniform float camera_zoom;          // Camera zoom level
+
+// Emboss parameters
+uniform float EMBOSS_INTENSITY;     // Emboss effect intensity
+uniform float EMBOSS_SMOOTHNESS;    // Emboss sampling epsilon
 
 in vec2 uv;
 out vec4 fragColor;
@@ -23,6 +33,30 @@ vec3 hsv2rgb(vec3 c)
     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+// Convert screen UV coordinates to canvas texture coordinates
+// Screen UV (0,0) to (1,1) -> world space -> canvas texture coords
+vec2 screen_to_canvas_uv(vec2 screen_uv) {
+    // Screen UV to normalized device coordinates (-1 to 1)
+    vec2 ndc = screen_uv * 2.0 - 1.0;
+
+    // Apply aspect ratio correction and zoom
+    //ndc.x *= screen_aspect;
+    //ndc *= camera_zoom;
+
+    // Add camera position to get world space position
+    vec2 world_pos = ndc*camera_zoom + camera_position*vec2(1,-1);
+    world_pos.x*=screen_aspect;
+    // World space to canvas texture coords: divide by 2 and add 0.5
+    return (world_pos/2.+.5);
+}
+
+// Estimate gradient of scalar field using central differences (takes .z component as scalar)
+vec2 gradient(sampler2D tex, vec2 tex_uv, float epsilon) {
+    float dx = (texture(tex, tex_uv + vec2(epsilon, 0.0)).z - texture(tex, tex_uv - vec2(epsilon, 0.0)).z) / (2.0 * epsilon);
+    float dy = (texture(tex, tex_uv + vec2(0.0, epsilon)).z - texture(tex, tex_uv - vec2(0.0, epsilon)).z) / (2.0 * epsilon);
+    return vec2(dx, dy);
 }
 
 vec3 sweep_overlay(vec2 uv_coord) {
@@ -102,4 +136,5 @@ void main() {
         if(PARAMETER_SWEEP_MODE){
             fragColor.xyz += sweep_overlay(uv);
         }
+        if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
 }

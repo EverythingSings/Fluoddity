@@ -151,7 +151,11 @@ class App:
             sweep_reticle_visible=sweep_reticle_visible,
             screen_aspect=screen_aspect,
             watercolor_mode=ui_state.sim.watercolor_mode,
-            ink_weight=ui_state.sim.ink_weight
+            ink_weight=ui_state.sim.ink_weight,
+            brush_tex=self.sim.brush_tex,
+            canvas_tex=self.sim.can,
+            emboss_intensity=ui_state.sim.emboss_intensity,
+            emboss_smoothness=ui_state.sim.emboss_smoothness
         )
 
         # 7.5. Render arrow debug overlay if enabled
@@ -545,7 +549,13 @@ class App:
                     screen_aspect=screen_aspect,
                     brightness=self.camera.BRIGHTNESS,
                     ink_weight=ui_state.sim.ink_weight,
-                    watercolor_mode=ui_state.sim.watercolor_mode
+                    watercolor_mode=ui_state.sim.watercolor_mode,
+                    brush_tex=self.sim.brush_tex,
+                    canvas_tex=self.sim.can,
+                    camera_position=tuple(self.camera.position),
+                    camera_zoom=self.camera.zoom,
+                    emboss_intensity=ui_state.sim.emboss_intensity,
+                    emboss_smoothness=ui_state.sim.emboss_smoothness
                 )
 
                 # Only process when accumulation cycle completes
@@ -589,7 +599,13 @@ class App:
                 screen_aspect=screen_aspect,
                 brightness=self.camera.BRIGHTNESS,
                 ink_weight=ui_state.sim.ink_weight,
-                watercolor_mode=ui_state.sim.watercolor_mode
+                watercolor_mode=ui_state.sim.watercolor_mode,
+                brush_tex=self.sim.brush_tex,
+                canvas_tex=self.sim.can,
+                camera_position=tuple(self.camera.position),
+                camera_zoom=self.camera.zoom,
+                emboss_intensity=ui_state.sim.emboss_intensity,
+                emboss_smoothness=ui_state.sim.emboss_smoothness
             )
 
             self.camera.assembled_texture = assembled_tex

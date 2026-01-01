@@ -1109,6 +1109,8 @@ class UI:
                     self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
                 self._delayed_tooltip("Enable watercolor rendering effect.")
 
+                imgui.separator()
+
                 # Emboss Intensity slider
                 _, self.state.sim.emboss_intensity = imgui.slider_float(
                     "Emboss Intensity", self.state.sim.emboss_intensity, -1.0, 1.0
