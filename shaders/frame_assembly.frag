@@ -91,7 +91,7 @@ void main() {
             fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
         }
         // Apply brightness multiplier before gamma correction
-        #define BRIGHTNESS_CONSTANT 2.
+        #define BRIGHTNESS_CONSTANT 3.
         fragColor.xyz *= BRIGHTNESS*BRIGHTNESS_CONSTANT;
         float len = length(fragColor.xyz);
         if (len > 0.0) {

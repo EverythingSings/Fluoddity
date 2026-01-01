@@ -134,8 +134,9 @@ class FrameAssembler:
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()
-        if is_first_frame:
-            self.resources['accumulation_fbo'].clear()
+        #no need to clear the buffer, it's handled in frame_assembly.frag (is_first_frame)
+        #if is_first_frame:
+        #    self.resources['accumulation_fbo'].clear()
         self.resources['vao'].render()
 
         # Return assembled texture only on final sample
