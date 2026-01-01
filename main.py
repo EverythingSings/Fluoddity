@@ -319,6 +319,9 @@ class App:
                         config_string, ui_state.sim, ui_state.preferences.slider_ranges
                     )
                     if rule is not None:
+                        # Apply watercolor override if provided (from Load vs Load (Watercolor) menu)
+                        if ui_state.load_watercolor_override is not None:
+                            ui_state.sim.watercolor_mode = ui_state.load_watercolor_override
                         self.rule_manager.push_rule(rule)
                         self.sim.apply_rule(rule)
                         print(f"Config loaded from {filepath}")

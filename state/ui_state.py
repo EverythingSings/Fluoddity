@@ -45,6 +45,7 @@ class UIState:
     save_filename: str = ""  # Filename to save to (without extension)
     load_filename: str = ""  # Filename to load from (without extension)
     delete_filename: str = ""  # Filename to delete (without extension)
+    load_watercolor_override: bool | None = None  # Override watercolor mode when loading
 
     # Config preview (for Load submenu hover)
     request_preview_config: bool = False  # Push rule for preview

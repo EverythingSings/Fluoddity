@@ -81,6 +81,9 @@ class UI:
         self.base_sim_state: SimState | None = None  # State before preview
         self.currently_previewing: str | None = None  # Currently hovered config
         self.last_loaded_filename: str = ""  # For default save name
+        # Track which load menu is open: None=neither, False=standard, True=watercolor
+        self.load_menu_watercolor_mode: bool | None = None
+        self._load_watercolor_override: bool | None = None  # Override for load operation
 
         # Delete confirmation state
         self.delete_confirm_filename: str | None = None
@@ -349,6 +352,7 @@ class UI:
         self.state.load_filename = self._load_filename
         self.state.delete_filename = self._delete_filename
         self.state.preview_filename = self._preview_filename
+        self.state.load_watercolor_override = self._load_watercolor_override
 
         # Transfer history window flags
         self.state.request_preview_history_rule = self._request_preview_history_rule
@@ -383,6 +387,7 @@ class UI:
         self._load_filename = ""
         self._delete_filename = ""
         self._preview_filename = ""
+        self._load_watercolor_override = None
 
         # Reset history window flags
         self._request_preview_history_rule = False
@@ -484,80 +489,77 @@ class UI:
                     self.save_filename_buffer = self.last_loaded_filename
                 self._delayed_tooltip("Save the current physics settings including particle rules.")
 
-                # Load submenu with preview
+                # Load submenu with preview (standard mode - no watercolor)
                 if imgui.begin_menu("Load"):
                     load_submenu_open = True
+                    current_menu_watercolor = False
 
                     # First frame submenu opens: cache configs and store base state
                     if not self.load_submenu_was_open:
                         self._cache_all_configs()
                         self.base_sim_state = replace(self.state.sim)
                         self.currently_previewing = None
+                        self.load_menu_watercolor_mode = current_menu_watercolor
 
-                    if not self.config_files:
-                        imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files")
-                    else:
-                        # Calculate max filename width to size the submenu properly
-                        max_text_width = 0.0
-                        for fn in self.config_files:
-                            text_size = imgui.calc_text_size(fn)
-                            if text_size.x > max_text_width:
-                                max_text_width = text_size.x
+                    # Lock watercolor mode to menu's mode
+                    self.state.sim.watercolor_mode = current_menu_watercolor
 
-                        # Add padding for the X button (25px) and some margin
-                        total_width = max_text_width + 40
+                    hovered_this_frame = self._render_load_submenu_content(current_menu_watercolor)
 
-                        hovered_this_frame = None
-                        for filename in self.config_files:
-                            # Selectable for filename with calculated width
-                            clicked, _ = imgui.selectable(
-                                filename, False,
-                                imgui.SelectableFlags_.no_auto_close_popups,
-                                imgui.ImVec2(max_text_width + 10, 0)
-                            )
+                    # Handle preview on hover
+                    if hovered_this_frame != self.currently_previewing:
+                        # First, clear any existing preview
+                        if self.currently_previewing:
+                            self._request_clear_preview = True
 
-                            # Check if filename is hovered
-                            if imgui.is_item_hovered():
-                                hovered_this_frame = filename
+                        if hovered_this_frame and hovered_this_frame in self.cached_configs:
+                            # Apply preview config with watercolor override
+                            config = self.cached_configs[hovered_this_frame]
+                            self._apply_config_to_sim_state(config, watercolor_override=current_menu_watercolor)
+                            self._request_preview_config = True
+                            self._preview_filename = hovered_this_frame
+                            self.currently_previewing = hovered_this_frame
+                        elif hovered_this_frame is None and self.base_sim_state:
+                            # Revert to base state with watercolor override
+                            self._restore_base_sim_state(watercolor_override=current_menu_watercolor)
+                            self.currently_previewing = None
 
-                            # X button on same line (right after the selectable)
-                            imgui.same_line()
-                            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
-                            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
-                            if imgui.small_button(f"X##{filename}"):
-                                self.delete_confirm_filename = filename
-                            imgui.pop_style_color(2)
+                    imgui.end_menu()
 
-                            # Also check hover on X button for preview
-                            if imgui.is_item_hovered():
-                                hovered_this_frame = filename
+                # Load (Watercolor) submenu with preview
+                if imgui.begin_menu("Load (Watercolor)"):
+                    load_submenu_open = True
+                    current_menu_watercolor = True
 
-                            if clicked:
-                                # Finalize selection
-                                self._load_filename = filename
-                                self._request_load_file = True
-                                self.last_loaded_filename = filename
-                                self.base_sim_state = None
-                                self.currently_previewing = None
-                                imgui.close_current_popup()
+                    # First frame submenu opens: cache configs and store base state
+                    if not self.load_submenu_was_open:
+                        self._cache_all_configs()
+                        self.base_sim_state = replace(self.state.sim)
+                        self.currently_previewing = None
+                        self.load_menu_watercolor_mode = current_menu_watercolor
 
-                        # Handle preview on hover
-                        if hovered_this_frame != self.currently_previewing:
-                            # First, clear any existing preview
-                            if self.currently_previewing:
-                                self._request_clear_preview = True
+                    # Lock watercolor mode to menu's mode
+                    self.state.sim.watercolor_mode = current_menu_watercolor
 
-                            if hovered_this_frame and hovered_this_frame in self.cached_configs:
-                                # Apply preview config (physics locally, rule via orchestrator)
-                                config = self.cached_configs[hovered_this_frame]
-                                self._apply_config_to_sim_state(config)
-                                self._request_preview_config = True
-                                self._preview_filename = hovered_this_frame
-                                self.currently_previewing = hovered_this_frame
-                            elif hovered_this_frame is None and self.base_sim_state:
-                                # Revert to base state
-                                self._restore_base_sim_state()
-                                self.currently_previewing = None
+                    hovered_this_frame = self._render_load_submenu_content(current_menu_watercolor)
+
+                    # Handle preview on hover
+                    if hovered_this_frame != self.currently_previewing:
+                        # First, clear any existing preview
+                        if self.currently_previewing:
+                            self._request_clear_preview = True
+
+                        if hovered_this_frame and hovered_this_frame in self.cached_configs:
+                            # Apply preview config with watercolor override
+                            config = self.cached_configs[hovered_this_frame]
+                            self._apply_config_to_sim_state(config, watercolor_override=current_menu_watercolor)
+                            self._request_preview_config = True
+                            self._preview_filename = hovered_this_frame
+                            self.currently_previewing = hovered_this_frame
+                        elif hovered_this_frame is None and self.base_sim_state:
+                            # Revert to base state with watercolor override
+                            self._restore_base_sim_state(watercolor_override=current_menu_watercolor)
+                            self.currently_previewing = None
 
                     imgui.end_menu()
 
@@ -625,14 +627,15 @@ class UI:
 
         # Handle submenu close without selection
         if self.load_submenu_was_open and not load_submenu_open:
-            # Submenu just closed
+            # Submenu just closed - restore base state without watercolor override
             if self.base_sim_state:
-                self._restore_base_sim_state()
+                self._restore_base_sim_state()  # No override - restore original watercolor mode
             if self.currently_previewing:
                 self._request_clear_preview = True
             self.base_sim_state = None
             self.currently_previewing = None
             self.cached_configs = {}
+            self.load_menu_watercolor_mode = None  # Clear the watercolor lock
 
         self.load_submenu_was_open = load_submenu_open
 
@@ -1614,8 +1617,13 @@ class UI:
                 if config:
                     self.cached_configs[filename] = config
 
-    def _apply_config_to_sim_state(self, config: PhysicsConfig):
-        """Apply a config's physics and appearance settings to the current sim state."""
+    def _apply_config_to_sim_state(self, config: PhysicsConfig, watercolor_override: bool | None = None):
+        """Apply a config's physics and appearance settings to the current sim state.
+
+        Args:
+            config: The config to apply
+            watercolor_override: If not None, override the config's watercolor_mode with this value
+        """
         self.state.sim.AXIAL_FORCE = config.axial_force
         self.state.sim.LATERAL_FORCE = config.lateral_force
         self.state.sim.SENSOR_GAIN = config.sensor_gain
@@ -1636,7 +1644,8 @@ class UI:
         self.state.sim.brightness = config.brightness
         self.state.sim.hue_sensitivity = config.hue_sensitivity
         self.state.sim.color_by_cohort = config.color_by_cohort
-        self.state.sim.watercolor_mode = config.watercolor_mode
+        # Use watercolor override if provided, otherwise use config's value
+        self.state.sim.watercolor_mode = watercolor_override if watercolor_override is not None else config.watercolor_mode
         self.state.sim.emboss_intensity = config.emboss_intensity
         self.state.sim.emboss_smoothness = config.emboss_smoothness
         # Sweep settings
@@ -1670,8 +1679,12 @@ class UI:
              'SENSOR_DISTANCE': 'Sensor Distance', 'TRAIL_PERSISTENCE': 'Trail Persistence'}
         )
 
-    def _restore_base_sim_state(self):
-        """Restore sim state from saved base state."""
+    def _restore_base_sim_state(self, watercolor_override: bool | None = None):
+        """Restore sim state from saved base state.
+
+        Args:
+            watercolor_override: If not None, override the base state's watercolor_mode with this value
+        """
         if self.base_sim_state:
             self.state.sim.AXIAL_FORCE = self.base_sim_state.AXIAL_FORCE
             self.state.sim.LATERAL_FORCE = self.base_sim_state.LATERAL_FORCE
@@ -1693,7 +1706,8 @@ class UI:
             self.state.sim.brightness = self.base_sim_state.brightness
             self.state.sim.hue_sensitivity = self.base_sim_state.hue_sensitivity
             self.state.sim.color_by_cohort = self.base_sim_state.color_by_cohort
-            self.state.sim.watercolor_mode = self.base_sim_state.watercolor_mode
+            # Use watercolor override if provided, otherwise use base state's value
+            self.state.sim.watercolor_mode = watercolor_override if watercolor_override is not None else self.base_sim_state.watercolor_mode
             self.state.sim.emboss_intensity = self.base_sim_state.emboss_intensity
             self.state.sim.emboss_smoothness = self.base_sim_state.emboss_smoothness
             # Sweep settings
@@ -1705,6 +1719,74 @@ class UI:
                 self.state.sim.y_sweeps[key] = self.base_sim_state.y_sweeps.get(key, 0.0)
             for key in self.state.sim.cohort_sweeps:
                 self.state.sim.cohort_sweeps[key] = self.base_sim_state.cohort_sweeps.get(key, 0.0)
+
+    def _render_load_submenu_content(self, menu_watercolor_mode: bool) -> str | None:
+        """Render the content of a load submenu.
+
+        Args:
+            menu_watercolor_mode: The watercolor mode for this menu (False=standard, True=watercolor)
+
+        Returns:
+            The hovered filename this frame, or None
+        """
+        if not self.config_files:
+            imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files")
+            return None
+
+        # Calculate max filename width to size the submenu properly
+        max_text_width = 0.0
+        for fn in self.config_files:
+            text_size = imgui.calc_text_size(fn)
+            if text_size.x > max_text_width:
+                max_text_width = text_size.x
+
+        hovered_this_frame = None
+        for filename in self.config_files:
+            # Check if config's watercolor mode matches the menu's mode
+            config = self.cached_configs.get(filename)
+            config_matches_menu = config and config.watercolor_mode == menu_watercolor_mode
+
+            # Apply blue highlight for matching configs
+            if config_matches_menu:
+                imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(0.4, 0.7, 1.0, 1.0))
+
+            # Selectable for filename with calculated width
+            clicked, _ = imgui.selectable(
+                filename, False,
+                imgui.SelectableFlags_.no_auto_close_popups,
+                imgui.ImVec2(max_text_width + 10, 0)
+            )
+
+            if config_matches_menu:
+                imgui.pop_style_color()
+
+            # Check if filename is hovered
+            if imgui.is_item_hovered():
+                hovered_this_frame = filename
+
+            # X button on same line (right after the selectable)
+            imgui.same_line()
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+            if imgui.small_button(f"X##{filename}"):
+                self.delete_confirm_filename = filename
+            imgui.pop_style_color(2)
+
+            # Also check hover on X button for preview
+            if imgui.is_item_hovered():
+                hovered_this_frame = filename
+
+            if clicked:
+                # Finalize selection with watercolor override
+                self._load_filename = filename
+                self._request_load_file = True
+                self._load_watercolor_override = menu_watercolor_mode
+                self.last_loaded_filename = filename
+                self.base_sim_state = None
+                self.currently_previewing = None
+                imgui.close_current_popup()
+
+        return hovered_this_frame
 
     def _generate_rule_label(self) -> tuple[int, str, str]:
         """Generate random jersey number with colored digits.
