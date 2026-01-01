@@ -139,7 +139,8 @@ class App:
 
         # 6. Run simulation if going
         if ui_state.sim.going:
-            self.run_simulation_frame(ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible, screen_aspect)
+            self.run_simulation_frame(ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
+                                      screen_aspect, ui_state.sim.watercolor_mode)
 
         # 7. Render camera view
         self.camera.render(
@@ -148,7 +149,8 @@ class App:
             sweep_mode=sweep_mode,
             sweep_reticle_pos=sweep_reticle_pos,
             sweep_reticle_visible=sweep_reticle_visible,
-            screen_aspect=screen_aspect
+            screen_aspect=screen_aspect,
+            watercolor_mode=ui_state.sim.watercolor_mode
         )
 
         # 7.5. Render arrow debug overlay if enabled
@@ -485,8 +487,11 @@ class App:
             ui_state.camera.position[1] = -(new_y_ndc_adj - y_ndc) * new_zoom
 
     def run_simulation_frame(self, ui_state, sweep_mode: bool, sweep_reticle_pos: tuple,
-                              sweep_reticle_visible: bool, screen_aspect: float):
+                              sweep_reticle_visible: bool, screen_aspect: float,
+                              watercolor_mode: bool = False):
         """Run simulation step(s) with frame assembly and video recording."""
+        # Set watercolor mode on camera for generate_view_texture()
+        self.camera.watercolor_mode = watercolor_mode
         speedmult = ui_state.preferences.speedmult
         motion_blur = ui_state.preferences.motion_blur
 
@@ -534,7 +539,8 @@ class App:
                     sweep_reticle_pos=sweep_reticle_pos,
                     sweep_reticle_visible=sweep_reticle_visible,
                     screen_aspect=screen_aspect,
-                    brightness=self.camera.BRIGHTNESS
+                    brightness=self.camera.BRIGHTNESS,
+                    watercolor_mode=ui_state.sim.watercolor_mode
                 )
 
                 # Only process when accumulation cycle completes
@@ -576,7 +582,8 @@ class App:
                 sweep_reticle_pos=sweep_reticle_pos,
                 sweep_reticle_visible=sweep_reticle_visible,
                 screen_aspect=screen_aspect,
-                brightness=self.camera.BRIGHTNESS
+                brightness=self.camera.BRIGHTNESS,
+                watercolor_mode=ui_state.sim.watercolor_mode
             )
 
             self.camera.assembled_texture = assembled_tex

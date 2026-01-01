@@ -32,7 +32,7 @@ class SimState:
     # Appearance settings (saved with physics config)
     brightness: float = 1.0
     hue_sensitivity: float = 0.5
-    color_by_cohort: bool = False
+    color_by_cohort: bool = True  # Default True so old saves use cohort coloring
     watercolor_mode: bool = False
     emboss_intensity: float = 0.0
     emboss_smoothness: float = 0.001

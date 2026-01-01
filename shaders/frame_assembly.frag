@@ -8,7 +8,8 @@ uniform bool PARAMETER_SWEEP_MODE;  // Whether parameter sweeps are active
 uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 range)
 uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
-uniform float BRIGHTNESS;           // Global brightness multiplier
+uniform float BRIGHTNESS;           // Global brightness multiplier (or ink weight in watercolor mode)
+uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
 
 in vec2 uv;
 out vec4 fragColor;
@@ -63,7 +64,16 @@ vec3 sweep_overlay(vec2 uv_coord) {
 void main() {
     // Sample the input frame
     vec3 current_color = texture(input_frame, uv).rgb;
-    current_color *= BRIGHTNESS;
+
+    // Apply brightness/ink weight
+    if (WATERCOLOR_MODE) {
+        // Watercolor: convert from log-space optical density to linear transmission
+        // BRIGHTNESS acts as ink weight - higher = darker/more opaque
+        current_color = exp(BRIGHTNESS * current_color);
+    } else {
+        // Normal mode: simple brightness multiplier
+        current_color *= BRIGHTNESS;
+    }
 
     // Divide by number of samples (for averaging)
     current_color /= float(TOTAL_SAMPLES);

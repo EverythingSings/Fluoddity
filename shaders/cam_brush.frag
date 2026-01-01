@@ -1,5 +1,7 @@
 #version 430
 
+uniform bool WATERCOLOR_MODE;
+
 in vec2 uv;
 in vec4 pos_vel;
 in vec4 view_col;
@@ -27,7 +29,19 @@ void main() {
         discard;
     }
 
-    // Output directly to viewport
-    vec3 hsv_viewcol = hsv2rgb(view_col.xyz);
-    cam_brush_out = vec4(hsv_viewcol, view_col.w * kernel_func);
+    vec3 output_color;
+    if (WATERCOLOR_MODE) {
+        // Watercolor mode: accumulate optical density in log space
+        // Get particle chroma (full brightness HSV -> RGB)
+        vec3 particle_chroma = hsv2rgb(vec3(view_col.xy, 1.0));
+        // Clamp to avoid log(0) and ensure some transmission
+        particle_chroma = clamp(particle_chroma, 0.001, 0.9);
+        // Output log-space optical density scaled by original intensity
+        output_color = log(particle_chroma) * view_col.z;
+    } else {
+        // Normal mode: standard HSV to RGB
+        output_color = hsv2rgb(view_col.xyz);
+    }
+
+    cam_brush_out = vec4(output_color, view_col.w * kernel_func);
 }

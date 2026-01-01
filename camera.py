@@ -12,7 +12,8 @@ class Camera:
         self.window = window
         self.BRIGHTNESS = 1
         self.cam_brush_mode = True
-        
+        self.watercolor_mode = False
+
         # Camera state
         self.position = np.array([0.0, 0.0])  # 2D position
         self.zoom = 1.0
@@ -93,6 +94,7 @@ class Camera:
             self.cam_brush_program['cam_zoom'].value = self.zoom
             self.cam_brush_program['canvas_resolution'].value = self.sim.view_tex.size
             self.cam_brush_program['window_size'].value = (width, height)
+            tryset(self.cam_brush_program, 'WATERCOLOR_MODE', self.watercolor_mode)
 
             # Particles need additive blending
             self.ctx.enable(moderngl.BLEND)
@@ -117,7 +119,9 @@ class Camera:
 
     def render(self, sim_going: bool = True, current_view_option: int = 2,
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
-                sweep_reticle_visible: bool = False, screen_aspect: float = 1.0):
+                sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
+                watercolor_mode: bool = False):
+        self.watercolor_mode = watercolor_mode
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
         if sim_going and self.assembled_texture is not None:
@@ -135,7 +139,8 @@ class Camera:
                 sweep_reticle_pos=sweep_reticle_pos,
                 sweep_reticle_visible=sweep_reticle_visible,
                 screen_aspect=screen_aspect,
-                brightness=self.BRIGHTNESS
+                brightness=self.BRIGHTNESS,
+                watercolor_mode=watercolor_mode
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

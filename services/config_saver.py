@@ -59,7 +59,7 @@ class PhysicsConfig:
     # Appearance settings (version 5+)
     brightness: float = 1.0
     hue_sensitivity: float = 0.5
-    color_by_cohort: bool = False
+    color_by_cohort: bool = True  # Default True so old saves use cohort coloring
     watercolor_mode: bool = False
     emboss_intensity: float = 0.0
     emboss_smoothness: float = 0.001
@@ -158,10 +158,10 @@ class PhysicsConfig:
         num_cohorts = 64
         rule_seed = DEFAULT_RULE_SEED  # Fixed default for reproducibility
 
-        # Version 5 defaults
+        # Version 5 defaults (color_by_cohort=True so old saves use cohort coloring)
         brightness = 1.0
         hue_sensitivity = 0.5
-        color_by_cohort = False
+        color_by_cohort = True
         watercolor_mode = False
         emboss_intensity = 0.0
         emboss_smoothness = 0.001
@@ -409,7 +409,7 @@ class ConfigSaver:
         appearance_default = (
             config.brightness == 1.0 and
             config.hue_sensitivity == 0.5 and
-            not config.color_by_cohort and
+            config.color_by_cohort and  # Default is True
             not config.watercolor_mode and
             config.emboss_intensity == 0.0 and
             config.emboss_smoothness == 0.001
