@@ -1,7 +1,6 @@
 #version 330 core
         in vec2 texcoord;
         uniform sampler2D view_tex;
-        uniform float BRIGHTNESS;
         out vec4 fragColor;
 
 
@@ -32,5 +31,5 @@ void kalTransform(inout vec2 pos,inout vec2 vel){
             kalTransform(uv,dum);
             uv=(uv+1)/2.;
             #endif
-            fragColor = BRIGHTNESS*texture(view_tex, uv);
+            fragColor = texture(view_tex, uv);
         }

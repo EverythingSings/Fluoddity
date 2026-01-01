@@ -523,7 +523,8 @@ class App:
                     sweep_mode=sweep_mode,
                     sweep_reticle_pos=sweep_reticle_pos,
                     sweep_reticle_visible=sweep_reticle_visible,
-                    screen_aspect=screen_aspect
+                    screen_aspect=screen_aspect,
+                    brightness=self.camera.BRIGHTNESS
                 )
 
                 # Only process when accumulation cycle completes
@@ -564,7 +565,8 @@ class App:
                 sweep_mode=sweep_mode,
                 sweep_reticle_pos=sweep_reticle_pos,
                 sweep_reticle_visible=sweep_reticle_visible,
-                screen_aspect=screen_aspect
+                screen_aspect=screen_aspect,
+                brightness=self.camera.BRIGHTNESS
             )
 
             self.camera.assembled_texture = assembled_tex

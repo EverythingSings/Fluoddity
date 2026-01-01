@@ -8,6 +8,7 @@ uniform bool PARAMETER_SWEEP_MODE;  // Whether parameter sweeps are active
 uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 range)
 uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
+uniform float BRIGHTNESS;           // Global brightness multiplier
 
 in vec2 uv;
 out vec4 fragColor;
@@ -62,6 +63,7 @@ vec3 sweep_overlay(vec2 uv_coord) {
 void main() {
     // Sample the input frame
     vec3 current_color = texture(input_frame, uv).rgb;
+    current_color *= BRIGHTNESS;
 
     // Divide by number of samples (for averaging)
     current_color /= float(TOTAL_SAMPLES);

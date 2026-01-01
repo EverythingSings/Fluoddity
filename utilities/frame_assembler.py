@@ -69,7 +69,7 @@ class FrameAssembler:
 
     def assemble_frame(self, input_texture, total_samples, current_sample_index, view_mode=0,
                        sweep_mode=False, sweep_reticle_pos=(0.5, 0.5), sweep_reticle_visible=False,
-                       screen_aspect=1.0):
+                       screen_aspect=1.0, brightness=1.0):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -82,6 +82,7 @@ class FrameAssembler:
             sweep_reticle_pos: (x, y) screen UV position of sweep reticle
             sweep_reticle_visible: Whether to show the reticle
             screen_aspect: Screen width/height ratio for proper circle rendering
+            brightness: Global brightness multiplier
 
         Returns:
             The assembled texture if final sample, None if still accumulating
@@ -125,6 +126,7 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'sweep_reticle_pos', sweep_reticle_pos)
         tryset(self.resources['shader'], 'sweep_reticle_visible', sweep_reticle_visible)
         tryset(self.resources['shader'], 'screen_aspect', screen_aspect)
+        tryset(self.resources['shader'], 'BRIGHTNESS', brightness)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()
