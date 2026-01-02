@@ -26,8 +26,8 @@
       1.0
     ],
     "Sensor Gain": [
-      0.0,
-      5.0,
+      -3.0,
+      3.0,
       0.0,
       5.0
     ],
@@ -112,7 +112,7 @@
       "TRAIL_PERSISTENCE": 0.0
     }
   },
-  "parameter_sweeps_enabled": false,
+  "parameter_sweeps_enabled": true,
   "settings": {
     "disable_symmetry": false,
     "absolute_orientation": false,

@@ -213,12 +213,14 @@ class App:
 
         # Handle entity clicking and rule undo (only in Select Particle mode)
         # Handle sweep preview restore: ANY click (including on imgui) re-enables sweeps
+        restored_sweep_preview = False
         if ui_state.sim.sweep_preview_pending_restore:
             if ui_state.any_left_click_this_frame or ui_state.any_right_click_this_frame:
                 ui_state.sim.parameter_sweeps_enabled = True
                 ui_state.sim.sweep_preview_pending_restore = False
+                restored_sweep_preview = True  # Skip click handling below
 
-        if ui_state.preferences.mouse_mode == "Select Particle":
+        if ui_state.preferences.mouse_mode == "Select Particle" and not restored_sweep_preview:
             if ui_state.left_click_this_frame:
                 # When parameter sweeps checkbox is enabled, disable rule picking entirely
                 if ui_state.sim.parameter_sweeps_enabled:
