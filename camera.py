@@ -122,8 +122,8 @@ class Camera:
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
                 sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
                 watercolor_mode: bool = False, ink_weight: float = 1.0,
-                brush_tex=None, canvas_tex=None,
-                emboss_intensity: float = 0.0, emboss_smoothness: float = 0.001):
+                emboss_tex=None, emboss_mode: int = 0,
+                emboss_intensity: float = 0.5, emboss_smoothness: float = 0.1):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
         # ALWAYS use assembled texture when simulation is running
@@ -134,6 +134,8 @@ class Camera:
             # When paused or no assembled texture yet, generate fresh frame and apply gamma
             raw_tex = self.generate_view_texture()
             # Apply gamma correction via frame assembler (single sample mode)
+            # Override emboss_intensity to 0 when mode is Off (0)
+            effective_emboss_intensity = 0.0 if emboss_mode == 0 else emboss_intensity
             TEX_TO_VIEW = self.frame_assembler.assemble_frame(
                 raw_tex,
                 total_samples=1,
@@ -146,11 +148,10 @@ class Camera:
                 brightness=self.BRIGHTNESS,
                 ink_weight=self.ink_weight,
                 watercolor_mode=watercolor_mode,
-                brush_tex=brush_tex,
-                canvas_tex=canvas_tex,
+                emboss_tex=emboss_tex,
                 camera_position=tuple(self.position),
                 camera_zoom=self.zoom,
-                emboss_intensity=emboss_intensity,
+                emboss_intensity=effective_emboss_intensity,
                 emboss_smoothness=emboss_smoothness
             )
             # assemble_frame returns the texture immediately when total_samples=1

@@ -1111,17 +1111,26 @@ class UI:
 
                 imgui.separator()
 
-                # Emboss Intensity slider
-                _, self.state.sim.emboss_intensity = imgui.slider_float(
-                    "Emboss Intensity", self.state.sim.emboss_intensity, -1.0, 1.0
+                # Emboss mode combo box
+                emboss_options = ["Off", "Canvas (Trails)", "Brush (Particles)"]
+                _, self.state.sim.emboss_mode = imgui.combo(
+                    "Emboss", self.state.sim.emboss_mode, emboss_options
                 )
-                self._delayed_tooltip("Intensity of emboss lighting effect. Negative values invert.")
+                self._delayed_tooltip("EXPENSIVE- calculate some fake 3D lighting\nby treating (otherwise unused) particle\ndensity as a heightmap.")
 
-                # Emboss Smoothness slider
-                _, self.state.sim.emboss_smoothness = imgui.slider_float(
-                    "Emboss Smoothness", self.state.sim.emboss_smoothness, 0.001, 1.0
-                )
-                self._delayed_tooltip("Controls the smoothness of emboss sampling.")
+                # Emboss sliders only visible when mode is not Off
+                if self.state.sim.emboss_mode != 0:
+                    # Emboss Intensity slider
+                    _, self.state.sim.emboss_intensity = imgui.slider_float(
+                        "Emboss Intensity", self.state.sim.emboss_intensity, -1.0, 1.0
+                    )
+                    self._delayed_tooltip("Intensity of emboss lighting effect. Negative values invert.")
+
+                    # Emboss Smoothness slider
+                    _, self.state.sim.emboss_smoothness = imgui.slider_float(
+                        "Emboss Smoothness", self.state.sim.emboss_smoothness, 0.001, 1.0
+                    )
+                    self._delayed_tooltip("Controls the smoothness of emboss sampling.")
 
                 imgui.end_menu()
 
@@ -1655,6 +1664,7 @@ class UI:
         self.state.sim.color_by_cohort = config.color_by_cohort
         # Use watercolor override if provided, otherwise use config's value
         self.state.sim.watercolor_mode = watercolor_override if watercolor_override is not None else config.watercolor_mode
+        self.state.sim.emboss_mode = config.emboss_mode
         self.state.sim.emboss_intensity = config.emboss_intensity
         self.state.sim.emboss_smoothness = config.emboss_smoothness
         # Sweep settings
@@ -1717,6 +1727,7 @@ class UI:
             self.state.sim.color_by_cohort = self.base_sim_state.color_by_cohort
             # Use watercolor override if provided, otherwise use base state's value
             self.state.sim.watercolor_mode = watercolor_override if watercolor_override is not None else self.base_sim_state.watercolor_mode
+            self.state.sim.emboss_mode = self.base_sim_state.emboss_mode
             self.state.sim.emboss_intensity = self.base_sim_state.emboss_intensity
             self.state.sim.emboss_smoothness = self.base_sim_state.emboss_smoothness
             # Sweep settings

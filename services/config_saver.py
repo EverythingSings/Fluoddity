@@ -23,8 +23,9 @@ PHYSICS_PARAMS = [
 # Version 2: Adds DISABLE_SYMMETRY and ABSOLUTE_ORIENTATION booleans (362 bytes)
 # Version 3: Adds boundary_conditions, initial_conditions, num_cohorts (362 + 3*4 = 374 bytes)
 # Version 4: Adds rule_seed float (374 + 4 = 378 bytes)
-# Version 5: Adds appearance settings + parameter sweep data (variable length)
-CONFIG_VERSION = 5
+# Version 5: Adds appearance settings + parameter sweep data (22-byte appearance, variable length)
+# Version 6: Adds emboss_mode to appearance settings (26-byte appearance, variable length)
+CONFIG_VERSION = 6
 
 # Default rule_seed for backward compatibility (fixed value for reproducibility)
 DEFAULT_RULE_SEED = 0.42
@@ -63,8 +64,9 @@ class PhysicsConfig:
     hue_sensitivity: float = 0.5
     color_by_cohort: bool = True  # Default True so old saves use cohort coloring
     watercolor_mode: bool = False
-    emboss_intensity: float = 0.0
-    emboss_smoothness: float = 0.001
+    emboss_mode: int = 0  # 0=Off, 1=Canvas (Trails), 2=Brush (Particles)
+    emboss_intensity: float = 0.5
+    emboss_smoothness: float = 0.1
 
     # Parameter sweep settings (version 5+)
     parameter_sweeps_enabled: bool = False
@@ -106,14 +108,24 @@ class PhysicsConfig:
         if version == 4:
             return physics_bytes + rule_bytes + bool_bytes + sim_bytes + seed_bytes
 
-        # Version 5: add appearance settings + sweep data
-        # Use little-endian format '<fff??ff' to avoid alignment padding (22 bytes)
-        appearance_bytes = struct.pack(
-            '<fff??ff',
-            self.brightness, self.ink_weight, self.hue_sensitivity,
-            self.color_by_cohort, self.watercolor_mode,
-            self.emboss_intensity, self.emboss_smoothness
-        )
+        # Version 5: 22-byte appearance format without emboss_mode
+        # Version 6: 26-byte appearance format with emboss_mode
+        if version >= 6:
+            # Use little-endian format '<fff??ffi' (26 bytes)
+            appearance_bytes = struct.pack(
+                '<fff??ffi',
+                self.brightness, self.ink_weight, self.hue_sensitivity,
+                self.color_by_cohort, self.watercolor_mode,
+                self.emboss_intensity, self.emboss_smoothness, self.emboss_mode
+            )
+        else:
+            # Version 5: Use little-endian format '<fff??ff' (22 bytes)
+            appearance_bytes = struct.pack(
+                '<fff??ff',
+                self.brightness, self.ink_weight, self.hue_sensitivity,
+                self.color_by_cohort, self.watercolor_mode,
+                self.emboss_intensity, self.emboss_smoothness
+            )
         sweep_enabled_bytes = struct.pack('?', self.parameter_sweeps_enabled)
         sweep_bytes = (
             self._encode_sweep(self.x_sweep_data) +
@@ -144,8 +156,8 @@ class PhysicsConfig:
         return (param_name, direction, cur_min, cur_max), offset
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> 'PhysicsConfig':
-        """Deserialize config from bytes. Supports versions 1-5."""
+    def from_bytes(cls, data: bytes, version: int = 5) -> 'PhysicsConfig':
+        """Deserialize config from bytes. Supports versions 1-6."""
         # Unpack physics params (10 floats = 40 bytes)
         physics = struct.unpack('10f', data[:40])
         # Unpack rule (80 floats = 320 bytes)
@@ -166,8 +178,9 @@ class PhysicsConfig:
         hue_sensitivity = 0.5
         color_by_cohort = True
         watercolor_mode = False
-        emboss_intensity = 0.0
-        emboss_smoothness = 0.001
+        emboss_mode = 0  # 0=Off, 1=Canvas, 2=Brush
+        emboss_intensity = 0.5
+        emboss_smoothness = 0.1
         parameter_sweeps_enabled = False
         x_sweep_data = None
         y_sweep_data = None
@@ -186,20 +199,32 @@ class PhysicsConfig:
             rule_seed, = struct.unpack('f', data[374:378])
 
         # Version 5+: check if we have appearance and sweep data
-        # New format: 22 bytes (fff??ff) with ink_weight
-        if len(data) >= 401:  # 378 + 22 (appearance) + 1 (sweep enabled)
+        # Version 6+: 26-byte appearance format with emboss_mode (fff??ffi)
+        # Version 5: 22-byte appearance format without emboss_mode (fff??ff)
+        if version >= 6 and len(data) >= 405:  # 378 + 26 (appearance) + 1 (sweep enabled)
+            brightness, ink_weight, hue_sensitivity, color_by_cohort, watercolor_mode, \
+                emboss_intensity, emboss_smoothness, emboss_mode = struct.unpack('<fff??ffi', data[378:404])
+            parameter_sweeps_enabled, = struct.unpack('?', data[404:405])
+            # Decode sweeps (variable length)
+            offset = 405
+            x_sweep_data, offset = cls._decode_sweep(data, offset)
+            y_sweep_data, offset = cls._decode_sweep(data, offset)
+            cohort_sweep_data, offset = cls._decode_sweep(data, offset)
+        elif len(data) >= 401:  # Version 5 format: 22 bytes (fff??ff) without emboss_mode
             brightness, ink_weight, hue_sensitivity, color_by_cohort, watercolor_mode, \
                 emboss_intensity, emboss_smoothness = struct.unpack('<fff??ff', data[378:400])
+            emboss_mode = 0  # Default for version 5
             parameter_sweeps_enabled, = struct.unpack('?', data[400:401])
             # Decode sweeps (variable length)
             offset = 401
             x_sweep_data, offset = cls._decode_sweep(data, offset)
             y_sweep_data, offset = cls._decode_sweep(data, offset)
             cohort_sweep_data, offset = cls._decode_sweep(data, offset)
-        elif len(data) >= 397:  # Old format: 18 bytes (ff??ff) without ink_weight
+        elif len(data) >= 397:  # Very old format: 18 bytes (ff??ff) without ink_weight or emboss_mode
             brightness, hue_sensitivity, color_by_cohort, watercolor_mode, \
                 emboss_intensity, emboss_smoothness = struct.unpack('<ff??ff', data[378:396])
             ink_weight = 1.0  # Default for old format
+            emboss_mode = 0  # Default for old format
             parameter_sweeps_enabled, = struct.unpack('?', data[396:397])
             # Decode sweeps (variable length)
             offset = 397
@@ -230,6 +255,7 @@ class PhysicsConfig:
             hue_sensitivity=hue_sensitivity,
             color_by_cohort=color_by_cohort,
             watercolor_mode=watercolor_mode,
+            emboss_mode=emboss_mode,
             emboss_intensity=emboss_intensity,
             emboss_smoothness=emboss_smoothness,
             parameter_sweeps_enabled=parameter_sweeps_enabled,
@@ -317,6 +343,7 @@ class ConfigSaver:
             hue_sensitivity=sim_state.hue_sensitivity,
             color_by_cohort=sim_state.color_by_cohort,
             watercolor_mode=sim_state.watercolor_mode,
+            emboss_mode=sim_state.emboss_mode,
             emboss_intensity=sim_state.emboss_intensity,
             emboss_smoothness=sim_state.emboss_smoothness,
             parameter_sweeps_enabled=sim_state.parameter_sweeps_enabled,
@@ -381,6 +408,7 @@ class ConfigSaver:
         sim_state.hue_sensitivity = config.hue_sensitivity
         sim_state.color_by_cohort = config.color_by_cohort
         sim_state.watercolor_mode = config.watercolor_mode
+        sim_state.emboss_mode = config.emboss_mode
         sim_state.emboss_intensity = config.emboss_intensity
         sim_state.emboss_smoothness = config.emboss_smoothness
 
@@ -420,6 +448,9 @@ class ConfigSaver:
         - Version 4: Rule seed is non-default (378 bytes)
         - Version 5: Appearance or sweep settings are non-default (variable)
         """
+        # Check if version 6 features are non-default (emboss_mode)
+        emboss_mode_used = config.emboss_mode != 0
+
         # Check if version 5 features are non-default
         # Note: brightness is always 1.0 (now in preferences), not checked
         appearance_default = (
@@ -427,8 +458,8 @@ class ConfigSaver:
             config.hue_sensitivity == 0.5 and
             config.color_by_cohort and  # Default is True
             not config.watercolor_mode and
-            config.emboss_intensity == 0.0 and
-            config.emboss_smoothness == 0.001
+            config.emboss_intensity == 0.5 and
+            config.emboss_smoothness == 0.1
         )
         sweeps_default = (
             not config.parameter_sweeps_enabled and
@@ -448,7 +479,9 @@ class ConfigSaver:
         booleans_default = not config.disable_symmetry and not config.absolute_orientation
 
         # Use minimal version for backward compatibility
-        if not appearance_default or not sweeps_default:
+        if emboss_mode_used:
+            version = 6
+        elif not appearance_default or not sweeps_default:
             version = 5
         elif not rule_seed_default:
             version = 4
@@ -483,7 +516,7 @@ class ConfigSaver:
             colon_idx = config_string.index(':')
             version = int(config_string[3:colon_idx])
 
-            if version not in [1, 2, 3, 4, 5]:
+            if version not in [1, 2, 3, 4, 5, 6]:
                 print(f"Unsupported config version: {version}")
                 return None
 
@@ -492,7 +525,7 @@ class ConfigSaver:
             compressed = base64.urlsafe_b64decode(encoded)
             raw_bytes = zlib.decompress(compressed)
 
-            return PhysicsConfig.from_bytes(raw_bytes)
+            return PhysicsConfig.from_bytes(raw_bytes, version)
 
         except Exception as e:
             print(f"Failed to decode config: {e}")

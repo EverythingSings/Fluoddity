@@ -70,8 +70,8 @@ class FrameAssembler:
     def assemble_frame(self, input_texture, total_samples, current_sample_index, view_mode=0,
                        sweep_mode=False, sweep_reticle_pos=(0.5, 0.5), sweep_reticle_visible=False,
                        screen_aspect=1.0, brightness=1.0, ink_weight=1.0, watercolor_mode=False,
-                       brush_tex=None, canvas_tex=None, camera_position=(0.0, 0.0), camera_zoom=1.0,
-                       emboss_intensity=0.0, emboss_smoothness=0.001):
+                       emboss_tex=None, camera_position=(0.0, 0.0), camera_zoom=1.0,
+                       emboss_intensity=0.0, emboss_smoothness=0.1):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -87,11 +87,10 @@ class FrameAssembler:
             brightness: Global brightness multiplier (applied before gamma)
             ink_weight: Watercolor mode optical density control
             watercolor_mode: Whether to use watercolor rendering
-            brush_tex: Brush texture for emboss effect
-            canvas_tex: Canvas texture for emboss effect
+            emboss_tex: Texture for emboss effect (canvas or brush based on mode)
             camera_position: Camera position in world space (x, y)
             camera_zoom: Camera zoom level
-            emboss_intensity: Emboss effect intensity
+            emboss_intensity: Emboss effect intensity (0 when mode is Off)
             emboss_smoothness: Emboss sampling epsilon
 
         Returns:
@@ -125,16 +124,13 @@ class FrameAssembler:
         # Bind textures
         input_texture.use(location=0)  # input_frame
         self.resources['accumulation_texture'].use(location=1)  # accumulation_buffer
-        if brush_tex is not None:
-            brush_tex.use(location=2)  # brush_tex
-        if canvas_tex is not None:
-            canvas_tex.use(location=3)  # canvas_tex
+        if emboss_tex is not None:
+            emboss_tex.use(location=2)  # emboss_tex
 
         # Set uniforms
         self.resources['shader']['input_frame'] = 0
         self.resources['shader']['accumulation_buffer'] = 1
-        tryset(self.resources['shader'], 'brush_tex', 2)
-        tryset(self.resources['shader'], 'canvas_tex', 3)
+        tryset(self.resources['shader'], 'emboss_tex', 2)
         self.resources['shader']['is_first_frame'] = is_first_frame
         self.resources['shader']['final_sample'] = final_sample
         tryset(self.resources['shader'], 'view_mode', view_mode)

@@ -1,8 +1,7 @@
 #version 330 core
 uniform sampler2D input_frame;
 uniform sampler2D accumulation_buffer;
-uniform sampler2D brush_tex;        // Brush texture for emboss
-uniform sampler2D canvas_tex;       // Canvas texture for emboss
+uniform sampler2D emboss_tex;       // Texture for emboss (canvas or brush, based on mode)
 uniform bool is_first_frame;
 uniform bool final_sample;
 uniform int view_mode;  // 0=can, 1=brush_tex, 2=cam_brush
@@ -95,7 +94,26 @@ vec3 sweep_overlay(vec2 uv_coord) {
     // White reticle with slight transparency effect
     return vec3(reticle * 0.8);
 }
-
+vec2 safenorm(vec2 n){
+    float l = length(n);
+    return l>0?n/l:vec2(0);
+}
+vec3 safenorm(vec3 n){
+    float l = length(n);
+    return l>0?n/l:vec3(0);
+}
+vec3 emboss(vec2 uv){
+    // Early return if emboss is disabled (mode=Off or intensity=0)
+    if (EMBOSS_INTENSITY == 0.0) {
+        return vec3(.0);
+    }
+    vec2 canv_uv = screen_to_canvas_uv(uv);
+    vec2 grad = gradient(emboss_tex, canv_uv, .01*EMBOSS_SMOOTHNESS);
+    grad *= max(abs(canv_uv-.5).x,abs(canv_uv-.5).y)>.5?0:1;
+    vec3 fakenorm = normalize(vec3(grad.x,.5/pow(EMBOSS_INTENSITY,5.),grad.y));
+    //fakenorm = vec3(0,1,0);
+    return vec3(1.74)*max(0,dot(fakenorm,normalize(vec3(1,1.,-1))));
+}
 void main() {
     // Sample the input frame
     vec3 current_color = texture(input_frame, uv).rgb;
@@ -106,7 +124,7 @@ void main() {
         #define INK_CONSTANT 10
         current_color = exp(INK_WEIGHT*INK_CONSTANT * current_color);
     }
-
+    current_color = current_color*(EMBOSS_INTENSITY!=0?emboss(uv):vec3(1));//emboss(uv)*EMBOSS_INTENSITY+1-EMBOSS_INTENSITY);
     // Divide by number of samples (for averaging)
     current_color /= float(TOTAL_SAMPLES);
 
@@ -136,5 +154,5 @@ void main() {
         if(PARAMETER_SWEEP_MODE){
             fragColor.xyz += sweep_overlay(uv);
         }
-        if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
+        //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
 }

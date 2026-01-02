@@ -34,8 +34,9 @@ class SimState:
     hue_sensitivity: float = 0.5
     color_by_cohort: bool = True  # Default True so old saves use cohort coloring
     watercolor_mode: bool = False
-    emboss_intensity: float = 0.0
-    emboss_smoothness: float = 0.001
+    emboss_mode: int = 0  # 0=Off, 1=Canvas (Trails), 2=Brush (Particles)
+    emboss_intensity: float = 0.5
+    emboss_smoothness: float = 0.1
 
     # Parameter sweep settings
     parameter_sweeps_enabled: bool = False

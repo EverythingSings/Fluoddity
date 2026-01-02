@@ -143,6 +143,14 @@ class App:
                                       screen_aspect, ui_state.sim.watercolor_mode)
 
         # 7. Render camera view
+        # Determine emboss texture based on mode: 0=Off (None), 1=Canvas, 2=Brush
+        emboss_mode = ui_state.sim.emboss_mode
+        if emboss_mode == 1:
+            emboss_tex = self.sim.can
+        elif emboss_mode == 2:
+            emboss_tex = self.sim.brush_tex
+        else:
+            emboss_tex = None
         self.camera.render(
             sim_going=ui_state.sim.going,
             current_view_option=ui_state.sim.current_view_option,
@@ -152,8 +160,8 @@ class App:
             screen_aspect=screen_aspect,
             watercolor_mode=ui_state.sim.watercolor_mode,
             ink_weight=ui_state.sim.ink_weight,
-            brush_tex=self.sim.brush_tex,
-            canvas_tex=self.sim.can,
+            emboss_tex=emboss_tex,
+            emboss_mode=emboss_mode,
             emboss_intensity=ui_state.sim.emboss_intensity,
             emboss_smoothness=ui_state.sim.emboss_smoothness
         )
@@ -538,6 +546,16 @@ class App:
                 raw_view_tex = self.camera.generate_view_texture()
 
                 # Assemble frame (applies gamma correction on final sample)
+                # Determine emboss texture based on mode: 0=Off (None), 1=Canvas, 2=Brush
+                emboss_mode = ui_state.sim.emboss_mode
+                if emboss_mode == 1:
+                    emboss_tex = self.sim.can
+                elif emboss_mode == 2:
+                    emboss_tex = self.sim.brush_tex
+                else:
+                    emboss_tex = None
+                # Override emboss_intensity to 0 when mode is Off (0)
+                effective_emboss_intensity = 0.0 if emboss_mode == 0 else ui_state.sim.emboss_intensity
                 assembled_tex = self.camera.frame_assembler.assemble_frame(
                     raw_view_tex,
                     total_samples=speedmult,
@@ -550,11 +568,10 @@ class App:
                     brightness=self.camera.BRIGHTNESS,
                     ink_weight=ui_state.sim.ink_weight,
                     watercolor_mode=ui_state.sim.watercolor_mode,
-                    brush_tex=self.sim.brush_tex,
-                    canvas_tex=self.sim.can,
+                    emboss_tex=emboss_tex,
                     camera_position=tuple(self.camera.position),
                     camera_zoom=self.camera.zoom,
-                    emboss_intensity=ui_state.sim.emboss_intensity,
+                    emboss_intensity=effective_emboss_intensity,
                     emboss_smoothness=ui_state.sim.emboss_smoothness
                 )
 
@@ -588,6 +605,16 @@ class App:
             raw_view_tex = self.camera.generate_view_texture()
 
             # Apply gamma correction in single-sample mode (no temporal accumulation)
+            # Determine emboss texture based on mode: 0=Off (None), 1=Canvas, 2=Brush
+            emboss_mode = ui_state.sim.emboss_mode
+            if emboss_mode == 1:
+                emboss_tex = self.sim.can
+            elif emboss_mode == 2:
+                emboss_tex = self.sim.brush_tex
+            else:
+                emboss_tex = None
+            # Override emboss_intensity to 0 when mode is Off (0)
+            effective_emboss_intensity = 0.0 if emboss_mode == 0 else ui_state.sim.emboss_intensity
             assembled_tex = self.camera.frame_assembler.assemble_frame(
                 raw_view_tex,
                 total_samples=1,
@@ -600,11 +627,10 @@ class App:
                 brightness=self.camera.BRIGHTNESS,
                 ink_weight=ui_state.sim.ink_weight,
                 watercolor_mode=ui_state.sim.watercolor_mode,
-                brush_tex=self.sim.brush_tex,
-                canvas_tex=self.sim.can,
+                emboss_tex=emboss_tex,
                 camera_position=tuple(self.camera.position),
                 camera_zoom=self.camera.zoom,
-                emboss_intensity=ui_state.sim.emboss_intensity,
+                emboss_intensity=effective_emboss_intensity,
                 emboss_smoothness=ui_state.sim.emboss_smoothness
             )
 
