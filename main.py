@@ -220,42 +220,43 @@ class App:
 
         if ui_state.preferences.mouse_mode == "Select Particle":
             if ui_state.left_click_this_frame:
-                # Handle entity clicking (left click)
-                tex_coords = self.camera.screen_to_tex(
-                    ui_state.mouse_pos,
-                    self.sim.view_tex.size
-                )
+                # When parameter sweeps checkbox is enabled, disable rule picking entirely
+                if ui_state.sim.parameter_sweeps_enabled:
+                    # Only update sliders if there are active sweeps
+                    if self.sim.has_active_xy_sweep():
+                        tex_coords = self.camera.screen_to_tex(
+                            ui_state.mouse_pos,
+                            self.sim.view_tex.size
+                        )
+                        world_pos = (tex_coords[0] * 2 - 1, tex_coords[1] * 2 - 1)
 
-                # When parameter sweeps are active, behavior changes:
-                # - If cohort sweep active: need entity picker for cohort info
-                # - If only X/Y sweeps: can resolve from position alone (no entity readback)
-                # - In all sweep cases: only update sliders, don't pick a new rule
-                if ui_state.sim.parameter_sweeps_enabled and self.sim.has_active_xy_sweep():
-                    # Convert tex coords to world pos for sweep calculation
-                    world_pos = (tex_coords[0] * 2 - 1, tex_coords[1] * 2 - 1)
-
-                    if self.sim.has_active_cohort_sweep():
-                        # Need entity picker for cohort info
-                        entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
-                        self.sim.update_sliders_from_particle(world_pos, entity_cohort)
-                    else:
-                        # No cohort sweep - can update from position alone
-                        self.sim.update_sliders_from_position(world_pos)
+                        if self.sim.has_active_cohort_sweep():
+                            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
+                            self.sim.update_sliders_from_particle(world_pos, entity_cohort)
+                        else:
+                            self.sim.update_sliders_from_position(world_pos)
+                    # If no active sweeps, left click does nothing
                 else:
                     # Normal mode: pick entity and apply rule
+                    tex_coords = self.camera.screen_to_tex(
+                        ui_state.mouse_pos,
+                        self.sim.view_tex.size
+                    )
                     entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
                     print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
                     rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
                     self.rule_manager.push_rule(rule)
                     self.sim.apply_rule(rule)
-                    # Update sliders to show effective parameter values at this particle's location
                     self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
             elif ui_state.right_click_this_frame:
-                # Right click behavior depends on sweep mode
-                if ui_state.sim.parameter_sweeps_enabled and self.sim.has_active_xy_sweep():
-                    # Enter sweep preview mode: disable sweeps and set pending restore
-                    ui_state.sim.parameter_sweeps_enabled = False
-                    ui_state.sim.sweep_preview_pending_restore = True
+                # When parameter sweeps checkbox is enabled, disable rule undo entirely
+                if ui_state.sim.parameter_sweeps_enabled:
+                    # Only enter preview mode if there are active sweeps
+                    if self.sim.has_active_xy_sweep():
+                        # Enter sweep preview mode: disable sweeps and set pending restore
+                        ui_state.sim.parameter_sweeps_enabled = False
+                        ui_state.sim.sweep_preview_pending_restore = True
+                    # If no active sweeps, right click does nothing
                 else:
                     # Normal mode: pop rule from history
                     prev_rule = self.rule_manager.pop_rule()

@@ -308,6 +308,9 @@ class UI:
             elif key == glfw.KEY_F:
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
+                # If re-enabling sweeps while in preview mode, clear the preview flag
+                if self.state.sim.parameter_sweeps_enabled and self.state.sim.sweep_preview_pending_restore:
+                    self.state.sim.sweep_preview_pending_restore = False
             elif key == glfw.KEY_Z:
                 # Full reset (one-shot, not hold)
                 self._request_full_reset = True
