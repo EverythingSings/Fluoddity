@@ -21,6 +21,10 @@ class UIState:
     left_click_this_frame: bool = False
     right_click_this_frame: bool = False
 
+    # Any click events (includes clicks on imgui elements, for sweep restore)
+    any_left_click_this_frame: bool = False
+    any_right_click_this_frame: bool = False
+
     # Continuous mouse state (respects imgui capture)
     mouse_left_held: bool = False
 

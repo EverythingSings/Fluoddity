@@ -223,15 +223,15 @@ class Sim:
         self._camera_state = camera_state
 
     def _get_slider_range(self, slider_label: str, default_min: float, default_max: float) -> tuple[float, float]:
-        """Get the current min/max range for a slider from preferences."""
-        if self._preferences is None:
+        """Get the current min/max range for a slider from sim state."""
+        if self._state is None:
             return (default_min, default_max)
 
-        if slider_label not in self._preferences.slider_ranges:
+        if slider_label not in self._state.slider_ranges:
             return (default_min, default_max)
 
-        return (self._preferences.slider_ranges[slider_label][0],
-                self._preferences.slider_ranges[slider_label][1])
+        return (self._state.slider_ranges[slider_label][0],
+                self._state.slider_ranges[slider_label][1])
 
     def calculate_setting(self, slider_value: float, min_value: float, max_value: float,
                          pos: tuple[float, float], cohort: float,
@@ -311,10 +311,6 @@ class Sim:
             tryset(self.entity_update_program, f'{uniform_name}.x_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.y_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', 0.0)
-
-    def apply_preferences(self, preferences) -> None:
-        """Apply preferences from Orchestrator before update."""
-        self._preferences = preferences
 
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""

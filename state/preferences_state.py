@@ -7,9 +7,6 @@ import json
 class PreferencesState:
     """User preferences that persist between program sessions."""
 
-    # Slider range customizations (stores [min, max, default_min, default_max])
-    slider_ranges: dict[str, list[float]] = field(default_factory=dict)
-
     # Camera/rendering preferences
     speedmult: int = 1
     motion_blur: bool = True
@@ -29,11 +26,6 @@ class PreferencesState:
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)
     physics_group_forces: bool = True  # Default: open (global force mult, drag)
     physics_group_advanced: bool = False  # Default: collapsed
-
-    # Parameter sweep settings (stores sweep state: 0.0=off, 1.0=normal, -1.0=inverse)
-    x_sweeps: dict[str, float] = field(default_factory=dict)
-    y_sweeps: dict[str, float] = field(default_factory=dict)
-    cohort_sweeps: dict[str, float] = field(default_factory=dict)
 
     # Recording preferences
     max_frames: int = 1800  # 150 * 12

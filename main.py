@@ -108,7 +108,6 @@ class App:
         # 5. Apply state to components
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
-        self.sim.apply_preferences(ui_state.preferences)
         self.camera.apply_state(ui_state.camera)
         # Sync brightness from preferences
         self.camera.BRIGHTNESS = ui_state.preferences.brightness
@@ -116,8 +115,8 @@ class App:
         # 5.5. Calculate sweep reticle info (needed for both running and paused states)
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
 
-        # Hide reticle when in sweep preview mode or when recording video
-        if ui_state.sim.sweep_preview_active or is_recording:
+        # Hide reticle when recording video
+        if is_recording:
             sweep_reticle_visible = False
 
         # Transform reticle from texture UV to screen UV (accounting for camera)
@@ -134,7 +133,7 @@ class App:
             sweep_reticle_x = screen_x / width
             sweep_reticle_y = screen_y / height
 
-        sweep_mode = ui_state.sim.parameter_sweeps_enabled and not ui_state.sim.sweep_preview_active
+        sweep_mode = ui_state.sim.parameter_sweeps_enabled
         sweep_reticle_pos = (sweep_reticle_x, sweep_reticle_y)
 
         # 6. Run simulation if going
@@ -213,20 +212,14 @@ class App:
             self.sim.apply_rule(zero_rule)
 
         # Handle entity clicking and rule undo (only in Select Particle mode)
+        # Handle sweep preview restore: ANY click (including on imgui) re-enables sweeps
+        if ui_state.sim.sweep_preview_pending_restore:
+            if ui_state.any_left_click_this_frame or ui_state.any_right_click_this_frame:
+                ui_state.sim.parameter_sweeps_enabled = True
+                ui_state.sim.sweep_preview_pending_restore = False
+
         if ui_state.preferences.mouse_mode == "Select Particle":
-            # Handle sweep preview mode: any click exits preview and restores sweeps
-            if ui_state.sim.sweep_preview_active:
-                if ui_state.left_click_this_frame or ui_state.right_click_this_frame:
-                    # Exit sweep preview mode and restore saved sweeps
-                    ui_state.sim.sweep_preview_active = False
-                    ui_state.sim.x_sweeps = ui_state.sim.saved_x_sweeps.copy()
-                    ui_state.sim.y_sweeps = ui_state.sim.saved_y_sweeps.copy()
-                    ui_state.sim.cohort_sweeps = ui_state.sim.saved_cohort_sweeps.copy()
-                    # Also update preferences so UI state stays in sync
-                    ui_state.preferences.x_sweeps = ui_state.sim.saved_x_sweeps.copy()
-                    ui_state.preferences.y_sweeps = ui_state.sim.saved_y_sweeps.copy()
-                    ui_state.preferences.cohort_sweeps = ui_state.sim.saved_cohort_sweeps.copy()
-            elif ui_state.left_click_this_frame:
+            if ui_state.left_click_this_frame:
                 # Handle entity clicking (left click)
                 tex_coords = self.camera.screen_to_tex(
                     ui_state.mouse_pos,
@@ -260,22 +253,9 @@ class App:
             elif ui_state.right_click_this_frame:
                 # Right click behavior depends on sweep mode
                 if ui_state.sim.parameter_sweeps_enabled and self.sim.has_active_xy_sweep():
-                    # Enter sweep preview mode: save sweeps and clear them
-                    ui_state.sim.sweep_preview_active = True
-                    ui_state.sim.saved_x_sweeps = ui_state.sim.x_sweeps.copy()
-                    ui_state.sim.saved_y_sweeps = ui_state.sim.y_sweeps.copy()
-                    ui_state.sim.saved_cohort_sweeps = ui_state.sim.cohort_sweeps.copy()
-                    # Clear all sweeps
-                    for key in ui_state.sim.x_sweeps:
-                        ui_state.sim.x_sweeps[key] = 0.0
-                    for key in ui_state.sim.y_sweeps:
-                        ui_state.sim.y_sweeps[key] = 0.0
-                    for key in ui_state.sim.cohort_sweeps:
-                        ui_state.sim.cohort_sweeps[key] = 0.0
-                    # Also update preferences so UI state stays in sync
-                    ui_state.preferences.x_sweeps = ui_state.sim.x_sweeps.copy()
-                    ui_state.preferences.y_sweeps = ui_state.sim.y_sweeps.copy()
-                    ui_state.preferences.cohort_sweeps = ui_state.sim.cohort_sweeps.copy()
+                    # Enter sweep preview mode: disable sweeps and set pending restore
+                    ui_state.sim.parameter_sweeps_enabled = False
+                    ui_state.sim.sweep_preview_pending_restore = True
                 else:
                     # Normal mode: pop rule from history
                     prev_rule = self.rule_manager.pop_rule()
@@ -284,9 +264,7 @@ class App:
         # Handle config save (Ctrl+C)
         if ui_state.request_save_config:
             current_rule = self.rule_manager.get_current_rule()
-            config_string = self.config_saver.save_to_string(
-                ui_state.sim, current_rule, ui_state.preferences.slider_ranges
-            )
+            config_string = self.config_saver.save_to_string(ui_state.sim, current_rule)
             self.ui.set_clipboard(config_string)
             print(f"Config copied to clipboard ({len(config_string)} chars)")
 
@@ -294,9 +272,7 @@ class App:
         if ui_state.request_load_config:
             config_string = ui_state.clipboard_text
             if config_string:
-                rule = self.config_saver.load_from_string(
-                    config_string, ui_state.sim, ui_state.preferences.slider_ranges
-                )
+                rule = self.config_saver.load_from_string(config_string, ui_state.sim)
                 if rule is not None:
                     self.rule_manager.push_rule(rule)
                     self.sim.apply_rule(rule)
@@ -309,47 +285,44 @@ class App:
             filename = ui_state.save_filename
             if filename:
                 current_rule = self.rule_manager.get_current_rule()
-                config_string = self.config_saver.save_to_string(
-                    ui_state.sim, current_rule, ui_state.preferences.slider_ranges
-                )
-                filepath = self.configs_dir / f"{filename}.txt"
-                filepath.write_text(config_string)
+                config = self.config_saver.create_config(ui_state.sim, current_rule)
+                filepath = self.configs_dir / f"{filename}.json"
+                self.config_saver.save_to_file(config, filepath)
                 print(f"Config saved to {filepath}")
 
         # Handle file load (menu)
         if ui_state.request_load_file:
-            # If we were previewing, pop the preview rule first
-            if self.preview_rule_active:
-                self.rule_manager.pop_rule()
-                self.preview_rule_active = False
-
             filename = ui_state.load_filename
             if filename:
-                filepath = self.configs_dir / f"{filename}.txt"
-                if filepath.exists():
-                    config_string = filepath.read_text()
-                    rule = self.config_saver.load_from_string(
-                        config_string, ui_state.sim, ui_state.preferences.slider_ranges
-                    )
-                    if rule is not None:
-                        # Apply watercolor override if provided (from Load vs Load (Watercolor) menu)
-                        if ui_state.load_watercolor_override is not None:
-                            ui_state.sim.watercolor_mode = ui_state.load_watercolor_override
+                if self.preview_rule_active:
+                    # Preview already applied config and pushed rule - just finalize it
+                    self.preview_rule_active = False
+                    # Apply watercolor override if provided
+                    if ui_state.load_watercolor_override is not None:
+                        ui_state.sim.watercolor_mode = ui_state.load_watercolor_override
+                    print(f"Config loaded (from preview): {filename}")
+                    self.ui.update_physics_defaults(filename)
+                else:
+                    # No preview active - load fresh from file
+                    filepath = self.configs_dir / f"{filename}.json"
+                    config = self.config_saver.load_from_file(filepath)
+                    if config is not None:
+                        rule = self.config_saver.apply_config(
+                            config, ui_state.sim,
+                            watercolor_override=ui_state.load_watercolor_override
+                        )
                         self.rule_manager.push_rule(rule)
                         self.sim.apply_rule(rule)
                         print(f"Config loaded from {filepath}")
-                        # Update physics defaults for reset functionality
                         self.ui.update_physics_defaults(filename)
                     else:
-                        print(f"Failed to parse config from {filepath}")
-                else:
-                    print(f"Config file not found: {filepath}")
+                        print(f"Failed to load config from {filepath}")
 
         # Handle file delete (menu)
         if ui_state.request_delete_file:
             filename = ui_state.delete_filename
             if filename:
-                filepath = self.configs_dir / f"{filename}.txt"
+                filepath = self.configs_dir / f"{filename}.json"
                 if filepath.exists():
                     filepath.unlink()
                     print(f"Config deleted: {filepath}")
@@ -365,14 +338,12 @@ class App:
         if ui_state.request_preview_config:
             filename = ui_state.preview_filename
             if filename:
-                filepath = self.configs_dir / f"{filename}.txt"
-                if filepath.exists():
-                    config_string = filepath.read_text()
-                    config = self.config_saver.decode_config(config_string)
-                    if config and config.rule is not None:
-                        self.rule_manager.push_rule(config.rule)
-                        self.sim.apply_rule(config.rule)
-                        self.preview_rule_active = True
+                filepath = self.configs_dir / f"{filename}.json"
+                config = self.config_saver.load_from_file(filepath)
+                if config and config.rule is not None:
+                    self.rule_manager.push_rule(config.rule)
+                    self.sim.apply_rule(config.rule)
+                    self.preview_rule_active = True
 
         # Handle rule history preview - clear must happen BEFORE new preview
         if ui_state.request_clear_history_preview:

@@ -6,7 +6,7 @@ import random
 import numpy as np
 import moderngl
 from pathlib import Path
-from dataclasses import replace, dataclass
+from dataclasses import dataclass
 from state import UIState, SimState, CameraState, RecordingState
 from services.config_saver import ConfigSaver, PhysicsConfig
 
@@ -78,8 +78,8 @@ class UI:
         self.config_files: list[str] = []  # List of available config filenames
         self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs
         self.load_submenu_was_open = False  # Track submenu open state
-        self.base_sim_state: SimState | None = None  # State before preview
-        self.base_slider_ranges: dict[str, list[float]] | None = None  # Slider ranges before preview
+        self.cached_config: str | None = None  # JSON string of config when menu opened
+        self.preview_rule_pushed: bool = False  # Whether we pushed a preview rule
         self.currently_previewing: str | None = None  # Currently hovered config
         self.last_loaded_filename: str = ""  # For default save name
         # Track which load menu is open: None=neither, False=standard, True=watercolor
@@ -123,6 +123,8 @@ class UI:
         # One-shot flags (reset after get_state)
         self._left_click_pending = False
         self._right_click_pending = False
+        self._any_left_click_pending = False  # Includes imgui clicks
+        self._any_right_click_pending = False  # Includes imgui clicks
         self._scroll_delta = 0.0
         self._request_reload = False
         self._request_reset = False
@@ -230,10 +232,17 @@ class UI:
         if self.imgui_mouse_callback:
             self.imgui_mouse_callback(window, button, action, mods)
 
-        if imgui.get_io().want_capture_mouse:
+        if action != glfw.PRESS:
             return
 
-        if action != glfw.PRESS:
+        # Track ALL clicks (including imgui) for sweep preview restore
+        if button == glfw.MOUSE_BUTTON_LEFT:
+            self._any_left_click_pending = True
+        elif button == glfw.MOUSE_BUTTON_RIGHT:
+            self._any_right_click_pending = True
+
+        # Only track non-imgui clicks for normal interactions
+        if imgui.get_io().want_capture_mouse:
             return
 
         if button == glfw.MOUSE_BUTTON_LEFT:
@@ -299,15 +308,6 @@ class UI:
             elif key == glfw.KEY_F:
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
-                # If disabling sweeps while in preview mode, exit preview and restore sweeps
-                if not self.state.sim.parameter_sweeps_enabled and self.state.sim.sweep_preview_active:
-                    self.state.sim.sweep_preview_active = False
-                    self.state.sim.x_sweeps = self.state.sim.saved_x_sweeps.copy()
-                    self.state.sim.y_sweeps = self.state.sim.saved_y_sweeps.copy()
-                    self.state.sim.cohort_sweeps = self.state.sim.saved_cohort_sweeps.copy()
-                    self.state.preferences.x_sweeps = self.state.sim.saved_x_sweeps.copy()
-                    self.state.preferences.y_sweeps = self.state.sim.saved_y_sweeps.copy()
-                    self.state.preferences.cohort_sweeps = self.state.sim.saved_cohort_sweeps.copy()
             elif key == glfw.KEY_Z:
                 # Full reset (one-shot, not hold)
                 self._request_full_reset = True
@@ -340,6 +340,8 @@ class UI:
         self.state.mouse_pos = self._mouse_pos
         self.state.left_click_this_frame = self._left_click_pending
         self.state.right_click_this_frame = self._right_click_pending
+        self.state.any_left_click_this_frame = self._any_left_click_pending
+        self.state.any_right_click_this_frame = self._any_right_click_pending
 
         # Continuous mouse state (for draw trail mode) - respects imgui capture
         left_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
@@ -379,6 +381,8 @@ class UI:
         # Reset one-shot flags
         self._left_click_pending = False
         self._right_click_pending = False
+        self._any_left_click_pending = False
+        self._any_right_click_pending = False
         self._scroll_delta = 0.0
         self._request_reload = False
         self._request_reset = False
@@ -403,12 +407,6 @@ class UI:
         self._request_load_history_rule = False
         self._request_delete_history_rule = False
         self._history_preview_index = -1
-
-        # Copy parameter sweeps from preferences to sim state
-        # Sweeps are stored in preferences but sim accesses them via sim state
-        self.state.sim.x_sweeps = self.state.preferences.x_sweeps.copy()
-        self.state.sim.y_sweeps = self.state.preferences.y_sweeps.copy()
-        self.state.sim.cohort_sweeps = self.state.preferences.cohort_sweeps.copy()
 
         return self.state
 
@@ -502,12 +500,13 @@ class UI:
                 if imgui.begin_menu("Load"):
                     load_submenu_open = True
 
-                    # First frame submenu opens: cache configs and store base state
+                    # First frame submenu opens: cache current state and scan config files
                     if not self.load_submenu_was_open:
                         self._cache_all_configs()
-                        self.base_sim_state = replace(self.state.sim)
-                        # Deep copy slider_ranges to restore later
-                        self.base_slider_ranges = {k: v.copy() for k, v in self.state.preferences.slider_ranges.items()}
+                        # Cache current config as JSON string for restoration
+                        self.cached_config = self.config_saver.save_to_string(
+                            self.state.sim, self._display_info.get('current_rule'))
+                        self.preview_rule_pushed = False
                         self.currently_previewing = None
                         # Lock to current watercolor mode when menu opens
                         self.load_menu_watercolor_mode = self.state.sim.watercolor_mode
@@ -528,9 +527,13 @@ class UI:
                         # Update any current preview with new watercolor mode
                         if self.currently_previewing and self.currently_previewing in self.cached_configs:
                             config = self.cached_configs[self.currently_previewing]
-                            self._apply_config_to_sim_state(config, watercolor_override=current_menu_watercolor)
-                        elif self.base_sim_state:
-                            self._restore_base_sim_state(watercolor_override=current_menu_watercolor)
+                            self.config_saver.apply_config(config, self.state.sim,
+                                                          watercolor_override=current_menu_watercolor)
+                        elif self.cached_config:
+                            # Restore from cache with watercolor override
+                            self.config_saver.load_from_string(
+                                self.cached_config, self.state.sim,
+                                watercolor_override=current_menu_watercolor)
 
                     # Lock watercolor mode to menu's mode
                     self.state.sim.watercolor_mode = current_menu_watercolor
@@ -546,13 +549,16 @@ class UI:
                         if hovered_this_frame and hovered_this_frame in self.cached_configs:
                             # Apply preview config with watercolor override
                             config = self.cached_configs[hovered_this_frame]
-                            self._apply_config_to_sim_state(config, watercolor_override=current_menu_watercolor)
+                            self.config_saver.apply_config(config, self.state.sim,
+                                                          watercolor_override=current_menu_watercolor)
                             self._request_preview_config = True
                             self._preview_filename = hovered_this_frame
                             self.currently_previewing = hovered_this_frame
-                        elif hovered_this_frame is None and self.base_sim_state:
-                            # Revert to base state with watercolor override
-                            self._restore_base_sim_state(watercolor_override=current_menu_watercolor)
+                        elif hovered_this_frame is None and self.cached_config:
+                            # Revert to cached state with watercolor override
+                            self.config_saver.load_from_string(
+                                self.cached_config, self.state.sim,
+                                watercolor_override=current_menu_watercolor)
                             self.currently_previewing = None
 
                     imgui.end_menu()
@@ -579,15 +585,15 @@ class UI:
                 # Reset all slider ranges
                 if imgui.menu_item("Reset all slider ranges to defaults", "", False)[0]:
                     # Clear all custom slider ranges, reverting to defaults
-                    self.state.preferences.slider_ranges.clear()
+                    self.state.sim.slider_ranges.clear()
 
                 # Reset all parameter sweeps
                 if imgui.menu_item("Reset all parameter sweeps", "", False)[0]:
                     # Turn off all parameter sweeps
-                    for param in list(self.state.preferences.x_sweeps.keys()):
-                        self.state.preferences.x_sweeps[param] = 0.0
-                        self.state.preferences.y_sweeps[param] = 0.0
-                        self.state.preferences.cohort_sweeps[param] = 0.0
+                    for param in list(self.state.sim.x_sweeps.keys()):
+                        self.state.sim.x_sweeps[param] = 0.0
+                        self.state.sim.y_sweeps[param] = 0.0
+                        self.state.sim.cohort_sweeps[param] = 0.0
                 self._delayed_tooltip("Set all parameter sweeps to 'off'.")
 
                 # Reset all UI settings
@@ -621,14 +627,15 @@ class UI:
 
         # Handle submenu close without selection
         if self.load_submenu_was_open and not load_submenu_open:
-            # Submenu just closed - restore base state without watercolor override
-            if self.base_sim_state:
-                self._restore_base_sim_state()  # No override - restore original watercolor mode
+            # Submenu just closed - restore cached state (no watercolor override)
+            if self.cached_config:
+                self.config_saver.load_from_string(self.cached_config, self.state.sim)
             if self.currently_previewing:
                 self._request_clear_preview = True
-            self.base_sim_state = None
+            self.cached_config = None
             self.currently_previewing = None
             self.cached_configs = {}
+            self.preview_rule_pushed = False
             self.load_menu_watercolor_mode = None  # Clear the watercolor lock
 
         self.load_submenu_was_open = load_submenu_open
@@ -998,8 +1005,8 @@ class UI:
 
     def render_physics_settings_window(self):
         """Render the Physics Settings window with sliders."""
-        # Apply bluish background when in sweep preview mode
-        if self.state.sim.sweep_preview_active:
+        # Apply bluish background when in sweep preview mode (waiting for click to restore sweeps)
+        if self.state.sim.sweep_preview_pending_restore:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.15, 0.20, 0.35, 0.94))
             imgui.push_style_color(imgui.Col_.title_bg_active, imgui.ImVec4(0.20, 0.30, 0.50, 1.0))
 
@@ -1154,7 +1161,7 @@ class UI:
             if imgui.button("Save", imgui.ImVec2(120, 0)):
                 if self.save_filename_buffer.strip():
                     filename = self.save_filename_buffer.strip()
-                    filepath = self.configs_dir / f"{filename}.txt"
+                    filepath = self.configs_dir / f"{filename}.json"
                     if filepath.exists():
                         # File exists, need overwrite confirmation
                         # Close save popup first, then open overwrite popup
@@ -1178,7 +1185,7 @@ class UI:
             imgui.open_popup("Overwrite?")
 
         if imgui.begin_popup_modal("Overwrite?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
-            imgui.text(f"File '{self.overwrite_confirm_filename}.txt' already exists.")
+            imgui.text(f"File '{self.overwrite_confirm_filename}.json' already exists.")
             imgui.text("Do you want to overwrite it?")
             imgui.separator()
             if imgui.button("Overwrite", imgui.ImVec2(120, 0)):
@@ -1198,7 +1205,7 @@ class UI:
             imgui.open_popup("Delete Config?")
 
         if imgui.begin_popup_modal("Delete Config?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
-            imgui.text(f"Are you sure you want to delete '{self.delete_confirm_filename}.txt'?")
+            imgui.text(f"Are you sure you want to delete '{self.delete_confirm_filename}.json'?")
             imgui.separator()
             if imgui.button("Delete", imgui.ImVec2(120, 0)):
                 self._delete_filename = self.delete_confirm_filename
@@ -1408,7 +1415,7 @@ class UI:
         imgui.end()
 
         # Pop sweep preview style colors (pushed before imgui.begin)
-        if self.state.sim.sweep_preview_active:
+        if self.state.sim.sweep_preview_pending_restore:
             imgui.pop_style_color(2)
 
     def render_history_window(self):
@@ -1619,10 +1626,10 @@ class UI:
         self.physics_window_interaction = False
 
     def _refresh_config_files(self):
-        """Scan physics_configs directory for .txt files."""
+        """Scan physics_configs directory for .json files."""
         self.config_files = []
         if self.configs_dir.exists():
-            for f in sorted(self.configs_dir.glob("*.txt")):
+            for f in sorted(self.configs_dir.glob("*.json")):
                 # Store just the stem (filename without extension)
                 self.config_files.append(f.stem)
 
@@ -1631,122 +1638,10 @@ class UI:
         self._refresh_config_files()
         self.cached_configs = {}
         for filename in self.config_files:
-            filepath = self.configs_dir / f"{filename}.txt"
-            if filepath.exists():
-                config_string = filepath.read_text()
-                config = self.config_saver.decode_config(config_string)
-                if config:
-                    self.cached_configs[filename] = config
-
-    def _apply_config_to_sim_state(self, config: PhysicsConfig, watercolor_override: bool | None = None):
-        """Apply a config's physics and appearance settings to the current sim state.
-
-        Args:
-            config: The config to apply
-            watercolor_override: If not None, override the config's watercolor_mode with this value
-        """
-        self.state.sim.AXIAL_FORCE = config.axial_force
-        self.state.sim.LATERAL_FORCE = config.lateral_force
-        self.state.sim.SENSOR_GAIN = config.sensor_gain
-        self.state.sim.MUTATION_SCALE = config.mutation_scale
-        self.state.sim.DRAG = config.drag
-        self.state.sim.STRAFE_POWER = config.strafe_power
-        self.state.sim.SENSOR_ANGLE = config.sensor_angle
-        self.state.sim.GLOBAL_FORCE_MULT = config.global_force_mult
-        self.state.sim.SENSOR_DISTANCE = config.sensor_distance
-        self.state.sim.TRAIL_PERSISTENCE = config.trail_persistence
-        self.state.sim.DISABLE_SYMMETRY = config.disable_symmetry
-        self.state.sim.ABSOLUTE_ORIENTATION = config.absolute_orientation
-        self.state.sim.boundary_conditions = config.boundary_conditions
-        self.state.sim.initial_conditions = config.initial_conditions
-        self.state.sim.num_cohorts = config.num_cohorts
-        self.state.sim.rule_seed = config.rule_seed
-        # Appearance settings (brightness not applied - it's in preferences)
-        self.state.sim.ink_weight = config.ink_weight
-        self.state.sim.hue_sensitivity = config.hue_sensitivity
-        self.state.sim.color_by_cohort = config.color_by_cohort
-        # Use watercolor override if provided, otherwise use config's value
-        self.state.sim.watercolor_mode = watercolor_override if watercolor_override is not None else config.watercolor_mode
-        self.state.sim.emboss_mode = config.emboss_mode
-        self.state.sim.emboss_intensity = config.emboss_intensity
-        self.state.sim.emboss_smoothness = config.emboss_smoothness
-        # Sweep settings
-        self.state.sim.parameter_sweeps_enabled = config.parameter_sweeps_enabled
-        # Apply sweep data using config_saver helper
-        self.config_saver._apply_sweep_to_state(
-            config.x_sweep_data, self.state.sim.x_sweeps,
-            self.state.preferences.slider_ranges,
-            {'AXIAL_FORCE': 'Axial Force', 'LATERAL_FORCE': 'Lateral Force',
-             'SENSOR_GAIN': 'Sensor Gain', 'MUTATION_SCALE': 'Mutation Scale',
-             'DRAG': 'Drag', 'STRAFE_POWER': 'Strafe Power',
-             'SENSOR_ANGLE': 'Sensor Angle', 'GLOBAL_FORCE_MULT': 'Global Force Mult',
-             'SENSOR_DISTANCE': 'Sensor Distance', 'TRAIL_PERSISTENCE': 'Trail Persistence'}
-        )
-        self.config_saver._apply_sweep_to_state(
-            config.y_sweep_data, self.state.sim.y_sweeps,
-            self.state.preferences.slider_ranges,
-            {'AXIAL_FORCE': 'Axial Force', 'LATERAL_FORCE': 'Lateral Force',
-             'SENSOR_GAIN': 'Sensor Gain', 'MUTATION_SCALE': 'Mutation Scale',
-             'DRAG': 'Drag', 'STRAFE_POWER': 'Strafe Power',
-             'SENSOR_ANGLE': 'Sensor Angle', 'GLOBAL_FORCE_MULT': 'Global Force Mult',
-             'SENSOR_DISTANCE': 'Sensor Distance', 'TRAIL_PERSISTENCE': 'Trail Persistence'}
-        )
-        self.config_saver._apply_sweep_to_state(
-            config.cohort_sweep_data, self.state.sim.cohort_sweeps,
-            self.state.preferences.slider_ranges,
-            {'AXIAL_FORCE': 'Axial Force', 'LATERAL_FORCE': 'Lateral Force',
-             'SENSOR_GAIN': 'Sensor Gain', 'MUTATION_SCALE': 'Mutation Scale',
-             'DRAG': 'Drag', 'STRAFE_POWER': 'Strafe Power',
-             'SENSOR_ANGLE': 'Sensor Angle', 'GLOBAL_FORCE_MULT': 'Global Force Mult',
-             'SENSOR_DISTANCE': 'Sensor Distance', 'TRAIL_PERSISTENCE': 'Trail Persistence'}
-        )
-
-    def _restore_base_sim_state(self, watercolor_override: bool | None = None):
-        """Restore sim state from saved base state.
-
-        Args:
-            watercolor_override: If not None, override the base state's watercolor_mode with this value
-        """
-        if self.base_sim_state:
-            self.state.sim.AXIAL_FORCE = self.base_sim_state.AXIAL_FORCE
-            self.state.sim.LATERAL_FORCE = self.base_sim_state.LATERAL_FORCE
-            self.state.sim.SENSOR_GAIN = self.base_sim_state.SENSOR_GAIN
-            self.state.sim.MUTATION_SCALE = self.base_sim_state.MUTATION_SCALE
-            self.state.sim.DRAG = self.base_sim_state.DRAG
-            self.state.sim.STRAFE_POWER = self.base_sim_state.STRAFE_POWER
-            self.state.sim.SENSOR_ANGLE = self.base_sim_state.SENSOR_ANGLE
-            self.state.sim.GLOBAL_FORCE_MULT = self.base_sim_state.GLOBAL_FORCE_MULT
-            self.state.sim.SENSOR_DISTANCE = self.base_sim_state.SENSOR_DISTANCE
-            self.state.sim.TRAIL_PERSISTENCE = self.base_sim_state.TRAIL_PERSISTENCE
-            self.state.sim.DISABLE_SYMMETRY = self.base_sim_state.DISABLE_SYMMETRY
-            self.state.sim.ABSOLUTE_ORIENTATION = self.base_sim_state.ABSOLUTE_ORIENTATION
-            self.state.sim.boundary_conditions = self.base_sim_state.boundary_conditions
-            self.state.sim.initial_conditions = self.base_sim_state.initial_conditions
-            self.state.sim.num_cohorts = self.base_sim_state.num_cohorts
-            self.state.sim.rule_seed = self.base_sim_state.rule_seed
-            # Appearance settings (brightness not restored - it's in preferences)
-            self.state.sim.ink_weight = self.base_sim_state.ink_weight
-            self.state.sim.hue_sensitivity = self.base_sim_state.hue_sensitivity
-            self.state.sim.color_by_cohort = self.base_sim_state.color_by_cohort
-            # Use watercolor override if provided, otherwise use base state's value
-            self.state.sim.watercolor_mode = watercolor_override if watercolor_override is not None else self.base_sim_state.watercolor_mode
-            self.state.sim.emboss_mode = self.base_sim_state.emboss_mode
-            self.state.sim.emboss_intensity = self.base_sim_state.emboss_intensity
-            self.state.sim.emboss_smoothness = self.base_sim_state.emboss_smoothness
-            # Sweep settings
-            self.state.sim.parameter_sweeps_enabled = self.base_sim_state.parameter_sweeps_enabled
-            # Restore sweep dicts (deep copy)
-            for key in self.state.sim.x_sweeps:
-                self.state.sim.x_sweeps[key] = self.base_sim_state.x_sweeps.get(key, 0.0)
-            for key in self.state.sim.y_sweeps:
-                self.state.sim.y_sweeps[key] = self.base_sim_state.y_sweeps.get(key, 0.0)
-            for key in self.state.sim.cohort_sweeps:
-                self.state.sim.cohort_sweeps[key] = self.base_sim_state.cohort_sweeps.get(key, 0.0)
-            # Restore slider_ranges
-            if self.base_slider_ranges is not None:
-                self.state.preferences.slider_ranges.clear()
-                for k, v in self.base_slider_ranges.items():
-                    self.state.preferences.slider_ranges[k] = v.copy()
+            filepath = self.configs_dir / f"{filename}.json"
+            config = self.config_saver.load_from_file(filepath)
+            if config:
+                self.cached_configs[filename] = config
 
     def _render_load_submenu_content(self, menu_watercolor_mode: bool) -> str | None:
         """Render the content of a load submenu.
@@ -1805,13 +1700,16 @@ class UI:
                 hovered_this_frame = filename
 
             if clicked:
-                # Finalize selection with watercolor override
+                # Finalize selection - preview already applied the config
                 self._load_filename = filename
                 self._request_load_file = True
                 self._load_watercolor_override = menu_watercolor_mode
                 self.last_loaded_filename = filename
-                self.base_sim_state = None
+                # Clear everything to prevent hover code from re-applying
+                self.cached_config = None
+                self.cached_configs = {}
                 self.currently_previewing = None
+                self.preview_rule_pushed = False
                 imgui.close_current_popup()
 
         return hovered_this_frame
@@ -1862,10 +1760,10 @@ class UI:
             tuple: (changed, new_value)
         """
         # Initialize or get current range
-        if label not in self.state.preferences.slider_ranges:
-            self.state.preferences.slider_ranges[label] = [default_min, default_max, default_min, default_max]
+        if label not in self.state.sim.slider_ranges:
+            self.state.sim.slider_ranges[label] = [default_min, default_max, default_min, default_max]
 
-        min_val, max_val = self.state.preferences.slider_ranges[label][0], self.state.preferences.slider_ranges[label][1]
+        min_val, max_val = self.state.sim.slider_ranges[label][0], self.state.sim.slider_ranges[label][1]
 
         # Create the slider
         changed, new_value = imgui.slider_float(label, value, min_val, max_val, format=format)
@@ -1894,10 +1792,10 @@ class UI:
             tuple: (current_min, current_max, reset_requested, range_changed)
         """
         # Initialize slider range if not exists
-        if slider_name not in self.state.preferences.slider_ranges:
-            self.state.preferences.slider_ranges[slider_name] = [default_min, default_max, default_min, default_max]
+        if slider_name not in self.state.sim.slider_ranges:
+            self.state.sim.slider_ranges[slider_name] = [default_min, default_max, default_min, default_max]
 
-        min_val, max_val, def_min, def_max = self.state.preferences.slider_ranges[slider_name]
+        min_val, max_val, def_min, def_max = self.state.sim.slider_ranges[slider_name]
         range_changed = False
         reset_requested = False
 
@@ -1911,18 +1809,18 @@ class UI:
             changed_max, new_max = imgui.input_float(f"Max##{slider_name}", max_val)
 
             if changed_min:
-                self.state.preferences.slider_ranges[slider_name][0] = new_min
+                self.state.sim.slider_ranges[slider_name][0] = new_min
                 range_changed = True
             if changed_max:
-                self.state.preferences.slider_ranges[slider_name][1] = new_max
+                self.state.sim.slider_ranges[slider_name][1] = new_max
                 range_changed = True
 
             imgui.separator()
 
             # Reset range to default button
             if imgui.button(f"Reset Range to Default##{slider_name}"):
-                self.state.preferences.slider_ranges[slider_name][0] = def_min
-                self.state.preferences.slider_ranges[slider_name][1] = def_max
+                self.state.sim.slider_ranges[slider_name][0] = def_min
+                self.state.sim.slider_ranges[slider_name][1] = def_max
                 range_changed = True
 
             imgui.separator()
@@ -1938,7 +1836,7 @@ class UI:
 
             imgui.end_popup()
 
-        return self.state.preferences.slider_ranges[slider_name][0], self.state.preferences.slider_ranges[slider_name][1], reset_requested, range_changed
+        return self.state.sim.slider_ranges[slider_name][0], self.state.sim.slider_ranges[slider_name][1], reset_requested, range_changed
 
     def render_aligned_label(self, label_text: str):
         """Render a right-justified label aligned to the longest label width for consistent button positioning.
@@ -1974,11 +1872,11 @@ class UI:
             new_mode: New sweep mode (0.0 = off, 1.0 = normal, -1.0 = inverse)
         """
         if axis == 'x':
-            sweeps = self.state.preferences.x_sweeps
+            sweeps = self.state.sim.x_sweeps
         elif axis == 'y':
-            sweeps = self.state.preferences.y_sweeps
+            sweeps = self.state.sim.y_sweeps
         else:  # cohort
-            sweeps = self.state.preferences.cohort_sweeps
+            sweeps = self.state.sim.cohort_sweeps
 
         # If turning on a sweep, clear all others on this axis first
         if new_mode != 0.0:
@@ -2003,7 +1901,7 @@ class UI:
         button_width = button_height * 1.  # Wider than tall
 
         # X button (Red)
-        x_mode = self.state.preferences.x_sweeps.get(param_name, 0.0)
+        x_mode = self.state.sim.x_sweeps.get(param_name, 0.0)
         if x_mode == 1.0:  # Normal sweep - bright red (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
@@ -2029,7 +1927,7 @@ class UI:
         imgui.same_line(spacing=2)
 
         # Y button (Green)
-        y_mode = self.state.preferences.y_sweeps.get(param_name, 0.0)
+        y_mode = self.state.sim.y_sweeps.get(param_name, 0.0)
         if y_mode == 1.0:  # Normal sweep - bright green (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.2, 0.8, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.3, 1.0, 0.3, 1.0))
@@ -2055,7 +1953,7 @@ class UI:
         imgui.same_line(spacing=2)
 
         # C button (Yellow)
-        c_mode = self.state.preferences.cohort_sweeps.get(param_name, 0.0)
+        c_mode = self.state.sim.cohort_sweeps.get(param_name, 0.0)
         if c_mode == 1.0:  # Normal sweep - bright yellow (highlight)
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.9, 0.9, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 1.0, 0.3, 1.0))
@@ -2093,8 +1991,8 @@ class UI:
             hard_max: Optional hard maximum limit (e.g., 1.0 for Drag/Sensor Angle)
         """
         # Get current range - handle both 2-element and 4-element formats
-        if slider_label in self.state.preferences.slider_ranges:
-            range_data = self.state.preferences.slider_ranges[slider_label]
+        if slider_label in self.state.sim.slider_ranges:
+            range_data = self.state.sim.slider_ranges[slider_label]
             # slider_ranges can be [L, H] or [L, H, default_min, default_max]
             L, H = range_data[0], range_data[1]
         else:
@@ -2117,7 +2015,7 @@ class UI:
             H_prime = min(H_prime, hard_max)
 
         # Update the range in preferences
-        self.state.preferences.slider_ranges[slider_label] = [L_prime, H_prime,default_min,default_max]
+        self.state.sim.slider_ranges[slider_label] = [L_prime, H_prime,default_min,default_max]
 
     def render_range_adjust_buttons(self, param_name: str, slider_label: str, current_value: float, default_min: float, default_max: float, hard_min: float = None, hard_max: float = None):
         """Render widen/narrow buttons for adjusting slider range.
