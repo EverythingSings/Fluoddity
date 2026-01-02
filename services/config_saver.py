@@ -314,11 +314,17 @@ class ConfigSaver:
             'TRAIL_PERSISTENCE': 'Trail Persistence',
         }
 
-        # Extract active sweeps
-        ranges = slider_ranges or {}
-        x_sweep = self._extract_active_sweep(sim_state.x_sweeps, ranges, param_to_label)
-        y_sweep = self._extract_active_sweep(sim_state.y_sweeps, ranges, param_to_label)
-        cohort_sweep = self._extract_active_sweep(sim_state.cohort_sweeps, ranges, param_to_label)
+        # Extract active sweeps only if parameter sweeps are enabled
+        # If sweeps are off, don't save any sweep data
+        if sim_state.parameter_sweeps_enabled:
+            ranges = slider_ranges or {}
+            x_sweep = self._extract_active_sweep(sim_state.x_sweeps, ranges, param_to_label)
+            y_sweep = self._extract_active_sweep(sim_state.y_sweeps, ranges, param_to_label)
+            cohort_sweep = self._extract_active_sweep(sim_state.cohort_sweeps, ranges, param_to_label)
+        else:
+            x_sweep = None
+            y_sweep = None
+            cohort_sweep = None
 
         return PhysicsConfig(
             axial_force=sim_state.AXIAL_FORCE,

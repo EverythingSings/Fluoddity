@@ -79,6 +79,7 @@ class UI:
         self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs
         self.load_submenu_was_open = False  # Track submenu open state
         self.base_sim_state: SimState | None = None  # State before preview
+        self.base_slider_ranges: dict[str, list[float]] | None = None  # Slider ranges before preview
         self.currently_previewing: str | None = None  # Currently hovered config
         self.last_loaded_filename: str = ""  # For default save name
         # Track which load menu is open: None=neither, False=standard, True=watercolor
@@ -505,6 +506,8 @@ class UI:
                     if not self.load_submenu_was_open:
                         self._cache_all_configs()
                         self.base_sim_state = replace(self.state.sim)
+                        # Deep copy slider_ranges to restore later
+                        self.base_slider_ranges = {k: v.copy() for k, v in self.state.preferences.slider_ranges.items()}
                         self.currently_previewing = None
                         # Lock to current watercolor mode when menu opens
                         self.load_menu_watercolor_mode = self.state.sim.watercolor_mode
@@ -1739,6 +1742,11 @@ class UI:
                 self.state.sim.y_sweeps[key] = self.base_sim_state.y_sweeps.get(key, 0.0)
             for key in self.state.sim.cohort_sweeps:
                 self.state.sim.cohort_sweeps[key] = self.base_sim_state.cohort_sweeps.get(key, 0.0)
+            # Restore slider_ranges
+            if self.base_slider_ranges is not None:
+                self.state.preferences.slider_ranges.clear()
+                for k, v in self.base_slider_ranges.items():
+                    self.state.preferences.slider_ranges[k] = v.copy()
 
     def _render_load_submenu_content(self, menu_watercolor_mode: bool) -> str | None:
         """Render the content of a load submenu.
