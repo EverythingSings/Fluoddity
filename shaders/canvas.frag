@@ -110,7 +110,9 @@ void main() {
     vec4 can_color;
     float TRAIL_DIFFUSION = calculate_setting(TRAIL_DIFFUSION_SETTING,texcoord*2.-1,0);
     if(TRAIL_DIFFUSION>0){
-        can_color = getBlur(texcoord, can_tex,1./TRAIL_DIFFUSION-1);
+        TRAIL_DIFFUSION= TRAIL_DIFFUSION*TRAIL_DIFFUSION;//better scaling for slider
+        TRAIL_DIFFUSION = 4/(pow(5,(TRAIL_DIFFUSION))-1);//better scaling for slider
+        can_color = getBlur(texcoord, can_tex,TRAIL_DIFFUSION);
     }
     else{
         can_color = texture(can_tex,texcoord);

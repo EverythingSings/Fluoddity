@@ -7,7 +7,7 @@ from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService
 from utilities.gl_helpers import readback_rule
-from state import load_preferences, save_preferences
+from state import load_preferences, save_preferences, SimState
 
 
 class App:
@@ -66,6 +66,37 @@ class App:
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
         self.mouse_button_state = False  # Track if left mouse button is currently pressed
+
+        # Ensure _Default.json exists and load it
+        self._ensure_default_config()
+        self._load_default_config()
+
+    def _ensure_default_config(self):
+        """Ensure _Default.json exists in physics_configs directory. Create it if missing."""
+        import numpy as np
+        default_path = self.configs_dir / "_Default.json"
+        if not default_path.exists():
+            # Create default config from fresh SimState
+            default_state = SimState()
+            # Create zero rule for the default config
+            zero_rule = np.zeros((10, 8), dtype=np.float32)
+            # Create and save config
+            config = self.config_saver.create_config(default_state, zero_rule)
+            self.config_saver.save_to_file(config, default_path)
+            print(f"Created default config: {default_path}")
+
+    def _load_default_config(self):
+        """Load _Default.json on startup."""
+        default_path = self.configs_dir / "_Default.json"
+        config = self.config_saver.load_from_file(default_path)
+        if config is not None:
+            rule = self.config_saver.apply_config(config, self.ui.state.sim)
+            self.rule_manager.push_rule(rule)
+            self.sim.apply_rule(rule)
+            print(f"Loaded default config from {default_path}")
+            self.ui.update_physics_defaults("_Default")
+        else:
+            print(f"Failed to load default config from {default_path}")
 
     def run(self):
         while not glfw.window_should_close(self.window):

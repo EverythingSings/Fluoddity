@@ -488,9 +488,11 @@ class UI:
 
         if imgui.begin_main_menu_bar():
             if imgui.begin_menu("File"):
-                if imgui.menu_item("New (Press Z)", "", False)[0]:
-                    self._request_full_reset = True
-                self._delayed_tooltip("Reset to default physics with a blank rule.\nEquivalent to pressing Z.")
+                if imgui.menu_item("New", "", False)[0]:
+                    self._load_filename = "_Default"
+                    self._request_load_file = True
+                    self._load_watercolor_override = None
+                self._delayed_tooltip("Start a fresh config. Loads from _Default")
 
                 imgui.separator()
 
