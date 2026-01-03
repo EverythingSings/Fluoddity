@@ -167,6 +167,21 @@ class Sim:
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', 0.0)
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', 0.0)
 
+        # Assign TRAIL_DIFFUSION as a PhysicsSetting struct
+        min_val, max_val = self._get_slider_range('Trail Diffusion', 0.0, 1.0)
+        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.slider_value', self._state.TRAIL_DIFFUSION)
+        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.min_value', min_val)
+        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.max_value', max_val)
+        # Only apply sweeps if parameter sweeps UI is enabled
+        if self._state.parameter_sweeps_enabled:
+            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_DIFFUSION', 0.0))
+            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_DIFFUSION', 0.0))
+            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_DIFFUSION', 0.0))
+        else:
+            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.x_sweep', 0.0)
+            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.y_sweep', 0.0)
+            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', 0.0)
+
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
 
@@ -338,7 +353,7 @@ class Sim:
             pos: (x, y) world position of entity in [-1, 1] range
             cohort: Normalized cohort value in [0, 1] range
         """
-        # Define all 10 parameters with their state field, slider label, and default ranges
+        # Define all 11 parameters with their state field, slider label, and default ranges
         parameters = [
             ('AXIAL_FORCE', 'Axial Force', -1.0, 1.0),
             ('LATERAL_FORCE', 'Lateral Force', -1.0, 1.0),
@@ -350,6 +365,7 @@ class Sim:
             ('GLOBAL_FORCE_MULT', 'Global Force Mult', 0.0, 2.0),
             ('SENSOR_DISTANCE', 'Sensor Distance', 0.0, 4.0),
             ('TRAIL_PERSISTENCE', 'Trail Persistence', 0.0, 1.0),
+            ('TRAIL_DIFFUSION', 'Trail Diffusion', 0.0, 1.0),
         ]
 
         for param_name, slider_label, default_min, default_max in parameters:
@@ -455,6 +471,7 @@ class Sim:
             'GLOBAL_FORCE_MULT': ('Global Force Mult', 0.0, 2.0),
             'SENSOR_DISTANCE': ('Sensor Distance', 0.0, 4.0),
             'TRAIL_PERSISTENCE': ('Trail Persistence', 0.0, 1.0),
+            'TRAIL_DIFFUSION': ('Trail Diffusion', 0.0, 1.0),
         }
 
         # Calculate X position

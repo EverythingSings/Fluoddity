@@ -18,6 +18,7 @@ class SimState:
     GLOBAL_FORCE_MULT: float = 1.0
     SENSOR_DISTANCE: float = 1.0
     TRAIL_PERSISTENCE: float = 0.938
+    TRAIL_DIFFUSION: float = 1.0
 
     # Extra options
     DISABLE_SYMMETRY: bool = False
@@ -58,6 +59,7 @@ class SimState:
         'GLOBAL_FORCE_MULT': 0.0,
         'SENSOR_DISTANCE': 0.0,
         'TRAIL_PERSISTENCE': 0.0,
+        'TRAIL_DIFFUSION': 0.0,
     })
     y_sweeps: dict[str, float] = field(default_factory=lambda: {
         'AXIAL_FORCE': 0.0,
@@ -70,6 +72,7 @@ class SimState:
         'GLOBAL_FORCE_MULT': 0.0,
         'SENSOR_DISTANCE': 0.0,
         'TRAIL_PERSISTENCE': 0.0,
+        'TRAIL_DIFFUSION': 0.0,
     })
     cohort_sweeps: dict[str, float] = field(default_factory=lambda: {
         'AXIAL_FORCE': 0.0,
@@ -82,4 +85,5 @@ class SimState:
         'GLOBAL_FORCE_MULT': 0.0,
         'SENSOR_DISTANCE': 0.0,
         'TRAIL_PERSISTENCE': 0.0,
+        'TRAIL_DIFFUSION': 0.0,
     })

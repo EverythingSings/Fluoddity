@@ -18,7 +18,7 @@ from state import SimState
 PHYSICS_PARAMS = [
     'AXIAL_FORCE', 'LATERAL_FORCE', 'SENSOR_GAIN', 'MUTATION_SCALE',
     'DRAG', 'STRAFE_POWER', 'SENSOR_ANGLE', 'GLOBAL_FORCE_MULT',
-    'SENSOR_DISTANCE', 'TRAIL_PERSISTENCE'
+    'SENSOR_DISTANCE', 'TRAIL_PERSISTENCE', 'TRAIL_DIFFUSION'
 ]
 
 # Mapping from param names to slider labels
@@ -33,6 +33,7 @@ PARAM_TO_LABEL = {
     'GLOBAL_FORCE_MULT': 'Global Force Mult',
     'SENSOR_DISTANCE': 'Sensor Distance',
     'TRAIL_PERSISTENCE': 'Trail Persistence',
+    'TRAIL_DIFFUSION': 'Trail Diffusion',
 }
 
 # Default slider ranges: [default_min, default_max]
@@ -47,6 +48,7 @@ DEFAULT_SLIDER_RANGES = {
     'Global Force Mult': [0.0, 2.0],
     'Sensor Distance': [0.0, 4.0],
     'Trail Persistence': [0.0, 1.0],
+    'Trail Diffusion': [0.0, 1.0],
 }
 
 CONFIG_VERSION = 7
@@ -70,7 +72,7 @@ def _default_slider_ranges() -> dict[str, list[float]]:
 class PhysicsConfig:
     """Complete physics configuration: all state from Physics Settings window."""
 
-    # Physics parameters (10 sliders)
+    # Physics parameters (11 sliders)
     axial_force: float = 0.371
     lateral_force: float = -0.707
     sensor_gain: float = 0.116
@@ -81,6 +83,7 @@ class PhysicsConfig:
     global_force_mult: float = 1.0
     sensor_distance: float = 1.0
     trail_persistence: float = 0.938
+    trail_diffusion: float = 1.0
 
     # Slider ranges: {label: [cur_min, cur_max, default_min, default_max]}
     slider_ranges: dict[str, list[float]] = field(default_factory=_default_slider_ranges)
@@ -126,6 +129,7 @@ class PhysicsConfig:
                 'global_force_mult': self.global_force_mult,
                 'sensor_distance': self.sensor_distance,
                 'trail_persistence': self.trail_persistence,
+                'trail_diffusion': self.trail_diffusion,
             },
             'slider_ranges': self.slider_ranges,
             'sweeps': {
@@ -189,6 +193,7 @@ class PhysicsConfig:
             global_force_mult=physics.get('global_force_mult', 1.0),
             sensor_distance=physics.get('sensor_distance', 1.0),
             trail_persistence=physics.get('trail_persistence', 0.938),
+            trail_diffusion=physics.get('trail_diffusion', 1.0),
             slider_ranges=slider_ranges,
             x_sweeps=x_sweeps,
             y_sweeps=y_sweeps,
@@ -239,6 +244,7 @@ class ConfigSaver:
             global_force_mult=sim_state.GLOBAL_FORCE_MULT,
             sensor_distance=sim_state.SENSOR_DISTANCE,
             trail_persistence=sim_state.TRAIL_PERSISTENCE,
+            trail_diffusion=sim_state.TRAIL_DIFFUSION,
             slider_ranges=sim_state.slider_ranges.copy(),
             x_sweeps=sim_state.x_sweeps.copy(),
             y_sweeps=sim_state.y_sweeps.copy(),
@@ -284,6 +290,7 @@ class ConfigSaver:
         sim_state.GLOBAL_FORCE_MULT = config.global_force_mult
         sim_state.SENSOR_DISTANCE = config.sensor_distance
         sim_state.TRAIL_PERSISTENCE = config.trail_persistence
+        sim_state.TRAIL_DIFFUSION = config.trail_diffusion
 
         # Slider ranges (full replacement)
         sim_state.slider_ranges.clear()
@@ -483,6 +490,7 @@ class ConfigSaver:
             global_force_mult=physics[7],
             sensor_distance=physics[8],
             trail_persistence=physics[9],
+            trail_diffusion=1.0,  # Legacy didn't have this param, use default
             slider_ranges=_default_slider_ranges(),  # Legacy didn't save all ranges
             x_sweeps=x_sweeps,
             y_sweeps=y_sweeps,

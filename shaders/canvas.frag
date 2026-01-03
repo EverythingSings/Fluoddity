@@ -28,6 +28,7 @@ struct PhysicsSetting {
 };
 
 uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
+uniform PhysicsSetting TRAIL_DIFFUSION_SETTING;
 
 #define COHORTS 64
 
@@ -81,7 +82,7 @@ vec4 getCan(vec2 p, sampler2D sam) {
     return texture(sam, uv);
 }
 
-vec4 getBlur(vec2 pos, sampler2D sam) {
+vec4 getBlur(vec2 pos, sampler2D sam,float diffusion_constant) {
     ivec2 imsz = textureSize(sam, 0);
     vec3 off = vec3(1. / vec2(imsz), 0);
     vec2 np = pos + off.zy;
@@ -92,7 +93,7 @@ vec4 getBlur(vec2 pos, sampler2D sam) {
     vec4 sc = getCan(sp, sam);
     vec4 wc = getCan(wp, sam);
     vec4 ec = getCan(ep, sam);
-    float K = 0;
+    float K = diffusion_constant;
     return (getCan(pos, sam) * K + nc + sc + wc + ec) / (4. + K);
 }
 
@@ -106,7 +107,14 @@ float draw_kernel(float distance, float size) {
 
 void main() {
     vec4 brush_color = texture(brush_tex, texcoord);
-    vec4 can_color = getBlur(texcoord, can_tex);
+    vec4 can_color;
+    float TRAIL_DIFFUSION = calculate_setting(TRAIL_DIFFUSION_SETTING,texcoord*2.-1,0);
+    if(TRAIL_DIFFUSION>0){
+        can_color = getBlur(texcoord, can_tex,1./TRAIL_DIFFUSION-1);
+    }
+    else{
+        can_color = texture(can_tex,texcoord);
+    }
 
     // Convert texcoord from [0,1] to [-1,1] for position-based sweeps
     vec2 world_pos = texcoord * 2.0 - 1.0;

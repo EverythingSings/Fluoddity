@@ -112,6 +112,7 @@ class UI:
                 'GLOBAL_FORCE_MULT': self.state.sim.GLOBAL_FORCE_MULT,
                 'SENSOR_DISTANCE': self.state.sim.SENSOR_DISTANCE,
                 'TRAIL_PERSISTENCE': self.state.sim.TRAIL_PERSISTENCE,
+                'TRAIL_DIFFUSION': self.state.sim.TRAIL_DIFFUSION,
             },
             source_filename=None
         )
@@ -435,6 +436,7 @@ class UI:
                 'GLOBAL_FORCE_MULT': self.state.sim.GLOBAL_FORCE_MULT,
                 'SENSOR_DISTANCE': self.state.sim.SENSOR_DISTANCE,
                 'TRAIL_PERSISTENCE': self.state.sim.TRAIL_PERSISTENCE,
+                'TRAIL_DIFFUSION': self.state.sim.TRAIL_DIFFUSION,
             },
             source_filename=filename
         )
@@ -1409,6 +1411,23 @@ class UI:
             )
             self.render_custom_tooltip("Trail Persistence",
                 "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly. Values close to 1.0 tend to create 'sharper' more stable patterns. ")
+
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Trail Diffusion:")
+                self.render_range_adjust_buttons("TRAIL_DIFFUSION", "Trail Diffusion", self.state.sim.TRAIL_DIFFUSION, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("TRAIL_DIFFUSION")
+                imgui.same_line(spacing=8)
+
+            _, self.state.sim.TRAIL_DIFFUSION = self.slider_float_with_range_menu(
+                label="Trail Diffusion",
+                param_name="TRAIL_DIFFUSION",
+                value=self.state.sim.TRAIL_DIFFUSION,
+                default_min=0.0,
+                default_max=1.0,
+            )
+            self.render_custom_tooltip("Trail Diffusion",
+                "Controls the amount of diffusion applied to particle trails.")
 
         imgui.separator()
 
