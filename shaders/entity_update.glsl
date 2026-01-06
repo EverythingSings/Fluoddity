@@ -92,6 +92,11 @@ layout(std430, binding = 3) buffer MultiLoadConfigBuffer {
     MultiLoadConfig configs[64];
 };
 
+// Multi-load target rules (separate buffer for cleaner organization)
+layout(std430, binding = 4) buffer MultiLoadRuleBuffer {
+    Rule target_rules[64];
+};
+
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
 #define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer.
@@ -261,6 +266,11 @@ bool get_particle_color_by_cohort() {
 float get_particle_rule_seed() {
     int idx = get_particle_config_index();
     return idx >= 0 ? configs[idx].rule_seed : RULE_SEED;
+}
+
+Rule get_particle_target_rule() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? target_rules[idx] : target_rule;
 }
 
 
@@ -434,7 +444,7 @@ void main() {
     vec4 ltap = get_can(e.pos+left_sensor_offset);
     vec4 rtap = get_can(e.pos+right_sensor_offset);
 
-    Rule current_rule=target_rule;
+    Rule current_rule=get_particle_target_rule();
     //if a few coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
         current_rule = Rule(generate_random_centers(get_particle_rule_seed()+floor(cohort)));

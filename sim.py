@@ -39,10 +39,14 @@ class Sim:
         MAX_MULTI_LOAD_CONFIGS = 64
         self.multi_load_buffer = self.ctx.buffer(reserve=MAX_MULTI_LOAD_CONFIGS * MULTI_LOAD_CONFIG_SIZE)
 
+        # Multi-load rule buffer (64 rules * SIZE_OF_RULE_STRUCT bytes per rule)
+        self.multi_load_rule_buffer = self.ctx.buffer(reserve=MAX_MULTI_LOAD_CONFIGS * SIZE_OF_RULE_STRUCT)
+
         # Bind entity and rule buffers
         self.entities.bind_to_storage_buffer(0)
         self.rule_buffer.bind_to_storage_buffer(2)
         self.multi_load_buffer.bind_to_storage_buffer(3)  # Binding 3 matches shader layout
+        self.multi_load_rule_buffer.bind_to_storage_buffer(4)  # Binding 4 for multi-load rules
 
         # Create canvas texture (4-channel float32)
         self.can = self.ctx.texture(CANVAS_SHAPE, 4, dtype='f4')
@@ -430,8 +434,21 @@ class Sim:
                 config.rule_seed
             ))
 
-        # Write to SSBO
+        # Write config data to SSBO
         self.multi_load_buffer.write(bytes(data))
+
+        # Write rules to separate rule buffer
+        rule_data = bytearray()
+        for i in range(config_count):
+            config = multi_load_service.get_config(i)
+            if config is None or config.rule is None:
+                # Write zeros for missing rules
+                rule_data.extend(bytes(SIZE_OF_RULE_STRUCT))
+            else:
+                # Write rule as flat float32 array (10 centers * 8 floats = 80 floats)
+                rule_data.extend(config.rule.astype(np.float32).tobytes())
+
+        self.multi_load_rule_buffer.write(bytes(rule_data))
 
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""

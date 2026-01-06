@@ -616,27 +616,26 @@ class UI:
 
                     hovered_this_frame = self._render_load_submenu_content(current_menu_watercolor)
 
-                    # Handle preview on hover (disabled in multi-load mode)
-                    if not self.state.multi_load.multi_load_enabled:
-                        if hovered_this_frame != self.currently_previewing:
-                            # First, clear any existing preview
-                            if self.currently_previewing:
-                                self._request_clear_preview = True
+                    # Handle preview on hover (works in both normal and multi-load modes)
+                    if hovered_this_frame != self.currently_previewing:
+                        # First, clear any existing preview
+                        if self.currently_previewing:
+                            self._request_clear_preview = True
 
-                            if hovered_this_frame and hovered_this_frame in self.cached_configs:
-                                # Apply preview config with watercolor override
-                                config = self.cached_configs[hovered_this_frame]
-                                self.config_saver.apply_config(config, self.state.sim,
-                                                              watercolor_override=current_menu_watercolor)
-                                self._request_preview_config = True
-                                self._preview_filename = hovered_this_frame
-                                self.currently_previewing = hovered_this_frame
-                            elif hovered_this_frame is None and self.cached_config:
-                                # Revert to cached state with watercolor override
-                                self.config_saver.load_from_string(
-                                    self.cached_config, self.state.sim,
-                                    watercolor_override=current_menu_watercolor)
-                                self.currently_previewing = None
+                        if hovered_this_frame and hovered_this_frame in self.cached_configs:
+                            # Apply preview config with watercolor override
+                            config = self.cached_configs[hovered_this_frame]
+                            self.config_saver.apply_config(config, self.state.sim,
+                                                          watercolor_override=current_menu_watercolor)
+                            self._request_preview_config = True
+                            self._preview_filename = hovered_this_frame
+                            self.currently_previewing = hovered_this_frame
+                        elif hovered_this_frame is None and self.cached_config:
+                            # Revert to cached state with watercolor override
+                            self.config_saver.load_from_string(
+                                self.cached_config, self.state.sim,
+                                watercolor_override=current_menu_watercolor)
+                            self.currently_previewing = None
 
                     imgui.end_menu()
 
