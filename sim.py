@@ -126,6 +126,7 @@ class Sim:
         # Multi-load mode: set uniform arrays for all loaded configs
         if multi_load_service and multi_load_service.is_active():
             self._set_multi_load_uniforms(multi_load_service)
+        
         # Normal mode: set single config uniforms
         else:
             tryset(self.entity_update_program, 'MULTILOAD_COUNT', 0)
@@ -140,16 +141,19 @@ class Sim:
             self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
             tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
             tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
-            tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
-            tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
-            tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
-
-            # Appearance settings from sim state (now part of physics config)
-            tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
-            tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._state.color_by_cohort)
-
             # Rule seed from sim state (saved with physics configs)
             tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
+        
+        #both modes: set global and conditionally global uniforms
+        tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
+        tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
+        tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
+             
+        # Appearance settings from sim state (now part of physics config)
+        tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
+        tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._state.color_by_cohort)
+
+
 
         num_workgroups = (ENTITY_COUNT + 63) // 64
         ctx.memory_barrier()

@@ -407,8 +407,8 @@ void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, vec2 pos, f
     strafe = baseterm.zw + y_reflect(mirrorterm.zw);
 
     //Convert force and strafe back to world coordinates
-    force=forward*force.x*calculate_setting(AXIAL_FORCE_SETTING,pos,cohort)+left*force.y*calculate_setting(LATERAL_FORCE_SETTING,pos,cohort);
-    strafe = forward*strafe.x*calculate_setting(AXIAL_FORCE_SETTING,pos,cohort) + left * strafe.y * calculate_setting(LATERAL_FORCE_SETTING,pos,cohort);
+    force=forward*force.x*calculate_setting(get_particle_axial_force(),pos,cohort)+left*force.y*calculate_setting(get_particle_lateral_force(),pos,cohort);
+    strafe = forward*strafe.x*calculate_setting(get_particle_axial_force(),pos,cohort) + left * strafe.y * calculate_setting(get_particle_lateral_force(),pos,cohort);
 
     color = baseterm.xy+(mirrorterm.xy); //Just an arbitrary function of blackbox output. Reuses force terms.
     return;
