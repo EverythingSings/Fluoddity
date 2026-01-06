@@ -18,6 +18,7 @@ class MultiLoadService:
         self.assignment_mode: str = "Cohorts"
         self.per_config_initial_conditions: bool = False
         self.per_config_cohorts: bool = False
+        self._ssbo_dirty: bool = False  # Flag for SSBO update needed
 
     # --- Configuration Management ---
 
@@ -40,6 +41,7 @@ class MultiLoadService:
         # Auto-adjust simultaneous_configs if needed
         if self.simultaneous_configs > len(self.loaded_configs):
             self.simultaneous_configs = float(len(self.loaded_configs))
+        self.invalidate_ssbo()  # Mark SSBO as needing update
         return True
 
     def remove_config(self, index: int) -> bool:
@@ -61,6 +63,7 @@ class MultiLoadService:
                                                float(len(self.loaded_configs)))
             else:
                 self.simultaneous_configs = 1.0
+            self.invalidate_ssbo()  # Mark SSBO as needing update
             return True
         return False
 
@@ -70,6 +73,7 @@ class MultiLoadService:
         self.loaded_filenames.clear()
         self.simultaneous_configs = 1.0
         self.current_progress = 0.0
+        self.invalidate_ssbo()  # Mark SSBO as needing update
 
     # --- Query Methods ---
 
@@ -128,3 +132,17 @@ class MultiLoadService:
         self.assignment_mode = multi_load_state.assignment_mode
         self.per_config_initial_conditions = multi_load_state.per_config_initial_conditions
         self.per_config_cohorts = multi_load_state.per_config_cohorts
+
+    # --- SSBO Management ---
+
+    def invalidate_ssbo(self) -> None:
+        """Mark the SSBO as needing an update (called when config data changes)."""
+        self._ssbo_dirty = True
+
+    def is_ssbo_dirty(self) -> bool:
+        """Check if the SSBO needs to be rewritten."""
+        return self._ssbo_dirty
+
+    def clear_ssbo_dirty(self) -> None:
+        """Clear the dirty flag (called after SSBO write completes)."""
+        self._ssbo_dirty = False

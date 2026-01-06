@@ -33,9 +33,16 @@ class Sim:
         self.entities = self.ctx.buffer(reserve=ENTITY_COUNT * SIZE_OF_ENTITY_STRUCT)
         self.rule_buffer = self.ctx.buffer(reserve=ENTITY_COUNT * SIZE_OF_RULE_STRUCT)
 
+        # Multi-load config buffer (64 configs * 248 bytes per config)
+        # Each MultiLoadConfig struct: 9 PhysicsSetting (54 floats) + 6 ints + 2 floats = 248 bytes
+        MULTI_LOAD_CONFIG_SIZE = 248
+        MAX_MULTI_LOAD_CONFIGS = 64
+        self.multi_load_buffer = self.ctx.buffer(reserve=MAX_MULTI_LOAD_CONFIGS * MULTI_LOAD_CONFIG_SIZE)
+
         # Bind entity and rule buffers
         self.entities.bind_to_storage_buffer(0)
         self.rule_buffer.bind_to_storage_buffer(2)
+        self.multi_load_buffer.bind_to_storage_buffer(3)  # Binding 3 matches shader layout
 
         # Create canvas texture (4-channel float32)
         self.can = self.ctx.texture(CANVAS_SHAPE, 4, dtype='f4')
@@ -353,10 +360,10 @@ class Sim:
         tryset(self.entity_update_program, f'{array_name}[{index}].cohort_sweep', config.cohort_sweeps.get(param_name, 0.0))
 
     def _set_multi_load_uniforms(self, multi_load_service):
-        """Set uniform arrays for all loaded configs in multi-load mode."""
+        """Set uniforms and SSBO for multi-load mode."""
         config_count = multi_load_service.get_config_count()
 
-        # Set multi-load control uniforms
+        # Set multi-load control uniforms (small, not expensive)
         tryset(self.entity_update_program, 'MULTILOAD_COUNT', config_count)
         tryset(self.entity_update_program, 'MULTI_LOAD_CURRENT_PROGRESS', multi_load_service.current_progress)
         tryset(self.entity_update_program, 'MULTI_LOAD_SIMULTANEOUS_CONFIGS', multi_load_service.simultaneous_configs)
@@ -367,40 +374,64 @@ class Sim:
         tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS', multi_load_service.per_config_initial_conditions)
         tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_COHORTS', multi_load_service.per_config_cohorts)
 
-        # Set arrays for each loaded config
+        # Write config data to SSBO only when dirty (expensive operation)
+        if multi_load_service.is_ssbo_dirty():
+            self._write_multi_load_ssbo(multi_load_service)
+            multi_load_service.clear_ssbo_dirty()
+
+    def _write_multi_load_ssbo(self, multi_load_service):
+        """Pack config data and write to SSBO."""
+        import struct
+
+        config_count = multi_load_service.get_config_count()
+        data = bytearray()
+
         for i in range(config_count):
             config = multi_load_service.get_config(i)
             if config is None:
+                # Write zeros for missing configs
+                data.extend(bytes(248))
                 continue
 
-            # Physics parameters as PhysicsSetting structs
-            self._set_multiload_physics_param('AXIAL_FORCE_ARRAY', i, config, 'axial_force', 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
-            self._set_multiload_physics_param('LATERAL_FORCE_ARRAY', i, config, 'lateral_force', 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
-            self._set_multiload_physics_param('SENSOR_GAIN_ARRAY', i, config, 'sensor_gain', 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
-            self._set_multiload_physics_param('MUTATION_SCALE_ARRAY', i, config, 'mutation_scale', 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
-            self._set_multiload_physics_param('DRAG_ARRAY', i, config, 'drag', 'Drag', 'DRAG', -1.0, 1.0)
-            self._set_multiload_physics_param('STRAFE_POWER_ARRAY', i, config, 'strafe_power', 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
-            self._set_multiload_physics_param('SENSOR_ANGLE_ARRAY', i, config, 'sensor_angle', 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
-            self._set_multiload_physics_param('GLOBAL_FORCE_MULT_ARRAY', i, config, 'global_force_mult', 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
-            self._set_multiload_physics_param('SENSOR_DISTANCE_ARRAY', i, config, 'sensor_distance', 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
+            # Pack physics parameters (9 PhysicsSetting structs, each 6 floats)
+            params = [
+                ('axial_force', 'AXIAL_FORCE', -1.0, 1.0),
+                ('lateral_force', 'LATERAL_FORCE', -1.0, 1.0),
+                ('sensor_gain', 'SENSOR_GAIN', 0.0, 5.0),
+                ('mutation_scale', 'MUTATION_SCALE', -0.5, 0.5),
+                ('drag', 'DRAG', -1.0, 1.0),
+                ('strafe_power', 'STRAFE_POWER', 0.0, 0.5),
+                ('sensor_angle', 'SENSOR_ANGLE', -1.0, 1.0),
+                ('global_force_mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0),
+                ('sensor_distance', 'SENSOR_DISTANCE', 0.0, 4.0),
+            ]
 
-            # Simulation settings
-            tryset(self.entity_update_program, f'DISABLE_SYMMETRY_ARRAY[{i}]', config.disable_symmetry)
-            tryset(self.entity_update_program, f'ABSOLUTE_ORIENTATION_ARRAY[{i}]', config.absolute_orientation)
-            tryset(self.entity_update_program, f'BOUNDARY_CONDITIONS_ARRAY[{i}]', config.boundary_conditions)
-            tryset(self.entity_update_program, f'RESET_MODE_ARRAY[{i}]', config.initial_conditions)
-            tryset(self.entity_update_program, f'COHORTS_ARRAY[{i}]', config.num_cohorts)
+            for attr_name, param_name, default_min, default_max in params:
+                slider_value = getattr(config, attr_name)
+                min_val, max_val = self._get_slider_range(attr_name.replace('_', ' ').title(), default_min, default_max)
+                x_sweep = config.x_sweeps.get(param_name, 0.0)
+                y_sweep = config.y_sweeps.get(param_name, 0.0)
+                cohort_sweep = config.cohort_sweeps.get(param_name, 0.0)
+                data.extend(struct.pack('6f', slider_value, min_val, max_val, x_sweep, y_sweep, cohort_sweep))
 
-            # Appearance settings
-            tryset(self.entity_update_program, f'HUE_SENSITIVITY_ARRAY[{i}]', config.hue_sensitivity)
-            tryset(self.entity_update_program, f'COLOR_BY_COHORT_ARRAY[{i}]', config.color_by_cohort)
+            # Pack simulation settings (6 ints)
+            data.extend(struct.pack('6i',
+                int(config.disable_symmetry),
+                int(config.absolute_orientation),
+                config.boundary_conditions,
+                config.initial_conditions,
+                config.num_cohorts,
+                int(config.color_by_cohort)
+            ))
 
-            # Rule seed
-            tryset(self.entity_update_program, f'RULE_SEED_ARRAY[{i}]', config.rule_seed)
+            # Pack appearance and rule seed (2 floats)
+            data.extend(struct.pack('2f',
+                config.hue_sensitivity,
+                config.rule_seed
+            ))
 
-            # Rule array - need to set the rule as a 2D array uniform
-            # For now, we'll use a placeholder - the actual rule setting might need special handling
-            # TODO: Implement rule array setting (may need special uniform handling like set_rule_uniform)
+        # Write to SSBO
+        self.multi_load_buffer.write(bytes(data))
 
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""

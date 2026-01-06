@@ -52,7 +52,7 @@ uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
 uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
 
-// Multi-load uniforms
+// Multi-load control uniforms (small, stay as uniforms)
 uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
 uniform float MULTI_LOAD_CURRENT_PROGRESS; // Current position in config ring (0-1)
 uniform float MULTI_LOAD_SIMULTANEOUS_CONFIGS; // How many configs to span
@@ -60,30 +60,37 @@ uniform int MULTI_LOAD_ASSIGNMENT_MODE; // 0 = Cohorts, 1 = Random
 uniform bool MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS; // If true, use per-config reset modes
 uniform bool MULTI_LOAD_PER_CONFIG_COHORTS; // If true, use per-config cohort counts
 
-// Multi-load physics parameter arrays (as PhysicsSetting structs)
-uniform PhysicsSetting AXIAL_FORCE_ARRAY[64];
-uniform PhysicsSetting LATERAL_FORCE_ARRAY[64];
-uniform PhysicsSetting SENSOR_GAIN_ARRAY[64];
-uniform PhysicsSetting MUTATION_SCALE_ARRAY[64];
-uniform PhysicsSetting DRAG_ARRAY[64];
-uniform PhysicsSetting STRAFE_POWER_ARRAY[64];
-uniform PhysicsSetting SENSOR_ANGLE_ARRAY[64];
-uniform PhysicsSetting GLOBAL_FORCE_MULT_ARRAY[64];
-uniform PhysicsSetting SENSOR_DISTANCE_ARRAY[64];
+// Multi-load config data (large arrays, packed into SSBO)
+struct MultiLoadConfig {
+    // Physics parameters as PhysicsSetting structs (9 params * 6 floats = 54 floats)
+    PhysicsSetting axial_force;
+    PhysicsSetting lateral_force;
+    PhysicsSetting sensor_gain;
+    PhysicsSetting mutation_scale;
+    PhysicsSetting drag;
+    PhysicsSetting strafe_power;
+    PhysicsSetting sensor_angle;
+    PhysicsSetting global_force_mult;
+    PhysicsSetting sensor_distance;
 
-// Multi-load simulation setting arrays
-uniform bool DISABLE_SYMMETRY_ARRAY[64];
-uniform bool ABSOLUTE_ORIENTATION_ARRAY[64];
-uniform int BOUNDARY_CONDITIONS_ARRAY[64];
-uniform int RESET_MODE_ARRAY[64];
-uniform int COHORTS_ARRAY[64];
+    // Simulation settings (5 values, but need padding for alignment)
+    int disable_symmetry;      // bool as int for alignment
+    int absolute_orientation;  // bool as int for alignment
+    int boundary_conditions;
+    int reset_mode;
+    int cohorts;
 
-// Multi-load appearance arrays
-uniform float HUE_SENSITIVITY_ARRAY[64];
-uniform bool COLOR_BY_COHORT_ARRAY[64];
+    // Appearance settings (2 values)
+    float hue_sensitivity;
+    int color_by_cohort;       // bool as int for alignment
 
-// Multi-load rule seed array
-uniform float RULE_SEED_ARRAY[64];
+    // Rule seed
+    float rule_seed;
+};
+
+layout(std430, binding = 3) buffer MultiLoadConfigBuffer {
+    MultiLoadConfig configs[64];
+};
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
@@ -115,7 +122,7 @@ int get_particle_cohorts() {
     int idx = get_particle_config_index();
     // Use per-config value only if multi-load is active AND per-config checkbox is enabled
     if (idx >= 0 && MULTI_LOAD_PER_CONFIG_COHORTS) {
-        return COHORTS_ARRAY[idx];
+        return configs[idx].cohorts;
     }
     return COHORTS;
 }
@@ -172,69 +179,69 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
 
 PhysicsSetting get_particle_axial_force() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? AXIAL_FORCE_ARRAY[idx] : AXIAL_FORCE_SETTING;
+    return idx >= 0 ? configs[idx].axial_force : AXIAL_FORCE_SETTING;
 }
 
 PhysicsSetting get_particle_lateral_force() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? LATERAL_FORCE_ARRAY[idx] : LATERAL_FORCE_SETTING;
+    return idx >= 0 ? configs[idx].lateral_force : LATERAL_FORCE_SETTING;
 }
 
 PhysicsSetting get_particle_sensor_gain() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? SENSOR_GAIN_ARRAY[idx] : SENSOR_GAIN_SETTING;
+    return idx >= 0 ? configs[idx].sensor_gain : SENSOR_GAIN_SETTING;
 }
 
 PhysicsSetting get_particle_mutation_scale() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? MUTATION_SCALE_ARRAY[idx] : MUTATION_SCALE_SETTING;
+    return idx >= 0 ? configs[idx].mutation_scale : MUTATION_SCALE_SETTING;
 }
 
 PhysicsSetting get_particle_drag() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? DRAG_ARRAY[idx] : DRAG_SETTING;
+    return idx >= 0 ? configs[idx].drag : DRAG_SETTING;
 }
 
 PhysicsSetting get_particle_strafe_power() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? STRAFE_POWER_ARRAY[idx] : STRAFE_POWER_SETTING;
+    return idx >= 0 ? configs[idx].strafe_power : STRAFE_POWER_SETTING;
 }
 
 PhysicsSetting get_particle_sensor_angle() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? SENSOR_ANGLE_ARRAY[idx] : SENSOR_ANGLE_SETTING;
+    return idx >= 0 ? configs[idx].sensor_angle : SENSOR_ANGLE_SETTING;
 }
 
 PhysicsSetting get_particle_global_force_mult() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? GLOBAL_FORCE_MULT_ARRAY[idx] : GLOBAL_FORCE_MULT_SETTING;
+    return idx >= 0 ? configs[idx].global_force_mult : GLOBAL_FORCE_MULT_SETTING;
 }
 
 PhysicsSetting get_particle_sensor_distance() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? SENSOR_DISTANCE_ARRAY[idx] : SENSOR_DISTANCE_SETTING;
+    return idx >= 0 ? configs[idx].sensor_distance : SENSOR_DISTANCE_SETTING;
 }
 
 bool get_particle_disable_symmetry() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? DISABLE_SYMMETRY_ARRAY[idx] : DISABLE_SYMMETRY;
+    return idx >= 0 ? bool(configs[idx].disable_symmetry) : DISABLE_SYMMETRY;
 }
 
 bool get_particle_absolute_orientation() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? ABSOLUTE_ORIENTATION_ARRAY[idx] : ABSOLUTE_ORIENTATION;
+    return idx >= 0 ? bool(configs[idx].absolute_orientation) : ABSOLUTE_ORIENTATION;
 }
 
 int get_particle_boundary_conditions() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? BOUNDARY_CONDITIONS_ARRAY[idx] : BOUNDARY_CONDITIONS_MODE;
+    return idx >= 0 ? configs[idx].boundary_conditions : BOUNDARY_CONDITIONS_MODE;
 }
 
 int get_particle_reset_mode() {
     int idx = get_particle_config_index();
     // Use per-config value only if multi-load is active AND per-config checkbox is enabled
     if (idx >= 0 && MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS) {
-        return RESET_MODE_ARRAY[idx];
+        return configs[idx].reset_mode;
     }
     return RESET_MODE;
 }
@@ -243,17 +250,17 @@ int get_particle_reset_mode() {
 
 float get_particle_hue_sensitivity() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? HUE_SENSITIVITY_ARRAY[idx] : HUE_SENSITIVITY;
+    return idx >= 0 ? configs[idx].hue_sensitivity : HUE_SENSITIVITY;
 }
 
 bool get_particle_color_by_cohort() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? COLOR_BY_COHORT_ARRAY[idx] : COLOR_BY_COHORT;
+    return idx >= 0 ? bool(configs[idx].color_by_cohort) : COLOR_BY_COHORT;
 }
 
 float get_particle_rule_seed() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? RULE_SEED_ARRAY[idx] : RULE_SEED;
+    return idx >= 0 ? configs[idx].rule_seed : RULE_SEED;
 }
 
 
