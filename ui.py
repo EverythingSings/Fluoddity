@@ -698,6 +698,13 @@ class UI:
 
             # Extras menu
             if imgui.begin_menu("Extras"):
+                # Multi Load toggle
+                _, self.state.multi_load.multi_load_enabled = imgui.checkbox(
+                    "Multi Load",
+                    self.state.multi_load.multi_load_enabled
+                )
+                self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
+
                 # Video Recording Controls
                 if imgui.menu_item("Video Recording Controls", "", self.show_video_recording_window)[0]:
                     self.show_video_recording_window = not self.show_video_recording_window

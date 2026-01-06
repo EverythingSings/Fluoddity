@@ -5,7 +5,7 @@ from pathlib import Path
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService
 from utilities.gl_helpers import readback_rule
 from state import load_preferences, save_preferences, SimState
 
@@ -49,6 +49,7 @@ class App:
         self.video_service = VideoRecorderService()
         self.config_saver = ConfigSaver()
         self.arrow_debug_service = ArrowDebugService(self.ctx)
+        self.multi_load_service = MultiLoadService()
         self.configs_dir = Path("physics_configs")
         self.configs_dir.mkdir(exist_ok=True)
 
@@ -141,8 +142,16 @@ class App:
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)
+        self.multi_load_service.apply_state(ui_state.multi_load)
         # Sync brightness from preferences
         self.camera.BRIGHTNESS = ui_state.preferences.brightness
+
+        # 5.1. Multi-load conflict prevention
+        if ui_state.multi_load.multi_load_enabled:
+            # Disable parameter sweeps when multi-load is active
+            ui_state.sim.parameter_sweeps_enabled = False
+            # Force mouse mode to Draw Trail
+            ui_state.preferences.mouse_mode = "Draw Trail"
 
         # 5.5. Calculate sweep reticle info (needed for both running and paused states)
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
