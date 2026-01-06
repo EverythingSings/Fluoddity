@@ -53,6 +53,7 @@ class UI:
 
         # UI-only state
         self.show_demo_window = False
+        self.show_physics_settings_window = True  # Physics settings window (default open)
         self.show_controls_window = False  # Help controls window
         self.show_parameter_sweeps_window = False  # Help parameter sweeps window
         self.show_tutorial_window = False  # Help tutorial window
@@ -508,7 +509,9 @@ class UI:
         # Main application menu bar
         self.render_main_menu_bar()
 
-        self.render_physics_settings_window()
+        # Render Physics Settings window if visible
+        if self.show_physics_settings_window:
+            self.render_physics_settings_window()
 
         # Render Preferences window if visible
         if self.state.preferences.show_preferences_window:
@@ -635,11 +638,17 @@ class UI:
 
                     imgui.end_menu()
 
+                imgui.separator()
+
+                # Preferences toggle
+                if imgui.menu_item("Preferences", "", self.state.preferences.show_preferences_window)[0]:
+                    self.state.preferences.show_preferences_window = not self.state.preferences.show_preferences_window
+
                 imgui.end_menu()
 
-            # Preferences toggle button
-            if imgui.menu_item("Preferences", "", self.state.preferences.show_preferences_window)[0]:
-                self.state.preferences.show_preferences_window = not self.state.preferences.show_preferences_window
+            # Physics Settings toggle button
+            if imgui.menu_item("Physics Settings", "", self.show_physics_settings_window)[0]:
+                self.show_physics_settings_window = not self.show_physics_settings_window
 
             # Reset menu
             if imgui.begin_menu("Reset..."):
@@ -1082,7 +1091,7 @@ class UI:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.15, 0.20, 0.35, 0.94))
             imgui.push_style_color(imgui.Col_.title_bg_active, imgui.ImVec4(0.20, 0.30, 0.50, 1.0))
 
-        imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
+        _, self.show_physics_settings_window = imgui.begin('Physics Settings', p_open=self.show_physics_settings_window, flags=imgui.WindowFlags_.menu_bar)
 
         # Additional Settings menu bar
         if imgui.begin_menu_bar():
