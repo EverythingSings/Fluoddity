@@ -35,6 +35,7 @@ class UI:
         self.imgui_renderer = glfw_backend.GlfwRenderer(window)
 
         io = imgui.get_io()
+        io.config_flags |= imgui.ConfigFlags_.docking_enable  # Enable docking
 
         # Default font at normal size
         io.fonts.add_font_default()
@@ -447,6 +448,33 @@ class UI:
 
         imgui.new_frame()
 
+        # Create a full-window dockspace
+        viewport = imgui.get_main_viewport()
+        imgui.set_next_window_pos(viewport.work_pos)
+        imgui.set_next_window_size(viewport.work_size)
+        imgui.set_next_window_viewport(viewport.id_)
+
+        dockspace_window_flags = (
+            imgui.WindowFlags_.no_title_bar
+            | imgui.WindowFlags_.no_collapse
+            | imgui.WindowFlags_.no_resize
+            | imgui.WindowFlags_.no_move
+            | imgui.WindowFlags_.no_bring_to_front_on_focus
+            | imgui.WindowFlags_.no_nav_focus
+            | imgui.WindowFlags_.no_background
+        )
+
+        imgui.push_style_var(imgui.StyleVar_.window_rounding, 0.0)
+        imgui.push_style_var(imgui.StyleVar_.window_border_size, 0.0)
+        imgui.push_style_var(imgui.StyleVar_.window_padding, imgui.ImVec2(0.0, 0.0))
+
+        imgui.begin("DockSpace Window", None, dockspace_window_flags)
+        imgui.pop_style_var(3)
+
+        # Create the dockspace
+        dockspace_id = imgui.get_id("MainDockSpace")
+        imgui.dock_space(dockspace_id, imgui.ImVec2(0.0, 0.0), imgui.DockNodeFlags_.passthru_central_node)
+
         # Apply global color tinting based on mode
         recording_active = self._display_info.get('recording_active', False)
         sweeps_active = self.state.sim.parameter_sweeps_enabled
@@ -512,6 +540,9 @@ class UI:
         # Restore normal colors if we pushed any
         if color_push_count > 0:
             imgui.pop_style_color(color_push_count)
+
+        # End dockspace window
+        imgui.end()
 
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
