@@ -8,6 +8,7 @@ RESTART ON OPEN
 -draw trail reticle
 -hue offset
 -save needs to change "current file"
+-radial absolute Orientation
 Rewrite slider tooltips
 write tooltips for some sim controls
 tune slider ranges

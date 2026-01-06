@@ -22,10 +22,11 @@ class PhysicsDefaults:
 class UI:
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
-    def __init__(self, window, ctx: moderngl.Context, view_option_labels: list[str]):
+    def __init__(self, window, ctx: moderngl.Context, view_option_labels: list[str], multi_load_service=None):
         self.window = window
         self.ctx = ctx
         self.view_option_labels = view_option_labels
+        self.multi_load_service = multi_load_service
 
 
 
@@ -785,13 +786,18 @@ class UI:
             # === Mouse Interaction section ===
             imgui.text("Mouse Interaction (Press 'T' to toggle)")
 
-            # Mouse mode combo box
-            mouse_modes = ["Select Particle", "Draw Trail"]
-            current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
-            clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
-            if clicked:
-                self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
-            self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
+            # Mouse mode combo box (locked when multi-load enabled)
+            if self.state.multi_load.multi_load_enabled:
+                imgui.begin_disabled()
+                imgui.text_colored(imgui.ImVec4(0.8, 0.8, 0.2, 1.0), "Mouse Mode: Draw Trail (locked in Multi-Load)")
+                imgui.end_disabled()
+            else:
+                mouse_modes = ["Select Particle", "Draw Trail"]
+                current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
+                clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
+                if clicked:
+                    self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
+                self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
 
             # Draw mode sliders (only show when in Draw Trail mode)
             if self.state.preferences.mouse_mode == "Draw Trail":
@@ -1100,6 +1106,141 @@ class UI:
 
         _, self.show_physics_settings_window = imgui.begin('Physics Settings', p_open=self.show_physics_settings_window, flags=imgui.WindowFlags_.menu_bar)
 
+        # Multi-load mode: different rendering
+        if self.state.multi_load.multi_load_enabled:
+            # Render multi-load specific UI
+            if imgui.begin_menu_bar():
+                if imgui.begin_menu("Multi-Load Settings"):
+                    # Particle Assignment combo
+                    assignment_options = ["Random", "Cohorts"]
+                    current_idx = 0 if self.state.multi_load.assignment_mode == "Random" else 1
+                    imgui.set_next_item_width(150)
+                    changed, new_idx = imgui.combo("Particle Assignment", current_idx, assignment_options)
+                    if changed:
+                        self.state.multi_load.assignment_mode = assignment_options[new_idx]
+                    self._delayed_tooltip("Random: each particle randomly assigned\nCohorts: particles grouped by cohort")
+
+                    _, self.state.multi_load.per_config_initial_conditions = imgui.checkbox(
+                        "Per-config Initial Conditions", self.state.multi_load.per_config_initial_conditions)
+                    self._delayed_tooltip("Each config uses its own initial conditions")
+
+                    _, self.state.multi_load.per_config_cohorts = imgui.checkbox(
+                        "Per-config Cohorts", self.state.multi_load.per_config_cohorts)
+                    self._delayed_tooltip("Each config uses its own cohort count")
+
+                    imgui.end_menu()
+
+                # Simplified Additional Settings (some items greyed out)
+                if imgui.begin_menu("Additional Settings"):
+                    # Boundary Conditions
+                    boundary_options = ["Bounce", "Reset", "Wrap"]
+                    imgui.set_next_item_width(100)
+                    if imgui.begin_combo("Boundary Conditions", boundary_options[self.state.sim.boundary_conditions]):
+                        for i, option in enumerate(boundary_options):
+                            if imgui.selectable(option, self.state.sim.boundary_conditions == i)[0]:
+                                self.state.sim.boundary_conditions = i
+                        imgui.end_combo()
+
+                    # Initial Conditions (greyed if per-config)
+                    if self.state.multi_load.per_config_initial_conditions:
+                        imgui.begin_disabled()
+                    initial_options = ["Grid", "Random", "Ring"]
+                    imgui.set_next_item_width(100)
+                    if imgui.begin_combo("Initial Conditions", initial_options[self.state.sim.initial_conditions]):
+                        for i, option in enumerate(initial_options):
+                            if imgui.selectable(option, self.state.sim.initial_conditions == i)[0]:
+                                self.state.sim.initial_conditions = i
+                        imgui.end_combo()
+                    if self.state.multi_load.per_config_initial_conditions:
+                        imgui.end_disabled()
+
+                    # Cohorts (greyed if per-config)
+                    if self.state.multi_load.per_config_cohorts:
+                        imgui.begin_disabled()
+                    imgui.set_next_item_width(100)
+                    _, self.state.sim.num_cohorts = imgui.slider_int("Number of Cohorts", self.state.sim.num_cohorts, 1, 144)
+                    if self.state.multi_load.per_config_cohorts:
+                        imgui.end_disabled()
+
+                    _, self.state.sim.disable_symmetry = imgui.checkbox("Disable Symmetry", self.state.sim.disable_symmetry)
+                    _, self.state.sim.absolute_orientation = imgui.checkbox("Absolute Orientation", self.state.sim.absolute_orientation)
+
+                    # Parameter Sweeps (disabled)
+                    imgui.begin_disabled()
+                    imgui.checkbox("Parameter Sweeps", False)
+                    imgui.end_disabled()
+                    self._delayed_tooltip("Disabled in Multi-Load mode")
+
+                    imgui.end_menu()
+
+                # Appearance (unchanged, copy from normal mode)
+                if imgui.begin_menu("Appearance"):
+                    _, self.state.sim.color_by_cohort = imgui.checkbox("Color by Cohort", self.state.sim.color_by_cohort)
+                    if not self.state.sim.color_by_cohort:
+                        imgui.set_next_item_width(100)
+                        _, self.state.sim.hue_sensitivity = imgui.slider_float("Hue Sensitivity", self.state.sim.hue_sensitivity, -1.0, 1.0)
+                    _, self.state.sim.watercolor_mode = imgui.checkbox("Watercolor Mode", self.state.sim.watercolor_mode)
+                    if self.state.sim.watercolor_mode:
+                        imgui.set_next_item_width(100)
+                        _, self.state.sim.ink_weight = imgui.slider_float("Ink Weight", self.state.sim.ink_weight, 0.0, 4.0)
+                    emboss_options = ["Off", "Canvas (Trails)", "Brush (Particles)"]
+                    imgui.set_next_item_width(150)
+                    if imgui.begin_combo("Emboss Mode", emboss_options[self.state.sim.emboss_mode]):
+                        for i, option in enumerate(emboss_options):
+                            if imgui.selectable(option, self.state.sim.emboss_mode == i)[0]:
+                                self.state.sim.emboss_mode = i
+                        imgui.end_combo()
+                    if self.state.sim.emboss_mode != 0:
+                        imgui.set_next_item_width(100)
+                        _, self.state.sim.emboss_intensity = imgui.slider_float("Emboss Intensity", self.state.sim.emboss_intensity, -1.0, 1.0)
+                        imgui.set_next_item_width(100)
+                        _, self.state.sim.emboss_smoothness = imgui.slider_float("Emboss Smoothness", self.state.sim.emboss_smoothness, 0.001, 1.0)
+                    imgui.end_menu()
+
+                imgui.end_menu_bar()
+
+            # Multi-load controls
+            imgui.text("Multi-Load Controls")
+            imgui.separator()
+
+            # Get config count from service
+            config_count = self.multi_load_service.get_config_count() if self.multi_load_service else 0
+
+            _, self.state.multi_load.simultaneous_configs = imgui.slider_float(
+                "Simultaneous Configs", self.state.multi_load.simultaneous_configs, 0.0, float(max(1, config_count)))
+            _, self.state.multi_load.progression_pace = imgui.slider_float(
+                "Progression Pace", self.state.multi_load.progression_pace, 0.0, 1.0)
+            _, self.state.multi_load.current_progress = imgui.slider_float(
+                "Current Progress", self.state.multi_load.current_progress, 0.0, 1.0)
+
+            imgui.separator()
+            imgui.text(f"Loaded Configurations ({config_count}/64)")
+            imgui.separator()
+
+            if config_count == 0:
+                imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), "No configs loaded")
+                imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), "Use File -> Load to add")
+            else:
+                # Render config list with remove buttons
+                for i in range(config_count):
+                    filename = self.multi_load_service.get_filename(i)
+                    if filename:
+                        # Config name
+                        imgui.text(f"{i+1}. {filename}")
+                        imgui.same_line()
+                        # Remove button (aligned to right)
+                        imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+                        imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+                        if imgui.small_button(f"Remove##{i}"):
+                            self.multi_load_service.remove_config(i)
+                        imgui.pop_style_color(2)
+
+            imgui.end()
+            if self.state.sim.sweep_preview_pending_restore:
+                imgui.pop_style_color(2)
+            return
+
+        # Normal mode: render sliders and settings
         # Additional Settings menu bar
         if imgui.begin_menu_bar():
             if imgui.begin_menu("Additional Settings"):

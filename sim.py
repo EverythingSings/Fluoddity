@@ -105,33 +105,40 @@ class Sim:
 
 
     
-    def entity_update(self, ctx: moderngl.Context):
+    def entity_update(self, ctx: moderngl.Context, multi_load_service=None):
         '''
         Run a single physics update on all particles
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
-        self._assign_physics_setting('AXIAL_FORCE_SETTING', self._state.AXIAL_FORCE, 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
-        self._assign_physics_setting('LATERAL_FORCE_SETTING', self._state.LATERAL_FORCE, 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
-        self._assign_physics_setting('SENSOR_GAIN_SETTING', self._state.SENSOR_GAIN, 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
-        self._assign_physics_setting('MUTATION_SCALE_SETTING', self._state.MUTATION_SCALE, 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
-        self._assign_physics_setting('DRAG_SETTING', self._state.DRAG, 'Drag', 'DRAG', -1.0, 1.0)
-        self._assign_physics_setting('STRAFE_POWER_SETTING', self._state.STRAFE_POWER, 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
-        self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
-        self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
-        self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
-        tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
-        tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
-        tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
-        tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
-        tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
 
-        # Appearance settings from sim state (now part of physics config)
-        tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
-        tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._state.color_by_cohort)
+        # Multi-load mode: set uniform arrays for all loaded configs
+        if multi_load_service and multi_load_service.is_active():
+            self._set_multi_load_uniforms(multi_load_service)
+        # Normal mode: set single config uniforms
+        else:
+            tryset(self.entity_update_program, 'MULTILOAD_COUNT', 0)
+            self._assign_physics_setting('AXIAL_FORCE_SETTING', self._state.AXIAL_FORCE, 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
+            self._assign_physics_setting('LATERAL_FORCE_SETTING', self._state.LATERAL_FORCE, 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
+            self._assign_physics_setting('SENSOR_GAIN_SETTING', self._state.SENSOR_GAIN, 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
+            self._assign_physics_setting('MUTATION_SCALE_SETTING', self._state.MUTATION_SCALE, 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
+            self._assign_physics_setting('DRAG_SETTING', self._state.DRAG, 'Drag', 'DRAG', -1.0, 1.0)
+            self._assign_physics_setting('STRAFE_POWER_SETTING', self._state.STRAFE_POWER, 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
+            self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
+            self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
+            self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
+            tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
+            tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
+            tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
+            tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
+            tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
 
-        # Rule seed from sim state (saved with physics configs)
-        tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
+            # Appearance settings from sim state (now part of physics config)
+            tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
+            tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._state.color_by_cohort)
+
+            # Rule seed from sim state (saved with physics configs)
+            tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
 
         num_workgroups = (ENTITY_COUNT + 63) // 64
         ctx.memory_barrier()
@@ -197,7 +204,8 @@ class Sim:
         self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
-               prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0):
+               prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
+               multi_load_service=None):
         self.can.use(location=1)
         self.brush_tex.use(location=3)
 
@@ -206,11 +214,15 @@ class Sim:
 
         self.brush_update(ctx)
         ctx.memory_barrier()
-        self.entity_update(ctx)
+        self.entity_update(ctx, multi_load_service)
 
         ctx.disable(moderngl.BLEND)
         self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power)
         self.frame_count += 1
+
+        # Increment multi-load progress if active
+        if multi_load_service and multi_load_service.is_active():
+            multi_load_service.increment_progress()
 
     def reset(self):
         old_fbo = self.ctx.fbo
@@ -326,6 +338,63 @@ class Sim:
             tryset(self.entity_update_program, f'{uniform_name}.x_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.y_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', 0.0)
+
+    def _set_multiload_physics_param(self, array_name: str, index: int, config, param_attr: str, slider_label: str, param_name: str, default_min: float, default_max: float):
+        """Helper to set a single PhysicsSetting struct in an array for multi-load mode."""
+        slider_value = getattr(config, param_attr)
+        min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
+
+        tryset(self.entity_update_program, f'{array_name}[{index}].slider_value', slider_value)
+        tryset(self.entity_update_program, f'{array_name}[{index}].min_value', min_val)
+        tryset(self.entity_update_program, f'{array_name}[{index}].max_value', max_val)
+        # Include sweep data from config
+        tryset(self.entity_update_program, f'{array_name}[{index}].x_sweep', config.x_sweeps.get(param_name, 0.0))
+        tryset(self.entity_update_program, f'{array_name}[{index}].y_sweep', config.y_sweeps.get(param_name, 0.0))
+        tryset(self.entity_update_program, f'{array_name}[{index}].cohort_sweep', config.cohort_sweeps.get(param_name, 0.0))
+
+    def _set_multi_load_uniforms(self, multi_load_service):
+        """Set uniform arrays for all loaded configs in multi-load mode."""
+        config_count = multi_load_service.get_config_count()
+
+        # Set multi-load control uniforms
+        tryset(self.entity_update_program, 'MULTILOAD_COUNT', config_count)
+        tryset(self.entity_update_program, 'MULTI_LOAD_CURRENT_PROGRESS', multi_load_service.current_progress)
+        tryset(self.entity_update_program, 'MULTI_LOAD_SIMULTANEOUS_CONFIGS', multi_load_service.simultaneous_configs)
+
+        # Set arrays for each loaded config
+        for i in range(config_count):
+            config = multi_load_service.get_config(i)
+            if config is None:
+                continue
+
+            # Physics parameters as PhysicsSetting structs
+            self._set_multiload_physics_param('AXIAL_FORCE_ARRAY', i, config, 'AXIAL_FORCE', 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
+            self._set_multiload_physics_param('LATERAL_FORCE_ARRAY', i, config, 'LATERAL_FORCE', 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
+            self._set_multiload_physics_param('SENSOR_GAIN_ARRAY', i, config, 'SENSOR_GAIN', 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
+            self._set_multiload_physics_param('MUTATION_SCALE_ARRAY', i, config, 'MUTATION_SCALE', 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
+            self._set_multiload_physics_param('DRAG_ARRAY', i, config, 'DRAG', 'Drag', 'DRAG', -1.0, 1.0)
+            self._set_multiload_physics_param('STRAFE_POWER_ARRAY', i, config, 'STRAFE_POWER', 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
+            self._set_multiload_physics_param('SENSOR_ANGLE_ARRAY', i, config, 'SENSOR_ANGLE', 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
+            self._set_multiload_physics_param('GLOBAL_FORCE_MULT_ARRAY', i, config, 'GLOBAL_FORCE_MULT', 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
+            self._set_multiload_physics_param('SENSOR_DISTANCE_ARRAY', i, config, 'SENSOR_DISTANCE', 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
+
+            # Simulation settings
+            tryset(self.entity_update_program, f'DISABLE_SYMMETRY_ARRAY[{i}]', config.DISABLE_SYMMETRY)
+            tryset(self.entity_update_program, f'ABSOLUTE_ORIENTATION_ARRAY[{i}]', config.ABSOLUTE_ORIENTATION)
+            tryset(self.entity_update_program, f'BOUNDARY_CONDITIONS_ARRAY[{i}]', config.boundary_conditions)
+            tryset(self.entity_update_program, f'RESET_MODE_ARRAY[{i}]', config.initial_conditions)
+            tryset(self.entity_update_program, f'COHORTS_ARRAY[{i}]', config.num_cohorts)
+
+            # Appearance settings
+            tryset(self.entity_update_program, f'HUE_SENSITIVITY_ARRAY[{i}]', config.hue_sensitivity)
+            tryset(self.entity_update_program, f'COLOR_BY_COHORT_ARRAY[{i}]', config.color_by_cohort)
+
+            # Rule seed
+            tryset(self.entity_update_program, f'RULE_SEED_ARRAY[{i}]', config.rule_seed)
+
+            # Rule array - need to set the rule as a 2D array uniform
+            # For now, we'll use a placeholder - the actual rule setting might need special handling
+            # TODO: Implement rule array setting (may need special uniform handling like set_rule_uniform)
 
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""

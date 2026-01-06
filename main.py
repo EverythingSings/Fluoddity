@@ -50,6 +50,7 @@ class App:
         self.config_saver = ConfigSaver()
         self.arrow_debug_service = ArrowDebugService(self.ctx)
         self.multi_load_service = MultiLoadService()
+        self.ui.multi_load_service = self.multi_load_service  # Give UI access to service
         self.configs_dir = Path("physics_configs")
         self.configs_dir.mkdir(exist_ok=True)
 
@@ -338,29 +339,43 @@ class App:
         if ui_state.request_load_file:
             filename = ui_state.load_filename
             if filename:
-                if self.preview_rule_active:
-                    # Preview already applied config and pushed rule - just finalize it
-                    self.preview_rule_active = False
-                    # Apply watercolor override if provided
-                    if ui_state.load_watercolor_override is not None:
-                        ui_state.sim.watercolor_mode = ui_state.load_watercolor_override
-                    print(f"Config loaded (from preview): {filename}")
-                    self.ui.update_physics_defaults(filename)
-                else:
-                    # No preview active - load fresh from file
+                # Multi-load mode: add config to service instead of replacing current
+                if ui_state.multi_load.multi_load_enabled:
                     filepath = self.configs_dir / f"{filename}.json"
                     config = self.config_saver.load_from_file(filepath)
                     if config is not None:
-                        rule = self.config_saver.apply_config(
-                            config, ui_state.sim,
-                            watercolor_override=ui_state.load_watercolor_override
-                        )
-                        self.rule_manager.push_rule(rule)
-                        self.sim.apply_rule(rule)
-                        print(f"Config loaded from {filepath}")
-                        self.ui.update_physics_defaults(filename)
+                        success = self.multi_load_service.add_config(config, filename)
+                        if success:
+                            print(f"Config added to multi-load: {filename}")
+                        else:
+                            print(f"Failed to add config: multi-load list is full ({self.multi_load_service.get_config_count()}/64)")
                     else:
                         print(f"Failed to load config from {filepath}")
+                # Normal mode: load and apply config
+                else:
+                    if self.preview_rule_active:
+                        # Preview already applied config and pushed rule - just finalize it
+                        self.preview_rule_active = False
+                        # Apply watercolor override if provided
+                        if ui_state.load_watercolor_override is not None:
+                            ui_state.sim.watercolor_mode = ui_state.load_watercolor_override
+                        print(f"Config loaded (from preview): {filename}")
+                        self.ui.update_physics_defaults(filename)
+                    else:
+                        # No preview active - load fresh from file
+                        filepath = self.configs_dir / f"{filename}.json"
+                        config = self.config_saver.load_from_file(filepath)
+                        if config is not None:
+                            rule = self.config_saver.apply_config(
+                                config, ui_state.sim,
+                                watercolor_override=ui_state.load_watercolor_override
+                            )
+                            self.rule_manager.push_rule(rule)
+                            self.sim.apply_rule(rule)
+                            print(f"Config loaded from {filepath}")
+                            self.ui.update_physics_defaults(filename)
+                        else:
+                            print(f"Failed to load config from {filepath}")
 
         # Handle file delete (menu)
         if ui_state.request_delete_file:
@@ -554,7 +569,8 @@ class App:
                     mouse_pos=mouse_tex_coords,
                     prev_mouse_pos=self.prev_mouse_tex_coords,
                     draw_size=ui_state.preferences.draw_size,
-                    draw_power=draw_power_value
+                    draw_power=draw_power_value,
+                    multi_load_service=self.multi_load_service
                 )
 
                 # Generate raw view texture (PRE-gamma correction)
@@ -613,7 +629,8 @@ class App:
                     mouse_pos=mouse_tex_coords,
                     prev_mouse_pos=self.prev_mouse_tex_coords,
                     draw_size=ui_state.preferences.draw_size,
-                    draw_power=draw_power_value
+                    draw_power=draw_power_value,
+                    multi_load_service=self.multi_load_service
                 )
 
             # Generate view texture only once at the end
