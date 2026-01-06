@@ -70,6 +70,7 @@ class App:
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
         self._load_default_config()
+        self.sim.reset()
 
     def _ensure_default_config(self):
         """Ensure _Default.json exists in physics_configs directory. Create it if missing."""

@@ -1,3 +1,13 @@
+RESTART ON OPEN
+    def run(self):
+        self.sim.reset()
+
+-Multiload
+-Timelapse
+-Black reticle for watercolor
+-draw trail reticle
+-hue offset
+-save needs to change "current file"
 Rewrite slider tooltips
 write tooltips for some sim controls
 tune slider ranges
