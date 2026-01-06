@@ -1162,8 +1162,12 @@ class UI:
                     if self.state.multi_load.per_config_cohorts:
                         imgui.end_disabled()
 
-                    _, self.state.sim.disable_symmetry = imgui.checkbox("Disable Symmetry", self.state.sim.disable_symmetry)
-                    _, self.state.sim.absolute_orientation = imgui.checkbox("Absolute Orientation", self.state.sim.absolute_orientation)
+                    # Disable these options in multi-load (per-config settings)
+                    imgui.begin_disabled()
+                    imgui.checkbox("Disable Symmetry", False)
+                    imgui.checkbox("Absolute Orientation", False)
+                    imgui.end_disabled()
+                    self._delayed_tooltip("Per-config settings in Multi-Load mode")
 
                     # Parameter Sweeps (disabled)
                     imgui.begin_disabled()
@@ -1210,8 +1214,21 @@ class UI:
                 "Simultaneous Configs", self.state.multi_load.simultaneous_configs, 0.0, float(max(1, config_count)))
             _, self.state.multi_load.progression_pace = imgui.slider_float(
                 "Progression Pace", self.state.multi_load.progression_pace, 0.0, 1.0)
-            _, self.state.multi_load.current_progress = imgui.slider_float(
-                "Current Progress", self.state.multi_load.current_progress, 0.0, 1.0)
+
+            # Sync current progress from service (for auto-advancement display)
+            if self.multi_load_service:
+                current_progress_value = self.multi_load_service.current_progress
+            else:
+                current_progress_value = self.state.multi_load.current_progress
+
+            changed, new_progress = imgui.slider_float(
+                "Current Progress", current_progress_value, 0.0, 1.0)
+            if changed and self.multi_load_service:
+                # User manually changed the slider - update service directly
+                self.multi_load_service.set_progress(new_progress)
+            # Always sync state from service for next frame
+            if self.multi_load_service:
+                self.state.multi_load.current_progress = self.multi_load_service.current_progress
 
             imgui.separator()
             imgui.text(f"Loaded Configurations ({config_count}/64)")

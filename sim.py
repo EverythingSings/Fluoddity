@@ -368,19 +368,19 @@ class Sim:
                 continue
 
             # Physics parameters as PhysicsSetting structs
-            self._set_multiload_physics_param('AXIAL_FORCE_ARRAY', i, config, 'AXIAL_FORCE', 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
-            self._set_multiload_physics_param('LATERAL_FORCE_ARRAY', i, config, 'LATERAL_FORCE', 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
-            self._set_multiload_physics_param('SENSOR_GAIN_ARRAY', i, config, 'SENSOR_GAIN', 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
-            self._set_multiload_physics_param('MUTATION_SCALE_ARRAY', i, config, 'MUTATION_SCALE', 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
-            self._set_multiload_physics_param('DRAG_ARRAY', i, config, 'DRAG', 'Drag', 'DRAG', -1.0, 1.0)
-            self._set_multiload_physics_param('STRAFE_POWER_ARRAY', i, config, 'STRAFE_POWER', 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
-            self._set_multiload_physics_param('SENSOR_ANGLE_ARRAY', i, config, 'SENSOR_ANGLE', 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
-            self._set_multiload_physics_param('GLOBAL_FORCE_MULT_ARRAY', i, config, 'GLOBAL_FORCE_MULT', 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
-            self._set_multiload_physics_param('SENSOR_DISTANCE_ARRAY', i, config, 'SENSOR_DISTANCE', 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
+            self._set_multiload_physics_param('AXIAL_FORCE_ARRAY', i, config, 'axial_force', 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
+            self._set_multiload_physics_param('LATERAL_FORCE_ARRAY', i, config, 'lateral_force', 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
+            self._set_multiload_physics_param('SENSOR_GAIN_ARRAY', i, config, 'sensor_gain', 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
+            self._set_multiload_physics_param('MUTATION_SCALE_ARRAY', i, config, 'mutation_scale', 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
+            self._set_multiload_physics_param('DRAG_ARRAY', i, config, 'drag', 'Drag', 'DRAG', -1.0, 1.0)
+            self._set_multiload_physics_param('STRAFE_POWER_ARRAY', i, config, 'strafe_power', 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
+            self._set_multiload_physics_param('SENSOR_ANGLE_ARRAY', i, config, 'sensor_angle', 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
+            self._set_multiload_physics_param('GLOBAL_FORCE_MULT_ARRAY', i, config, 'global_force_mult', 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
+            self._set_multiload_physics_param('SENSOR_DISTANCE_ARRAY', i, config, 'sensor_distance', 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
 
             # Simulation settings
-            tryset(self.entity_update_program, f'DISABLE_SYMMETRY_ARRAY[{i}]', config.DISABLE_SYMMETRY)
-            tryset(self.entity_update_program, f'ABSOLUTE_ORIENTATION_ARRAY[{i}]', config.ABSOLUTE_ORIENTATION)
+            tryset(self.entity_update_program, f'DISABLE_SYMMETRY_ARRAY[{i}]', config.disable_symmetry)
+            tryset(self.entity_update_program, f'ABSOLUTE_ORIENTATION_ARRAY[{i}]', config.absolute_orientation)
             tryset(self.entity_update_program, f'BOUNDARY_CONDITIONS_ARRAY[{i}]', config.boundary_conditions)
             tryset(self.entity_update_program, f'RESET_MODE_ARRAY[{i}]', config.initial_conditions)
             tryset(self.entity_update_program, f'COHORTS_ARRAY[{i}]', config.num_cohorts)
