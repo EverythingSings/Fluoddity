@@ -361,6 +361,12 @@ class Sim:
         tryset(self.entity_update_program, 'MULTI_LOAD_CURRENT_PROGRESS', multi_load_service.current_progress)
         tryset(self.entity_update_program, 'MULTI_LOAD_SIMULTANEOUS_CONFIGS', multi_load_service.simultaneous_configs)
 
+        # Set assignment mode and per-config flags
+        assignment_mode_int = 1 if multi_load_service.assignment_mode == "Random" else 0
+        tryset(self.entity_update_program, 'MULTI_LOAD_ASSIGNMENT_MODE', assignment_mode_int)
+        tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS', multi_load_service.per_config_initial_conditions)
+        tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_COHORTS', multi_load_service.per_config_cohorts)
+
         # Set arrays for each loaded config
         for i in range(config_count):
             config = multi_load_service.get_config(i)

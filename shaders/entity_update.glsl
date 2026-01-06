@@ -49,13 +49,76 @@ uniform bool DISABLE_SYMMETRY;
 uniform bool ABSOLUTE_ORIENTATION;//orient physics around y axis instead of particle velocity
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
-uniform int COHORTS; //each cohort gets its own rule and starting location 
+uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
+
+// Multi-load uniforms
+uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
+uniform float MULTI_LOAD_CURRENT_PROGRESS; // Current position in config ring (0-1)
+uniform float MULTI_LOAD_SIMULTANEOUS_CONFIGS; // How many configs to span
+uniform int MULTI_LOAD_ASSIGNMENT_MODE; // 0 = Cohorts, 1 = Random
+uniform bool MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS; // If true, use per-config reset modes
+uniform bool MULTI_LOAD_PER_CONFIG_COHORTS; // If true, use per-config cohort counts
+
+// Multi-load physics parameter arrays (as PhysicsSetting structs)
+uniform PhysicsSetting AXIAL_FORCE_ARRAY[64];
+uniform PhysicsSetting LATERAL_FORCE_ARRAY[64];
+uniform PhysicsSetting SENSOR_GAIN_ARRAY[64];
+uniform PhysicsSetting MUTATION_SCALE_ARRAY[64];
+uniform PhysicsSetting DRAG_ARRAY[64];
+uniform PhysicsSetting STRAFE_POWER_ARRAY[64];
+uniform PhysicsSetting SENSOR_ANGLE_ARRAY[64];
+uniform PhysicsSetting GLOBAL_FORCE_MULT_ARRAY[64];
+uniform PhysicsSetting SENSOR_DISTANCE_ARRAY[64];
+
+// Multi-load simulation setting arrays
+uniform bool DISABLE_SYMMETRY_ARRAY[64];
+uniform bool ABSOLUTE_ORIENTATION_ARRAY[64];
+uniform int BOUNDARY_CONDITIONS_ARRAY[64];
+uniform int RESET_MODE_ARRAY[64];
+uniform int COHORTS_ARRAY[64];
+
+// Multi-load appearance arrays
+uniform float HUE_SENSITIVITY_ARRAY[64];
+uniform bool COLOR_BY_COHORT_ARRAY[64];
+
+// Multi-load rule seed array
+uniform float RULE_SEED_ARRAY[64];
+
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
 #define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer.
-                            //Entities with index > ACTIVE_COUNT aren't rendered or updated
 
+// Multi-load helper: Calculate which config index this particle should use
+int get_particle_config_index() {
+    if (MULTILOAD_COUNT == 0) return -1; // Not in multi-load mode
+
+    // Calculate normalized index (0 to 1) for this particle
+    float normalized_index = float(gl_GlobalInvocationID.x) / float(ACTIVE_COUNT);
+
+    // For "Random" assignment mode, hash the normalized_index for stable pseudo-random assignment
+    if (MULTI_LOAD_ASSIGNMENT_MODE == 1) {
+        normalized_index = hash(vec2(normalized_index, 0.0));
+    }
+
+    // Calculate config index using circular ring formula
+    // If SIMULTANEOUS_CONFIGS == 2, span across 2 full indices as normalized_index sweeps 0 to 1
+    float offset = MULTI_LOAD_SIMULTANEOUS_CONFIGS / float(MULTILOAD_COUNT) * normalized_index;
+    float ring_position = fract(MULTI_LOAD_CURRENT_PROGRESS + offset);
+    int config_index = int(floor(float(MULTILOAD_COUNT) * ring_position));
+
+    // Clamp to valid range
+    return clamp(config_index, 0, MULTILOAD_COUNT - 1);
+}
+                            //Entities with index > ACTIVE_COUNT aren't rendered or updated
+int get_particle_cohorts() {
+    int idx = get_particle_config_index();
+    // Use per-config value only if multi-load is active AND per-config checkbox is enabled
+    if (idx >= 0 && MULTI_LOAD_PER_CONFIG_COHORTS) {
+        return COHORTS_ARRAY[idx];
+    }
+    return COHORTS;
+}
 //Calculate the actual setting value for this particle. When sweeps are
 //active, physics settings can depend on entity position and cohort
 // SYNCHRONIZED: This function must match canvas.frag and sim.py::calculate_setting
@@ -66,7 +129,7 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
         {return setting.slider_value;}
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
-    cohort = cohort / float(COHORTS); //convert to 0..1 for mixing
+    cohort = cohort / float(get_particle_cohorts()); //convert to 0..1 for mixing
 
     // Count active sweeps and accumulate results
     float result = 0;
@@ -104,6 +167,96 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
 }
 
 
+
+// Helper functions to get config values (return array value if multi-load, else single uniform)
+
+PhysicsSetting get_particle_axial_force() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? AXIAL_FORCE_ARRAY[idx] : AXIAL_FORCE_SETTING;
+}
+
+PhysicsSetting get_particle_lateral_force() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? LATERAL_FORCE_ARRAY[idx] : LATERAL_FORCE_SETTING;
+}
+
+PhysicsSetting get_particle_sensor_gain() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? SENSOR_GAIN_ARRAY[idx] : SENSOR_GAIN_SETTING;
+}
+
+PhysicsSetting get_particle_mutation_scale() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? MUTATION_SCALE_ARRAY[idx] : MUTATION_SCALE_SETTING;
+}
+
+PhysicsSetting get_particle_drag() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? DRAG_ARRAY[idx] : DRAG_SETTING;
+}
+
+PhysicsSetting get_particle_strafe_power() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? STRAFE_POWER_ARRAY[idx] : STRAFE_POWER_SETTING;
+}
+
+PhysicsSetting get_particle_sensor_angle() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? SENSOR_ANGLE_ARRAY[idx] : SENSOR_ANGLE_SETTING;
+}
+
+PhysicsSetting get_particle_global_force_mult() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? GLOBAL_FORCE_MULT_ARRAY[idx] : GLOBAL_FORCE_MULT_SETTING;
+}
+
+PhysicsSetting get_particle_sensor_distance() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? SENSOR_DISTANCE_ARRAY[idx] : SENSOR_DISTANCE_SETTING;
+}
+
+bool get_particle_disable_symmetry() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? DISABLE_SYMMETRY_ARRAY[idx] : DISABLE_SYMMETRY;
+}
+
+bool get_particle_absolute_orientation() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? ABSOLUTE_ORIENTATION_ARRAY[idx] : ABSOLUTE_ORIENTATION;
+}
+
+int get_particle_boundary_conditions() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? BOUNDARY_CONDITIONS_ARRAY[idx] : BOUNDARY_CONDITIONS_MODE;
+}
+
+int get_particle_reset_mode() {
+    int idx = get_particle_config_index();
+    // Use per-config value only if multi-load is active AND per-config checkbox is enabled
+    if (idx >= 0 && MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS) {
+        return RESET_MODE_ARRAY[idx];
+    }
+    return RESET_MODE;
+}
+
+
+
+float get_particle_hue_sensitivity() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? HUE_SENSITIVITY_ARRAY[idx] : HUE_SENSITIVITY;
+}
+
+bool get_particle_color_by_cohort() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? COLOR_BY_COHORT_ARRAY[idx] : COLOR_BY_COHORT;
+}
+
+float get_particle_rule_seed() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? RULE_SEED_ARRAY[idx] : RULE_SEED;
+}
+
+
 ////////////////////////////////////
 //FOURIER NOISE IS IMPORTED INTO THIS SHADER
 //FROM fourier4_4.glsl
@@ -120,7 +273,7 @@ vec4 get_can(vec2 p){
     vec2 res=textureSize(canvas,0);
     vec2 aspect=vec2(1,res.x/res.y);
     vec2 uv = p/2*aspect+.5;
-    if(BOUNDARY_CONDITIONS_MODE == 2) uv = fract(uv);
+    if(get_particle_boundary_conditions() == 2) uv = fract(uv);
     return texture(canvas, uv);
 }
 
@@ -129,7 +282,7 @@ vec2 safenorm(vec2 p){
 }
 
 float get_cohort(uint index) {
-    return float(COHORTS) * float(index) / float(ACTIVE_COUNT);
+    return float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
 }
 
 //Return all entities to their initialization state
@@ -144,28 +297,30 @@ void reset(uint index){
     vec2 vel=0.01*.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
 
     //RESET_MODE: 0=Grid, 1=Random, 2=Ring
-    if(RESET_MODE == 0) {
+    int reset_mode = get_particle_reset_mode();
+    int cohorts = get_particle_cohorts();
+    if(reset_mode == 0) {
         //GRID: position different cohorts at different places in a grid
-        float spots=COHORTS;
+        float spots=float(cohorts);
         float spot_rows=ceil(sqrt(spots));
         vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
         pR(pos,floor(cohort_val)*3.1415*2*spots);
         pos+=1.8*((gridcell)/spot_rows+ (1/2.*(1/spot_rows-1)));
     }
-    else if(RESET_MODE == 1) {
+    else if(reset_mode == 1) {
         //RANDOM: scatter cohorts randomly across the canvas, homogenous start
         pos+= vec2(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0))) * 2.0 - 1.0;
     }
-    else if(RESET_MODE == 2) {
+    else if(reset_mode == 2) {
         //RING: arrange cohorts in a ring pattern
-        float angle = cohort_val / float(COHORTS) * 2.0 * PI;
+        float angle = cohort_val / float(cohorts) * 2.0 * PI;
         float radius = 0.5;
         pos += vec2(cos(angle), sin(angle)) * radius;
         //pos += 0.02 * vec2(hash(vec2(cohort_val)), hash(vec2(cohort_val + 1.0))); // Small jitter
     }
 
     //store to persistent entity buffer
-    entities[index]=Entity(pos,vel,size,cohort_val/float(COHORTS),float[2](0,0),color);
+    entities[index]=Entity(pos,vel,size,cohort_val/float(cohorts),float[2](0,0),color);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
@@ -259,14 +414,14 @@ void main() {
     float cohort = get_cohort(index);
 
     //Calculate position offsets for the two sensors.
-    float sample_dist = .005 * calculate_setting(SENSOR_DISTANCE_SETTING,e.pos,cohort);
-    
+    float sample_dist = .005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
+
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
-    if(ABSOLUTE_ORIENTATION){orientation = vec2(0,1);}
+    if(get_particle_absolute_orientation()){orientation = vec2(0,1);}
     vec2 left_sensor_offset = orientation*sample_dist;
     vec2 right_sensor_offset = orientation*sample_dist;
-    pR(left_sensor_offset,calculate_setting(SENSOR_ANGLE_SETTING,e.pos,cohort)*PI);//rotate them opposite directions
-    pR(right_sensor_offset,-calculate_setting(SENSOR_ANGLE_SETTING,e.pos,cohort)*PI);
+    pR(left_sensor_offset,calculate_setting(get_particle_sensor_angle(),e.pos,cohort)*PI);//rotate them opposite directions
+    pR(right_sensor_offset,-calculate_setting(get_particle_sensor_angle(),e.pos,cohort)*PI);
 
     //read the trails from canvas
     vec4 ltap = get_can(e.pos+left_sensor_offset);
@@ -275,13 +430,13 @@ void main() {
     Rule current_rule=target_rule;
     //if a few coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
-        current_rule = Rule(generate_random_centers(RULE_SEED+floor(cohort)));
+        current_rule = Rule(generate_random_centers(get_particle_rule_seed()+floor(cohort)));
     }
     //Each cohort gets a random mutation
-    mutate_rule(current_rule,calculate_setting(MUTATION_SCALE_SETTING,e.pos,cohort),RULE_SEED+floor(cohort));
+    mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),e.pos,cohort),get_particle_rule_seed()+floor(cohort));
 
     //rescale sensor values
-    float sensor_scaling = 38.855*calculate_setting(SENSOR_GAIN_SETTING,e.pos,cohort);
+    float sensor_scaling = 38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
     ltap *= sensor_scaling;
     rtap *= sensor_scaling;
 
@@ -292,27 +447,28 @@ void main() {
     calculate_entity_behavior(ltap.xy,rtap.xy,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
 
     //rescale output forces
-    force *= calculate_setting(GLOBAL_FORCE_MULT_SETTING,e.pos,cohort)/400.;
-    strafe *= calculate_setting(GLOBAL_FORCE_MULT_SETTING,e.pos,cohort)/20.;
+    force *= calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
+    strafe *= calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
 
 
     //e.color is interpreted as vec4(hue,saturation,brightness,alpha)
     //We just set brightness to 1 and modulate hue and saturation
-    e.color.x = HUE_SENSITIVITY*col_params.x;//hue can be anything
+    e.color.x = get_particle_hue_sensitivity()*col_params.x;//hue can be anything
     e.color.y = sin(col_params.y)/2.+.5;//saturation must be 0..1
 
-    if(COLOR_BY_COHORT) {e.color.x = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
+    if(get_particle_color_by_cohort()) {e.color.x = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
     e.color.z=1;//brightness 1.
     e.color.w=0.045; //low alpha
 
     //Accelerate: Apply drag and add force to e.vel,
-    e.vel = e.vel*calculate_setting(DRAG_SETTING,e.pos,cohort) + force;
+    e.vel = e.vel*calculate_setting(get_particle_drag(),e.pos,cohort) + force;
     //Move: add e.vel and strafe to e.pos
     e.pos += e.vel;
-    e.pos += strafe*calculate_setting(STRAFE_POWER_SETTING,e.pos,cohort);
+    e.pos += strafe*calculate_setting(get_particle_strafe_power(),e.pos,cohort);
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
-    if(BOUNDARY_CONDITIONS_MODE==0){
+    int boundary_mode = get_particle_boundary_conditions();
+    if(boundary_mode==0){
         //reflect particles off canvas boundaries
         if (e.pos.x < -1.0 || e.pos.x > 1.0){
             e.vel.x=-e.vel.x;
@@ -324,14 +480,14 @@ void main() {
             e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
         }
     }
-    else if(BOUNDARY_CONDITIONS_MODE==1){
+    else if(boundary_mode==1){
         //reset to initial conditions
         if(e.pos.x<-1.||e.pos.x>1.||e.pos.y<-1||e.pos.y>1.){
             reset(index);
             return;//reset expects to be the last thing we do. It handles entity buffer storage
         }
     }
-    else if(BOUNDARY_CONDITIONS_MODE==2){
+    else if(boundary_mode==2){
         //wrap from from -1 to 1
         e.pos = 2*(fract(e.pos/2-.5)-.5);
     }
