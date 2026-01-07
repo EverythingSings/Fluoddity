@@ -171,16 +171,25 @@ class Sim:
         self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=ENTITY_COUNT, vertices=4)
 
     def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
-                   prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0):
+                   prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
+                   multi_load_service=None):
         # Boundary conditions mode for wrap behavior
         tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
+
+        # Multi-load mode: calculate weighted average trail settings
+        if multi_load_service and multi_load_service.is_active():
+            trail_persistence, trail_diffusion = self._calculate_weighted_trail_settings(multi_load_service)
+        else:
+            trail_persistence = self._state.TRAIL_PERSISTENCE
+            trail_diffusion = self._state.TRAIL_DIFFUSION
+
         # Assign TRAIL_PERSISTENCE as a PhysicsSetting struct
         min_val, max_val = self._get_slider_range('Trail Persistence', 0.0, 1.0)
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.slider_value', self._state.TRAIL_PERSISTENCE)
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.slider_value', trail_persistence)
         tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.min_value', min_val)
         tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.max_value', max_val)
-        # Only apply sweeps if parameter sweeps UI is enabled
-        if self._state.parameter_sweeps_enabled:
+        # Only apply sweeps if parameter sweeps UI is enabled AND not in multi-load mode
+        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_PERSISTENCE', 0.0))
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_PERSISTENCE', 0.0))
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_PERSISTENCE', 0.0))
@@ -191,11 +200,11 @@ class Sim:
 
         # Assign TRAIL_DIFFUSION as a PhysicsSetting struct
         min_val, max_val = self._get_slider_range('Trail Diffusion', 0.0, 1.0)
-        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.slider_value', self._state.TRAIL_DIFFUSION)
+        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.slider_value', trail_diffusion)
         tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.min_value', min_val)
         tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.max_value', max_val)
-        # Only apply sweeps if parameter sweeps UI is enabled
-        if self._state.parameter_sweeps_enabled:
+        # Only apply sweeps if parameter sweeps UI is enabled AND not in multi-load mode
+        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
             tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_DIFFUSION', 0.0))
             tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_DIFFUSION', 0.0))
             tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_DIFFUSION', 0.0))
@@ -232,7 +241,7 @@ class Sim:
         self.entity_update(ctx, multi_load_service)
 
         ctx.disable(moderngl.BLEND)
-        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power)
+        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service)
         self.frame_count += 1
 
         # Increment multi-load progress if active
@@ -353,6 +362,107 @@ class Sim:
             tryset(self.entity_update_program, f'{uniform_name}.x_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.y_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', 0.0)
+
+    def _calculate_weighted_trail_settings(self, multi_load_service) -> tuple[float, float]:
+        """Calculate weighted average trail settings based on multi-load window.
+
+        The window is defined by current_progress (position in circular buffer, 0-1)
+        and simultaneous_configs (span width in number of configs). We calculate
+        which configs the window touches and their weights, then return weighted averages.
+
+        Args:
+            multi_load_service: MultiLoadService instance
+
+        Returns:
+            (trail_persistence, trail_diffusion) tuple of weighted averages
+        """
+        config_count = multi_load_service.get_config_count()
+        if config_count == 0:
+            return (0.938, 1.0)  # Default values
+
+        current_progress = multi_load_service.current_progress
+        simultaneous = multi_load_service.simultaneous_configs
+
+        # Calculate window center and half-width in config index space
+        # Each config occupies unit width [i, i+1) in index space
+        half_width = simultaneous / 2.0
+        center = current_progress * config_count + half_width
+        
+        # Calculate weighted sum
+        total_weight = 0.0
+        weighted_persistence = 0.0
+        weighted_diffusion = 0.0
+
+        for i in range(config_count):
+            # Calculate overlap between window and config i
+            # Config i occupies space [i, i+1) in index space
+            overlap = self._calculate_circular_overlap(
+                center - half_width,  # window start
+                center + half_width,  # window end
+                float(i),              # config start
+                float(i + 1),          # config end
+                float(config_count)    # total configs for wrapping
+            )
+
+            if overlap > 0:
+                config = multi_load_service.get_config(i)
+                if config:
+                    weighted_persistence += overlap * config.trail_persistence
+                    weighted_diffusion += overlap * config.trail_diffusion
+                    total_weight += overlap
+
+        # Return weighted averages
+        if total_weight > 0:
+            return (weighted_persistence / total_weight, weighted_diffusion / total_weight)
+        else:
+            # Fallback to first config if no overlap (shouldn't happen)
+            config = multi_load_service.get_config(0)
+            if config:
+                return (config.trail_persistence, config.trail_diffusion)
+            return (0.938, 1.0)
+
+    def _calculate_circular_overlap(self, win_start: float, win_end: float,
+                                     cfg_start: float, cfg_end: float,
+                                     total_count: float) -> float:
+        """Calculate overlap between window and config in circular buffer.
+
+        Args:
+            win_start, win_end: Window bounds in index space (can be negative or > total_count)
+            cfg_start, cfg_end: Config bounds in index space [i, i+1)
+            total_count: Total number of configs
+
+        Returns:
+            Overlap amount (0 to 1.0 representing fraction of window)
+        """
+        # Normalize window bounds to [0, total_count) range with wrapping
+        win_start = win_start % total_count
+        win_end = win_end % total_count
+
+        overlap = 0.0
+
+        # Case 1: Window doesn't wrap (win_start < win_end)
+        if win_start <= win_end:
+            # Simple overlap calculation
+            overlap_start = max(win_start, cfg_start)
+            overlap_end = min(win_end, cfg_end)
+            overlap = max(0.0, overlap_end - overlap_start)
+        else:
+            # Case 2: Window wraps around (win_start > win_end in normalized space)
+            # The window consists of two segments: [win_start, total_count) and [0, win_end)
+
+            # Check overlap with first segment [win_start, total_count)
+            if cfg_end > win_start:
+                overlap_start = max(win_start, cfg_start)
+                overlap_end = min(total_count, cfg_end)
+                overlap += max(0.0, overlap_end - overlap_start)
+
+            # Check overlap with second segment [0, win_end)
+            if cfg_start < win_end:
+                overlap_start = max(0.0, cfg_start)
+                overlap_end = min(win_end, cfg_end)
+                overlap += max(0.0, overlap_end - overlap_start)
+
+        return overlap
 
     def _set_multiload_physics_param(self, array_name: str, index: int, config, param_attr: str, slider_label: str, param_name: str, default_min: float, default_max: float):
         """Helper to set a single PhysicsSetting struct in an array for multi-load mode."""
