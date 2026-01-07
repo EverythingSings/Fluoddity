@@ -571,7 +571,8 @@ class App:
                     prev_mouse_pos=self.prev_mouse_tex_coords,
                     draw_size=ui_state.preferences.draw_size,
                     draw_power=draw_power_value,
-                    multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None
+                    multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None,
+                    is_preview_active = self.preview_rule_active
                 )
 
                 # Generate raw view texture (PRE-gamma correction)

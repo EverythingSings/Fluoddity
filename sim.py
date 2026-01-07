@@ -116,7 +116,7 @@ class Sim:
 
 
     
-    def entity_update(self, ctx: moderngl.Context, multi_load_service=None):
+    def entity_update(self, ctx: moderngl.Context, multi_load_service=None,is_preview_active = False):
         '''
         Run a single physics update on all particles
         '''
@@ -124,7 +124,7 @@ class Sim:
         tryset(self.entity_update_program, 'canvas', 1)
 
         # Multi-load mode: set uniform arrays for all loaded configs
-        if multi_load_service and multi_load_service.is_active():
+        if multi_load_service and multi_load_service.is_active() and not is_preview_active:
             self._set_multi_load_uniforms(multi_load_service)
         
         # Normal mode: set single config uniforms
@@ -172,12 +172,12 @@ class Sim:
 
     def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                    prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-                   multi_load_service=None):
+                   multi_load_service=None,is_preview_active = False):
         # Boundary conditions mode for wrap behavior
         tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
 
         # Multi-load mode: calculate weighted average trail settings
-        if multi_load_service and multi_load_service.is_active():
+        if multi_load_service and multi_load_service.is_active() and not is_preview_active:
             trail_persistence, trail_diffusion = self._calculate_weighted_trail_settings(multi_load_service)
         else:
             trail_persistence = self._state.TRAIL_PERSISTENCE
@@ -229,7 +229,7 @@ class Sim:
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-               multi_load_service=None):
+               multi_load_service=None, is_preview_active = False):
         self.can.use(location=1)
         self.brush_tex.use(location=3)
 
@@ -238,10 +238,10 @@ class Sim:
 
         self.brush_update(ctx)
         ctx.memory_barrier()
-        self.entity_update(ctx, multi_load_service)
+        self.entity_update(ctx, multi_load_service,is_preview_active)
 
         ctx.disable(moderngl.BLEND)
-        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service)
+        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service,is_preview_active)
         self.frame_count += 1
 
         # Increment multi-load progress if active
@@ -385,7 +385,7 @@ class Sim:
 
         # Calculate window center and half-width in config index space
         # Each config occupies unit width [i, i+1) in index space
-        half_width = simultaneous / 2.0
+        half_width = simultaneous / 2.0 + 1e-3
         center = current_progress * config_count + half_width
         
         # Calculate weighted sum
