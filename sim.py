@@ -527,8 +527,12 @@ class Sim:
             for attr_name, param_name, default_min, default_max in params:
                 slider_value = getattr(config, attr_name)
                 min_val, max_val = self._get_slider_range(attr_name.replace('_', ' ').title(), default_min, default_max)
-                x_sweep = config.x_sweeps.get(param_name, 0.0)
-                y_sweep = config.y_sweeps.get(param_name, 0.0)
+                if config.parameter_sweeps_enabled:
+                    x_sweep = config.x_sweeps.get(param_name, 0.0) 
+                    y_sweep = config.y_sweeps.get(param_name, 0.0)
+                else:
+                    x_sweep = 0
+                    y_sweep = 0
                 cohort_sweep = config.cohort_sweeps.get(param_name, 0.0)
                 data.extend(struct.pack('6f', slider_value, min_val, max_val, x_sweep, y_sweep, cohort_sweep))
 
