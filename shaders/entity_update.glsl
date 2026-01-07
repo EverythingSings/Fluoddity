@@ -237,9 +237,11 @@ bool get_particle_absolute_orientation() {
     return idx >= 0 ? bool(configs[idx].absolute_orientation) : ABSOLUTE_ORIENTATION;
 }
 
+//HARDCODED TO BE GLOBAL FOR NOW
 int get_particle_boundary_conditions() {
-    int idx = get_particle_config_index();
-    return idx >= 0 ? configs[idx].boundary_conditions : BOUNDARY_CONDITIONS_MODE;
+    //int idx = get_particle_config_index();
+    //return idx >= 0 ? configs[idx].boundary_conditions : BOUNDARY_CONDITIONS_MODE;
+    return BOUNDARY_CONDITIONS_MODE;
 }
 
 int get_particle_reset_mode() {
@@ -252,15 +254,18 @@ int get_particle_reset_mode() {
 }
 
 
-
+//HARDCODED TO BE GLOBAL FOR NOW
 float get_particle_hue_sensitivity() {
-    int idx = get_particle_config_index();
-    return idx >= 0 ? configs[idx].hue_sensitivity : HUE_SENSITIVITY;
+    //int idx = get_particle_config_index();
+    //return idx >= 0 ? configs[idx].hue_sensitivity : HUE_SENSITIVITY;
+    return HUE_SENSITIVITY;
 }
 
+//HARDCODED TO BE GLOBAL FOR NOW
 bool get_particle_color_by_cohort() {
-    int idx = get_particle_config_index();
-    return idx >= 0 ? bool(configs[idx].color_by_cohort) : COLOR_BY_COHORT;
+    //int idx = get_particle_config_index();
+    //return idx >= 0 ? bool(configs[idx].color_by_cohort) : COLOR_BY_COHORT;
+    return COLOR_BY_COHORT;
 }
 
 float get_particle_rule_seed() {

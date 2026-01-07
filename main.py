@@ -72,6 +72,7 @@ class App:
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
         self._load_default_config()
+        self.sim.reload()
         self.sim.reset()
 
     def _ensure_default_config(self):
