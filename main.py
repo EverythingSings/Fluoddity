@@ -266,7 +266,6 @@ class App:
             zero_rule = self.rule_manager.push_zero_rule()
             self.sim.apply_rule(zero_rule)
 
-        # Handle entity clicking and rule undo (only in Select Particle mode)
         # Handle sweep preview restore: ANY click (including on imgui) re-enables sweeps
         restored_sweep_preview = False
         if ui_state.sim.sweep_preview_pending_restore:
@@ -275,9 +274,10 @@ class App:
                 ui_state.sim.sweep_preview_pending_restore = False
                 restored_sweep_preview = True  # Skip click handling below
 
-        if ui_state.preferences.mouse_mode == "Select Particle" and not restored_sweep_preview:
+        # Handle mouse clicks - behavior depends on whether parameter sweeps are enabled
+        if not restored_sweep_preview:
             if ui_state.left_click_this_frame:
-                # When parameter sweeps checkbox is enabled, disable rule picking entirely
+                # When parameter sweeps are enabled, left click updates sliders (any mouse mode)
                 if ui_state.sim.parameter_sweeps_enabled:
                     # Only update sliders if there are active sweeps
                     if self.sim.has_active_xy_sweep():
@@ -293,7 +293,8 @@ class App:
                         else:
                             self.sim.update_sliders_from_position(world_pos)
                     # If no active sweeps, left click does nothing
-                else:
+                # When parameter sweeps are disabled and in Select Particle mode, pick entity
+                elif ui_state.preferences.mouse_mode == "Select Particle":
                     # Normal mode: pick entity and apply rule
                     tex_coords = self.camera.screen_to_tex(
                         ui_state.mouse_pos,
@@ -306,7 +307,7 @@ class App:
                     self.sim.apply_rule(rule)
                     self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
             elif ui_state.right_click_this_frame:
-                # When parameter sweeps checkbox is enabled, disable rule undo entirely
+                # When parameter sweeps are enabled, right click enters preview mode (any mouse mode)
                 if ui_state.sim.parameter_sweeps_enabled:
                     # Only enter preview mode if there are active sweeps
                     if self.sim.has_active_xy_sweep():
@@ -314,7 +315,8 @@ class App:
                         ui_state.sim.parameter_sweeps_enabled = False
                         ui_state.sim.sweep_preview_pending_restore = True
                     # If no active sweeps, right click does nothing
-                else:
+                # When parameter sweeps are disabled and in Select Particle mode, undo rule
+                elif ui_state.preferences.mouse_mode == "Select Particle":
                     # Normal mode: pop rule from history
                     prev_rule = self.rule_manager.pop_rule()
                     self.sim.apply_rule(prev_rule)
@@ -624,7 +626,7 @@ class App:
                     camera_zoom=self.camera.zoom,
                     emboss_intensity=effective_emboss_intensity,
                     emboss_smoothness=ui_state.sim.emboss_smoothness,
-                    trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and not self.video_service.is_active() else 0,
+                    trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
                     mouse_screen_coords=mouse_screen_coords
                 )
 
@@ -686,7 +688,7 @@ class App:
                 camera_zoom=self.camera.zoom,
                 emboss_intensity=effective_emboss_intensity,
                 emboss_smoothness=ui_state.sim.emboss_smoothness,
-                trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and not self.video_service.is_active() else 0,
+                trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
                 mouse_screen_coords=mouse_screen_coords
             )
 
