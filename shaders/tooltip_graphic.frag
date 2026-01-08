@@ -17,6 +17,7 @@ uniform bool DRAG_MODE;
 uniform bool ANGLE_MODE;
 uniform bool DISTANCE_MODE;
 uniform bool TRAIL_MODE;
+uniform bool DIFFUSION_MODE;
 uniform bool GLOBAL_MODE;
 uniform bool STRAFE_MODE;
 uniform bool MUTATION_MODE;
@@ -84,9 +85,15 @@ void main() {
     
     //trail indicator
     vec2 tuv = uv;
-    //pR(tuv,-length(tuv*.61)*LATERAL_SLIDER/(1+1*abs(AXIAL_SLIDER)));
     vec3 trail_col = 2*vec3(1,.6,.2);
-    if(!TRAIL_MODE)trail_col = mix(trail_col,vec3(.5),.75);
+    if(DIFFUSION_MODE){
+    tuv.x=mix(tuv.x,tuv.x*(1.-.8*sqrt(abs(tuv.y))),.5+.5*sin(time));
+    trail_col*=1.-.8*abs(tuv.y)*(.5+.5*sin(time));
+    }
+    //pR(tuv,-length(tuv*.61)*LATERAL_SLIDER/(1+1*abs(AXIAL_SLIDER)));
+    
+    if(!TRAIL_MODE&&!DIFFUSION_MODE)trail_col = mix(trail_col,vec3(.5),.75);
+
     fragColor.xyz += trail_col*.7*max(0,sign(-tuv.y)*max(0,1-8*abs(tuv.x)))*exp(tuv.y*10*(1-TRAIL_PERSISTENCE_SLIDER)/TRAIL_PERSISTENCE_SLIDER);
     
     //center particle

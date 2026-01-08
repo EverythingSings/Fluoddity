@@ -71,7 +71,8 @@ class FrameAssembler:
                        sweep_mode=False, sweep_reticle_pos=(0.5, 0.5), sweep_reticle_visible=False,
                        screen_aspect=1.0, brightness=1.0, ink_weight=1.0, watercolor_mode=False,
                        emboss_tex=None, camera_position=(0.0, 0.0), camera_zoom=1.0,
-                       emboss_intensity=0.0, emboss_smoothness=0.1):
+                       emboss_intensity=0.0, emboss_smoothness=0.1, trail_draw_radius=0.0,
+                       mouse_screen_coords=(0.5, 0.5)):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -141,6 +142,8 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'BRIGHTNESS', brightness)
         tryset(self.resources['shader'], 'INK_WEIGHT', ink_weight)
         tryset(self.resources['shader'], 'WATERCOLOR_MODE', watercolor_mode)
+        tryset(self.resources['shader'], 'TRAIL_DRAW_RADIUS', trail_draw_radius)
+        tryset(self.resources['shader'], 'mouse_screen_coords', mouse_screen_coords)
         # Camera and emboss uniforms
         tryset(self.resources['shader'], 'camera_position', camera_position)
         tryset(self.resources['shader'], 'camera_zoom', camera_zoom)

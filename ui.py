@@ -1798,6 +1798,7 @@ class UI:
         self.tooltip_program['ANGLE_MODE'] = (self.last_hovered_slider == "Sensor Angle")
         self.tooltip_program['DISTANCE_MODE'] = (self.last_hovered_slider == "Sensor Distance")
         self.tooltip_program['TRAIL_MODE'] = (self.last_hovered_slider == "Trail Persistence")
+        self.tooltip_program['DIFFUSION_MODE'] = (self.last_hovered_slider == "Trail Diffusion")
         self.tooltip_program['GLOBAL_MODE'] = (self.last_hovered_slider == "Global Force Mult")
         self.tooltip_program['STRAFE_MODE'] = (self.last_hovered_slider == "Strafe Power")
         self.tooltip_program['MUTATION_MODE'] = (self.last_hovered_slider == "Mutation Scale")

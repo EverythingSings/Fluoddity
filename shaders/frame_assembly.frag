@@ -12,6 +12,8 @@ uniform float screen_aspect;        // Screen width/height for aspect-correct ci
 uniform float BRIGHTNESS;           // Global brightness multiplier (applied before gamma)
 uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()
 uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
+uniform float TRAIL_DRAW_RADIUS;    // Draw size for trail drawing overlay (0 when not active)
+uniform vec2 mouse_screen_coords;   // Mouse position in normalized screen coords (0-1)
 
 // Camera state for screen-to-canvas UV conversion
 uniform vec2 camera_position;       // Camera position in world space
@@ -94,6 +96,33 @@ vec3 sweep_overlay(vec2 uv_coord) {
     // White reticle with slight transparency effect
     return vec3(reticle * 0.8);
 }
+
+vec3 draw_overlay(vec2 uv_coord) {
+
+    // Draw a ring showing the trail drawing radius
+    if (TRAIL_DRAW_RADIUS <= 0.0) {
+        return vec3(0.0);
+    }
+
+    // Calculate delta in screen space with aspect correction
+    // Use mouse_screen_coords for the ring center
+    vec2 delta = uv_coord - vec2(0,1)-mouse_screen_coords*vec2(1,-1);
+    delta.x *= screen_aspect;
+
+    float dist = length(delta);
+
+    // Ring parameters - scale the radius to screen space
+    // TRAIL_DRAW_RADIUS is in canvas space (0-1), need to convert to screen space
+    float radius = 2*TRAIL_DRAW_RADIUS / camera_zoom;
+    float line_thickness = 0.003;
+
+    // Draw a thin ring at the draw radius
+    float ring = smoothstep(radius - line_thickness, radius, dist)
+               - smoothstep(radius, radius + line_thickness, dist);
+
+    // Return white or black depending on watercolor mode (like sweep_overlay)
+    return vec3(ring * 0.6);
+}
 vec2 safenorm(vec2 n){
     float l = length(n);
     return l>0?n/l:vec2(0);
@@ -153,6 +182,9 @@ void main() {
     }
         if(PARAMETER_SWEEP_MODE){
             fragColor.xyz += sweep_overlay(uv)* (WATERCOLOR_MODE?-1:1);
+        }
+        if(TRAIL_DRAW_RADIUS > 0.0){
+            fragColor.xyz += draw_overlay(uv)* (WATERCOLOR_MODE?-1:1);
         }
         //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
 }

@@ -123,7 +123,9 @@ class Camera:
                 sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
                 watercolor_mode: bool = False, ink_weight: float = 1.0,
                 emboss_tex=None, emboss_mode: int = 0,
-                emboss_intensity: float = 0.5, emboss_smoothness: float = 0.1):
+                emboss_intensity: float = 0.5, emboss_smoothness: float = 0.1,
+                draw_trail_mode: bool = False, draw_size: float = 0.0,
+                mouse_screen_coords: tuple = (0.5, 0.5)):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
         # ALWAYS use assembled texture when simulation is running
@@ -136,6 +138,8 @@ class Camera:
             # Apply gamma correction via frame assembler (single sample mode)
             # Override emboss_intensity to 0 when mode is Off (0)
             effective_emboss_intensity = 0.0 if emboss_mode == 0 else emboss_intensity
+            # Pass draw_size only when in draw trail mode
+            trail_draw_radius = draw_size if draw_trail_mode else 0.0
             TEX_TO_VIEW = self.frame_assembler.assemble_frame(
                 raw_tex,
                 total_samples=1,
@@ -152,7 +156,9 @@ class Camera:
                 camera_position=tuple(self.position),
                 camera_zoom=self.zoom,
                 emboss_intensity=effective_emboss_intensity,
-                emboss_smoothness=emboss_smoothness
+                emboss_smoothness=emboss_smoothness,
+                trail_draw_radius=trail_draw_radius,
+                mouse_screen_coords=mouse_screen_coords
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

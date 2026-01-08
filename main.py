@@ -193,6 +193,15 @@ class App:
             emboss_tex = self.sim.brush_tex
         else:
             emboss_tex = None
+        # Check if in draw trail mode
+        draw_trail_mode = ui_state.preferences.mouse_mode == "Draw Trail"
+
+        # Convert mouse position to normalized screen coords (0-1 range)
+        width, height = glfw.get_framebuffer_size(self.window)
+        mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
+        mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
+        mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
+
         self.camera.render(
             sim_going=ui_state.sim.going,
             current_view_option=ui_state.sim.current_view_option,
@@ -205,7 +214,10 @@ class App:
             emboss_tex=emboss_tex,
             emboss_mode=emboss_mode,
             emboss_intensity=ui_state.sim.emboss_intensity,
-            emboss_smoothness=ui_state.sim.emboss_smoothness
+            emboss_smoothness=ui_state.sim.emboss_smoothness,
+            draw_trail_mode=draw_trail_mode,
+            draw_size=ui_state.preferences.draw_size,
+            mouse_screen_coords=mouse_screen_coords
         )
 
         # 7.5. Render arrow debug overlay if enabled
@@ -542,6 +554,12 @@ class App:
         speedmult = ui_state.preferences.speedmult
         motion_blur = ui_state.preferences.motion_blur
 
+        # Calculate mouse screen coordinates for draw overlay
+        width, height = glfw.get_framebuffer_size(self.window)
+        mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
+        mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
+        mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
+
         # Calculate draw mode parameters
         # Disable trail drawing when parameter sweeps are active
         draw_mode = (ui_state.preferences.mouse_mode == "Draw Trail" and
@@ -605,7 +623,9 @@ class App:
                     camera_position=tuple(self.camera.position),
                     camera_zoom=self.camera.zoom,
                     emboss_intensity=effective_emboss_intensity,
-                    emboss_smoothness=ui_state.sim.emboss_smoothness
+                    emboss_smoothness=ui_state.sim.emboss_smoothness,
+                    trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and not self.video_service.is_active() else 0,
+                    mouse_screen_coords=mouse_screen_coords
                 )
 
                 # Only process when accumulation cycle completes
@@ -665,7 +685,9 @@ class App:
                 camera_position=tuple(self.camera.position),
                 camera_zoom=self.camera.zoom,
                 emboss_intensity=effective_emboss_intensity,
-                emboss_smoothness=ui_state.sim.emboss_smoothness
+                emboss_smoothness=ui_state.sim.emboss_smoothness,
+                trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and not self.video_service.is_active() else 0,
+                mouse_screen_coords=mouse_screen_coords
             )
 
             self.camera.assembled_texture = assembled_tex
