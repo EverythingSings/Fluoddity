@@ -51,6 +51,7 @@ uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
 uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
+uniform float HAZARD_RATE;
 
 // Multi-load control uniforms (small, stay as uniforms)
 uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
@@ -430,7 +431,7 @@ void main() {
     }
 
     //frame_count == 0 signals a simulation reset
-    if (frame_count==0){reset(index);return;}
+    if (frame_count==0||HAZARD_RATE>hash(vec2(float(index)/float(ACTIVE_COUNT),frame_count))){reset(index);return;}
 
     Entity e=entities[index];
     float cohort = get_cohort(index);

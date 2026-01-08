@@ -1162,6 +1162,11 @@ class UI:
                     if self.state.multi_load.per_config_cohorts:
                         imgui.end_disabled()
 
+                    # Hazard Rate (always enabled in multi-load, global parameter)
+                    imgui.set_next_item_width(100)
+                    _, self.state.sim.hazard_rate = imgui.slider_float("Hazard Rate", self.state.sim.hazard_rate, 0.0, 0.05, "%.4f")
+                    self._delayed_tooltip("At values greater than 0, particles will occasionally reset to their initial conditions")
+
                     # Disable these options in multi-load (per-config settings)
                     imgui.begin_disabled()
                     imgui.checkbox("Disable Symmetry", False)
@@ -1305,6 +1310,16 @@ class UI:
                     1, 144
                 )
                 self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
+
+                # Hazard Rate
+                imgui.set_next_item_width(100)
+                _, self.state.sim.hazard_rate = imgui.slider_float(
+                    "Hazard Rate",
+                    self.state.sim.hazard_rate,
+                    0.0, 0.05,
+                    "%.4f"
+                )
+                self._delayed_tooltip("At values greater than 0, particles will occasionally reset to their initial conditions")
 
                 imgui.separator()
 

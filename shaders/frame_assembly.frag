@@ -152,7 +152,7 @@ void main() {
 
     }
         if(PARAMETER_SWEEP_MODE){
-            fragColor.xyz += sweep_overlay(uv);
+            fragColor.xyz += sweep_overlay(uv)* (WATERCOLOR_MODE?-1:1);
         }
         //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
 }
