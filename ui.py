@@ -1552,7 +1552,7 @@ class UI:
                 default_max=.5,
             )
             self.render_custom_tooltip("Mutation Scale",
-                "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every cohort will behave exactly like the particle you clicked.")
+                "Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every particle will behave exactly like the selected particle.")
 
         # === Forces Group ===
         imgui.set_next_item_open(self.state.preferences.physics_group_forces)
