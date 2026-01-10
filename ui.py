@@ -983,13 +983,13 @@ class UI:
             imgui.bullet_text("Escape - Exit application")
             imgui.bullet_text("P - Toggle video recording")
             imgui.bullet_text("G - Pause/resume simulation")
-            imgui.bullet_text("R (hold) - Reset particles to center")
+            imgui.bullet_text("R - Reset particles to Initial Conditions")
             imgui.bullet_text("F - Toggle parameter sweeps")
             imgui.bullet_text("V - Toggle watercolor mode")
             imgui.bullet_text("U - Reload shaders")
             imgui.bullet_text("H - Show tutorial")
             imgui.bullet_text("T - Toggle mouse mode")
-            imgui.bullet_text("Z - Full reset (push zero rule + reset particles)")
+            imgui.bullet_text("Z - Full reset (push zero rule + reset sim)")
 
             imgui.spacing()
             imgui.text("Mouse Controls")
@@ -1022,21 +1022,26 @@ class UI:
         if expanded:
             imgui.text_wrapped(
                 "Parameter sweeps let you vary physics settings across the screen, "
-                "creating a grid where each position uses different parameter values."
+                "creating a gradient where each position uses different parameter values."
             )
 
             imgui.spacing()
             imgui.text("How to Use")
             imgui.separator()
 
-            imgui.bullet_text("Enable sweeps: Extras -> Parameter Sweeps (or press F)")
-            imgui.bullet_text("Configure in Physics Settings -> Additional Settings")
+            imgui.bullet_text("Enable sweeps: Additional Settings -> Parameter Sweeps (or press F)")
             imgui.bullet_text("Each parameter can sweep on X-axis, Y-axis, or by Cohort")
+            imgui.bullet_text("The swept parameter will vary from slider_min to slider_max")
+            imgui.bullet_text("Each slider has up/down buttons to its left which\nwiden/narrow the slider range.")
+            imgui.bullet_text("Right click on sliders to manually set ranges")
+            imgui.bullet_text("When using X and or Y sweeps, click anywhere on the canvas to\nset slider values. Then when you turn sweeps off,\neverywhere will behave like the region you clicked. ")
+            imgui.bullet_text("Right click will temporarily disable sweeps allowing you to see\nthe effects of your slider values. Click anywhere to end the 'preview'.")
 
             imgui.spacing()
             imgui.text("Sweep Directions")
             imgui.separator()
-
+            
+            imgui.bullet_text("Left click for Normal, Right click for Inverse")
             imgui.bullet_text("Normal (->): Left/bottom = min, Right/top = max")
             imgui.bullet_text("Inverse (<-): Left/bottom = max, Right/top = min")
             imgui.bullet_text("Off: Parameter uses its slider value everywhere")
@@ -1044,17 +1049,21 @@ class UI:
             imgui.spacing()
             imgui.text("Tips")
             imgui.separator()
-
+            imgui.bullet_text("Some sliders have hard capped ranges, others are unbounded")
             imgui.text_wrapped(
-                "Combine X and Y sweeps on different parameters to explore "
-                "2D parameter spaces. For example, sweep Axial Force on X and "
-                "Lateral Force on Y to see how they interact."
+                "Cohort sweeps vary parameters across particle groups rather than "
+                "screen position."
             )
             imgui.spacing()
             imgui.text_wrapped(
-                "Cohort sweeps vary parameters across particle groups rather than "
-                "screen position, useful for seeing how different cohorts behave "
-                "with different settings."
+                "Combine X and Y sweeps on different parameters to explore "
+                "2D parameter spaces. For example, sweep Drag on X and "
+                "Sensor Angle on Y to see how they interact. My most common "
+                "pairs are Sensor Gain + Global force and Sensor Angle + Drag."
+                "\nSensor gain and Global force often need to be changed together "
+                "to keep energy ~constant. Sensor Angle + Drag is convenient "
+                "because both ranges are limited and the full 2d domain can be"
+                "viewed at once"
             )
 
         imgui.end()
