@@ -84,7 +84,7 @@ class UI:
         self.cached_config: str | None = None  # JSON string of config when menu opened
         self.preview_rule_pushed: bool = False  # Whether we pushed a preview rule
         self.currently_previewing: str | None = None  # Currently hovered config
-        self.last_loaded_filename: str = ""  # For default save name
+        self.currently_open_project: str = "_Default"  # Currently open project name
         # Track which load menu is open: None=neither, False=standard, True=watercolor
         self.load_menu_watercolor_mode: bool | None = None
         self._load_watercolor_override: bool | None = None  # Override for load operation
@@ -426,7 +426,8 @@ class UI:
         glfw.set_clipboard_string(self.window, text)
 
     def update_physics_defaults(self, filename: str) -> None:
-        """Update current physics defaults from current sim state (called after file load)."""
+        """Update current physics defaults from current sim state (called after file load/save)."""
+        self.currently_open_project = filename
         self.current_physics_defaults = PhysicsDefaults(
             values={
                 'AXIAL_FORCE': self.state.sim.AXIAL_FORCE,
@@ -568,7 +569,7 @@ class UI:
                 if imgui.menu_item("Save...", "", False)[0]:
                     self.save_popup_open = True
                     # Default to last loaded filename
-                    self.save_filename_buffer = self.last_loaded_filename
+                    self.save_filename_buffer = self.currently_open_project
                 self._delayed_tooltip("Save the current physics settings including particle rules.")
 
                 # Load submenu with preview - locks to current watercolor mode
@@ -653,16 +654,15 @@ class UI:
 
             # Reset menu
             if imgui.begin_menu("Reset..."):
-                # Reset all physics slider values to filename
-                if self.current_physics_defaults.source_filename:
-                    reset_label = f"Reset all Physics slider values to '{self.current_physics_defaults.source_filename}'"
-                else:
-                    reset_label = "Reset all Physics slider values to defaults"
+                # Revert to current project (reload the file)
+                revert_label = f"Revert to '{self.currently_open_project}'"
 
-                if imgui.menu_item(reset_label, "", False)[0]:
-                    # Reset all physics parameters to their default values
-                    for param_name, default_value in self.current_physics_defaults.values.items():
-                        setattr(self.state.sim, param_name, default_value)
+                if imgui.menu_item(revert_label, "", False)[0]:
+                    # Trigger file load equivalent to File->Load
+                    self._load_filename = self.currently_open_project
+                    self._request_load_file = True
+                    self._load_watercolor_override = None  # Keep current watercolor mode
+                self._delayed_tooltip(f"Equivalent to File -> Load {self.currently_open_project}")
 
                 # Reset all slider ranges
                 if imgui.menu_item("Reset all slider ranges to defaults", "", False)[0]:
@@ -1488,6 +1488,10 @@ class UI:
                 imgui.close_current_popup()
             imgui.end_popup()
 
+        # Display currently open project
+        imgui.text(f"Project: {self.currently_open_project}")
+        imgui.separator()
+
         # === Basics Group (Trail sensors and rule mutation) ===
         imgui.set_next_item_open(self.state.preferences.physics_group_basics)
         basics_open = imgui.collapsing_header("Basics - Trail sensors and rule mutation")
@@ -2004,7 +2008,7 @@ class UI:
                     self._load_filename = filename
                     self._request_load_file = True
                     self._load_watercolor_override = menu_watercolor_mode
-                    self.last_loaded_filename = filename
+                    self.currently_open_project = filename
                     # Clear everything to prevent hover code from re-applying
                     self.cached_config = None
                     self.cached_configs = {}

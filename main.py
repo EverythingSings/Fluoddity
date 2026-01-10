@@ -350,6 +350,7 @@ class App:
                 filepath = self.configs_dir / f"{filename}.json"
                 self.config_saver.save_to_file(config, filepath)
                 print(f"Config saved to {filepath}")
+                self.ui.update_physics_defaults(filename)
 
         # Handle file load (menu)
         if ui_state.request_load_file:
