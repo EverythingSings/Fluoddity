@@ -10,7 +10,8 @@
     "sensor_angle": 0.3114233613014221,
     "global_force_mult": 0.2850841283798218,
     "sensor_distance": -1.0521172285079956,
-    "trail_persistence": 0.9819999933242798
+    "trail_persistence": 0.9819999933242798,
+    "hazard_rate": 0.0
   },
   "slider_ranges": {
     "Axial Force": [
@@ -72,6 +73,12 @@
       1.0,
       0.0,
       1.0
+    ],
+    "Hazard Rate": [
+      0.0,
+      0.05,
+      0.0,
+      0.05
     ]
   },
   "sweeps": {
@@ -85,7 +92,8 @@
       "SENSOR_ANGLE": 0.0,
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
-      "TRAIL_PERSISTENCE": 0.0
+      "TRAIL_PERSISTENCE": 0.0,
+      "x": 0.0
     },
     "y": {
       "AXIAL_FORCE": 0.0,
@@ -97,7 +105,8 @@
       "SENSOR_ANGLE": 0.0,
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
-      "TRAIL_PERSISTENCE": 0.0
+      "TRAIL_PERSISTENCE": 0.0,
+      "y": 0.0
     },
     "cohort": {
       "AXIAL_FORCE": 0.0,
@@ -109,17 +118,19 @@
       "SENSOR_ANGLE": 0.0,
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
-      "TRAIL_PERSISTENCE": 0.0
+      "TRAIL_PERSISTENCE": 0.0,
+      "cohort": 0.0
     }
   },
   "parameter_sweeps_enabled": false,
   "settings": {
     "disable_symmetry": false,
-    "absolute_orientation": false,
+    "absolute_orientation": 0,
     "boundary_conditions": 0,
     "initial_conditions": 0,
     "num_cohorts": 64,
-    "rule_seed": 0.42
+    "rule_seed": 0.42,
+    "orientation_mix": 1.0
   },
   "appearance": {
     "ink_weight": 1.0,
