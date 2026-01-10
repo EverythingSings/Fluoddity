@@ -22,6 +22,7 @@ class PreferencesState:
     mouse_mode: str = "Select Particle"  # "Select Particle" or "Draw Trail"
     draw_size: float = 0.1  # Gaussian kernel width for trail drawing
     draw_power: float = 1.0  # Velocity strength when drawing trails
+    menu_close_threshold: float = 80.0  # Distance in pixels before menus auto-close
 
     # Physics slider group collapsed states (True = expanded/open, False = collapsed)
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)

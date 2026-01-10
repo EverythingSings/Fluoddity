@@ -95,6 +95,12 @@ class UI:
         # Overwrite confirmation state
         self.overwrite_confirm_filename: str | None = None
 
+        # Menu auto-close state
+        self.main_menu_bar_has_open_menu: bool = False  # Track if main menu bar has open menus
+        self.physics_menu_bar_has_open_menu: bool = False  # Track if physics menu bar has open menus
+        self.force_close_main_menus: bool = False  # Signal to close main menu bar menus
+        self.force_close_physics_menus: bool = False  # Signal to close physics menu bar menus
+
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
             sim=SimState(),
@@ -555,9 +561,28 @@ class UI:
     def render_main_menu_bar(self):
         """Render the main application menu bar at the top of the window."""
         load_submenu_open = False
+        any_menu_open_this_frame = False
 
         if imgui.begin_main_menu_bar():
-            if imgui.begin_menu("File"):
+            # Track all open menu rectangles separately (not combined into one giant box)
+            # We'll calculate distance as the minimum distance to any of these rectangles
+            menu_rectangles = []
+
+            # Start with the menu bar itself
+            menu_bar_min = imgui.get_window_pos()
+            menu_bar_size = imgui.get_window_size()
+            menu_rectangles.append((menu_bar_min.x, menu_bar_min.y,
+                                   menu_bar_min.x + menu_bar_size.x,
+                                   menu_bar_min.y + menu_bar_size.y))
+            if imgui.begin_menu("File", not self.force_close_main_menus):
+                any_menu_open_this_frame = True
+                # Add this menu's bounding box to the list
+                file_menu_min = imgui.get_window_pos()
+                file_menu_size = imgui.get_window_size()
+                menu_rectangles.append((file_menu_min.x, file_menu_min.y,
+                                       file_menu_min.x + file_menu_size.x,
+                                       file_menu_min.y + file_menu_size.y))
+
                 if imgui.menu_item("New", "", False)[0]:
                     self._load_filename = "_Default"
                     self._request_load_file = True
@@ -574,8 +599,15 @@ class UI:
 
                 # Load submenu with preview - locks to current watercolor mode
                 # Right-click toggles watercolor mode
-                if imgui.begin_menu("Load"):
+                if imgui.begin_menu("Load", not self.force_close_main_menus):
+                    any_menu_open_this_frame = True
                     load_submenu_open = True
+                    # Add this submenu's bounding box to the list
+                    load_menu_min = imgui.get_window_pos()
+                    load_menu_size = imgui.get_window_size()
+                    menu_rectangles.append((load_menu_min.x, load_menu_min.y,
+                                           load_menu_min.x + load_menu_size.x,
+                                           load_menu_min.y + load_menu_size.y))
 
                     # First frame submenu opens: cache current state and scan config files
                     if not self.load_submenu_was_open:
@@ -653,7 +685,15 @@ class UI:
                 self.show_physics_settings_window = not self.show_physics_settings_window
 
             # Reset menu
-            if imgui.begin_menu("Reset..."):
+            if imgui.begin_menu("Reset...", not self.force_close_main_menus):
+                any_menu_open_this_frame = True
+                # Add this menu's bounding box to the list
+                reset_menu_min = imgui.get_window_pos()
+                reset_menu_size = imgui.get_window_size()
+                menu_rectangles.append((reset_menu_min.x, reset_menu_min.y,
+                                       reset_menu_min.x + reset_menu_size.x,
+                                       reset_menu_min.y + reset_menu_size.y))
+
                 # Revert to current project (reload the file)
                 revert_label = f"Revert to '{self.currently_open_project}'"
 
@@ -688,7 +728,15 @@ class UI:
                 imgui.end_menu()
 
             # Help menu
-            if imgui.begin_menu("Help"):
+            if imgui.begin_menu("Help", not self.force_close_main_menus):
+                any_menu_open_this_frame = True
+                # Add this menu's bounding box to the list
+                help_menu_min = imgui.get_window_pos()
+                help_menu_size = imgui.get_window_size()
+                menu_rectangles.append((help_menu_min.x, help_menu_min.y,
+                                       help_menu_min.x + help_menu_size.x,
+                                       help_menu_min.y + help_menu_size.y))
+
                 if imgui.menu_item("Controls", "", self.show_controls_window)[0]:
                     self.show_controls_window = not self.show_controls_window
                 if imgui.menu_item("Parameter Sweeps", "", self.show_parameter_sweeps_window)[0]:
@@ -698,7 +746,15 @@ class UI:
                 imgui.end_menu()
 
             # Extras menu
-            if imgui.begin_menu("Extras"):
+            if imgui.begin_menu("Extras", not self.force_close_main_menus):
+                any_menu_open_this_frame = True
+                # Add this menu's bounding box to the list
+                extras_menu_min = imgui.get_window_pos()
+                extras_menu_size = imgui.get_window_size()
+                menu_rectangles.append((extras_menu_min.x, extras_menu_min.y,
+                                       extras_menu_min.x + extras_menu_size.x,
+                                       extras_menu_min.y + extras_menu_size.y))
+
                 # Multi Load toggle
                 _, self.state.multi_load.multi_load_enabled = imgui.checkbox(
                     "Multi Load",
@@ -712,7 +768,30 @@ class UI:
 
                 imgui.end_menu()
 
+            # After all menus: check mouse distance from all menu rectangles
+            # Find the minimum distance to any rectangle
+            if self.main_menu_bar_has_open_menu and not self.save_popup_open:
+                mouse_pos = imgui.get_mouse_pos()
+
+                # Calculate minimum distance to any menu rectangle
+                min_distance = float('inf')
+                for min_x, min_y, max_x, max_y in menu_rectangles:
+                    dx = max(min_x - mouse_pos.x, 0, mouse_pos.x - max_x)
+                    dy = max(min_y - mouse_pos.y, 0, mouse_pos.y - max_y)
+                    distance = (dx * dx + dy * dy) ** 0.5
+                    min_distance = min(min_distance, distance)
+
+                # If mouse is too far away from all rectangles, signal to close menus
+                if min_distance > self.state.preferences.menu_close_threshold:
+                    self.force_close_main_menus = True
+
             imgui.end_main_menu_bar()
+
+        # Update menu tracking state
+        self.main_menu_bar_has_open_menu = any_menu_open_this_frame
+        # Reset force close flag after processing
+        if self.force_close_main_menus and not any_menu_open_this_frame:
+            self.force_close_main_menus = False
 
         # Handle submenu close without selection
         if self.load_submenu_was_open and not load_submenu_open:
@@ -1115,11 +1194,32 @@ class UI:
 
         _, self.show_physics_settings_window = imgui.begin('Physics Settings', p_open=self.show_physics_settings_window, flags=imgui.WindowFlags_.menu_bar)
 
+        # Track if any physics menu is open
+        physics_any_menu_open_this_frame = False
+
         # Multi-load mode: different rendering
         if self.state.multi_load.multi_load_enabled:
             # Render multi-load specific UI
             if imgui.begin_menu_bar():
-                if imgui.begin_menu("Multi-Load Settings"):
+                # Track all open menu rectangles separately
+                physics_menu_rectangles = []
+
+                # Start with the menu bar itself
+                physics_menu_bar_min = imgui.get_window_pos()
+                physics_menu_bar_size = imgui.get_window_size()
+                physics_menu_rectangles.append((physics_menu_bar_min.x, physics_menu_bar_min.y,
+                                               physics_menu_bar_min.x + physics_menu_bar_size.x,
+                                               physics_menu_bar_min.y + physics_menu_bar_size.y))
+
+                if imgui.begin_menu("Multi-Load Settings", not self.force_close_physics_menus):
+                    physics_any_menu_open_this_frame = True
+                    # Add this menu's bounding box to the list
+                    multi_load_menu_min = imgui.get_window_pos()
+                    multi_load_menu_size = imgui.get_window_size()
+                    physics_menu_rectangles.append((multi_load_menu_min.x, multi_load_menu_min.y,
+                                                   multi_load_menu_min.x + multi_load_menu_size.x,
+                                                   multi_load_menu_min.y + multi_load_menu_size.y))
+
                     # Particle Assignment combo
                     assignment_options = ["Random", "Cohorts"]
                     current_idx = 0 if self.state.multi_load.assignment_mode == "Random" else 1
@@ -1140,7 +1240,15 @@ class UI:
                     imgui.end_menu()
 
                 # Simplified Additional Settings (some items greyed out)
-                if imgui.begin_menu("Additional Settings"):
+                if imgui.begin_menu("Additional Settings", not self.force_close_physics_menus):
+                    physics_any_menu_open_this_frame = True
+                    # Add this menu's bounding box to the list
+                    additional_menu_min = imgui.get_window_pos()
+                    additional_menu_size = imgui.get_window_size()
+                    physics_menu_rectangles.append((additional_menu_min.x, additional_menu_min.y,
+                                                   additional_menu_min.x + additional_menu_size.x,
+                                                   additional_menu_min.y + additional_menu_size.y))
+
                     # Boundary Conditions
                     boundary_options = ["Bounce", "Reset", "Wrap"]
                     imgui.set_next_item_width(100)
@@ -1192,7 +1300,15 @@ class UI:
                     imgui.end_menu()
 
                 # Appearance (unchanged, copy from normal mode)
-                if imgui.begin_menu("Appearance"):
+                if imgui.begin_menu("Appearance", not self.force_close_physics_menus):
+                    physics_any_menu_open_this_frame = True
+                    # Add this menu's bounding box to the list
+                    appearance_menu_min = imgui.get_window_pos()
+                    appearance_menu_size = imgui.get_window_size()
+                    physics_menu_rectangles.append((appearance_menu_min.x, appearance_menu_min.y,
+                                                   appearance_menu_min.x + appearance_menu_size.x,
+                                                   appearance_menu_min.y + appearance_menu_size.y))
+
                     _, self.state.sim.color_by_cohort = imgui.checkbox("Color by Cohort", self.state.sim.color_by_cohort)
                     if not self.state.sim.color_by_cohort:
                         imgui.set_next_item_width(100)
@@ -1215,7 +1331,30 @@ class UI:
                         _, self.state.sim.emboss_smoothness = imgui.slider_float("Emboss Smoothness", self.state.sim.emboss_smoothness, 0.001, 1.0)
                     imgui.end_menu()
 
+                # After all menus: check mouse distance from all menu rectangles
+                # Find the minimum distance to any rectangle
+                if self.physics_menu_bar_has_open_menu and not self.save_popup_open:
+                    mouse_pos = imgui.get_mouse_pos()
+
+                    # Calculate minimum distance to any menu rectangle
+                    min_distance = float('inf')
+                    for min_x, min_y, max_x, max_y in physics_menu_rectangles:
+                        dx = max(min_x - mouse_pos.x, 0, mouse_pos.x - max_x)
+                        dy = max(min_y - mouse_pos.y, 0, mouse_pos.y - max_y)
+                        distance = (dx * dx + dy * dy) ** 0.5
+                        min_distance = min(min_distance, distance)
+
+                    # If mouse is too far away from all rectangles, signal to close menus
+                    if min_distance > self.state.preferences.menu_close_threshold:
+                        self.force_close_physics_menus = True
+
                 imgui.end_menu_bar()
+
+            # Update physics menu tracking state
+            self.physics_menu_bar_has_open_menu = physics_any_menu_open_this_frame
+            # Reset force close flag after processing
+            if self.force_close_physics_menus and not physics_any_menu_open_this_frame:
+                self.force_close_physics_menus = False
 
             # Multi-load controls
             imgui.text("Multi-Load Controls")
@@ -1274,7 +1413,25 @@ class UI:
         # Normal mode: render sliders and settings
         # Additional Settings menu bar
         if imgui.begin_menu_bar():
-            if imgui.begin_menu("Additional Settings"):
+            # Track all open menu rectangles separately
+            physics_menu_rectangles = []
+
+            # Start with the menu bar itself
+            physics_menu_bar_min = imgui.get_window_pos()
+            physics_menu_bar_size = imgui.get_window_size()
+            physics_menu_rectangles.append((physics_menu_bar_min.x, physics_menu_bar_min.y,
+                                           physics_menu_bar_min.x + physics_menu_bar_size.x,
+                                           physics_menu_bar_min.y + physics_menu_bar_size.y))
+
+            if imgui.begin_menu("Additional Settings", not self.force_close_physics_menus):
+                physics_any_menu_open_this_frame = True
+                # Add this menu's bounding box to the list
+                additional_settings_menu_min = imgui.get_window_pos()
+                additional_settings_menu_size = imgui.get_window_size()
+                physics_menu_rectangles.append((additional_settings_menu_min.x, additional_settings_menu_min.y,
+                                               additional_settings_menu_min.x + additional_settings_menu_size.x,
+                                               additional_settings_menu_min.y + additional_settings_menu_size.y))
+
                 # Boundary Conditions (with per-option tooltips)
                 boundary_options = ["Bounce", "Reset", "Wrap"]
                 boundary_tooltips = [
@@ -1358,7 +1515,15 @@ class UI:
                 imgui.end_menu()
 
             # Appearance menu
-            if imgui.begin_menu("Appearance"):
+            if imgui.begin_menu("Appearance", not self.force_close_physics_menus):
+                physics_any_menu_open_this_frame = True
+                # Add this menu's bounding box to the list
+                appearance_settings_menu_min = imgui.get_window_pos()
+                appearance_settings_menu_size = imgui.get_window_size()
+                physics_menu_rectangles.append((appearance_settings_menu_min.x, appearance_settings_menu_min.y,
+                                               appearance_settings_menu_min.x + appearance_settings_menu_size.x,
+                                               appearance_settings_menu_min.y + appearance_settings_menu_size.y))
+
                 # Color by cohort checkbox
                 _, self.state.sim.color_by_cohort = imgui.checkbox(
                     "Color by Cohort",
@@ -1414,7 +1579,30 @@ class UI:
 
                 imgui.end_menu()
 
+            # After all menus: check mouse distance from all menu rectangles
+            # Find the minimum distance to any rectangle
+            if self.physics_menu_bar_has_open_menu and not self.save_popup_open:
+                mouse_pos = imgui.get_mouse_pos()
+
+                # Calculate minimum distance to any menu rectangle
+                min_distance = float('inf')
+                for min_x, min_y, max_x, max_y in physics_menu_rectangles:
+                    dx = max(min_x - mouse_pos.x, 0, mouse_pos.x - max_x)
+                    dy = max(min_y - mouse_pos.y, 0, mouse_pos.y - max_y)
+                    distance = (dx * dx + dy * dy) ** 0.5
+                    min_distance = min(min_distance, distance)
+
+                # If mouse is too far away from all rectangles, signal to close menus
+                if min_distance > self.state.preferences.menu_close_threshold:
+                    self.force_close_physics_menus = True
+
             imgui.end_menu_bar()
+
+        # Update physics menu tracking state
+        self.physics_menu_bar_has_open_menu = physics_any_menu_open_this_frame
+        # Reset force close flag after processing
+        if self.force_close_physics_menus and not physics_any_menu_open_this_frame:
+            self.force_close_physics_menus = False
 
         # Save popup modal
         if self.save_popup_open:
