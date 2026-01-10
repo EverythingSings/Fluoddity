@@ -19,16 +19,17 @@ class SimState:
     SENSOR_DISTANCE: float = 1.0
     TRAIL_PERSISTENCE: float = 0.938
     TRAIL_DIFFUSION: float = 1.0
+    HAZARD_RATE: float = 0.0
 
     # Extra options
     DISABLE_SYMMETRY: bool = False
-    ABSOLUTE_ORIENTATION: bool = False
+    ABSOLUTE_ORIENTATION: int = 0  # 0=Off, 1=Y axis, 2=Radial
+    ORIENTATION_MIX: float = 1.0
 
     # Simulation settings (defaults ensure backward compatibility with old configs)
     boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap (default: Bounce)
     initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring (default: Grid)
     num_cohorts: int = 64         # Number of cohorts (1-144, default: 64)
-    hazard_rate: float = 0.0      # Probability per frame that particles reset (0.0-0.05, default: 0.0)
     rule_seed: float = 0.42       # Seed for procedural rule generation (fixed default for reproducibility)
 
     # Appearance settings (saved with physics config)
@@ -61,6 +62,7 @@ class SimState:
         'SENSOR_DISTANCE': 0.0,
         'TRAIL_PERSISTENCE': 0.0,
         'TRAIL_DIFFUSION': 0.0,
+        'HAZARD_RATE': 0.0,
     })
     y_sweeps: dict[str, float] = field(default_factory=lambda: {
         'AXIAL_FORCE': 0.0,
@@ -74,6 +76,7 @@ class SimState:
         'SENSOR_DISTANCE': 0.0,
         'TRAIL_PERSISTENCE': 0.0,
         'TRAIL_DIFFUSION': 0.0,
+        'HAZARD_RATE': 0.0,
     })
     cohort_sweeps: dict[str, float] = field(default_factory=lambda: {
         'AXIAL_FORCE': 0.0,
@@ -87,4 +90,5 @@ class SimState:
         'SENSOR_DISTANCE': 0.0,
         'TRAIL_PERSISTENCE': 0.0,
         'TRAIL_DIFFUSION': 0.0,
+        'HAZARD_RATE': 0.0,
     })

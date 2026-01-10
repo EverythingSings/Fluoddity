@@ -1486,16 +1486,6 @@ class UI:
                 )
                 self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
 
-                # Hazard Rate
-                imgui.set_next_item_width(100)
-                _, self.state.sim.hazard_rate = imgui.slider_float(
-                    "Hazard Rate",
-                    self.state.sim.hazard_rate,
-                    0.0, 0.05,
-                    "%.4f"
-                )
-                self._delayed_tooltip("At values greater than 0, particles will occasionally reset to their initial conditions")
-
                 imgui.separator()
 
                 # Disable Symmetry
@@ -1505,12 +1495,27 @@ class UI:
                 )
                 self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior,\nleading to clockwise/counterclockwise bias.\nTurn it on to see why we go through trouble\nof calculating \"mirror world\" behavior in entity_update.glsl")
 
-                # Absolute Orientation
-                _, self.state.sim.ABSOLUTE_ORIENTATION = imgui.checkbox(
+                # Absolute Orientation (combo box with 3 modes)
+                combo_items = ["Off", "Y axis", "Radial"]
+                clicked, current = imgui.combo(
                     "Absolute Orientation",
-                    self.state.sim.ABSOLUTE_ORIENTATION
+                    self.state.sim.ABSOLUTE_ORIENTATION,
+                    combo_items
                 )
-                self._delayed_tooltip("Calculate rule behavior in local coordinates defined by y axis\nrather than particle velocity. Turn it on to see why we go through the\ntrouble of calculating particle behavior in local coordinates in entity_update.glsl")
+                if clicked:
+                    self.state.sim.ABSOLUTE_ORIENTATION = current
+                self._delayed_tooltip("Calculate rule behavior in local coordinates rather than particle velocity.\nOff: use particle velocity | Y axis: align to y axis | Radial: align to radial direction")
+
+                # Orientation Mix (only visible if Absolute Orientation != Off)
+                if self.state.sim.ABSOLUTE_ORIENTATION != 0:
+                    imgui.set_next_item_width(100)
+                    _, self.state.sim.ORIENTATION_MIX = imgui.slider_float(
+                        "Orientation Mix",
+                        self.state.sim.ORIENTATION_MIX,
+                        0.0, 1.0,
+                        "%.2f"
+                    )
+                    self._delayed_tooltip("Blend factor for orientation calculations (0.0 = velocity only, 1.0 = full absolute orientation)")
 
                 imgui.separator()
 
@@ -1894,6 +1899,23 @@ class UI:
             )
             self.render_custom_tooltip("Trail Diffusion",
                 "Controls the amount of diffusion applied to particle trails.")
+
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_aligned_label("Hazard Rate:")
+                self.render_range_adjust_buttons("HAZARD_RATE", "Hazard Rate", self.state.sim.HAZARD_RATE, 0.0, 0.05, hard_min=0.0, hard_max=0.05)
+                imgui.same_line(spacing=2)
+                self.render_sweep_buttons("HAZARD_RATE")
+                imgui.same_line(spacing=8)
+
+            _, self.state.sim.HAZARD_RATE = self.slider_float_with_range_menu(
+                label="Hazard Rate",
+                param_name="HAZARD_RATE",
+                value=self.state.sim.HAZARD_RATE,
+                default_min=0.0,
+                default_max=0.05,
+            )
+            self.render_custom_tooltip("Hazard Rate",
+                "Probability per frame that particles reset to initial conditions. Higher values create more dynamic, chaotic patterns.")
 
         imgui.separator()
 

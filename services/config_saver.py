@@ -18,7 +18,7 @@ from state import SimState
 PHYSICS_PARAMS = [
     'AXIAL_FORCE', 'LATERAL_FORCE', 'SENSOR_GAIN', 'MUTATION_SCALE',
     'DRAG', 'STRAFE_POWER', 'SENSOR_ANGLE', 'GLOBAL_FORCE_MULT',
-    'SENSOR_DISTANCE', 'TRAIL_PERSISTENCE', 'TRAIL_DIFFUSION'
+    'SENSOR_DISTANCE', 'TRAIL_PERSISTENCE', 'TRAIL_DIFFUSION', 'HAZARD_RATE'
 ]
 
 # Mapping from param names to slider labels
@@ -34,6 +34,7 @@ PARAM_TO_LABEL = {
     'SENSOR_DISTANCE': 'Sensor Distance',
     'TRAIL_PERSISTENCE': 'Trail Persistence',
     'TRAIL_DIFFUSION': 'Trail Diffusion',
+    'HAZARD_RATE': 'Hazard Rate',
 }
 
 # Default slider ranges: [default_min, default_max]
@@ -49,6 +50,7 @@ DEFAULT_SLIDER_RANGES = {
     'Sensor Distance': [0.0, 4.0],
     'Trail Persistence': [0.0, 1.0],
     'Trail Diffusion': [0.0, 1.0],
+    'Hazard Rate': [0.0, 0.05],
 }
 
 CONFIG_VERSION = 7
@@ -71,7 +73,7 @@ def _default_slider_ranges() -> dict[str, list[float]]:
 class PhysicsConfig:
     """Complete physics configuration: all state from Physics Settings window."""
 
-    # Physics parameters (11 sliders)
+    # Physics parameters (12 sliders)
     axial_force: float = 0.371
     lateral_force: float = -0.707
     sensor_gain: float = 0.116
@@ -83,6 +85,7 @@ class PhysicsConfig:
     sensor_distance: float = 1.0
     trail_persistence: float = 0.938
     trail_diffusion: float = 1.0
+    hazard_rate: float = 0.0
 
     # Slider ranges: {label: [cur_min, cur_max, default_min, default_max]}
     slider_ranges: dict[str, list[float]] = field(default_factory=_default_slider_ranges)
@@ -95,11 +98,11 @@ class PhysicsConfig:
 
     # Simulation settings
     disable_symmetry: bool = False
-    absolute_orientation: bool = False
+    absolute_orientation: int = 0  # 0=Off, 1=Y axis, 2=Radial
+    orientation_mix: float = 1.0
     boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap
     initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring
     num_cohorts: int = 64
-    hazard_rate: float = 0.0
     rule_seed: float = DEFAULT_RULE_SEED
 
     # Appearance settings
@@ -130,6 +133,7 @@ class PhysicsConfig:
                 'sensor_distance': self.sensor_distance,
                 'trail_persistence': self.trail_persistence,
                 'trail_diffusion': self.trail_diffusion,
+                'hazard_rate': self.hazard_rate,
             },
             'slider_ranges': self.slider_ranges,
             'sweeps': {
@@ -141,10 +145,10 @@ class PhysicsConfig:
             'settings': {
                 'disable_symmetry': self.disable_symmetry,
                 'absolute_orientation': self.absolute_orientation,
+                'orientation_mix': self.orientation_mix,
                 'boundary_conditions': self.boundary_conditions,
                 'initial_conditions': self.initial_conditions,
                 'num_cohorts': self.num_cohorts,
-                'hazard_rate': self.hazard_rate,
                 'rule_seed': self.rule_seed,
             },
             'appearance': {
@@ -195,17 +199,18 @@ class PhysicsConfig:
             sensor_distance=physics.get('sensor_distance', 1.0),
             trail_persistence=physics.get('trail_persistence', 0.938),
             trail_diffusion=physics.get('trail_diffusion', 1.0),
+            hazard_rate=physics.get('hazard_rate', 0.0),
             slider_ranges=slider_ranges,
             x_sweeps=x_sweeps,
             y_sweeps=y_sweeps,
             cohort_sweeps=cohort_sweeps,
             parameter_sweeps_enabled=data.get('parameter_sweeps_enabled', False),
             disable_symmetry=settings.get('disable_symmetry', False),
-            absolute_orientation=settings.get('absolute_orientation', False),
+            absolute_orientation=int(settings.get('absolute_orientation', 0)),
+            orientation_mix=settings.get('orientation_mix', 1.0),
             boundary_conditions=settings.get('boundary_conditions', 0),
             initial_conditions=settings.get('initial_conditions', 0),
             num_cohorts=settings.get('num_cohorts', 64),
-            hazard_rate=settings.get('hazard_rate', 0.0),
             rule_seed=settings.get('rule_seed', DEFAULT_RULE_SEED),
             ink_weight=appearance.get('ink_weight', 1.0),
             hue_sensitivity=appearance.get('hue_sensitivity', 0.5),
@@ -247,6 +252,7 @@ class ConfigSaver:
             sensor_distance=sim_state.SENSOR_DISTANCE,
             trail_persistence=sim_state.TRAIL_PERSISTENCE,
             trail_diffusion=sim_state.TRAIL_DIFFUSION,
+            hazard_rate=sim_state.HAZARD_RATE,
             slider_ranges=sim_state.slider_ranges.copy(),
             x_sweeps=sim_state.x_sweeps.copy(),
             y_sweeps=sim_state.y_sweeps.copy(),
@@ -254,10 +260,10 @@ class ConfigSaver:
             parameter_sweeps_enabled=sim_state.parameter_sweeps_enabled,
             disable_symmetry=sim_state.DISABLE_SYMMETRY,
             absolute_orientation=sim_state.ABSOLUTE_ORIENTATION,
+            orientation_mix=sim_state.ORIENTATION_MIX,
             boundary_conditions=sim_state.boundary_conditions,
             initial_conditions=sim_state.initial_conditions,
             num_cohorts=sim_state.num_cohorts,
-            hazard_rate=sim_state.hazard_rate,
             rule_seed=sim_state.rule_seed,
             ink_weight=sim_state.ink_weight,
             hue_sensitivity=sim_state.hue_sensitivity,
@@ -294,6 +300,7 @@ class ConfigSaver:
         sim_state.SENSOR_DISTANCE = config.sensor_distance
         sim_state.TRAIL_PERSISTENCE = config.trail_persistence
         sim_state.TRAIL_DIFFUSION = config.trail_diffusion
+        sim_state.HAZARD_RATE = config.hazard_rate
 
         # Slider ranges (full replacement)
         sim_state.slider_ranges.clear()
@@ -311,10 +318,10 @@ class ConfigSaver:
         # Simulation settings
         sim_state.DISABLE_SYMMETRY = config.disable_symmetry
         sim_state.ABSOLUTE_ORIENTATION = config.absolute_orientation
+        sim_state.ORIENTATION_MIX = config.orientation_mix
         sim_state.boundary_conditions = config.boundary_conditions
         sim_state.initial_conditions = config.initial_conditions
         sim_state.num_cohorts = config.num_cohorts
-        sim_state.hazard_rate = config.hazard_rate
         sim_state.rule_seed = config.rule_seed
 
         # Appearance settings

@@ -43,15 +43,16 @@ uniform PhysicsSetting AXIAL_FORCE_SETTING;
 uniform PhysicsSetting LATERAL_FORCE_SETTING;
 uniform PhysicsSetting SENSOR_GAIN_SETTING;
 uniform PhysicsSetting MUTATION_SCALE_SETTING;
+uniform PhysicsSetting HAZARD_RATE_SETTING;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
-uniform bool ABSOLUTE_ORIENTATION;//orient physics around y axis instead of particle velocity
+uniform int ABSOLUTE_ORIENTATION; // 0=Off, 1=Y axis, 2=Radial
+uniform float ORIENTATION_MIX; // Blend factor for orientation calculations
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
 uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
-uniform float HAZARD_RATE;
 
 // Multi-load control uniforms (small, stay as uniforms)
 uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
@@ -63,7 +64,7 @@ uniform bool MULTI_LOAD_PER_CONFIG_COHORTS; // If true, use per-config cohort co
 
 // Multi-load config data (large arrays, packed into SSBO)
 struct MultiLoadConfig {
-    // Physics parameters as PhysicsSetting structs (9 params * 6 floats = 54 floats)
+    // Physics parameters as PhysicsSetting structs (10 params * 6 floats = 60 floats)
     PhysicsSetting axial_force;
     PhysicsSetting lateral_force;
     PhysicsSetting sensor_gain;
@@ -73,19 +74,19 @@ struct MultiLoadConfig {
     PhysicsSetting sensor_angle;
     PhysicsSetting global_force_mult;
     PhysicsSetting sensor_distance;
+    PhysicsSetting hazard_rate;
 
-    // Simulation settings (5 values, but need padding for alignment)
+    // Simulation settings (6 ints)
     int disable_symmetry;      // bool as int for alignment
-    int absolute_orientation;  // bool as int for alignment
+    int absolute_orientation;  // 0=Off, 1=Y axis, 2=Radial
     int boundary_conditions;
     int reset_mode;
     int cohorts;
-
-    // Appearance settings (2 values)
-    float hue_sensitivity;
     int color_by_cohort;       // bool as int for alignment
 
-    // Rule seed
+    // Appearance and orientation mix (3 floats)
+    float hue_sensitivity;
+    float orientation_mix;
     float rule_seed;
 };
 
@@ -233,9 +234,13 @@ bool get_particle_disable_symmetry() {
     return idx >= 0 ? bool(configs[idx].disable_symmetry) : DISABLE_SYMMETRY;
 }
 
-bool get_particle_absolute_orientation() {
+int get_particle_absolute_orientation() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? bool(configs[idx].absolute_orientation) : ABSOLUTE_ORIENTATION;
+    return idx >= 0 ? int(configs[idx].absolute_orientation) : ABSOLUTE_ORIENTATION;
+}
+PhysicsSetting get_particle_hazard_rate() {
+    int idx = get_particle_config_index();
+    return idx >= 0 ? (configs[idx].hazard_rate) : HAZARD_RATE_SETTING;
 }
 
 //HARDCODED TO BE GLOBAL FOR NOW
@@ -429,18 +434,20 @@ void main() {
         entities[index] = Entity(vec2(10000), vec2(0), 0.0, 0.0, float[2](0,0), vec4(0));
         return;
     }
-
-    //frame_count == 0 signals a simulation reset
-    if (frame_count==0||HAZARD_RATE>hash(vec2(float(index)/float(ACTIVE_COUNT),frame_count))){reset(index);return;}
-
     Entity e=entities[index];
     float cohort = get_cohort(index);
+    //frame_count == 0 signals a simulation reset
+    if (frame_count==0||calculate_setting(get_particle_hazard_rate(),e.pos,cohort)>hash(vec2(float(index)/float(ACTIVE_COUNT),frame_count))){reset(index);return;}
+
+
 
     //Calculate position offsets for the two sensors.
     float sample_dist = .005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
-
+    int ORIENTATION_MODE =get_particle_absolute_orientation();
+    float mix_amt = min(1,ORIENTATION_MODE)*ORIENTATION_MIX;
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
-    if(get_particle_absolute_orientation()){orientation = vec2(0,1);}
+    if(ORIENTATION_MODE==1){orientation = mix(orientation,vec2(0,1),mix_amt);}
+    else if(ORIENTATION_MODE==2){orientation = mix(orientation,-normalize(e.pos),mix_amt);}
     vec2 left_sensor_offset = orientation*sample_dist;
     vec2 right_sensor_offset = orientation*sample_dist;
     pR(left_sensor_offset,calculate_setting(get_particle_sensor_angle(),e.pos,cohort)*PI);//rotate them opposite directions

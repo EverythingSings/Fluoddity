@@ -139,8 +139,10 @@ class Sim:
             self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
             self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
             self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
+            self._assign_physics_setting('HAZARD_RATE_SETTING', self._state.HAZARD_RATE, 'Hazard Rate', 'HAZARD_RATE', 0.0, 0.05)
             tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
             tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
+            tryset(self.entity_update_program, 'ORIENTATION_MIX', self._state.ORIENTATION_MIX)
             # Rule seed from sim state (saved with physics configs)
             tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
         
@@ -148,7 +150,6 @@ class Sim:
         tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
         tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
-        tryset(self.entity_update_program, 'HAZARD_RATE', self._state.hazard_rate)
 
         # Appearance settings from sim state (now part of physics config)
         tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
@@ -508,11 +509,11 @@ class Sim:
         for i in range(config_count):
             config = multi_load_service.get_config(i)
             if config is None:
-                # Write zeros for missing configs
-                data.extend(bytes(248))
+                # Write zeros for missing configs (10×6 floats + 6 ints + 3 floats = 276 bytes)
+                data.extend(bytes(276))
                 continue
 
-            # Pack physics parameters (9 PhysicsSetting structs, each 6 floats)
+            # Pack physics parameters (10 PhysicsSetting structs, each 6 floats)
             params = [
                 ('axial_force', 'AXIAL_FORCE', -1.0, 1.0),
                 ('lateral_force', 'LATERAL_FORCE', -1.0, 1.0),
@@ -523,6 +524,7 @@ class Sim:
                 ('sensor_angle', 'SENSOR_ANGLE', -1.0, 1.0),
                 ('global_force_mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0),
                 ('sensor_distance', 'SENSOR_DISTANCE', 0.0, 4.0),
+                ('hazard_rate', 'HAZARD_RATE', 0.0, 0.05),
             ]
 
             for attr_name, param_name, default_min, default_max in params:
@@ -547,9 +549,10 @@ class Sim:
                 int(config.color_by_cohort)
             ))
 
-            # Pack appearance and rule seed (2 floats)
-            data.extend(struct.pack('2f',
+            # Pack appearance, orientation_mix, and rule seed (3 floats)
+            data.extend(struct.pack('3f',
                 config.hue_sensitivity,
+                config.orientation_mix,
                 config.rule_seed
             ))
 
@@ -714,6 +717,7 @@ class Sim:
             'SENSOR_DISTANCE': ('Sensor Distance', 0.0, 4.0),
             'TRAIL_PERSISTENCE': ('Trail Persistence', 0.0, 1.0),
             'TRAIL_DIFFUSION': ('Trail Diffusion', 0.0, 1.0),
+            'HAZARD_RATE': ('Hazard Rate',0.0,0.05)
         }
 
         # Calculate X position
