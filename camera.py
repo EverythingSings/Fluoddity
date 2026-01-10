@@ -125,7 +125,7 @@ class Camera:
                 emboss_tex=None, emboss_mode: int = 0,
                 emboss_intensity: float = 0.5, emboss_smoothness: float = 0.1,
                 draw_trail_mode: bool = False, draw_size: float = 0.0,
-                mouse_screen_coords: tuple = (0.5, 0.5)):
+                mouse_screen_coords: tuple = (0.5, 0.5), exposure: float = 0.0):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
         # ALWAYS use assembled texture when simulation is running
@@ -150,6 +150,7 @@ class Camera:
                 sweep_reticle_visible=sweep_reticle_visible,
                 screen_aspect=screen_aspect,
                 brightness=self.BRIGHTNESS,
+                exposure=exposure,
                 ink_weight=self.ink_weight,
                 watercolor_mode=watercolor_mode,
                 emboss_tex=emboss_tex,

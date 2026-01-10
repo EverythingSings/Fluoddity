@@ -10,6 +10,8 @@ uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 
 uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
 uniform float BRIGHTNESS;           // Global brightness multiplier (applied before gamma)
+uniform float EXPOSURE;//undo gamma from last frame and blend it with this frame, allows long exposure effect
+#define BRIGHTNESS_CONSTANT (3.*BRIGHTNESS)
 uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()
 uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
 uniform float TRAIL_DRAW_RADIUS;    // Draw size for trail drawing overlay (0 when not active)
@@ -156,13 +158,17 @@ void main() {
     current_color = current_color*(EMBOSS_INTENSITY!=0?emboss(uv):vec3(1));//emboss(uv)*EMBOSS_INTENSITY+1-EMBOSS_INTENSITY);
     // Divide by number of samples (for averaging)
     current_color /= float(TOTAL_SAMPLES);
-
+    
     // Add to or replace accumulation
     if (is_first_frame) {
-        fragColor = vec4(current_color, 1.0);
+        vec3 previous_frame = texture(accumulation_buffer, uv).rgb;
+        float previous_len = length(previous_frame);
+        previous_frame=safenorm(previous_frame)*pow(previous_len,1./(1-.575));
+        previous_frame/=BRIGHTNESS_CONSTANT;
+        fragColor = vec4(mix(current_color,previous_frame,EXPOSURE-.0001), 1.0);
     } else {
         vec3 previous_accumulation = texture(accumulation_buffer, uv).rgb;
-        fragColor = vec4(previous_accumulation + current_color, 1.0);
+        fragColor = vec4(previous_accumulation + (1.0001-EXPOSURE)*current_color, 1.0);
     }
 
     // Apply gamma correction only on final sample (AFTER accumulation)
@@ -172,18 +178,19 @@ void main() {
             fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
         }
         // Apply brightness multiplier before gamma correction
-        #define BRIGHTNESS_CONSTANT 3.
-        fragColor.xyz *= BRIGHTNESS*BRIGHTNESS_CONSTANT;
+        
+        fragColor.xyz *= BRIGHTNESS_CONSTANT;
         float len = length(fragColor.xyz);
         if (len > 0.0) {
             fragColor.xyz /= pow(len, 0.575);
         }
 
     }
+    //Conditionally draw sweep reticle and mouse draw reticle
         if(PARAMETER_SWEEP_MODE){
             fragColor.xyz += sweep_overlay(uv)* (WATERCOLOR_MODE?-1:1);
         }
-        if(TRAIL_DRAW_RADIUS > 0.0){
+        if(TRAIL_DRAW_RADIUS > 0.0 && EXPOSURE<.25){
             fragColor.xyz += draw_overlay(uv)* (WATERCOLOR_MODE?-1:1);
         }
         //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}

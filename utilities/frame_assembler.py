@@ -69,7 +69,7 @@ class FrameAssembler:
 
     def assemble_frame(self, input_texture, total_samples, current_sample_index, view_mode=0,
                        sweep_mode=False, sweep_reticle_pos=(0.5, 0.5), sweep_reticle_visible=False,
-                       screen_aspect=1.0, brightness=1.0, ink_weight=1.0, watercolor_mode=False,
+                       screen_aspect=1.0, brightness=1.0, exposure=0.0, ink_weight=1.0, watercolor_mode=False,
                        emboss_tex=None, camera_position=(0.0, 0.0), camera_zoom=1.0,
                        emboss_intensity=0.0, emboss_smoothness=0.1, trail_draw_radius=0.0,
                        mouse_screen_coords=(0.5, 0.5)):
@@ -86,6 +86,7 @@ class FrameAssembler:
             sweep_reticle_visible: Whether to show the reticle
             screen_aspect: Screen width/height ratio for proper circle rendering
             brightness: Global brightness multiplier (applied before gamma)
+            exposure: Frame blending amount (0=disabled, 1=long exposure)
             ink_weight: Watercolor mode optical density control
             watercolor_mode: Whether to use watercolor rendering
             emboss_tex: Texture for emboss effect (canvas or brush based on mode)
@@ -140,6 +141,7 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'sweep_reticle_visible', sweep_reticle_visible)
         tryset(self.resources['shader'], 'screen_aspect', screen_aspect)
         tryset(self.resources['shader'], 'BRIGHTNESS', brightness)
+        tryset(self.resources['shader'], 'EXPOSURE', exposure)
         tryset(self.resources['shader'], 'INK_WEIGHT', ink_weight)
         tryset(self.resources['shader'], 'WATERCOLOR_MODE', watercolor_mode)
         tryset(self.resources['shader'], 'TRAIL_DRAW_RADIUS', trail_draw_radius)

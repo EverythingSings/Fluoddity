@@ -12,6 +12,7 @@ class PreferencesState:
     motion_blur: bool = True
     rule_seed: float = 0.0
     brightness: float = 1.0  # Global brightness multiplier
+    exposure: float = 0.0  # Frame blending for motion blur effect (0=disabled, 1=long exposure)
 
     # UI preferences
     show_preferences_window: bool = True  # Whether preferences window is visible

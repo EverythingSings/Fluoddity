@@ -217,7 +217,8 @@ class App:
             emboss_smoothness=ui_state.sim.emboss_smoothness,
             draw_trail_mode=draw_trail_mode,
             draw_size=ui_state.preferences.draw_size,
-            mouse_screen_coords=mouse_screen_coords
+            mouse_screen_coords=mouse_screen_coords,
+            exposure=ui_state.preferences.exposure
         )
 
         # 7.5. Render arrow debug overlay if enabled
@@ -619,6 +620,7 @@ class App:
                     sweep_reticle_visible=sweep_reticle_visible,
                     screen_aspect=screen_aspect,
                     brightness=self.camera.BRIGHTNESS,
+                    exposure=ui_state.preferences.exposure,
                     ink_weight=ui_state.sim.ink_weight,
                     watercolor_mode=ui_state.sim.watercolor_mode,
                     emboss_tex=emboss_tex,
@@ -681,6 +683,7 @@ class App:
                 sweep_reticle_visible=sweep_reticle_visible,
                 screen_aspect=screen_aspect,
                 brightness=self.camera.BRIGHTNESS,
+                exposure=ui_state.preferences.exposure,
                 ink_weight=ui_state.sim.ink_weight,
                 watercolor_mode=ui_state.sim.watercolor_mode,
                 emboss_tex=emboss_tex,

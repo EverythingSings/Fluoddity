@@ -873,6 +873,15 @@ class UI:
             )
             self._delayed_tooltip("Global brightness multiplier for the output.")
 
+            # Exposure / Cheap Blur slider
+            _, self.state.preferences.exposure = imgui.slider_float(
+                "Exposure / Cheap Blur",
+                self.state.preferences.exposure,
+                0.0, 1.0,
+                format="%.2f"
+            )
+            self._delayed_tooltip("Blend frames together for a cheap motion blur or set near 1 for a long exposure effect.")
+
         imgui.end()
 
         # Restore normal window background color if it was changed
