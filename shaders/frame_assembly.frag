@@ -43,16 +43,25 @@ vec3 hsv2rgb(vec3 c)
 vec2 screen_to_canvas_uv(vec2 screen_uv) {
     // Screen UV to normalized device coordinates (-1 to 1)
     vec2 ndc = screen_uv * 2.0 - 1.0;
-
-    // Apply aspect ratio correction and zoom
-    //ndc.x *= screen_aspect;
-    //ndc *= camera_zoom;
-
     // Add camera position to get world space position
     vec2 world_pos = ndc*camera_zoom + camera_position*vec2(1,-1);
+    // Apply aspect ratio correction
     world_pos.x*=screen_aspect;
     // World space to canvas texture coords: divide by 2 and add 0.5
     return (world_pos/2.+.5);
+}
+
+// Convert canvas texture coordinates to screen UV coordinates
+// Inverse of screen_to_canvas_uv
+vec2 canvas_uv_to_screen(vec2 canvas_uv) {
+    // Canvas texture coords to world space: multiply by 2 and subtract 1
+    vec2 world_pos = canvas_uv * 2.0 - 1.0;
+    // Remove aspect ratio correction
+    world_pos.x /= screen_aspect;
+    // Subtract camera position to get NDC (with flipped y)
+    vec2 ndc = (world_pos - camera_position*vec2(1,-1)) / camera_zoom;
+    // NDC to screen UV coordinates (0 to 1)
+    return ndc * 0.5 + 0.5;
 }
 
 // Estimate gradient of scalar field using central differences (takes .z component as scalar)
@@ -138,7 +147,7 @@ vec3 emboss(vec2 uv){
     if (EMBOSS_INTENSITY == 0.0) {
         return vec3(.0);
     }
-    vec2 canv_uv = screen_to_canvas_uv(uv);
+    vec2 canv_uv = view_mode==2?screen_to_canvas_uv(uv):uv;
     vec2 grad = gradient(emboss_tex, canv_uv, .01*EMBOSS_SMOOTHNESS);
     grad *= max(abs(canv_uv-.5).x,abs(canv_uv-.5).y)>.5?0:1;
     vec3 fakenorm = normalize(vec3(grad.x,.5/pow(EMBOSS_INTENSITY,5.),grad.y));
@@ -187,11 +196,13 @@ void main() {
 
     }
     //Conditionally draw sweep reticle and mouse draw reticle
+    vec2 overlay_uv=uv;
+    if(view_mode!=2){overlay_uv = canvas_uv_to_screen(uv);}
         if(PARAMETER_SWEEP_MODE){
-            fragColor.xyz += sweep_overlay(uv)* (WATERCOLOR_MODE?-1:1);
+            fragColor.xyz += sweep_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
         }
         if(TRAIL_DRAW_RADIUS > 0.0 && EXPOSURE<.25){
-            fragColor.xyz += draw_overlay(uv)* (WATERCOLOR_MODE?-1:1);
+            fragColor.xyz += draw_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
         }
         //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
 }
