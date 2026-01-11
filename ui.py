@@ -1246,6 +1246,10 @@ class UI:
                         "Per-config Cohorts", self.state.multi_load.per_config_cohorts)
                     self._delayed_tooltip("Each config uses its own cohort count")
 
+                    _, self.state.multi_load.per_config_hazard_rate = imgui.checkbox(
+                        "Per-config Hazard Rate", self.state.multi_load.per_config_hazard_rate)
+                    self._delayed_tooltip("Each config uses its own hazard rate setting")
+
                     imgui.end_menu()
 
                 # Simplified Additional Settings (some items greyed out)
@@ -1288,10 +1292,14 @@ class UI:
                     if self.state.multi_load.per_config_cohorts:
                         imgui.end_disabled()
 
-                    # Hazard Rate (always enabled in multi-load, global parameter)
+                    # Hazard Rate (conditional on per-config setting)
+                    if self.state.multi_load.per_config_hazard_rate:
+                        imgui.begin_disabled()
                     imgui.set_next_item_width(100)
-                    _, self.state.sim.hazard_rate = imgui.slider_float("Hazard Rate", self.state.sim.hazard_rate, 0.0, 0.05, "%.4f")
-                    self._delayed_tooltip("At values greater than 0, particles will occasionally reset to their initial conditions")
+                    _, self.state.sim.HAZARD_RATE = imgui.slider_float("Hazard Rate", self.state.sim.HAZARD_RATE, 0.0, 0.05, "%.4f")
+                    if self.state.multi_load.per_config_hazard_rate:
+                        imgui.end_disabled()
+                    self._delayed_tooltip("Probability per frame that particles reset to initial conditions")
 
                     # Disable these options in multi-load (per-config settings)
                     imgui.begin_disabled()
@@ -1373,7 +1381,7 @@ class UI:
             config_count = self.multi_load_service.get_config_count() if self.multi_load_service else 0
 
             _, self.state.multi_load.simultaneous_configs = imgui.slider_float(
-                "Simultaneous Configs", self.state.multi_load.simultaneous_configs, 0.0, float(max(1, config_count)))
+                "Simultaneous Configs", self.state.multi_load.simultaneous_configs, 0.0, float(max(1, config_count-.001)))
             _, self.state.multi_load.progression_pace = imgui.slider_float(
                 "Progression Pace", self.state.multi_load.progression_pace, 0.0, 1.0)
 

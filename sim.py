@@ -5,10 +5,12 @@ from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, t
 from state import SimState
 
 # Global constants
-ENTITY_COUNT = 600000
+EVERYTHING_SCALE = 0.25
+ENTITY_COUNT = int(600000*EVERYTHING_SCALE*EVERYTHING_SCALE)
 SIZE_OF_ENTITY_STRUCT = 4*12  # 4 bytes per 32bit value. 12 values (pos:2, vel:2, size:1, padding:3, color:4)
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
-CANVAS_SHAPE = (1024, 1024) # Changing canvas size can significantly alter particle behavior. Presets all assume 1024 x 1024 
+CANVAS_DIM = int(1024*(EVERYTHING_SCALE))
+CANVAS_SHAPE = (CANVAS_DIM, CANVAS_DIM) # Changing canvas size can significantly alter particle behavior. Presets all assume 1024 x 1024 
 
 class Sim:
     def __init__(self, ctx: moderngl.Context):
@@ -139,7 +141,6 @@ class Sim:
             self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
             self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
             self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
-            self._assign_physics_setting('HAZARD_RATE_SETTING', self._state.HAZARD_RATE, 'Hazard Rate', 'HAZARD_RATE', 0.0, 0.05)
             tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
             tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
             tryset(self.entity_update_program, 'ORIENTATION_MIX', self._state.ORIENTATION_MIX)
@@ -150,6 +151,7 @@ class Sim:
         tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
         tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
+        self._assign_physics_setting('HAZARD_RATE_SETTING', self._state.HAZARD_RATE, 'Hazard Rate', 'HAZARD_RATE', 0.0, 0.05)
 
         # Appearance settings from sim state (now part of physics config)
         tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
@@ -493,6 +495,7 @@ class Sim:
         tryset(self.entity_update_program, 'MULTI_LOAD_ASSIGNMENT_MODE', assignment_mode_int)
         tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS', multi_load_service.per_config_initial_conditions)
         tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_COHORTS', multi_load_service.per_config_cohorts)
+        tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_HAZARD_RATE', multi_load_service.per_config_hazard_rate)
 
         # Write config data to SSBO only when dirty (expensive operation)
         if multi_load_service.is_ssbo_dirty():

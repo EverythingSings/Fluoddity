@@ -122,7 +122,7 @@ class App:
         # 3. Process continuous input (camera movement)
         self.process_camera_input(ui_state)
 
-        # 4. Lock speedmult to motion_blur_samples if recording
+        # 4. Lock physics frequency to video recorder frequency if recording
         is_recording = self.video_service.is_active()
 
         # Detect recording state changes

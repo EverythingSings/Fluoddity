@@ -18,6 +18,7 @@ class MultiLoadService:
         self.assignment_mode: str = "Cohorts"
         self.per_config_initial_conditions: bool = False
         self.per_config_cohorts: bool = False
+        self.per_config_hazard_rate: bool = False
         self._ssbo_dirty: bool = False  # Flag for SSBO update needed
 
     # --- Configuration Management ---
@@ -132,6 +133,7 @@ class MultiLoadService:
         self.assignment_mode = multi_load_state.assignment_mode
         self.per_config_initial_conditions = multi_load_state.per_config_initial_conditions
         self.per_config_cohorts = multi_load_state.per_config_cohorts
+        self.per_config_hazard_rate = multi_load_state.per_config_hazard_rate
 
     # --- SSBO Management ---
 

@@ -1,5 +1,5 @@
 #version 450
-
+#define EVERYTHING_SCALE 0.25
 layout(local_size_x = 64) in;
 
 //SAME STRUCT USED IN BRUSH.VERT AND CAM_BRUSH.VERT
@@ -61,6 +61,7 @@ uniform float MULTI_LOAD_SIMULTANEOUS_CONFIGS; // How many configs to span
 uniform int MULTI_LOAD_ASSIGNMENT_MODE; // 0 = Cohorts, 1 = Random
 uniform bool MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS; // If true, use per-config reset modes
 uniform bool MULTI_LOAD_PER_CONFIG_COHORTS; // If true, use per-config cohort counts
+uniform bool MULTI_LOAD_PER_CONFIG_HAZARD_RATE; // If true, use per-config hazard rates
 
 // Multi-load config data (large arrays, packed into SSBO)
 struct MultiLoadConfig {
@@ -101,7 +102,7 @@ layout(std430, binding = 4) buffer MultiLoadRuleBuffer {
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
-#define ACTIVE_COUNT 600000 //Supports up to the size of the entity buffer.
+#define ACTIVE_COUNT 600000*EVERYTHING_SCALE*EVERYTHING_SCALE //Supports up to the size of the entity buffer.
 
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
@@ -240,7 +241,7 @@ int get_particle_absolute_orientation() {
 }
 PhysicsSetting get_particle_hazard_rate() {
     int idx = get_particle_config_index();
-    return idx >= 0 ? (configs[idx].hazard_rate) : HAZARD_RATE_SETTING;
+    return idx >= 0 &&MULTI_LOAD_PER_CONFIG_HAZARD_RATE? (configs[idx].hazard_rate) : HAZARD_RATE_SETTING;
 }
 
 //HARDCODED TO BE GLOBAL FOR NOW
@@ -316,7 +317,7 @@ float get_cohort(uint index) {
 //Return all entities to their initialization state
 void reset(uint index){
 
-    float size=index<ACTIVE_COUNT?.0015: 0;
+    float size=index<ACTIVE_COUNT?.0015/EVERYTHING_SCALE: 0;
     float cohort_val = get_cohort(index);
 
     vec4 color=vec4(0,0,1,.045);
@@ -442,7 +443,7 @@ void main() {
 
 
     //Calculate position offsets for the two sensors.
-    float sample_dist = .005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
+    float sample_dist = 1./EVERYTHING_SCALE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
     int ORIENTATION_MODE =get_particle_absolute_orientation();
     float mix_amt = min(1,ORIENTATION_MODE)*ORIENTATION_MIX;
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
@@ -458,7 +459,7 @@ void main() {
     vec4 rtap = get_can(e.pos+right_sensor_offset);
 
     Rule current_rule=get_particle_target_rule();
-    //if a few coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
+    //if a few arbitrary coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
     if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
         current_rule = Rule(generate_random_centers(get_particle_rule_seed()+floor(cohort)));
     }
@@ -466,7 +467,7 @@ void main() {
     mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),e.pos,cohort),get_particle_rule_seed()+floor(cohort));
 
     //rescale sensor values
-    float sensor_scaling = 38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
+    float sensor_scaling = EVERYTHING_SCALE*38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
     ltap *= sensor_scaling;
     rtap *= sensor_scaling;
 
@@ -477,8 +478,8 @@ void main() {
     calculate_entity_behavior(ltap.xy,rtap.xy,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
 
     //rescale output forces
-    force *= calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
-    strafe *= calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
+    force *= 1./EVERYTHING_SCALE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
+    strafe *= 1./EVERYTHING_SCALE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
 
 
     //e.color is interpreted as vec4(hue,saturation,brightness,alpha)

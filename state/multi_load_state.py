@@ -21,3 +21,4 @@ class MultiLoadState:
     assignment_mode: str = "Cohorts"  # "Random" or "Cohorts"
     per_config_initial_conditions: bool = False
     per_config_cohorts: bool = False
+    per_config_hazard_rate: bool = False

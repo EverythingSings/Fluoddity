@@ -1,5 +1,5 @@
 #version 430 
-
+#define EVERYTHING_SCALE .25
 uniform vec2 canvas_resolution;
 uniform vec2 cam_pos;
 uniform float cam_zoom;
