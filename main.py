@@ -32,14 +32,18 @@ class App:
         # Always on top
         glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE)
 
+        # Load preferences first to get world_size
+        loaded_prefs = load_preferences()
+
         # Create components (no cross-references between UI and sim/camera)
-        self.sim = Sim(self.ctx)
+        self.sim = Sim(self.ctx, world_size=loaded_prefs.world_size)
         self.camera = Camera(self.ctx, self.sim, self.window)
         self.ui = UI(self.window, self.ctx, self.sim.view_option_labels)
 
-        # Load and apply preferences
-        loaded_prefs = load_preferences()
+        # Apply loaded preferences to UI
         self.ui.state.preferences = loaded_prefs
+        # Initialize world size tracker with loaded value
+        self.ui._last_applied_world_size = loaded_prefs.world_size
 
         # Create services (Orchestrator owns these)
         self.rule_manager = RuleManager()
@@ -245,6 +249,23 @@ class App:
 
     def process_commands(self, ui_state):
         """Handle one-shot commands."""
+
+        # Handle world size change
+        if ui_state.request_world_size_change:
+            # Update sim's world_size
+            self.sim.world_size = ui_state.preferences.world_size
+            # Reallocate buffers and textures
+            self.sim.setup_simulation_state()
+            # Recompile shaders with new entity count
+            self.sim.setup_shaders()
+            # Apply current rule
+            if self.rule_manager.has_rules():
+                self.sim.apply_rule(self.rule_manager.get_current_rule())
+            # Reset simulation
+            self.sim.reset()
+            # Update UI tracker so we don't trigger again
+            self.ui._last_applied_world_size = ui_state.preferences.world_size
+            print(f"World size changed to {self.sim.world_size} (entity_count: {self.sim.entity_count}, canvas: {self.sim.get_canvas_dimensions()}x{self.sim.get_canvas_dimensions()})")
 
         # Toggle recording
         if ui_state.toggle_recording:
@@ -585,6 +606,12 @@ class App:
         if motion_blur:
             # Motion blur enabled: temporal accumulation with multiple render calls
             # Run simulation steps and accumulate frames
+            motion_blur_render_cadence = ui_state.preferences.blur_quality
+
+            # Calculate how many render samples we'll actually take
+            # We render every Nth physics step, so total_render_samples = speedmult / cadence
+            render_sample_index = 0
+
             for step in range(speedmult):
                 self.sim.update(
                     self.ctx,
@@ -596,6 +623,10 @@ class App:
                     multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None,
                     is_preview_active = self.preview_rule_active
                 )
+
+                # Only render on frames matching the blur quality cadence
+                if step % motion_blur_render_cadence != 0:
+                    continue
 
                 # Generate raw view texture (PRE-gamma correction)
                 raw_view_tex = self.camera.generate_view_texture()
@@ -611,10 +642,14 @@ class App:
                     emboss_tex = None
                 # Override emboss_intensity to 0 when mode is Off (0)
                 effective_emboss_intensity = 0.0 if emboss_mode == 0 else ui_state.sim.emboss_intensity
+
+                # Calculate total render samples based on cadence
+                total_render_samples = (speedmult + motion_blur_render_cadence - 1) // motion_blur_render_cadence
+
                 assembled_tex = self.camera.frame_assembler.assemble_frame(
                     raw_view_tex,
-                    total_samples=speedmult,
-                    current_sample_index=step,
+                    total_samples=total_render_samples,
+                    current_sample_index=render_sample_index,
                     view_mode=ui_state.sim.current_view_option,
                     sweep_mode=sweep_mode,
                     sweep_reticle_pos=sweep_reticle_pos,
@@ -632,6 +667,9 @@ class App:
                     trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
                     mouse_screen_coords=mouse_screen_coords
                 )
+
+                # Increment render sample index for next sample
+                render_sample_index += 1
 
                 # Only process when accumulation cycle completes
                 if assembled_tex is not None:

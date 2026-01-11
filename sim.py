@@ -1,21 +1,19 @@
 import moderngl
 import time
+import math
 import numpy as np
 from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, tryset, set_rule_uniform
 from state import SimState
 
 # Global constants
-WORLD_SIZE = 0.25
-ENTITY_COUNT = int(600000*WORLD_SIZE)
 SIZE_OF_ENTITY_STRUCT = 4*12  # 4 bytes per 32bit value. 12 values (pos:2, vel:2, size:1, padding:3, color:4)
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
-CANVAS_DIM = int(1024*math.sqrt(WORLD_SIZE))
-CANVAS_SHAPE = (CANVAS_DIM, CANVAS_DIM) # Changing canvas size can significantly alter particle behavior. Presets all assume 1024 x 1024 
 
 class Sim:
-    def __init__(self, ctx: moderngl.Context):
-        self.entity_count = ENTITY_COUNT
+    def __init__(self, ctx: moderngl.Context, world_size: float = 1.0):
         self.ctx = ctx
+        self.world_size = world_size
+        self.entity_count = self.get_entity_count()
         self.time = 0.0
         self.start_time_stamp = time.time()
         self.frame_count = 0
@@ -30,10 +28,23 @@ class Sim:
         self._state = SimState()
         self._camera_state = None  # Will be set by apply_camera_state
 
+    def get_entity_count(self) -> int:
+        """Calculate entity count based on world size."""
+        return int(600000 * self.world_size)
+
+    def get_canvas_dimensions(self) -> int:
+        """Calculate canvas dimensions based on world size."""
+        return int(1024 * math.sqrt(self.world_size))
+
     def setup_simulation_state(self):
+        # Update entity_count in case world_size changed
+        self.entity_count = self.get_entity_count()
+        canvas_dim = self.get_canvas_dimensions()
+        canvas_shape = (canvas_dim, canvas_dim)
+
         # Allocate state buffers
-        self.entities = self.ctx.buffer(reserve=ENTITY_COUNT * SIZE_OF_ENTITY_STRUCT)
-        self.rule_buffer = self.ctx.buffer(reserve=ENTITY_COUNT * SIZE_OF_RULE_STRUCT)
+        self.entities = self.ctx.buffer(reserve=self.entity_count * SIZE_OF_ENTITY_STRUCT)
+        self.rule_buffer = self.ctx.buffer(reserve=self.entity_count * SIZE_OF_RULE_STRUCT)
 
         # Multi-load config buffer (64 configs * 248 bytes per config)
         # Each MultiLoadConfig struct: 9 PhysicsSetting (54 floats) + 6 ints + 2 floats = 248 bytes
@@ -51,13 +62,13 @@ class Sim:
         self.multi_load_rule_buffer.bind_to_storage_buffer(4)  # Binding 4 for multi-load rules
 
         # Create canvas texture (4-channel float32)
-        self.can = self.ctx.texture(CANVAS_SHAPE, 4, dtype='f4')
+        self.can = self.ctx.texture(canvas_shape, 4, dtype='f4')
         self.can.repeat_x = False
         self.can.repeat_y = False
         self.canvas = self.ctx.framebuffer([self.can])
 
         # Create brush texture and framebuffer
-        self.brush_tex = self.ctx.texture(CANVAS_SHAPE, 4, dtype='f4')
+        self.brush_tex = self.ctx.texture(canvas_shape, 4, dtype='f4')
         self.brush_tex.repeat_x = False
         self.brush_tex.repeat_y = False
         self.brush = self.ctx.framebuffer([self.brush_tex])
@@ -70,10 +81,13 @@ class Sim:
         self.ctx.clear()
 
     def setup_shaders(self):
+        canvas_dim = self.get_canvas_dimensions()
+        canvas_shape = (canvas_dim, canvas_dim)
+
         # 1. Entity update compute shader
         self.entity_update_source = read_shader('shaders/entity_update.glsl')
         self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('shaders/fourier4_4.glsl'))
-        self.entity_update_source = prepend_defines(self.entity_update_source, ENTITY_COUNT)
+        self.entity_update_source = prepend_defines(self.entity_update_source, self.entity_count)
 
         try:
             self.entity_update_program = self.ctx.compute_shader(self.entity_update_source)
@@ -81,12 +95,12 @@ class Sim:
             print('Entity Update Compilation Failed:')
             print(e)
 
-        tryset(self.entity_update_program, 'canvas_resolution', CANVAS_SHAPE)
+        tryset(self.entity_update_program, 'canvas_resolution', canvas_shape)
         tryset(self.entity_update_program, 'canvas', 1)
 
         # 2. Brush update shaders (instanced rendering)
         self.brush_vertex_source = read_shader('shaders/brush.vert')
-        self.brush_vertex_source = prepend_defines(self.brush_vertex_source, ENTITY_COUNT)
+        self.brush_vertex_source = prepend_defines(self.brush_vertex_source, self.entity_count)
         self.brush_fragment_source = read_shader('shaders/brush.frag')
 
         try:
@@ -98,7 +112,7 @@ class Sim:
             print('Brush Update Compilation Failed:')
             print(e)
 
-        self.brush_update_program['canvas_resolution'] = CANVAS_SHAPE
+        self.brush_update_program['canvas_resolution'] = canvas_shape
         self.brush_vao = self.ctx.vertex_array(self.brush_update_program, [])
 
         # 3. Canvas update shaders (fullscreen quad)
@@ -124,6 +138,7 @@ class Sim:
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
+        tryset(self.entity_update_program, 'WORLD_SIZE', self.world_size)
 
         # Multi-load mode: set uniform arrays for all loaded configs
         if multi_load_service and multi_load_service.is_active() and not is_preview_active:
@@ -159,7 +174,7 @@ class Sim:
 
 
 
-        num_workgroups = (ENTITY_COUNT + 63) // 64
+        num_workgroups = (self.entity_count + 63) // 64
         ctx.memory_barrier()
         self.entity_update_program.run(num_workgroups)
 
@@ -172,7 +187,7 @@ class Sim:
         ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
         ctx.blend_equation = moderngl.FUNC_ADD
 
-        self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=ENTITY_COUNT, vertices=4)
+        self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=self.entity_count, vertices=4)
 
     def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                    prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,

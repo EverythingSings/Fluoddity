@@ -10,6 +10,8 @@ class PreferencesState:
     # Camera/rendering preferences
     speedmult: int = 1
     motion_blur: bool = True
+    blur_quality: int = 1  # Motion blur render cadence (1 = every frame, 2 = every 2 frames, etc.)
+    world_size: float = 1.0  # World size multiplier (affects entity count and canvas dimensions)
     rule_seed: float = 0.0
     brightness: float = 1.0  # Global brightness multiplier
     exposure: float = 0.0  # Frame blending for motion blur effect (0=disabled, 1=long exposure)

@@ -101,6 +101,9 @@ class UI:
         self.force_close_main_menus: bool = False  # Signal to close main menu bar menus
         self.force_close_physics_menus: bool = False  # Signal to close physics menu bar menus
 
+        # Track last applied world size to detect changes
+        self._last_applied_world_size: float = 1.0
+
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(
             sim=SimState(),
@@ -147,6 +150,7 @@ class UI:
         self._request_delete_file = False
         self._request_preview_config = False
         self._request_clear_preview = False
+        self._request_world_size_change = False
 
         # Rule history window flags
         self._request_preview_history_rule = False
@@ -371,6 +375,7 @@ class UI:
         self.state.request_delete_file = self._request_delete_file
         self.state.request_preview_config = self._request_preview_config
         self.state.request_clear_preview = self._request_clear_preview
+        self.state.request_world_size_change = self._request_world_size_change
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
         self.state.delete_filename = self._delete_filename
@@ -408,6 +413,7 @@ class UI:
         self._request_delete_file = False
         self._request_preview_config = False
         self._request_clear_preview = False
+        self._request_world_size_change = False
         self._save_filename = ""
         self._load_filename = ""
         self._delete_filename = ""
@@ -820,6 +826,23 @@ class UI:
         expanded, self.state.preferences.show_preferences_window = imgui.begin("Preferences", True)
 
         if expanded:
+            # === World Size section ===
+            imgui.text("World Size")
+
+            _, self.state.preferences.world_size = imgui.slider_float(
+                "World Size",
+                self.state.preferences.world_size,
+                0.02, 4.0,
+                format="%.2f"
+            )
+            self._delayed_tooltip("Controls the size of the simulation world.\nAffects both entity count and canvas resolution.\nChanging this will reset the simulation.")
+
+            # Check if world_size changed from last applied value
+            if abs(self.state.preferences.world_size - self._last_applied_world_size) > 0.001:
+                self._request_world_size_change = True
+
+            imgui.separator()
+
             # === Physics Update Frequency section ===
             imgui.text("Physics Update Frequency")
 
@@ -859,6 +882,25 @@ class UI:
 
             if recording_active:
                 imgui.end_disabled()
+
+            # Blur Quality slider (only shown when motion blur is enabled)
+            if self.state.preferences.motion_blur:
+                imgui.indent(20)
+                # Custom format for blur quality
+                blur_val = self.state.preferences.blur_quality
+                if blur_val == 1:
+                    blur_format = "1 : Every Frame"
+                else:
+                    blur_format = f"{blur_val} : Every {blur_val} Frames"
+
+                _, self.state.preferences.blur_quality = imgui.slider_int(
+                    "Blur Quality",
+                    self.state.preferences.blur_quality,
+                    1, 20,
+                    format=blur_format
+                )
+                self._delayed_tooltip("Motion Blur can be expensive at high frequencies,\nskip some frames to improve performance")
+                imgui.unindent(20)
 
             imgui.separator()
 

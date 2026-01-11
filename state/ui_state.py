@@ -38,6 +38,7 @@ class UIState:
     request_reset: bool = False
     request_full_reset: bool = False
     toggle_recording: bool = False
+    request_world_size_change: bool = False
 
     # Config save/load (Ctrl+C/Ctrl+V)
     request_save_config: bool = False
