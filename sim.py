@@ -616,7 +616,7 @@ class Sim:
             pos: (x, y) world position of entity in [-1, 1] range
             cohort: Normalized cohort value in [0, 1] range
         """
-        # Define all 11 parameters with their state field, slider label, and default ranges
+        # Define all 12 parameters with their state field, slider label, and default ranges
         parameters = [
             ('AXIAL_FORCE', 'Axial Force', -1.0, 1.0),
             ('LATERAL_FORCE', 'Lateral Force', -1.0, 1.0),
@@ -629,6 +629,7 @@ class Sim:
             ('SENSOR_DISTANCE', 'Sensor Distance', 0.0, 4.0),
             ('TRAIL_PERSISTENCE', 'Trail Persistence', 0.0, 1.0),
             ('TRAIL_DIFFUSION', 'Trail Diffusion', 0.0, 1.0),
+            ('HAZARD_RATE', 'Hazard Rate', 0.0, 0.05),
         ]
 
         for param_name, slider_label, default_min, default_max in parameters:
