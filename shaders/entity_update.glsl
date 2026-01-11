@@ -1,5 +1,4 @@
 #version 450
-#define EVERYTHING_SCALE 0.25
 layout(local_size_x = 64) in;
 
 //SAME STRUCT USED IN BRUSH.VERT AND CAM_BRUSH.VERT
@@ -30,6 +29,7 @@ struct PhysicsSetting {
     float y_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
     float cohort_sweep; // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
 };
+uniform float WORLD_SIZE;
 uniform int frame_count;
 uniform Rule target_rule;
 uniform sampler2D canvas; //trails canvas
@@ -102,8 +102,8 @@ layout(std430, binding = 4) buffer MultiLoadRuleBuffer {
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
-#define ACTIVE_COUNT 600000*EVERYTHING_SCALE*EVERYTHING_SCALE //Supports up to the size of the entity buffer.
-
+#define ACTIVE_COUNT (600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
+#define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
     if (MULTILOAD_COUNT == 0) return -1; // Not in multi-load mode
@@ -317,7 +317,7 @@ float get_cohort(uint index) {
 //Return all entities to their initialization state
 void reset(uint index){
 
-    float size=index<ACTIVE_COUNT?.0015/EVERYTHING_SCALE: 0;
+    float size=index<ACTIVE_COUNT?.0015/SQRT_WORLD_SIZE: 0;
     float cohort_val = get_cohort(index);
 
     vec4 color=vec4(0,0,1,.045);
@@ -443,7 +443,7 @@ void main() {
 
 
     //Calculate position offsets for the two sensors.
-    float sample_dist = 1./EVERYTHING_SCALE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
+    float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
     int ORIENTATION_MODE =get_particle_absolute_orientation();
     float mix_amt = min(1,ORIENTATION_MODE)*ORIENTATION_MIX;
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
@@ -467,7 +467,7 @@ void main() {
     mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),e.pos,cohort),get_particle_rule_seed()+floor(cohort));
 
     //rescale sensor values
-    float sensor_scaling = EVERYTHING_SCALE*38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
+    float sensor_scaling = SQRT_WORLD_SIZE*38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
     ltap *= sensor_scaling;
     rtap *= sensor_scaling;
 
@@ -478,8 +478,8 @@ void main() {
     calculate_entity_behavior(ltap.xy,rtap.xy,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
 
     //rescale output forces
-    force *= 1./EVERYTHING_SCALE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
-    strafe *= 1./EVERYTHING_SCALE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
+    force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
+    strafe *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
 
 
     //e.color is interpreted as vec4(hue,saturation,brightness,alpha)

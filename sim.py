@@ -5,11 +5,11 @@ from utilities.gl_helpers import read_shader, shader_prepend, prepend_defines, t
 from state import SimState
 
 # Global constants
-EVERYTHING_SCALE = 0.25
-ENTITY_COUNT = int(600000*EVERYTHING_SCALE*EVERYTHING_SCALE)
+WORLD_SIZE = 0.25
+ENTITY_COUNT = int(600000*WORLD_SIZE)
 SIZE_OF_ENTITY_STRUCT = 4*12  # 4 bytes per 32bit value. 12 values (pos:2, vel:2, size:1, padding:3, color:4)
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
-CANVAS_DIM = int(1024*(EVERYTHING_SCALE))
+CANVAS_DIM = int(1024*math.sqrt(WORLD_SIZE))
 CANVAS_SHAPE = (CANVAS_DIM, CANVAS_DIM) # Changing canvas size can significantly alter particle behavior. Presets all assume 1024 x 1024 
 
 class Sim:
