@@ -829,17 +829,30 @@ class UI:
             # === World Size section ===
             imgui.text("World Size")
 
-            _, self.state.preferences.world_size = imgui.slider_float(
+            # Use input_float - only apply when user commits (Enter or focus loss)
+            changed, new_value = imgui.input_float(
                 "World Size",
                 self.state.preferences.world_size,
-                0.02, 4.0,
+                step=0.0,  # No step buttons
+                step_fast=0.0,
                 format="%.2f"
             )
-            self._delayed_tooltip("Controls the size of the simulation world.\nAffects both entity count and canvas resolution.\nChanging this will reset the simulation.")
 
-            # Check if world_size changed from last applied value
-            if abs(self.state.preferences.world_size - self._last_applied_world_size) > 0.001:
-                self._request_world_size_change = True
+            # Clamp to valid range
+            if new_value < 0.02:
+                new_value = 0.02
+            elif new_value > 4.0:
+                new_value = 4.0
+
+            # Update the displayed value (clamping happens immediately)
+            self.state.preferences.world_size = new_value
+
+            # Only trigger world size change when user commits the edit
+            if imgui.is_item_deactivated_after_edit():
+                if abs(self.state.preferences.world_size - self._last_applied_world_size) > 0.001:
+                    self._request_world_size_change = True
+
+            self._delayed_tooltip("Controls the size of the simulation world.\nAffects both entity count and canvas resolution.\nCommit changes with Enter or clicking away (will reset simulation).\nValid range: 0.02 to 4.0")
 
             imgui.separator()
 

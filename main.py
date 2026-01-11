@@ -323,11 +323,16 @@ class App:
                         self.sim.view_tex.size
                     )
                     entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
-                    print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
-                    rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
-                    self.rule_manager.push_rule(rule)
-                    self.sim.apply_rule(rule)
-                    self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+
+                    # Bounds check: ensure entity_id is valid for current buffer size
+                    if entity_id >= 0 and entity_id < self.sim.entity_count:
+                        print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
+                        rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
+                        self.rule_manager.push_rule(rule)
+                        self.sim.apply_rule(rule)
+                        self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+                    else:
+                        print(f"Warning: entity_id {entity_id} out of bounds (max: {self.sim.entity_count - 1})")
             elif ui_state.right_click_this_frame:
                 # When parameter sweeps are enabled, right click enters preview mode (any mouse mode)
                 if ui_state.sim.parameter_sweeps_enabled:
