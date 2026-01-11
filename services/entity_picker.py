@@ -15,6 +15,16 @@ class EntityPicker:
         self.entity_buffer = entity_buffer
         self.entity_stride = entity_stride
 
+    def update_buffer(self, entity_buffer: moderngl.Buffer):
+        """Update the entity buffer reference.
+
+        Call this when the buffer is reallocated (e.g., world size change).
+
+        Args:
+            entity_buffer: New GPU buffer containing entity data
+        """
+        self.entity_buffer = entity_buffer
+
     def find_nearest_entity(self, tex_coords: tuple[float, float]) -> tuple[int, tuple[float, float], float]:
         """Find the entity closest to given texture coordinates.
 

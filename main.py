@@ -258,6 +258,8 @@ class App:
             self.sim.setup_simulation_state()
             # Recompile shaders with new entity count
             self.sim.setup_shaders()
+            # Update entity picker with new buffer
+            self.entity_picker.update_buffer(self.sim.get_entity_buffer())
             # Apply current rule
             if self.rule_manager.has_rules():
                 self.sim.apply_rule(self.rule_manager.get_current_rule())
