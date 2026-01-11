@@ -54,11 +54,12 @@ class UI:
 
         # UI-only state
         self.show_demo_window = False
-        self.show_physics_settings_window = True  # Physics settings window (default open)
+        self.show_physics_settings_window = True  # Physics settings window (always visible, but can be hidden with sidebar)
         self.show_controls_window = False  # Help controls window
         self.show_parameter_sweeps_window = False  # Help parameter sweeps window
         self.show_tutorial_window = False  # Help tutorial window
         self.show_video_recording_window = False  # Video recording controls window
+        self.show_sidebar = True  # Controls visibility of Physics Settings and Preferences windows
 
         # Rule history window state
         self.show_history_window = False
@@ -328,6 +329,9 @@ class UI:
             elif key == glfw.KEY_Z:
                 # Full reset (one-shot, not hold)
                 self._request_full_reset = True
+            elif key == glfw.KEY_X:
+                # Toggle sidebar (Physics Settings and Preferences windows)
+                self.show_sidebar = not self.show_sidebar
             elif key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(window, True)
             elif key == glfw.KEY_F1:
@@ -523,12 +527,12 @@ class UI:
         # Main application menu bar
         self.render_main_menu_bar()
 
-        # Render Physics Settings window if visible
-        if self.show_physics_settings_window:
+        # Render Physics Settings window if sidebar is visible
+        if self.show_sidebar:
             self.render_physics_settings_window()
 
-        # Render Preferences window if visible
-        if self.state.preferences.show_preferences_window:
+        # Render Preferences window if sidebar is visible AND preferences are enabled
+        if self.show_sidebar and self.state.preferences.show_preferences_window:
             self.render_preferences_window()
 
         # Render Controls help window if visible
@@ -686,9 +690,9 @@ class UI:
 
                 imgui.end_menu()
 
-            # Physics Settings toggle button
-            if imgui.menu_item("Physics Settings", "", self.show_physics_settings_window)[0]:
-                self.show_physics_settings_window = not self.show_physics_settings_window
+            # Sidebar toggle button (shows/hides Physics Settings and Preferences)
+            if imgui.menu_item("Show/Hide Sidebar (X)", "", self.show_sidebar)[0]:
+                self.show_sidebar = not self.show_sidebar
 
             # Reset menu
             if imgui.begin_menu("Reset...", not self.force_close_main_menus):
@@ -1256,7 +1260,8 @@ class UI:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.15, 0.20, 0.35, 0.94))
             imgui.push_style_color(imgui.Col_.title_bg_active, imgui.ImVec4(0.20, 0.30, 0.50, 1.0))
 
-        _, self.show_physics_settings_window = imgui.begin('Physics Settings', p_open=self.show_physics_settings_window, flags=imgui.WindowFlags_.menu_bar)
+        # No p_open parameter - window is uncloseable
+        imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
 
         # Track if any physics menu is open
         physics_any_menu_open_this_frame = False
