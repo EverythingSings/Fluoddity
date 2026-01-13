@@ -1,7 +1,6 @@
 RESTART ON OPEN
     def run(self):
         self.sim.reset()
--Timelapse
 -save needs to change "current file"
 -radial absolute Orientation
 -camera.py -> screentotex fallback for 0 size

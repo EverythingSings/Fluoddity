@@ -1983,7 +1983,7 @@ class UI:
                 default_max=0.05,
             )
             self.render_custom_tooltip("Hazard Rate",
-                "Probability per frame that particles reset to initial conditions. Higher values create more dynamic, chaotic patterns.")
+                "Probability per frame that particles reset to initial conditions. Gives particles a probabalistic 'lifetime' after which they reset.")
 
         imgui.separator()
 

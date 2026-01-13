@@ -11,6 +11,7 @@
     "global_force_mult": 0.3569999933242798,
     "sensor_distance": 1.0,
     "trail_persistence": 0.9950000047683716,
+    "trail_diffusion": 1.0,
     "hazard_rate": 0.0
   },
   "slider_ranges": {
@@ -74,6 +75,12 @@
       0.0,
       1.0
     ],
+    "Trail Diffusion": [
+      0.0,
+      1.0,
+      0.0,
+      1.0
+    ],
     "Hazard Rate": [
       0.0,
       0.05,
@@ -93,6 +100,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "x": 0.0
     },
     "y": {
@@ -106,6 +115,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "y": 0.0
     },
     "cohort": {
@@ -119,6 +130,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "cohort": 0.0
     }
   },
@@ -126,11 +139,11 @@
   "settings": {
     "disable_symmetry": false,
     "absolute_orientation": 0,
+    "orientation_mix": 1.0,
     "boundary_conditions": 2,
     "initial_conditions": 1,
-    "num_cohorts": 62,
-    "rule_seed": 0.6370924115180969,
-    "orientation_mix": 1.0
+    "num_cohorts": 10,
+    "rule_seed": 0.6370924115180969
   },
   "appearance": {
     "ink_weight": 1.0,
