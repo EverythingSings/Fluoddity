@@ -72,7 +72,8 @@ class FrameAssembler:
                        screen_aspect=1.0, brightness=1.0, exposure=0.0, ink_weight=1.0, watercolor_mode=False,
                        emboss_tex=None, camera_position=(0.0, 0.0), camera_zoom=1.0,
                        emboss_intensity=0.0, emboss_smoothness=0.1, trail_draw_radius=0.0,
-                       mouse_screen_coords=(0.5, 0.5)):
+                       mouse_screen_coords=(0.5, 0.5), tiling_mode=False, view_min=(0.0, 0.0),
+                       view_max=(0.0, 0.0)):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -151,6 +152,10 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'camera_zoom', camera_zoom)
         tryset(self.resources['shader'], 'EMBOSS_INTENSITY', emboss_intensity)
         tryset(self.resources['shader'], 'EMBOSS_SMOOTHNESS', emboss_smoothness)
+        # Tiling mode uniforms
+        tryset(self.resources['shader'], 'tiling_mode_enabled', tiling_mode)
+        tryset(self.resources['shader'], 'view_min', view_min)
+        tryset(self.resources['shader'], 'view_max', view_max)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()

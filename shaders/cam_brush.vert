@@ -1,9 +1,14 @@
-#version 430 
+#version 430
 #define EVERYTHING_SCALE .25
 uniform vec2 canvas_resolution;
 uniform vec2 cam_pos;
 uniform float cam_zoom;
 uniform vec2 window_size;
+
+// Tiling mode uniforms
+uniform bool tiling_mode_enabled;
+uniform vec2 view_min;  // World-space minimum of view rectangle
+uniform vec2 view_max;  // World-space maximum of view rectangle
 
 //SYNC WITH ENTITY_UPDATE.GLSL AND BRUSH.VERT
 struct Entity {
@@ -37,6 +42,29 @@ void main() {
     vec2 entity_pos = entities[instance_id].pos;
     vec2 entity_vel = entities[instance_id].vel;
     float size = entities[instance_id].size;
+
+    // Tiling mode: find which periodic cell to render this particle in
+    bool should_cull = false;
+    if (tiling_mode_enabled) {
+        // Canonical position p is already in [-1, 1] (entity_pos)
+        vec2 p = entity_pos;
+
+        // Find the range of valid cell offsets
+        // n_min = ceil((view_min - p) / 2.0)
+        // n_max = floor((view_max - p) / 2.0)
+        vec2 n_min = ceil((view_min - p) * 0.5);
+        vec2 n_max = floor((view_max - p) * 0.5);
+
+        // Check if ANY valid cell exists
+        if (n_min.x <= n_max.x && n_min.y <= n_max.y) {
+            // Visible! Render at the smallest valid cell offset
+            entity_pos = p + n_min * 2.0;
+        } else {
+            // Not visible in any cell - cull
+            should_cull = true;
+        }
+    }
+
     // Calculate particle center in viewport coordinates for culling
     vec2 canvas_ndc_center = entity_pos * vec2(1, canvas_resolution.x/canvas_resolution.y);
     
@@ -62,7 +90,7 @@ void main() {
     float max_size = max(particle_size_in_viewport.x, particle_size_in_viewport.y);
     
     // Check if particle bounding box overlaps viewport
-    bool is_visible = (center_pos.x + max_size >= -1.0 && center_pos.x - max_size <= 1.0 &&
+    bool is_visible = !should_cull && (center_pos.x + max_size >= -1.0 && center_pos.x - max_size <= 1.0 &&
                        center_pos.y + max_size >= -1.0 && center_pos.y - max_size <= 1.0);
     
     // Generate quad vertices - collapse to center if not visible

@@ -963,11 +963,12 @@ class UI:
             changed, self.state.sim.current_view_option = imgui.combo(
                 label="Current View",
                 current_item=self.state.sim.current_view_option,
-                items=self.view_option_labels + ['Camera (Particles rendered as dots)']
+                items=self.view_option_labels + ['Camera (Particles rendered as dots)', 'Camera[Tiled] - EXPERIMENTAL']
             )
 
             if changed:
-                if self.state.sim.current_view_option == len(self.view_option_labels):
+                # cam_brush_mode is True for Camera (index 2) and Tiled (index 3)
+                if self.state.sim.current_view_option >= len(self.view_option_labels):
                     self.state.camera.cam_brush_mode = True
                 else:
                     self.state.camera.cam_brush_mode = False

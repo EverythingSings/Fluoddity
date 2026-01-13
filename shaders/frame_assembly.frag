@@ -25,6 +25,11 @@ uniform float camera_zoom;          // Camera zoom level
 uniform float EMBOSS_INTENSITY;     // Emboss effect intensity
 uniform float EMBOSS_SMOOTHNESS;    // Emboss sampling epsilon
 
+// Tiling mode parameters
+uniform bool tiling_mode_enabled;   // Whether tiling mode is active
+uniform vec2 view_min;              // World-space minimum of view rectangle
+uniform vec2 view_max;              // World-space maximum of view rectangle
+
 in vec2 uv;
 out vec4 fragColor;
 
@@ -154,9 +159,48 @@ vec3 emboss(vec2 uv){
     //fakenorm = vec3(0,1,0);
     return vec3(1.74)*max(0,dot(fakenorm,normalize(vec3(1,1.,-1))));
 }
+// Tiling mode: compute where to sample from based on world position
+vec2 tiling_sample_uv(vec2 screen_uv) {
+    // Convert screen UV to world position
+    vec2 ndc = screen_uv * 2.0 - 1.0;
+    vec2 world_pos = ndc * camera_zoom + camera_position * vec2(1, -1);
+    world_pos.x *= screen_aspect;
+
+    // Extract canonical position (which particle lives here?)
+    vec2 p = mod(world_pos + 1.0, 2.0) - 1.0;
+
+    // Compute the SAME n_min the vertex shader used
+    vec2 n_min = ceil((view_min - p) * 0.5);
+    vec2 n_max = floor((view_max - p) * 0.5);
+
+    // Check if this particle was rendered
+    if (n_min.x <= n_max.x && n_min.y <= n_max.y) {
+        // This particle was rendered - find where
+        vec2 rendered_world_pos = p + n_min * 2.0;
+
+        // Convert back to screen UV (reverse of the world_pos calculation above)
+        rendered_world_pos.x /= screen_aspect;
+        vec2 rendered_ndc = (rendered_world_pos - camera_position * vec2(1, -1)) / camera_zoom;
+        vec2 sample_uv = rendered_ndc * 0.5 + 0.5;
+
+        return sample_uv;
+    } else {
+        // This particle was culled - return black/transparent
+        return vec2(-1.0); // Invalid UV to signal no sample
+    }
+}
+
 void main() {
     // Sample the input frame
-    vec3 current_color = texture(input_frame, uv).rgb;
+    vec2 sample_uv = tiling_mode_enabled ? tiling_sample_uv(uv) : uv;
+
+    // Check if tiling returned an invalid UV (culled particle)
+    vec3 current_color;
+    if (tiling_mode_enabled && sample_uv.x < 0.0) {
+        current_color = vec3(0.0);
+    } else {
+        current_color = texture(input_frame, sample_uv).rgb;
+    }
 
     // In watercolor mode, convert from log-space optical density to linear transmission
     if (WATERCOLOR_MODE) {
@@ -164,7 +208,9 @@ void main() {
         #define INK_CONSTANT 10
         current_color = exp(INK_WEIGHT*INK_CONSTANT * current_color);
     }
-    current_color = current_color*(EMBOSS_INTENSITY!=0?emboss(uv):vec3(1));//emboss(uv)*EMBOSS_INTENSITY+1-EMBOSS_INTENSITY);
+    // Use the appropriate UV for emboss (tiled or regular)
+    vec2 emboss_uv = tiling_mode_enabled ? sample_uv : uv;
+    current_color = current_color*(EMBOSS_INTENSITY!=0?emboss(emboss_uv):vec3(1));//emboss(uv)*EMBOSS_INTENSITY+1-EMBOSS_INTENSITY);
     // Divide by number of samples (for averaging)
     current_color /= float(TOTAL_SAMPLES);
     

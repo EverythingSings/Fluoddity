@@ -81,8 +81,12 @@ class Camera:
         self.frame_assembler = FrameAssembler(self.ctx, self.cam_brush_target)
         self.assembled_texture = None
 
-    def generate_view_texture(self):
-        """Generate raw view texture (PRE-gamma correction) based on current mode."""
+    def generate_view_texture(self, tiling_mode: bool = False):
+        """Generate raw view texture (PRE-gamma correction) based on current mode.
+
+        Args:
+            tiling_mode: Whether tiling mode is enabled
+        """
 
         if self.cam_brush_mode:
             # Render particles to cam_brush_target
@@ -96,6 +100,27 @@ class Camera:
             self.cam_brush_program['canvas_resolution'].value = self.sim.view_tex.size
             self.cam_brush_program['window_size'].value = (width, height)
             tryset(self.cam_brush_program, 'WATERCOLOR_MODE', self.watercolor_mode)
+
+            # Tiling mode uniforms
+            tryset(self.cam_brush_program, 'tiling_mode_enabled', tiling_mode)
+            if tiling_mode:
+                # Compute view_min and view_max in world space
+                screen_aspect = width / height
+                # Screen corners in NDC are (-1, -1) to (1, 1)
+                # Convert to world space: world = ndc * zoom + cam_pos * vec2(1, -1)
+                # With aspect correction: world.x *= aspect
+                view_min_ndc = np.array([-1.0, -1.0])
+                view_max_ndc = np.array([1.0, 1.0])
+
+                view_min = view_min_ndc * self.zoom + self.position * np.array([1.0, -1.0])
+                view_max = view_max_ndc * self.zoom + self.position * np.array([1.0, -1.0])
+
+                # Apply aspect correction
+                view_min[0] *= screen_aspect
+                view_max[0] *= screen_aspect
+
+                tryset(self.cam_brush_program, 'view_min', tuple(view_min))
+                tryset(self.cam_brush_program, 'view_max', tuple(view_max))
 
             # Particles need additive blending
             self.ctx.enable(moderngl.BLEND)
@@ -125,16 +150,29 @@ class Camera:
                 emboss_tex=None, emboss_mode: int = 0,
                 emboss_intensity: float = 0.5, emboss_smoothness: float = 0.1,
                 draw_trail_mode: bool = False, draw_size: float = 0.0,
-                mouse_screen_coords: tuple = (0.5, 0.5), exposure: float = 0.0):
+                mouse_screen_coords: tuple = (0.5, 0.5), exposure: float = 0.0,
+                tiling_mode: bool = False):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
+
+        # Compute view bounds for tiling mode
+        view_min = (0.0, 0.0)
+        view_max = (0.0, 0.0)
+        if tiling_mode:
+            view_min_ndc = np.array([-1.0, -1.0])
+            view_max_ndc = np.array([1.0, 1.0])
+            view_min = view_min_ndc * self.zoom + self.position * np.array([1.0, -1.0])
+            view_max = view_max_ndc * self.zoom + self.position * np.array([1.0, -1.0])
+            view_min[0] *= screen_aspect
+            view_max[0] *= screen_aspect
+
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
         if sim_going and self.assembled_texture is not None:
             TEX_TO_VIEW = self.assembled_texture
         else:
             # When paused or no assembled texture yet, generate fresh frame and apply gamma
-            raw_tex = self.generate_view_texture()
+            raw_tex = self.generate_view_texture(tiling_mode=tiling_mode)
             # Apply gamma correction via frame assembler (single sample mode)
             # Override emboss_intensity to 0 when mode is Off (0)
             effective_emboss_intensity = 0.0 if emboss_mode == 0 else emboss_intensity
@@ -159,7 +197,10 @@ class Camera:
                 emboss_intensity=effective_emboss_intensity,
                 emboss_smoothness=emboss_smoothness,
                 trail_draw_radius=trail_draw_radius,
-                mouse_screen_coords=mouse_screen_coords
+                mouse_screen_coords=mouse_screen_coords,
+                tiling_mode=tiling_mode,
+                view_min=tuple(view_min),
+                view_max=tuple(view_max)
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

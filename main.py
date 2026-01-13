@@ -183,10 +183,13 @@ class App:
         sweep_mode = ui_state.sim.parameter_sweeps_enabled
         sweep_reticle_pos = (sweep_reticle_x, sweep_reticle_y)
 
+        # 5.6. Determine if tiling mode is active
+        tiling_mode = (ui_state.sim.current_view_option == 3)
+
         # 6. Run simulation if going
         if ui_state.sim.going:
             self.run_simulation_frame(ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
-                                      screen_aspect, ui_state.sim.watercolor_mode)
+                                      screen_aspect, ui_state.sim.watercolor_mode, tiling_mode=tiling_mode)
 
         # 7. Render camera view
         # Determine emboss texture based on mode: 0=Off (None), 1=Canvas, 2=Brush
@@ -222,7 +225,8 @@ class App:
             draw_trail_mode=draw_trail_mode,
             draw_size=ui_state.preferences.draw_size,
             mouse_screen_coords=mouse_screen_coords,
-            exposure=ui_state.preferences.exposure
+            exposure=ui_state.preferences.exposure,
+            tiling_mode=tiling_mode
         )
 
         # 7.5. Render arrow debug overlay if enabled
@@ -579,7 +583,7 @@ class App:
 
     def run_simulation_frame(self, ui_state, sweep_mode: bool, sweep_reticle_pos: tuple,
                               sweep_reticle_visible: bool, screen_aspect: float,
-                              watercolor_mode: bool = False):
+                              watercolor_mode: bool = False, tiling_mode: bool = False):
         """Run simulation step(s) with frame assembly and video recording."""
         # Set watercolor mode on camera for generate_view_texture()
         self.camera.watercolor_mode = watercolor_mode
@@ -591,6 +595,18 @@ class App:
         mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
         mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
         mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
+
+        # Compute view bounds for tiling mode
+        view_min = (0.0, 0.0)
+        view_max = (0.0, 0.0)
+        if tiling_mode:
+            import numpy as np
+            view_min_ndc = np.array([-1.0, -1.0])
+            view_max_ndc = np.array([1.0, 1.0])
+            view_min = view_min_ndc * self.camera.zoom + self.camera.position * np.array([1.0, -1.0])
+            view_max = view_max_ndc * self.camera.zoom + self.camera.position * np.array([1.0, -1.0])
+            view_min[0] *= screen_aspect
+            view_max[0] *= screen_aspect
 
         # Calculate draw mode parameters
         # Disable trail drawing when parameter sweeps are active
@@ -636,7 +652,7 @@ class App:
                     continue
 
                 # Generate raw view texture (PRE-gamma correction)
-                raw_view_tex = self.camera.generate_view_texture()
+                raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 
                 # Assemble frame (applies gamma correction on final sample)
                 # Determine emboss texture based on mode: 0=Off (None), 1=Canvas, 2=Brush
@@ -672,7 +688,10 @@ class App:
                     emboss_intensity=effective_emboss_intensity,
                     emboss_smoothness=ui_state.sim.emboss_smoothness,
                     trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
-                    mouse_screen_coords=mouse_screen_coords
+                    mouse_screen_coords=mouse_screen_coords,
+                    tiling_mode=tiling_mode,
+                    view_min=tuple(view_min),
+                    view_max=tuple(view_max)
                 )
 
                 # Increment render sample index for next sample
@@ -706,7 +725,7 @@ class App:
                 )
 
             # Generate view texture only once at the end
-            raw_view_tex = self.camera.generate_view_texture()
+            raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 
             # Apply gamma correction in single-sample mode (no temporal accumulation)
             # Determine emboss texture based on mode: 0=Off (None), 1=Canvas, 2=Brush
@@ -738,7 +757,10 @@ class App:
                 emboss_intensity=effective_emboss_intensity,
                 emboss_smoothness=ui_state.sim.emboss_smoothness,
                 trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
-                mouse_screen_coords=mouse_screen_coords
+                mouse_screen_coords=mouse_screen_coords,
+                tiling_mode=tiling_mode,
+                view_min=tuple(view_min),
+                view_max=tuple(view_max)
             )
 
             self.camera.assembled_texture = assembled_tex
