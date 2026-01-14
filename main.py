@@ -123,9 +123,10 @@ class App:
 
         # 1. Get current UI state
         ui_state = self.ui.get_state()
-
+        
+        tiling_mode = (ui_state.sim.current_view_option == 3)
         # 2. Process one-shot commands
-        self.process_commands(ui_state)
+        self.process_commands(ui_state,tiling_mode)
 
         # 3. Process continuous input (camera movement)
         self.process_camera_input(ui_state)
@@ -187,16 +188,15 @@ class App:
         sweep_mode = ui_state.sim.parameter_sweeps_enabled
         sweep_reticle_pos = (sweep_reticle_x, sweep_reticle_y)
 
-        # 5.6. Determine if tiling mode is active
-        tiling_mode = (ui_state.sim.current_view_option == 3)
+
 
         # Reposition camera when leaving tiling mode to keep it over the fundamental period
         if self.prev_view_option == 3 and ui_state.sim.current_view_option != 3:
             # We just left tiling mode - wrap camera position to [0, 2) using modular arithmetic
             # Camera position is in world space where the canvas spans [-1, 1]
             # The fundamental period is 2.0 (from -1 to 1)
-            self.camera.position[0] = np.fmod(self.camera.position[0] + 100.0, 2.0) - 1.0
-            self.camera.position[1] = np.fmod(self.camera.position[1] + 100.0, 2.0) - 1.0
+            ui_state.camera.position[0] = np.fmod(ui_state.camera.position[0] + 100.0, 2.0) - 1.0
+            ui_state.camera.position[1] = np.fmod(ui_state.camera.position[1] + 100.0, 2.0) - 1.0
 
         # Update previous view option for next frame
         self.prev_view_option = ui_state.sim.current_view_option
@@ -266,7 +266,7 @@ class App:
         })
         self.ui.render()
 
-    def process_commands(self, ui_state):
+    def process_commands(self, ui_state,tiling_mode):
         """Handle one-shot commands."""
 
         # Handle world size change
