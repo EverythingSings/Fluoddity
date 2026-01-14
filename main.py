@@ -1,6 +1,7 @@
 import glfw
 import moderngl
 import time
+import numpy as np
 from pathlib import Path
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
@@ -72,6 +73,9 @@ class App:
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
         self.mouse_button_state = False  # Track if left mouse button is currently pressed
+
+        # Track previous view option for camera repositioning when leaving tiling mode
+        self.prev_view_option = 0
 
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
@@ -185,6 +189,17 @@ class App:
 
         # 5.6. Determine if tiling mode is active
         tiling_mode = (ui_state.sim.current_view_option == 3)
+
+        # Reposition camera when leaving tiling mode to keep it over the fundamental period
+        if self.prev_view_option == 3 and ui_state.sim.current_view_option != 3:
+            # We just left tiling mode - wrap camera position to [0, 2) using modular arithmetic
+            # Camera position is in world space where the canvas spans [-1, 1]
+            # The fundamental period is 2.0 (from -1 to 1)
+            self.camera.position[0] = np.fmod(self.camera.position[0] + 100.0, 2.0) - 1.0
+            self.camera.position[1] = np.fmod(self.camera.position[1] + 100.0, 2.0) - 1.0
+
+        # Update previous view option for next frame
+        self.prev_view_option = ui_state.sim.current_view_option
 
         # 6. Run simulation if going
         if ui_state.sim.going:
@@ -313,6 +328,12 @@ class App:
                             ui_state.mouse_pos,
                             self.sim.view_tex.size
                         )
+                        # In tiling mode, wrap mouse position to fundamental domain
+                        if tiling_mode:
+                            tex_coords = (
+                                np.fmod(tex_coords[0] + 10.0, 1.0),
+                                np.fmod(tex_coords[1] + 10.0, 1.0)
+                            )
                         world_pos = (tex_coords[0] * 2 - 1, tex_coords[1] * 2 - 1)
 
                         if self.sim.has_active_cohort_sweep():
@@ -328,6 +349,12 @@ class App:
                         ui_state.mouse_pos,
                         self.sim.view_tex.size
                     )
+                    # In tiling mode, wrap mouse position to fundamental domain
+                    if tiling_mode:
+                        tex_coords = (
+                            np.fmod(tex_coords[0] + 10.0, 1.0),
+                            np.fmod(tex_coords[1] + 10.0, 1.0)
+                        )
                     entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords)
 
                     # Bounds check: ensure entity_id is valid for current buffer size
@@ -622,6 +649,13 @@ class App:
                 self.sim.can.size
             )
 
+            # In tiling mode, wrap mouse position to fundamental domain using modular arithmetic
+            if tiling_mode:
+                mouse_tex_coords = (
+                    np.fmod(mouse_tex_coords[0] + 10.0, 1.0),  # +10 ensures positive before fmod
+                    np.fmod(mouse_tex_coords[1] + 10.0, 1.0)
+                )
+
             # Only set draw_power if button is pressed (respects imgui capture)
             if ui_state.mouse_left_held:
                 draw_power_value = ui_state.preferences.draw_power
@@ -644,7 +678,8 @@ class App:
                     draw_size=ui_state.preferences.draw_size,
                     draw_power=draw_power_value,
                     multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None,
-                    is_preview_active = self.preview_rule_active
+                    is_preview_active = self.preview_rule_active,
+                    tiling_mode=tiling_mode
                 )
 
                 # Only render on frames matching the blur quality cadence
@@ -721,7 +756,8 @@ class App:
                     prev_mouse_pos=self.prev_mouse_tex_coords,
                     draw_size=ui_state.preferences.draw_size,
                     draw_power=draw_power_value,
-                    multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None
+                    multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None,
+                    tiling_mode=tiling_mode
                 )
 
             # Generate view texture only once at the end

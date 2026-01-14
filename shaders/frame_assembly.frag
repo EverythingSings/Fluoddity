@@ -147,12 +147,31 @@ vec3 safenorm(vec3 n){
     float l = length(n);
     return l>0?n/l:vec3(0);
 }
+// Compute tiled UV for sampling the single-tile texture with domain repetition
+vec2 tiled_sample_uv_emboss(vec2 screen_uv) {
+    // Convert screen UV to NDC (-1 to 1)
+    vec2 ndc = (screen_uv - 0.5) * 2.0;
+    // Apply zoom
+    ndc *= camera_zoom;
+    // Apply camera position offset (world space)
+    vec2 world = ndc + camera_position * vec2(1.0, -1.0);
+    // Apply aspect ratio correction
+    world.x *= screen_aspect;
+    return fract((world + 1.0) / 2.0);
+}
+
 vec3 emboss(vec2 uv){
     // Early return if emboss is disabled (mode=Off or intensity=0)
     if (EMBOSS_INTENSITY == 0.0) {
         return vec3(.0);
     }
-    vec2 canv_uv = view_mode==2?screen_to_canvas_uv(uv):uv;
+    vec2 canv_uv;
+    if (tiling_mode_enabled) {
+        // In tiling mode, use tiled UV for emboss texture
+        canv_uv = tiled_sample_uv_emboss(uv);
+    } else {
+        canv_uv = view_mode >= 2 ? screen_to_canvas_uv(uv) : uv;
+    }
     vec2 grad = gradient(emboss_tex, canv_uv, .01*EMBOSS_SMOOTHNESS);
     grad *= max(abs(canv_uv-.5).x,abs(canv_uv-.5).y)>.5?0:1;
     vec3 fakenorm = normalize(vec3(grad.x,.5/pow(EMBOSS_INTENSITY,5.),grad.y));
@@ -173,8 +192,9 @@ vec2 tiling_sample_uv(vec2 screen_uv) {
     vec2 n_min = ceil((view_min - p) * 0.5);
     vec2 n_max = floor((view_max - p) * 0.5);
 
-    // Check if this particle was rendered
-    if (n_min.x <= n_max.x && n_min.y <= n_max.y) {
+    // Check if this particle was rendered (with epsilon for floating point precision)
+    const float epsilon = 0.0001;
+    if (n_min.x <= n_max.x + epsilon && n_min.y <= n_max.y + epsilon) {
         // This particle was rendered - find where
         vec2 rendered_world_pos = p + n_min * 2.0;
 
@@ -208,9 +228,8 @@ void main() {
         #define INK_CONSTANT 10
         current_color = exp(INK_WEIGHT*INK_CONSTANT * current_color);
     }
-    // Use the appropriate UV for emboss (tiled or regular)
-    vec2 emboss_uv = tiling_mode_enabled ? sample_uv : uv;
-    current_color = current_color*(EMBOSS_INTENSITY!=0?emboss(emboss_uv):vec3(1));//emboss(uv)*EMBOSS_INTENSITY+1-EMBOSS_INTENSITY);
+    // Emboss always uses the original screen UV, not the tiled sample UV
+    current_color = current_color*(EMBOSS_INTENSITY!=0?emboss(uv):vec3(1));//emboss(uv)*EMBOSS_INTENSITY+1-EMBOSS_INTENSITY);
     // Divide by number of samples (for averaging)
     current_color /= float(TOTAL_SAMPLES);
     
@@ -229,11 +248,11 @@ void main() {
     // Apply gamma correction only on final sample (AFTER accumulation)
     if (final_sample) {
         //if we are in canvas or brush view, we must interpret raw texture before gamma correction and display:
-        if(view_mode !=2){
+        if(view_mode < 2){
             fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
         }
         // Apply brightness multiplier before gamma correction
-        
+
         fragColor.xyz *= BRIGHTNESS_CONSTANT;
         float len = length(fragColor.xyz);
         if (len > 0.0) {
@@ -243,7 +262,7 @@ void main() {
     }
     //Conditionally draw sweep reticle and mouse draw reticle
     vec2 overlay_uv=uv;
-    if(view_mode!=2){overlay_uv = canvas_uv_to_screen(uv);}
+    if(view_mode < 2){overlay_uv = canvas_uv_to_screen(uv);}
         if(PARAMETER_SWEEP_MODE){
             fragColor.xyz += sweep_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
         }

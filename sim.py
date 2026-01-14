@@ -191,9 +191,10 @@ class Sim:
 
     def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                    prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-                   multi_load_service=None,is_preview_active = False):
+                   multi_load_service=None, is_preview_active = False, tiling_mode: bool = False):
         # Boundary conditions mode for wrap behavior
         tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
+        tryset(self.canvas_update_program, 'tiling_mode', tiling_mode)
 
         # Multi-load mode: calculate weighted average trail settings
         if multi_load_service and multi_load_service.is_active() and not is_preview_active:
@@ -248,7 +249,7 @@ class Sim:
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-               multi_load_service=None, is_preview_active = False):
+               multi_load_service=None, is_preview_active = False, tiling_mode: bool = False):
         self.can.use(location=1)
         self.brush_tex.use(location=3)
 
@@ -260,7 +261,7 @@ class Sim:
         self.entity_update(ctx, multi_load_service,is_preview_active)
 
         ctx.disable(moderngl.BLEND)
-        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service,is_preview_active)
+        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service,is_preview_active, tiling_mode)
         self.frame_count += 1
 
         # Increment multi-load progress if active

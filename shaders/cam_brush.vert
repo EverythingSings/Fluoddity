@@ -55,8 +55,9 @@ void main() {
         vec2 n_min = ceil((view_min - p) * 0.5);
         vec2 n_max = floor((view_max - p) * 0.5);
 
-        // Check if ANY valid cell exists
-        if (n_min.x <= n_max.x && n_min.y <= n_max.y) {
+        // Check if ANY valid cell exists (with epsilon for floating point precision)
+        const float epsilon = 0.0001;
+        if (n_min.x <= n_max.x + epsilon && n_min.y <= n_max.y + epsilon) {
             // Visible! Render at the smallest valid cell offset
             entity_pos = p + n_min * 2.0;
         } else {
