@@ -1,5 +1,6 @@
 # Animation outputs
 *.mp4
+*.png
 *_ffmpeg.log
 
 # Python
