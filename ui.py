@@ -1784,11 +1784,11 @@ class UI:
             self.state.preferences.physics_group_basics = not self.state.preferences.physics_group_basics
         if basics_open:
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Sensor Gain:")
-                self.render_range_adjust_buttons("SENSOR_GAIN", "Sensor Gain", self.state.sim.SENSOR_GAIN, 0.0, 5.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("SENSOR_GAIN")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("SENSOR_GAIN", "Sensor Gain", self.state.sim.SENSOR_GAIN, 0.0, 5.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.SENSOR_GAIN = self.slider_float_with_range_menu(
                 label="Sensor Gain",
@@ -1801,11 +1801,11 @@ class UI:
                 "Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Sensor Angle:")
-                self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("SENSOR_ANGLE")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("SENSOR_ANGLE", "Sensor Angle", self.state.sim.SENSOR_ANGLE, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.SENSOR_ANGLE = self.slider_float_with_range_menu(
                 label="Sensor Angle",
@@ -1818,11 +1818,11 @@ class UI:
                 "Sets the angular offset of particle sensors from their forward direction. Determines whether particles are 'looking ahead' or 'looking behind'.")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Sensor Distance:")
-                self.render_range_adjust_buttons("SENSOR_DISTANCE", "Sensor Distance", self.state.sim.SENSOR_DISTANCE, 0.0, 4.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("SENSOR_DISTANCE")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("SENSOR_DISTANCE", "Sensor Distance", self.state.sim.SENSOR_DISTANCE, 0.0, 4.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.SENSOR_DISTANCE = self.slider_float_with_range_menu(
                 label="Sensor Distance",
@@ -1835,11 +1835,11 @@ class UI:
                 "Determines distance between a particle's center and where it reads the trail information from Canvas. Longer distances tend to create larger scale patterns.")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Mutation Scale:")
-                self.render_range_adjust_buttons("MUTATION_SCALE", "Mutation Scale", self.state.sim.MUTATION_SCALE, -0.5, 0.5)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("MUTATION_SCALE")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("MUTATION_SCALE", "Mutation Scale", self.state.sim.MUTATION_SCALE, -0.5, 0.5)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.MUTATION_SCALE = self.slider_float_with_range_menu(
                 label="Mutation Scale",
@@ -1858,11 +1858,11 @@ class UI:
             self.state.preferences.physics_group_forces = not self.state.preferences.physics_group_forces
         if forces_open:
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Global Force Mult:")
-                self.render_range_adjust_buttons("GLOBAL_FORCE_MULT", "Global Force Mult", self.state.sim.GLOBAL_FORCE_MULT, 0.0, 2.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("GLOBAL_FORCE_MULT")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("GLOBAL_FORCE_MULT", "Global Force Mult", self.state.sim.GLOBAL_FORCE_MULT, 0.0, 2.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.GLOBAL_FORCE_MULT = self.slider_float_with_range_menu(
                 label="Global Force Mult",
@@ -1875,11 +1875,11 @@ class UI:
                 "Scales axial and lateral forces applied to particles, and scales strafe power. Often tuned in the opposite direction to Sensor Gain and Drag to offset exploding/vanishing particle speed.")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Drag:")
-                self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("DRAG")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("DRAG", "Drag", self.state.sim.DRAG, -1.0, 1.0, hard_min=-1.0, hard_max=1.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.DRAG = self.slider_float_with_range_menu(
                 label="Drag",
@@ -1898,11 +1898,11 @@ class UI:
             self.state.preferences.physics_group_advanced = not self.state.preferences.physics_group_advanced
         if advanced_open:
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Axial Force:")
-                self.render_range_adjust_buttons("AXIAL_FORCE", "Axial Force", self.state.sim.AXIAL_FORCE, -1.0, 1.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("AXIAL_FORCE")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("AXIAL_FORCE", "Axial Force", self.state.sim.AXIAL_FORCE, -1.0, 1.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.AXIAL_FORCE = self.slider_float_with_range_menu(
                 label="Axial Force",
@@ -1915,11 +1915,11 @@ class UI:
                 "Controls the strength of forces applied parallel to the direction of travel: acceleration and braking")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Lateral Force:")
-                self.render_range_adjust_buttons("LATERAL_FORCE", "Lateral Force", self.state.sim.LATERAL_FORCE, -1.0, 1.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("LATERAL_FORCE")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("LATERAL_FORCE", "Lateral Force", self.state.sim.LATERAL_FORCE, -1.0, 1.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.LATERAL_FORCE = self.slider_float_with_range_menu(
                 label="Lateral Force",
@@ -1932,11 +1932,11 @@ class UI:
                 "Controls the strength of forces applied perpendicular to the direction of travel: turning left and right.")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Strafe Power:")
-                self.render_range_adjust_buttons("STRAFE_POWER", "Strafe Power", self.state.sim.STRAFE_POWER, 0.0, 0.5)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("STRAFE_POWER")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("STRAFE_POWER", "Strafe Power", self.state.sim.STRAFE_POWER, 0.0, 0.5)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.STRAFE_POWER = self.slider_float_with_range_menu(
                 label="Strafe Power",
@@ -1949,11 +1949,11 @@ class UI:
                 "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Trail Persistence:")
-                self.render_range_adjust_buttons("TRAIL_PERSISTENCE", "Trail Persistence", self.state.sim.TRAIL_PERSISTENCE, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("TRAIL_PERSISTENCE")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("TRAIL_PERSISTENCE", "Trail Persistence", self.state.sim.TRAIL_PERSISTENCE, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.TRAIL_PERSISTENCE = self.slider_float_with_range_menu(
                 label="Trail Persistence",
@@ -1966,11 +1966,11 @@ class UI:
                 "Controls how long particle trails remain visible. Higher values create longer-lasting trails, lower values make trails fade quickly. Values close to 1.0 tend to create 'sharper' more stable patterns. ")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Trail Diffusion:")
-                self.render_range_adjust_buttons("TRAIL_DIFFUSION", "Trail Diffusion", self.state.sim.TRAIL_DIFFUSION, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("TRAIL_DIFFUSION")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("TRAIL_DIFFUSION", "Trail Diffusion", self.state.sim.TRAIL_DIFFUSION, 0.0, 1.0, hard_min=0.0, hard_max=1.0)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.TRAIL_DIFFUSION = self.slider_float_with_range_menu(
                 label="Trail Diffusion",
@@ -1983,11 +1983,11 @@ class UI:
                 "Controls the amount of diffusion applied to particle trails.")
 
             if self.state.sim.parameter_sweeps_enabled:
-                self.render_aligned_label("Hazard Rate:")
-                self.render_range_adjust_buttons("HAZARD_RATE", "Hazard Rate", self.state.sim.HAZARD_RATE, 0.0, 0.05, hard_min=0.0, hard_max=0.05)
-                imgui.same_line(spacing=2)
                 self.render_sweep_buttons("HAZARD_RATE")
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons("HAZARD_RATE", "Hazard Rate", self.state.sim.HAZARD_RATE, 0.0, 0.05, hard_min=0.0, hard_max=0.05)
                 imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
             _, self.state.sim.HAZARD_RATE = self.slider_float_with_range_menu(
                 label="Hazard Rate",
