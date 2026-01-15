@@ -144,6 +144,7 @@ class UI:
         self._request_reset = False
         self._request_full_reset = False
         self._toggle_recording = False
+        self._request_screenshot = False
         self._request_save_config = False
         self._request_load_config = False
         self._request_save_file = False
@@ -293,6 +294,7 @@ class UI:
         # One-shot key commands
         if action == glfw.PRESS:
             ctrl_pressed = mods & glfw.MOD_CONTROL
+            shift_pressed = mods & glfw.MOD_SHIFT
 
             # Config save/load with Ctrl+C/Ctrl+V
             if ctrl_pressed and key == glfw.KEY_C:
@@ -308,6 +310,9 @@ class UI:
             elif key == glfw.KEY_H:
                 # Show tutorial
                 self.show_tutorial_window = not self.show_tutorial_window
+            elif shift_pressed and key == glfw.KEY_P:
+                # Screenshot (Shift+P)
+                self._request_screenshot = True
             elif key == glfw.KEY_P:
                 self._toggle_recording = True
             elif key == glfw.KEY_G:
@@ -372,6 +377,7 @@ class UI:
         self.state.request_reset = self._request_reset
         self.state.request_full_reset = self._request_full_reset
         self.state.toggle_recording = self._toggle_recording
+        self.state.request_screenshot = self._request_screenshot
         self.state.request_save_config = self._request_save_config
         self.state.request_load_config = self._request_load_config
         self.state.request_save_file = self._request_save_file
@@ -410,6 +416,7 @@ class UI:
         self._request_reset = False
         self._request_full_reset = False
         self._toggle_recording = False
+        self._request_screenshot = False
         self._request_save_config = False
         self._request_load_config = False
         self._request_save_file = False
@@ -550,7 +557,7 @@ class UI:
         if self.show_tutorial_window:
             self.render_tutorial_window()
 
-        # Render Video Recording window if visible
+        # Render Screen Recording window if visible
         if self.show_video_recording_window:
             self.render_video_recording_window()
 
@@ -775,8 +782,8 @@ class UI:
                 )
                 self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
 
-                # Video Recording Controls
-                if imgui.menu_item("Video Recording Controls", "", self.show_video_recording_window)[0]:
+                # Screen Recording Controls
+                if imgui.menu_item("Screen Recording Controls", "", self.show_video_recording_window)[0]:
                     self.show_video_recording_window = not self.show_video_recording_window
 
                 imgui.end_menu()
@@ -1180,14 +1187,14 @@ class UI:
         imgui.end()
 
     def render_video_recording_window(self):
-        """Render the Video Recording controls window (closeable)."""
+        """Render the Screen Recording controls window (closeable)."""
         recording_active = self._display_info.get('recording_active', False)
 
         # Apply red tint when recording
         if recording_active:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
 
-        expanded, self.show_video_recording_window = imgui.begin("Video Recording", True)
+        expanded, self.show_video_recording_window = imgui.begin("Screen Recording", True)
 
         if expanded:
             if recording_active:
@@ -1195,7 +1202,8 @@ class UI:
                 imgui.text("Press P to stop recording")
                 imgui.separator()
 
-            imgui.text("Press P to start/stop recording")
+            imgui.text("Press P to start/stop video recording")
+            imgui.text("Press Shift+P to take a screenshot")
             imgui.spacing()
 
             # Video Length (in seconds) - converts to/from max_frames internally
@@ -1216,16 +1224,16 @@ class UI:
             if recording_active:
                 imgui.begin_disabled()
 
-            # Video Physics Frequency (was Motion Blur Samples)
+            # Capture Physics Frequency / Screenshot samples
             current_hz = self.state.preferences.motion_blur_samples * 60
             _, self.state.preferences.motion_blur_samples = imgui.slider_int(
-                'Video Physics Frequency',
+                'Capture Physics Frequency',
                 self.state.preferences.motion_blur_samples,
                 v_min=1,
                 v_max=12,
                 format=f"x%d ({current_hz}hz)"
             )
-            self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
+            self._delayed_tooltip("Physics steps per frame for video/screenshots.\nHigher values = smoother motion blur.\nAlso determines screenshot quality (samples blended together).")
 
             if recording_active:
                 imgui.end_disabled()

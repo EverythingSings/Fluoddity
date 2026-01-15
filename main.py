@@ -70,6 +70,11 @@ class App:
         self.user_speedmult = 1
         self.was_recording = False
 
+        # Screenshot state machine
+        self.screenshot_pending = False  # Waiting for current frame to finish
+        self.screenshot_in_progress = False  # Override frame is running
+        self.screenshot_saved_settings = {}  # Saved user settings to restore
+
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
         self.mouse_button_state = False  # Track if left mouse button is currently pressed
@@ -131,6 +136,30 @@ class App:
         # 3. Process continuous input (camera movement)
         self.process_camera_input(ui_state)
 
+        # 3.5. Screenshot state machine
+        # If screenshot_pending was set on previous frame, start the override frame now
+        if self.screenshot_pending and not self.screenshot_in_progress:
+            # Transition from pending to in_progress
+            self.screenshot_pending = False
+            self.screenshot_in_progress = True
+            # Save current settings
+            self.screenshot_saved_settings = {
+                'speedmult': ui_state.preferences.speedmult,
+                'blur_quality': ui_state.preferences.blur_quality,
+                'motion_blur': ui_state.preferences.motion_blur,
+                'going': ui_state.sim.going,
+            }
+            # Apply override settings for maximum quality screenshot
+            # speedmult = motion_blur_samples (N physics steps per frame)
+            # blur_quality = 1 (render every physics step for N total samples)
+            # motion_blur = True (enable temporal accumulation)
+            ui_state.preferences.speedmult = ui_state.preferences.motion_blur_samples
+            ui_state.preferences.blur_quality = 1
+            ui_state.preferences.motion_blur = True
+            # If paused, temporarily unpause for this frame
+            if not ui_state.sim.going:
+                ui_state.sim.going = True
+
         # 4. Lock physics frequency to video recorder frequency if recording
         is_recording = self.video_service.is_active()
 
@@ -168,7 +197,7 @@ class App:
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
 
         # Hide reticle when recording video
-        if is_recording:
+        if is_recording or self.screenshot_in_progress:
             sweep_reticle_visible = False
 
         # Transform reticle from texture UV to screen UV (accounting for camera)
@@ -205,6 +234,36 @@ class App:
         if ui_state.sim.going:
             self.run_simulation_frame(ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
                                       screen_aspect, ui_state.sim.watercolor_mode, tiling_mode=tiling_mode)
+
+        # 6.5. Screenshot save and settings restoration
+        if self.screenshot_in_progress:
+            # Save the screenshot using the assembled texture
+            if self.camera.assembled_texture is not None:
+                from utilities.save_frame_gpu import save_frame_gpu
+                import datetime
+                # Generate timestamped filename
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                prefix = ui_state.preferences.filename_prefix or "screenshot"
+                filename = save_frame_gpu(
+                    self.camera.assembled_texture,
+                    self.ctx,
+                    supersample_k=ui_state.preferences.supersample_k,
+                    return_array=False
+                )
+                # Rename to proper filename with timestamp
+                import os
+                if filename and os.path.exists(filename):
+                    new_filename = f"frames/{prefix}_{timestamp}.png"
+                    os.rename(filename, new_filename)
+                    print(f"Screenshot saved: {new_filename}")
+
+            # Restore saved settings
+            ui_state.preferences.speedmult = self.screenshot_saved_settings['speedmult']
+            ui_state.preferences.blur_quality = self.screenshot_saved_settings['blur_quality']
+            ui_state.preferences.motion_blur = self.screenshot_saved_settings['motion_blur']
+            ui_state.sim.going = self.screenshot_saved_settings['going']
+            self.screenshot_in_progress = False
+            self.screenshot_saved_settings = {}
 
         # 7. Render camera view
         # Determine emboss texture based on mode: 0=Off (None), 1=Canvas, 2=Brush
@@ -291,6 +350,10 @@ class App:
         # Toggle recording
         if ui_state.toggle_recording:
             self.video_service.toggle()
+
+        # Screenshot request (Shift+P) - set pending flag
+        if ui_state.request_screenshot and not self.screenshot_pending and not self.screenshot_in_progress:
+            self.screenshot_pending = True
 
         # Shader reload
         if ui_state.request_reload:
@@ -722,7 +785,7 @@ class App:
                     camera_zoom=self.camera.zoom,
                     emboss_intensity=effective_emboss_intensity,
                     emboss_smoothness=ui_state.sim.emboss_smoothness,
-                    trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
+                    trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not self.screenshot_in_progress) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
                     mouse_screen_coords=mouse_screen_coords,
                     tiling_mode=tiling_mode,
                     view_min=tuple(view_min),
@@ -792,7 +855,7 @@ class App:
                 camera_zoom=self.camera.zoom,
                 emboss_intensity=effective_emboss_intensity,
                 emboss_smoothness=ui_state.sim.emboss_smoothness,
-                trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
+                trail_draw_radius= ui_state.preferences.draw_size if ui_state.preferences.mouse_mode== "Draw Trail" and (not self.video_service.is_active()) and (not self.screenshot_in_progress) and (not ui_state.sim.parameter_sweeps_enabled) else 0,
                 mouse_screen_coords=mouse_screen_coords,
                 tiling_mode=tiling_mode,
                 view_min=tuple(view_min),
