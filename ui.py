@@ -767,7 +767,7 @@ class UI:
 
                 # Multi Load toggle
                 _, self.state.multi_load.multi_load_enabled = imgui.checkbox(
-                    "Multi Load",
+                    "Multi Load - EXPERIMENTAL",
                     self.state.multi_load.multi_load_enabled
                 )
                 self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
