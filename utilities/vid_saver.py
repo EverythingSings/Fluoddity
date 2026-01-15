@@ -33,10 +33,10 @@ class VidSaver:
                 print(f"  Finishing current video and starting new one...")
                 self.recorder.close()
 
-            # Create timestamped filename
+            # Create timestamped filename in Videos folder
             timestamp = datetime.now().strftime('%H-%M-%S')
             prefix = filename_prefix if filename_prefix else "animation"
-            output_path = f"{prefix}-{timestamp}.mp4"
+            output_path = f"Videos/{prefix}-{timestamp}.mp4"
 
             self.recorder = FFmpegVideoRecorder(
                 width=output_width,

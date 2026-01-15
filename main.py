@@ -253,7 +253,7 @@ class App:
                 # Rename to proper filename with timestamp
                 import os
                 if filename and os.path.exists(filename):
-                    new_filename = f"frames/{prefix}_{timestamp}.png"
+                    new_filename = f"Screenshots/{prefix}_{timestamp}.png"
                     os.rename(filename, new_filename)
                     print(f"Screenshot saved: {new_filename}")
 

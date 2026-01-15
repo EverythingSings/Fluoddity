@@ -189,13 +189,13 @@ def save_frame_gpu(frame_data, ctx, supersample_k=1, return_array=False):
     # Otherwise save as PNG (legacy behavior)
     img = Image.fromarray(pixels, 'RGB')
 
-    # Create frames directory if it doesn't exist
-    if not os.path.exists('frames'):
-        os.mkdir('frames')
+    # Create Screenshots directory if it doesn't exist
+    if not os.path.exists('Screenshots'):
+        os.mkdir('Screenshots')
 
     # Increment output counter and save
     gpu_resources['output_counter'] += 1
-    filename = f"frames/frame_{gpu_resources['output_counter']:04d}.png"
+    filename = f"Screenshots/frame_{gpu_resources['output_counter']:04d}.png"
     img.save(filename)
 
     return filename

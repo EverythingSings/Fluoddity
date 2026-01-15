@@ -56,7 +56,11 @@ class FFmpegVideoRecorder:
         # Generate output path if not provided
         if output_path is None:
             timestamp = datetime.now().strftime('%H-%M-%S')
-            output_path = f"animation-{timestamp}.mp4"
+            output_path = f"Videos/animation-{timestamp}.mp4"
+
+        # Ensure Videos directory exists
+        import os
+        os.makedirs('Videos', exist_ok=True)
 
         self.output_path = output_path
 
