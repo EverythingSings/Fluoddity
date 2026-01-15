@@ -63,14 +63,14 @@ class Sim:
 
         # Create canvas texture (4-channel float32)
         self.can = self.ctx.texture(canvas_shape, 4, dtype='f4')
-        self.can.repeat_x = False
-        self.can.repeat_y = False
+        self.can.repeat_x = True
+        self.can.repeat_y = True
         self.canvas = self.ctx.framebuffer([self.can])
 
         # Create brush texture and framebuffer
         self.brush_tex = self.ctx.texture(canvas_shape, 4, dtype='f4')
-        self.brush_tex.repeat_x = False
-        self.brush_tex.repeat_y = False
+        self.brush_tex.repeat_x = True
+        self.brush_tex.repeat_y = True
         self.brush = self.ctx.framebuffer([self.brush_tex])
 
         # For camera to use
