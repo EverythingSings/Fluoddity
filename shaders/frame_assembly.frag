@@ -32,7 +32,7 @@ uniform vec2 view_max;              // World-space maximum of view rectangle
 
 // Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
 // Must match the value in cam_brush.vert. Smaller = more margin for edge blending.
-const float TILING_MARGIN = 0.9;
+const float TILING_MARGIN = 0.993;
 
 in vec2 uv;
 out vec4 fragColor;
@@ -238,10 +238,14 @@ vec3 sample_tiled_color(vec2 screen_uv) {
     // So: if dist > 0, we're at lower sample_uv, need to sample from higher (add tile_size_uv)
     //     if dist < 0, we're at higher sample_uv, need to sample from lower (subtract tile_size_uv)
 
-    bool near_seam_pos_x = dist_to_seam.x > 0.0 && dist_to_seam.x < margin_threshold;
-    bool near_seam_neg_x = dist_to_seam.x < 0.0 && dist_to_seam.x > -margin_threshold;
-    bool near_seam_pos_y = dist_to_seam.y > 0.0 && dist_to_seam.y < margin_threshold;
-    bool near_seam_neg_y = dist_to_seam.y < 0.0 && dist_to_seam.y > -margin_threshold;
+    // Skip edge blending if tile is larger than screen (seam is offscreen, no tiling visible)
+    bool seam_onscreen_x = tile_size_uv.x < 1.0;
+    bool seam_onscreen_y = tile_size_uv.y < 1.0;
+
+    bool near_seam_pos_x = seam_onscreen_x && dist_to_seam.x > 0.0 && dist_to_seam.x < margin_threshold;
+    bool near_seam_neg_x = seam_onscreen_x && dist_to_seam.x < 0.0 && dist_to_seam.x > -margin_threshold;
+    bool near_seam_pos_y = seam_onscreen_y && dist_to_seam.y > 0.0 && dist_to_seam.y < margin_threshold;
+    bool near_seam_neg_y = seam_onscreen_y && dist_to_seam.y < 0.0 && dist_to_seam.y > -margin_threshold;
 
     // X-axis edge blending
     if (near_seam_pos_x) {

@@ -12,7 +12,7 @@ uniform vec2 view_max;  // World-space maximum of view rectangle
 
 // Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
 // Must match the value in frame_assembly.frag. Smaller = more margin for edge blending.
-const float TILING_MARGIN = 0.9;
+const float TILING_MARGIN = 0.993;
 
 //SYNC WITH ENTITY_UPDATE.GLSL AND BRUSH.VERT
 struct Entity {

@@ -131,25 +131,31 @@ void main() {
     if (draw_mode && draw_power > 0.0) {
         float distance_to_mouse;
 
+        // Calculate velocity to add based on mouse movement
+        vec2 mouse_velocity = (mouse - previous_mouse);
+
         if (tiling_mode) {
             // In tiling mode, check 9-cell neighborhood (3x3) for wrapped distance
             // This allows trail drawing across wrapped edges/corners
             float min_distance = 999.0;
+            vec2 min_velocity = vec2(999);
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
                     vec2 wrapped_mouse = mouse + vec2(dx, dy);
                     float dist = length(texcoord - wrapped_mouse);
                     min_distance = min(min_distance, dist);
+                    vec2 vel = (wrapped_mouse-previous_mouse);
+                    min_velocity = length(vel)<length(min_velocity)?vel:min_velocity;
                 }
             }
             distance_to_mouse = min_distance;
+            mouse_velocity = min_velocity;
         } else {
             // Normal mode: direct distance calculation
             distance_to_mouse = length(texcoord - mouse);
         }
 
-        // Calculate velocity to add based on mouse movement
-        vec2 mouse_velocity = (mouse - previous_mouse) * draw_power/5;
+        mouse_velocity *= draw_power/5;
 
         // Apply Gaussian kernel and add to velocity channels (RG)
         float kernel_weight = draw_kernel(distance_to_mouse, draw_size);
