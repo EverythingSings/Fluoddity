@@ -10,6 +10,10 @@ uniform bool tiling_mode_enabled;
 uniform vec2 view_min;  // World-space minimum of view rectangle
 uniform vec2 view_max;  // World-space maximum of view rectangle
 
+// Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
+// Must match the value in frame_assembly.frag. Smaller = more margin for edge blending.
+const float TILING_MARGIN = 0.9;
+
 //SYNC WITH ENTITY_UPDATE.GLSL AND BRUSH.VERT
 struct Entity {
     vec2 pos;
@@ -137,7 +141,7 @@ void main() {
 
     vec2 pos = canvas_ndc * scale;
     pos -= cam_pos * vec2(1.0, -1.0) / cam_zoom;
-    
+    if(tiling_mode_enabled){pos*=TILING_MARGIN;}//make sure particles that are hanging off the edge still get rendered fully
     gl_Position = vec4(pos, 0.0, 1.0);
     // Pass through vertex data
     uv = uv_coords[vertex_id];

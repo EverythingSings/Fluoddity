@@ -30,6 +30,10 @@ uniform bool tiling_mode_enabled;   // Whether tiling mode is active
 uniform vec2 view_min;              // World-space minimum of view rectangle
 uniform vec2 view_max;              // World-space maximum of view rectangle
 
+// Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
+// Must match the value in cam_brush.vert. Smaller = more margin for edge blending.
+const float TILING_MARGIN = 0.9;
+
 in vec2 uv;
 out vec4 fragColor;
 
@@ -178,8 +182,9 @@ vec3 emboss(vec2 uv){
     //fakenorm = vec3(0,1,0);
     return vec3(1.74)*max(0,dot(fakenorm,normalize(vec3(1,1.,-1))));
 }
-// Tiling mode: compute where to sample from based on world position
-vec2 tiling_sample_uv(vec2 screen_uv) {
+// Tiling mode: sample color with edge blending for seamless tiling.
+// Handles particles whose sprites hang over the edge of the canonical tile.
+vec3 sample_tiled_color(vec2 screen_uv) {
     // Convert screen UV to world position
     vec2 ndc = screen_uv * 2.0 - 1.0;
     vec2 world_pos = ndc * camera_zoom + camera_position * vec2(1, -1);
@@ -194,32 +199,85 @@ vec2 tiling_sample_uv(vec2 screen_uv) {
 
     // Check if this particle was rendered (with epsilon for floating point precision)
     const float epsilon = 0.0001;
-    if (n_min.x <= n_max.x + epsilon && n_min.y <= n_max.y + epsilon) {
-        // This particle was rendered - find where
-        vec2 rendered_world_pos = p + n_min * 2.0;
-
-        // Convert back to screen UV (reverse of the world_pos calculation above)
-        rendered_world_pos.x /= screen_aspect;
-        vec2 rendered_ndc = (rendered_world_pos - camera_position * vec2(1, -1)) / camera_zoom;
-        vec2 sample_uv = rendered_ndc * 0.5 + 0.5;
-
-        return sample_uv;
-    } else {
-        // This particle was culled - return black/transparent
-        return vec2(-1.0); // Invalid UV to signal no sample
+    if (n_min.x > n_max.x + epsilon || n_min.y > n_max.y + epsilon) {
+        // This particle was culled
+        return vec3(0.0);
     }
+
+    // This particle was rendered - find where
+    vec2 rendered_world_pos = p + n_min * 2.0;
+
+    // Convert back to screen UV (reverse of the world_pos calculation above)
+    rendered_world_pos.x /= screen_aspect;
+    vec2 rendered_ndc = (rendered_world_pos - camera_position * vec2(1, -1)) / camera_zoom;
+    rendered_ndc *= TILING_MARGIN;
+    vec2 sample_uv = rendered_ndc * 0.5 + 0.5;
+
+    // Tile size in sample_uv space (how far to offset for opposite edge)
+    vec2 tile_size_uv = vec2(
+        TILING_MARGIN / (screen_aspect * camera_zoom),
+        TILING_MARGIN / camera_zoom
+    );
+
+    // Sample primary location
+    vec3 color = texture(input_frame, sample_uv).rgb;
+
+    // ===== SCREENSPACE SEAM DETECTION =====
+    // The screenspace seam is where n_min changes (discontinuity in the p-to-sample_uv mapping).
+    // This occurs at p_seam = mod(view_min + 1, 2) - 1, NOT at p = ±1 (worldspace seam).
+    vec2 p_seam = mod(view_min + 1.0, 2.0) - 1.0;
+
+    // Distance from p to the seam (in p-space, wrapped to [-1, 1])
+    vec2 dist_to_seam = p - p_seam;
+    dist_to_seam = mod(dist_to_seam + 1.0, 2.0) - 1.0;  // Wrap to [-1, 1]
+
+    // Margin threshold: how close to the seam triggers edge blending
+    float margin_threshold = 1.0 - TILING_MARGIN;
+
+    // At the seam, crossing from negative to positive dist causes sample_uv to DECREASE.
+    // So: if dist > 0, we're at lower sample_uv, need to sample from higher (add tile_size_uv)
+    //     if dist < 0, we're at higher sample_uv, need to sample from lower (subtract tile_size_uv)
+
+    bool near_seam_pos_x = dist_to_seam.x > 0.0 && dist_to_seam.x < margin_threshold;
+    bool near_seam_neg_x = dist_to_seam.x < 0.0 && dist_to_seam.x > -margin_threshold;
+    bool near_seam_pos_y = dist_to_seam.y > 0.0 && dist_to_seam.y < margin_threshold;
+    bool near_seam_neg_y = dist_to_seam.y < 0.0 && dist_to_seam.y > -margin_threshold;
+
+    // X-axis edge blending
+    if (near_seam_pos_x) {
+        // Right of seam (lower sample_uv): sample from left of seam (higher sample_uv)
+        color += texture(input_frame, sample_uv + vec2(tile_size_uv.x, 0.0)).rgb;
+    } else if (near_seam_neg_x) {
+        // Left of seam (higher sample_uv): sample from right of seam (lower sample_uv)
+        color += texture(input_frame, sample_uv - vec2(tile_size_uv.x, 0.0)).rgb;
+    }
+
+    // Y-axis edge blending
+    if (near_seam_pos_y) {
+        color += texture(input_frame, sample_uv + vec2(0.0, tile_size_uv.y)).rgb;
+    } else if (near_seam_neg_y) {
+        color += texture(input_frame, sample_uv - vec2(0.0, tile_size_uv.y)).rgb;
+    }
+
+    // Corner blending: if both x and y are in margin zones, also sample diagonal
+    if ((near_seam_pos_x || near_seam_neg_x) && (near_seam_pos_y || near_seam_neg_y)) {
+        vec2 corner_offset = vec2(
+            near_seam_pos_x ? tile_size_uv.x : -tile_size_uv.x,
+            near_seam_pos_y ? tile_size_uv.y : -tile_size_uv.y
+        );
+        color += texture(input_frame, sample_uv + corner_offset).rgb;
+    }
+
+    return color;
 }
 
 void main() {
-    // Sample the input frame
-    vec2 sample_uv = tiling_mode_enabled ? tiling_sample_uv(uv) : uv;
-
-    // Check if tiling returned an invalid UV (culled particle)
+    // Sample the input frame (tiling mode handles edge blending internally)
     vec3 current_color;
-    if (tiling_mode_enabled && sample_uv.x < 0.0) {
-        current_color = vec3(0.0);
+    if (tiling_mode_enabled) {
+        current_color = sample_tiled_color(uv);
     } else {
-        current_color = texture(input_frame, sample_uv).rgb;
+        current_color = texture(input_frame, uv).rgb;
     }
 
     // In watercolor mode, convert from log-space optical density to linear transmission
