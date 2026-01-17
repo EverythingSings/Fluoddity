@@ -32,6 +32,9 @@ Symmetry mode:
     local coord 2
     both
 
+
+Video recording should have it's own motion blur controls.
+
 Hive Explorer is like an interactive lava lamp. 
 Thousands of particles interact resulting in a great variety of forms and patterns.
 Thumb through the presets in File->Load to see what is possible.

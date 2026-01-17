@@ -36,6 +36,8 @@ class PreferencesState:
     motion_blur_samples: int = 12
     supersample_k: int = 2
     filename_prefix: str = ""
+    recording_motion_blur: bool = True  # Motion blur setting used during video recording
+    recording_blur_quality: int = 1  # Blur quality setting used during video recording
 
 
 def save_preferences(prefs: PreferencesState, filepath: Path | str = "preferences.config") -> None:

@@ -70,6 +70,10 @@ class App:
         self.user_speedmult = 1
         self.was_recording = False
 
+        # Track user's desired motion blur settings (for restoration after recording)
+        self.user_motion_blur = True
+        self.user_blur_quality = 1
+
         # Screenshot state machine
         self.screenshot_pending = False  # Waiting for current frame to finish
         self.screenshot_in_progress = False  # Override frame is running
@@ -165,15 +169,21 @@ class App:
 
         # Detect recording state changes
         if is_recording and not self.was_recording:
-            # Recording just started - save user's speedmult
+            # Recording just started - save user's speedmult and motion blur settings
             self.user_speedmult = ui_state.preferences.speedmult
+            self.user_motion_blur = ui_state.preferences.motion_blur
+            self.user_blur_quality = ui_state.preferences.blur_quality
         elif not is_recording and self.was_recording:
-            # Recording just stopped - restore user's speedmult
+            # Recording just stopped - restore user's speedmult and motion blur settings
             ui_state.preferences.speedmult = self.user_speedmult
+            ui_state.preferences.motion_blur = self.user_motion_blur
+            ui_state.preferences.blur_quality = self.user_blur_quality
 
-        # Lock speedmult while recording
+        # Lock speedmult and motion blur settings while recording
         if is_recording:
             ui_state.preferences.speedmult = ui_state.preferences.motion_blur_samples
+            ui_state.preferences.motion_blur = ui_state.preferences.recording_motion_blur
+            ui_state.preferences.blur_quality = ui_state.preferences.recording_blur_quality
 
         # Update recording state for next frame
         self.was_recording = is_recording

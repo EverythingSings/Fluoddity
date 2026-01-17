@@ -1242,6 +1242,32 @@ class UI:
                     "(Locked during recording)"
                 )
 
+            # Motion Blur checkbox (overrides preferences during recording)
+            _, self.state.preferences.recording_motion_blur = imgui.checkbox(
+                "Motion Blur (Recording)",
+                self.state.preferences.recording_motion_blur
+            )
+            self._delayed_tooltip("Enable motion blur during video recording.\nThis setting overrides the Motion Blur checkbox in Preferences while recording.")
+
+            # Blur Quality slider (only shown when recording motion blur is enabled)
+            if self.state.preferences.recording_motion_blur:
+                imgui.indent(20)
+                # Custom format for blur quality
+                blur_val = self.state.preferences.recording_blur_quality
+                if blur_val == 1:
+                    blur_format = "1 : Every Frame"
+                else:
+                    blur_format = f"{blur_val} : Every {blur_val} Frames"
+
+                _, self.state.preferences.recording_blur_quality = imgui.slider_int(
+                    "Blur Quality (Recording)",
+                    self.state.preferences.recording_blur_quality,
+                    1, 20,
+                    format=blur_format
+                )
+                self._delayed_tooltip("Motion Blur can be expensive at high frequencies,\nskip some frames to improve performance.\nThis setting overrides the Blur Quality slider in Preferences while recording.")
+                imgui.unindent(20)
+
             # Downsample Resolution Factor (was Supersample Kernel Width)
             _, self.state.preferences.supersample_k = imgui.input_int('Downsample Resolution Factor', self.state.preferences.supersample_k)
             self._delayed_tooltip("Set to '2' to render a video at half resolution.")
