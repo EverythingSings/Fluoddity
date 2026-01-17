@@ -1,11 +1,4 @@
-RESTART ON OPEN
-    def run(self):
-        self.sim.reset()
--save needs to change "current file"
--radial absolute Orientation
 -camera.py -> screentotex fallback for 0 size
-Rewrite slider tooltips
-write tooltips for some sim controls
 tune slider ranges
 
 -Text entry box with absolute orientation -> Text
@@ -33,14 +26,13 @@ Symmetry mode:
     both
 
 
-Video recording should have it's own motion blur controls.
-
 Hive Explorer is like an interactive lava lamp. 
 Thousands of particles interact resulting in a great variety of forms and patterns.
 Thumb through the presets in File->Load to see what is possible.
 -Basics (see help->Controls for more)
 Move the camera around with WASD. Zoom in or out with Q/E or scroll wheel.
 Press R to reset the simulation. Press G to toggle pause.
+Click to draw trails or select particles. Press T to toggle between drawing and selecting.
 -Trails
 Particles in hive explorer can't directly 'see' each other. 
 Instead, they interact by leaving pheremone trails as they move, like ants.
@@ -61,3 +53,7 @@ Create something you like? Save it as a new preset with File->Save...
 The active rule, current mutations, and everything on the physics panel will be restored when you load the save (Physics Sliders, Additional Settings, and Appearance)
 You can also press Ctrl-C to copy a 'save string' to your clipboard, and Ctrl-V to load a save string from the clipboard.
 This is useful when you don't want a permanent save, but want a checkpoint to return to.
+-Sliders
+All sliders support Ctrl click to enter custom values. You can exceed slider range this way, 
+but it isn't always advisable. The sliders in the Physics Settings panel are special. Right click on them to set 
+custom ranges with the context menu. You can also vary their value across the canvas with parameter sweeps. See Help -> Parameter Sweeps for more.
