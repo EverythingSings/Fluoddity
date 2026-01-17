@@ -866,7 +866,7 @@ class UI:
                 if abs(self.state.preferences.world_size - self._last_applied_world_size) > 0.001:
                     self._request_world_size_change = True
 
-            self._delayed_tooltip("Controls the size of the simulation world.\nAffects both entity count and canvas resolution.\nCommit changes with Enter or clicking away (will reset simulation).\nValid range: 0.02 to 4.0")
+            self._delayed_tooltip("EXPENSIVE - Controls the size of the simulation world.\nAffects both entity count and canvas resolution to keep density ~fixed")
 
             imgui.separator()
 
@@ -1658,8 +1658,7 @@ class UI:
                 )
                 if clicked:
                     self.state.sim.ABSOLUTE_ORIENTATION = current
-                self._delayed_tooltip("Calculate rule behavior in local coordinates rather than particle velocity.\nOff: use particle velocity | Y axis: align to y axis | Radial: align to radial direction")
-
+                self._delayed_tooltip("What direction are particles 'facing'? Which way is 'up'?\nOff: use particle velocity\nY axis: align to y axis\nRadial: align to center of canvas")
                 # Orientation Mix (only visible if Absolute Orientation != Off)
                 if self.state.sim.ABSOLUTE_ORIENTATION != 0:
                     imgui.set_next_item_width(100)
@@ -1697,7 +1696,7 @@ class UI:
                     "Color by Cohort",
                     self.state.sim.color_by_cohort
                 )
-                self._delayed_tooltip("Colors particles based on their cohort assignment\nrather than their velocity direction.")
+                self._delayed_tooltip("Colors particles based on their cohort assignment\nrather than their behavior.")
 
                 # Hue Sensitivity (only if not color by cohort)
                 if not self.state.sim.color_by_cohort:
@@ -1729,7 +1728,7 @@ class UI:
                 _, self.state.sim.emboss_mode = imgui.combo(
                     "Emboss", self.state.sim.emboss_mode, emboss_options
                 )
-                self._delayed_tooltip("EXPENSIVE- calculate some fake 3D lighting\nby treating (otherwise unused) particle\ndensity as a heightmap.")
+                self._delayed_tooltip("Calculate some fake 3D lighting\nby treating (otherwise unused) particle\ndensity as a heightmap.")
 
                 # Emboss sliders only visible when mode is not Off
                 if self.state.sim.emboss_mode != 0:
@@ -1946,7 +1945,7 @@ class UI:
                 default_max=0.5,
             )
             self.render_custom_tooltip("Strafe Power",
-                "Controls particle movement without applying forces to velocity. Strafe acts as a vector added directly to position, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
+                "Controls particle movement without applying forces to velocity. 'Strafe' is a vector added directly to position each frame, like a little hop. Strafe power scales with Axial, Lateral, and Global force multipliers.")
 
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_sweep_buttons("TRAIL_PERSISTENCE")
@@ -1980,7 +1979,7 @@ class UI:
                 default_max=1.0,
             )
             self.render_custom_tooltip("Trail Diffusion",
-                "Controls the amount of diffusion applied to particle trails.")
+                "Controls how quickly particle trails spread out and blend together.")
 
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_sweep_buttons("HAZARD_RATE")
