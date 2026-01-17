@@ -1,6 +1,43 @@
 import subprocess
 import numpy as np
 from datetime import datetime
+import sys
+import os
+from pathlib import Path
+
+
+def find_ffmpeg():
+    """
+    Find ffmpeg executable, checking bundled location first, then system PATH.
+
+    Returns:
+        str: Path to ffmpeg executable
+
+    Raises:
+        FileNotFoundError: If ffmpeg cannot be found
+    """
+    # Check if running as PyInstaller bundle
+    if getattr(sys, 'frozen', False):
+        # Running in a bundle - check for bundled ffmpeg
+        bundle_dir = Path(sys._MEIPASS)
+        ffmpeg_path = bundle_dir / 'ffmpeg.exe'
+        if ffmpeg_path.exists():
+            return str(ffmpeg_path)
+
+    # Check system PATH
+    import shutil
+    ffmpeg_path = shutil.which('ffmpeg')
+    if ffmpeg_path:
+        return ffmpeg_path
+
+    # Not found - provide helpful error message
+    raise FileNotFoundError(
+        "FFmpeg not found!\n\n"
+        "Video recording requires FFmpeg. Please either:\n"
+        "1. Install FFmpeg and add it to your system PATH, or\n"
+        "2. Place ffmpeg.exe in the same folder as this application\n\n"
+        "Download FFmpeg from: https://ffmpeg.org/download.html"
+    )
 
 class FFmpegVideoRecorder:
     """
@@ -72,6 +109,9 @@ class FFmpegVideoRecorder:
             preset = 'slow'
             crf = 18  # Higher quality (lower = better)
 
+        # Find ffmpeg executable (bundled or system PATH)
+        ffmpeg_cmd = find_ffmpeg()
+
         # Start ffmpeg process
         # Optionally capture ffmpeg output to log file for debugging
         if debug_log:
@@ -85,7 +125,7 @@ class FFmpegVideoRecorder:
             stderr_dest = subprocess.DEVNULL
 
         self.ffmpeg = subprocess.Popen([
-            'ffmpeg', '-y',  # Overwrite output file
+            ffmpeg_cmd, '-y',  # Overwrite output file
             '-f', 'rawvideo',
             '-pixel_format', 'rgb24',
             '-video_size', f'{self.width}x{self.height}',  # Use padded dimensions

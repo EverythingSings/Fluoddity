@@ -32,3 +32,8 @@ imgui.ini
 # Physics configs (user-generated) (STORING THESE FOR NOW SINCE THEY'RE TINY)
 # physics_configs/*.txt
 docs/todos.txt
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak
