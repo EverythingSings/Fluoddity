@@ -20,7 +20,7 @@ class PreferencesState:
     show_preferences_window: bool = True  # Whether preferences window is visible
     show_controls_window: bool = False  # Help controls window
     show_parameter_sweeps_window: bool = False  # Help parameter sweeps window
-    show_tutorial_window: bool = False  # Help tutorial window
+    show_tutorial_window: bool = True  # Help tutorial window
     show_performance_window: bool = False  # Help performance window
     physics_tooltips_enabled: bool = True
     debug_arrows: bool = False  # Visual debug overlay for velocity field

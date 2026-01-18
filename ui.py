@@ -747,17 +747,7 @@ class UI:
                     from state.preferences_state import PreferencesState
                     self.state.preferences = PreferencesState()
 
-                    # Reset imgui.ini from default_imgui.ini
-                    import shutil
-                    default_imgui_path = Path("default_imgui.ini")
-                    imgui_path = Path("imgui.ini")
-                    if default_imgui_path.exists():
-                        shutil.copy(default_imgui_path, imgui_path)
-                        # Load the new ini file into imgui's current state
-                        imgui.load_ini_settings_from_disk(str(imgui_path))
-                        print(f"Reset imgui.ini from {default_imgui_path}")
-                    else:
-                        print(f"Warning: {default_imgui_path} not found, could not reset imgui.ini")
+                    
                 self._delayed_tooltip("Restore all preferences and ui state to factory settings. \nEquivalent to deleting preferences.config, or running this\nprogram for the first time. Physics config saves are not affected.")
 
                 imgui.end_menu()
@@ -1233,18 +1223,19 @@ class UI:
                 "The options for World size, Physics update Frequency, and motion blur "
                 "can significantly affect performance. World size and update frequency "
                 "trade against each other so if you double one, halve the other for similar performance."
+                "Motion blur gets more expensive with large worldsizes."
             )
 
             imgui.spacing()
             imgui.text("Example Setups")
             imgui.separator()
 
-            imgui.bullet_text("x30 physics frequency with worldsize == 0.3")
-            imgui.bullet_text("x10 physics frequency with worldsize == 1.0")
+            imgui.bullet_text("x20 physics frequency with worldsize 0.3, motion blur every 4 frames")
+            imgui.bullet_text("x5 physics frequency with worldsize 1.0, motion blur every frame")
 
             imgui.spacing()
             imgui.text_wrapped(
-                "run well on my 5060. Motion blur gets more expensive with large worldsizes."
+                "These run well on my 5060."
             )
 
         imgui.end()
