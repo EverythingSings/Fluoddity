@@ -26,6 +26,8 @@ Symmetry mode:
     both
 
 
+Tutorial Replacement Text:
+
 Hive Explorer is like an interactive lava lamp. 
 Thousands of particles interact resulting in a great variety of forms and patterns.
 Thumb through the presets in File->Load to see what is possible.
