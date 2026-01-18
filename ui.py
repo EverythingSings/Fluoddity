@@ -9,6 +9,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from state import UIState, SimState, CameraState, RecordingState
 from services.config_saver import ConfigSaver, PhysicsConfig
+from keybinding_management import KeybindingManager
 
 
 @dataclass
@@ -28,8 +29,8 @@ class UI:
         self.view_option_labels = view_option_labels
         self.multi_load_service = multi_load_service
 
-
-
+        # Initialize keybinding manager
+        self.keybindings = KeybindingManager()
 
         # Initialize ImGui
         imgui.create_context()
@@ -58,6 +59,7 @@ class UI:
         self.show_controls_window = False  # Help controls window
         self.show_parameter_sweeps_window = False  # Help parameter sweeps window
         self.show_tutorial_window = False  # Help tutorial window
+        self.show_performance_window = False  # Help performance window
         self.show_video_recording_window = False  # Video recording controls window
         self.show_sidebar = True  # Controls visibility of Physics Settings and Preferences windows
 
@@ -297,50 +299,50 @@ class UI:
             shift_pressed = mods & glfw.MOD_SHIFT
 
             # Config save/load with Ctrl+C/Ctrl+V
-            if ctrl_pressed and key == glfw.KEY_C:
+            if ctrl_pressed and key == self.keybindings.get_key("copy_config_with_ctrl"):
                 self._request_save_config = True
-            elif ctrl_pressed and key == glfw.KEY_V:
+            elif ctrl_pressed and key == self.keybindings.get_key("paste_config_with_ctrl"):
                 self._request_load_config = True
-            elif key == glfw.KEY_V:
+            elif key == self.keybindings.get_key("toggle_watercolor"):
                 # Toggle watercolor mode
                 self.state.sim.watercolor_mode = not self.state.sim.watercolor_mode
-            elif key == glfw.KEY_U:
+            elif key == self.keybindings.get_key("reload_shaders"):
                 # Reload shaders
                 self._request_reload = True
-            elif key == glfw.KEY_H:
+            elif key == self.keybindings.get_key("toggle_help"):
                 # Show tutorial
                 self.show_tutorial_window = not self.show_tutorial_window
-            elif shift_pressed and key == glfw.KEY_P:
+            elif shift_pressed and key == self.keybindings.get_key("record_screen"):
                 # Screenshot (Shift+P)
                 self._request_screenshot = True
-            elif key == glfw.KEY_P:
+            elif key == self.keybindings.get_key("record_screen"):
                 self._toggle_recording = True
-            elif key == glfw.KEY_G:
+            elif key == self.keybindings.get_key("toggle_pause"):
                 self.state.sim.going = not self.state.sim.going
-            elif key == glfw.KEY_SPACE:
+            elif key == self.keybindings.get_key("randomize_mutations"):
                 self.state.sim.rule_seed = random.random()
-            elif key == glfw.KEY_T:
+            elif key == self.keybindings.get_key("toggle_mouse_mode"):
                 # Toggle mouse mode between Select Particle and Draw Trail
                 if self.state.preferences.mouse_mode == "Select Particle":
                     self.state.preferences.mouse_mode = "Draw Trail"
                 else:
                     self.state.preferences.mouse_mode = "Select Particle"
-            elif key == glfw.KEY_F:
+            elif key == self.keybindings.get_key("toggle_parameter_sweep"):
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
                 # If re-enabling sweeps while in preview mode, clear the preview flag
                 if self.state.sim.parameter_sweeps_enabled and self.state.sim.sweep_preview_pending_restore:
                     self.state.sim.sweep_preview_pending_restore = False
-            elif key == glfw.KEY_Z:
+            elif key == self.keybindings.get_key("randomize_rules"):
                 # Full reset (one-shot, not hold)
                 self._request_full_reset = True
-            elif key == glfw.KEY_X:
+            elif key == self.keybindings.get_key("toggle_sidebar"):
                 # Toggle sidebar (Physics Settings and Preferences windows)
                 self.show_sidebar = not self.show_sidebar
-            elif key == glfw.KEY_ESCAPE:
+            elif key == self.keybindings.get_key("exit_keybinding"):
                 glfw.set_window_should_close(window, True)
-            elif key == glfw.KEY_F1:
-                self.show_demo_window = not self.show_demo_window
+            #elif key == self.keybindings.get_key("toggle_tooltips"):
+            #    self.show_demo_window = not self.show_demo_window
 
     def char_callback(self, window, char):
         if self.imgui_char_callback:
@@ -358,7 +360,8 @@ class UI:
                 self.pending_resize_time = None
 
         # Check for R key hold (reset command - continuous)
-        if glfw.KEY_R in self._keys_pressed:
+        reset_key = self.keybindings.get_key("reset_keybinding")
+        if reset_key and reset_key in self._keys_pressed:
             self._request_reset = True
 
         # Build state snapshot
@@ -557,6 +560,10 @@ class UI:
         if self.show_tutorial_window:
             self.render_tutorial_window()
 
+        # Render Performance help window if visible
+        if self.show_performance_window:
+            self.render_performance_window()
+
         # Render Screen Recording window if visible
         if self.show_video_recording_window:
             self.render_video_recording_window()
@@ -743,6 +750,18 @@ class UI:
                     # Reset preferences to defaults (equivalent to deleting preferences.config)
                     from state.preferences_state import PreferencesState
                     self.state.preferences = PreferencesState()
+
+                    # Reset imgui.ini from default_imgui.ini
+                    import shutil
+                    default_imgui_path = Path("default_imgui.ini")
+                    imgui_path = Path("imgui.ini")
+                    if default_imgui_path.exists():
+                        shutil.copy(default_imgui_path, imgui_path)
+                        # Load the new ini file into imgui's current state
+                        imgui.load_ini_settings_from_disk(str(imgui_path))
+                        print(f"Reset imgui.ini from {default_imgui_path}")
+                    else:
+                        print(f"Warning: {default_imgui_path} not found, could not reset imgui.ini")
                 self._delayed_tooltip("Restore all preferences and ui state to factory settings. \nEquivalent to deleting preferences.config, or running this\nprogram for the first time. Physics config saves are not affected.")
 
                 imgui.end_menu()
@@ -763,6 +782,8 @@ class UI:
                     self.show_parameter_sweeps_window = not self.show_parameter_sweeps_window
                 if imgui.menu_item("Tutorial", "", self.show_tutorial_window)[0]:
                     self.show_tutorial_window = not self.show_tutorial_window
+                if imgui.menu_item("Performance", "", self.show_performance_window)[0]:
+                    self.show_performance_window = not self.show_performance_window
                 imgui.end_menu()
 
             # Extras menu
@@ -892,7 +913,7 @@ class UI:
                     label="Rate",
                     v=self.state.preferences.speedmult,
                     v_min=1,
-                    v_max=6,
+                    v_max=30,
                     format=f"x%d ({current_hz}hz)"
                 )
             self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
@@ -1204,6 +1225,31 @@ class UI:
                     "but it isn't always advisable. The sliders in the Physics Settings panel are special. Right click on them to set "
                     "custom ranges with the context menu. You can also vary their value across the canvas with parameter sweeps. See Help -> Parameter Sweeps for more."
                 )
+
+        imgui.end()
+
+    def render_performance_window(self):
+        """Render the Performance help window (closeable)."""
+        expanded, self.show_performance_window = imgui.begin("Performance", True)
+
+        if expanded:
+            imgui.text_wrapped(
+                "The options for World size, Physics update Frequency, and motion blur "
+                "can significantly affect performance. World size and update frequency "
+                "trade against each other so if you double one, halve the other for similar performance."
+            )
+
+            imgui.spacing()
+            imgui.text("Example Setups")
+            imgui.separator()
+
+            imgui.bullet_text("x30 physics frequency with worldsize == 0.3")
+            imgui.bullet_text("x10 physics frequency with worldsize == 1.0")
+
+            imgui.spacing()
+            imgui.text_wrapped(
+                "run well on my 5060. Motion blur gets more expensive with large worldsizes."
+            )
 
         imgui.end()
 

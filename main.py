@@ -615,18 +615,26 @@ class App:
 
         keys = ui_state.keys_pressed
 
-        if glfw.KEY_W in keys:
+        # Get key bindings from UI
+        key_w = self.ui.keybindings.get_key("camera_forward")
+        key_s = self.ui.keybindings.get_key("camera_backward")
+        key_a = self.ui.keybindings.get_key("camera_left")
+        key_d = self.ui.keybindings.get_key("camera_right")
+        key_e = self.ui.keybindings.get_key("camera_in")
+        key_q = self.ui.keybindings.get_key("camera_out")
+
+        if key_w and key_w in keys:
             ui_state.camera.position[1] -= move_speed
-        if glfw.KEY_S in keys:
+        if key_s and key_s in keys:
             ui_state.camera.position[1] += move_speed
-        if glfw.KEY_A in keys:
+        if key_a and key_a in keys:
             ui_state.camera.position[0] -= move_speed
-        if glfw.KEY_D in keys:
+        if key_d and key_d in keys:
             ui_state.camera.position[0] += move_speed
 
-        if glfw.KEY_E in keys:
+        if key_e and key_e in keys:
             ui_state.camera.zoom *= (1.0 - zoom_speed)
-        if glfw.KEY_Q in keys:
+        if key_q and key_q in keys:
             ui_state.camera.zoom *= (1.0 + zoom_speed)
 
         # Handle scroll zoom (zoom around mouse pointer - "Factorio-style")
