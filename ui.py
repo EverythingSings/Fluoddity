@@ -56,10 +56,6 @@ class UI:
         # UI-only state
         self.show_demo_window = False
         self.show_physics_settings_window = True  # Physics settings window (always visible, but can be hidden with sidebar)
-        self.show_controls_window = False  # Help controls window
-        self.show_parameter_sweeps_window = False  # Help parameter sweeps window
-        self.show_tutorial_window = False  # Help tutorial window
-        self.show_performance_window = False  # Help performance window
         self.show_video_recording_window = False  # Video recording controls window
         self.show_sidebar = True  # Controls visibility of Physics Settings and Preferences windows
 
@@ -311,7 +307,7 @@ class UI:
                 self._request_reload = True
             elif key == self.keybindings.get_key("toggle_help"):
                 # Show tutorial
-                self.show_tutorial_window = not self.show_tutorial_window
+                self.state.preferences.show_tutorial_window = not self.state.preferences.show_tutorial_window
             elif shift_pressed and key == self.keybindings.get_key("record_screen"):
                 # Screenshot (Shift+P)
                 self._request_screenshot = True
@@ -549,19 +545,19 @@ class UI:
             self.render_preferences_window()
 
         # Render Controls help window if visible
-        if self.show_controls_window:
+        if self.state.preferences.show_controls_window:
             self.render_controls_window()
 
         # Render Parameter Sweeps help window if visible
-        if self.show_parameter_sweeps_window:
+        if self.state.preferences.show_parameter_sweeps_window:
             self.render_parameter_sweeps_window()
 
         # Render Tutorial help window if visible
-        if self.show_tutorial_window:
+        if self.state.preferences.show_tutorial_window:
             self.render_tutorial_window()
 
         # Render Performance help window if visible
-        if self.show_performance_window:
+        if self.state.preferences.show_performance_window:
             self.render_performance_window()
 
         # Render Screen Recording window if visible
@@ -776,14 +772,14 @@ class UI:
                                        help_menu_min.x + help_menu_size.x,
                                        help_menu_min.y + help_menu_size.y))
 
-                if imgui.menu_item("Controls", "", self.show_controls_window)[0]:
-                    self.show_controls_window = not self.show_controls_window
-                if imgui.menu_item("Parameter Sweeps", "", self.show_parameter_sweeps_window)[0]:
-                    self.show_parameter_sweeps_window = not self.show_parameter_sweeps_window
-                if imgui.menu_item("Tutorial", "", self.show_tutorial_window)[0]:
-                    self.show_tutorial_window = not self.show_tutorial_window
-                if imgui.menu_item("Performance", "", self.show_performance_window)[0]:
-                    self.show_performance_window = not self.show_performance_window
+                if imgui.menu_item("Controls", "", self.state.preferences.show_controls_window)[0]:
+                    self.state.preferences.show_controls_window = not self.state.preferences.show_controls_window
+                if imgui.menu_item("Parameter Sweeps", "", self.state.preferences.show_parameter_sweeps_window)[0]:
+                    self.state.preferences.show_parameter_sweeps_window = not self.state.preferences.show_parameter_sweeps_window
+                if imgui.menu_item("Tutorial", "", self.state.preferences.show_tutorial_window)[0]:
+                    self.state.preferences.show_tutorial_window = not self.state.preferences.show_tutorial_window
+                if imgui.menu_item("Performance", "", self.state.preferences.show_performance_window)[0]:
+                    self.state.preferences.show_performance_window = not self.state.preferences.show_performance_window
                 imgui.end_menu()
 
             # Extras menu
@@ -1060,7 +1056,7 @@ class UI:
 
     def render_controls_window(self):
         """Render the Controls help window (closeable)."""
-        expanded, self.show_controls_window = imgui.begin("Controls", True)
+        expanded, self.state.preferences.show_controls_window = imgui.begin("Controls", True)
 
         if expanded:
             imgui.text("Keyboard Controls")
@@ -1109,7 +1105,7 @@ class UI:
 
     def render_parameter_sweeps_window(self):
         """Render the Parameter Sweeps help window (closeable)."""
-        expanded, self.show_parameter_sweeps_window = imgui.begin("Parameter Sweeps", True)
+        expanded, self.state.preferences.show_parameter_sweeps_window = imgui.begin("Parameter Sweeps", True)
 
         if expanded:
             imgui.text_wrapped(
@@ -1162,7 +1158,7 @@ class UI:
 
     def render_tutorial_window(self):
         """Render the Tutorial help window (closeable)."""
-        expanded, self.show_tutorial_window = imgui.begin("Tutorial", True)
+        expanded, self.state.preferences.show_tutorial_window = imgui.begin("Tutorial", True)
 
         if expanded:
             imgui.text_wrapped(
@@ -1230,7 +1226,7 @@ class UI:
 
     def render_performance_window(self):
         """Render the Performance help window (closeable)."""
-        expanded, self.show_performance_window = imgui.begin("Performance", True)
+        expanded, self.state.preferences.show_performance_window = imgui.begin("Performance", True)
 
         if expanded:
             imgui.text_wrapped(
