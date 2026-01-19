@@ -1859,9 +1859,9 @@ class UI:
         # === Basics Group (Trail sensors and rule mutation) ===
         imgui.set_next_item_open(self.state.preferences.physics_group_basics)
         basics_open = imgui.collapsing_header("Basics - Trail sensors and rule mutation")
-        # Only update state when user clicks the header (not when window state changes)
-        if imgui.is_item_clicked():
-            self.state.preferences.physics_group_basics = not self.state.preferences.physics_group_basics
+        # Update state to match actual header state (handles user clicks)
+        if imgui.is_item_toggled_open():
+            self.state.preferences.physics_group_basics = basics_open
         if basics_open:
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_sweep_buttons("SENSOR_GAIN")
@@ -1934,8 +1934,9 @@ class UI:
         # === Forces Group ===
         imgui.set_next_item_open(self.state.preferences.physics_group_forces)
         forces_open = imgui.collapsing_header("Forces")
-        if imgui.is_item_clicked():
-            self.state.preferences.physics_group_forces = not self.state.preferences.physics_group_forces
+        # Update state to match actual header state (handles user clicks)
+        if imgui.is_item_toggled_open():
+            self.state.preferences.physics_group_forces = forces_open
         if forces_open:
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_sweep_buttons("GLOBAL_FORCE_MULT")
@@ -1974,8 +1975,9 @@ class UI:
         # === Advanced Group ===
         imgui.set_next_item_open(self.state.preferences.physics_group_advanced)
         advanced_open = imgui.collapsing_header("Advanced")
-        if imgui.is_item_clicked():
-            self.state.preferences.physics_group_advanced = not self.state.preferences.physics_group_advanced
+        # Update state to match actual header state (handles user clicks)
+        if imgui.is_item_toggled_open():
+            self.state.preferences.physics_group_advanced = advanced_open
         if advanced_open:
             if self.state.sim.parameter_sweeps_enabled:
                 self.render_sweep_buttons("AXIAL_FORCE")
@@ -2411,9 +2413,9 @@ class UI:
             imgui.set_next_item_open(getattr(self.state.preferences, pref_attr))
             category_open = imgui.collapsing_header(category_name)
 
-            # Update preference when user clicks header
-            if imgui.is_item_clicked():
-                setattr(self.state.preferences, pref_attr, not getattr(self.state.preferences, pref_attr))
+            # Update preference to match actual header state (handles user clicks)
+            if imgui.is_item_toggled_open():
+                setattr(self.state.preferences, pref_attr, category_open)
 
             if category_open:
                 # Render configs in this category
