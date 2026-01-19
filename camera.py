@@ -241,7 +241,8 @@ class Camera:
         """
         x_screen, y_screen = coord_tuple
         width, height = glfw.get_framebuffer_size(self.window)
-
+        width = max(1,width)
+        height = max(1,height)
         x_ndc = (x_screen / width) * 2 - 1
         y_ndc = (1 - y_screen / height) * 2 - 1
 
