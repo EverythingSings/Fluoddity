@@ -77,7 +77,8 @@ class UI:
         self.config_saver = ConfigSaver()
 
         # Load submenu preview state
-        self.config_files: list[str] = []  # List of available config filenames
+        self.config_files: list[str] = []  # List of available config filenames (DEPRECATED: use config_files_by_category)
+        self.config_files_by_category: dict[str, list[str]] = {}  # Config filenames organized by category (Core/Custom/Advanced)
         self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs
         self.load_submenu_was_open = False  # Track submenu open state
         self.cached_config: str | None = None  # JSON string of config when menu opened
@@ -2298,25 +2299,80 @@ class UI:
         self.physics_window_interaction = False
 
     def _refresh_config_files(self):
-        """Scan physics_configs directory for .json files."""
-        self.config_files = []
+        """Scan physics_configs directory for .json files, organized by category."""
+        self.config_files = []  # Keep for backward compatibility
+        self.config_files_by_category = {
+            "Core": [],
+            "Custom": [],
+            "Advanced": []
+        }
+
         if self.configs_dir.exists():
+            # Scan Core subfolder
+            core_dir = self.configs_dir / "Core"
+            if core_dir.exists():
+                for f in sorted(core_dir.glob("*.json")):
+                    self.config_files_by_category["Core"].append(f.stem)
+
+            # Scan Custom (root level configs, not in subfolders)
             for f in sorted(self.configs_dir.glob("*.json")):
-                # Store just the stem (filename without extension)
-                self.config_files.append(f.stem)
+                self.config_files_by_category["Custom"].append(f.stem)
+                self.config_files.append(f.stem)  # Maintain backward compat list
+
+            # Scan Advanced subfolder
+            advanced_dir = self.configs_dir / "Advanced"
+            if advanced_dir.exists():
+                for f in sorted(advanced_dir.glob("*.json")):
+                    self.config_files_by_category["Advanced"].append(f.stem)
 
     def _cache_all_configs(self):
         """Load and cache all config files for preview."""
         self._refresh_config_files()
         self.cached_configs = {}
-        for filename in self.config_files:
+
+        # Load Core configs from Core subfolder
+        for filename in self.config_files_by_category["Core"]:
+            filepath = self.configs_dir / "Core" / f"{filename}.json"
+            config = self.config_saver.load_from_file(filepath)
+            if config:
+                self.cached_configs[filename] = config
+
+        # Load Custom configs from root directory
+        for filename in self.config_files_by_category["Custom"]:
             filepath = self.configs_dir / f"{filename}.json"
             config = self.config_saver.load_from_file(filepath)
             if config:
                 self.cached_configs[filename] = config
 
+        # Load Advanced configs from Advanced subfolder
+        for filename in self.config_files_by_category["Advanced"]:
+            filepath = self.configs_dir / "Advanced" / f"{filename}.json"
+            config = self.config_saver.load_from_file(filepath)
+            if config:
+                self.cached_configs[filename] = config
+
+    def _get_config_path(self, filename: str) -> Path:
+        """Get the full path to a config file by searching all categories.
+
+        Args:
+            filename: Config filename without extension
+
+        Returns:
+            Path to the config file
+        """
+        # Check Core folder
+        if filename in self.config_files_by_category.get("Core", []):
+            return self.configs_dir / "Core" / f"{filename}.json"
+
+        # Check Advanced folder
+        if filename in self.config_files_by_category.get("Advanced", []):
+            return self.configs_dir / "Advanced" / f"{filename}.json"
+
+        # Default to Custom (root directory)
+        return self.configs_dir / f"{filename}.json"
+
     def _render_load_submenu_content(self, menu_watercolor_mode: bool) -> str | None:
-        """Render the content of a load submenu.
+        """Render the content of a load submenu with hierarchical categories.
 
         Args:
             menu_watercolor_mode: The watercolor mode for this menu (False=standard, True=watercolor)
@@ -2324,77 +2380,102 @@ class UI:
         Returns:
             The hovered filename this frame, or None
         """
-        if not self.config_files:
+        # Check if we have any configs at all
+        total_configs = sum(len(files) for files in self.config_files_by_category.values())
+        if total_configs == 0:
             imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No config files")
             return None
 
-        # Calculate max filename width to size the submenu properly
+        # Calculate max filename width across all categories
         max_text_width = 0.0
-        for fn in self.config_files:
-            text_size = imgui.calc_text_size(fn)
-            if text_size.x > max_text_width:
-                max_text_width = text_size.x
+        for category_files in self.config_files_by_category.values():
+            for fn in category_files:
+                text_size = imgui.calc_text_size(fn)
+                if text_size.x > max_text_width:
+                    max_text_width = text_size.x
 
         hovered_this_frame = None
-        for filename in self.config_files:
-            # Check if config's watercolor mode matches the menu's mode
-            config = self.cached_configs.get(filename)
-            config_matches_menu = config and config.watercolor_mode == menu_watercolor_mode
 
-            # Apply blue highlight for matching configs
-            if config_matches_menu:
-                imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(0.4, 0.7, 1.0, 1.0))
+        # Render each category with collapsible headers
+        categories = [
+            ("Core", self.config_files_by_category["Core"], "load_menu_core_open"),
+            ("Custom", self.config_files_by_category["Custom"], "load_menu_custom_open"),
+            ("Advanced", self.config_files_by_category["Advanced"], "load_menu_advanced_open")
+        ]
 
-            # Selectable for filename with calculated width
-            clicked, _ = imgui.selectable(
-                filename, False,
-                imgui.SelectableFlags_.no_auto_close_popups,
-                imgui.ImVec2(max_text_width + 10, 0)
-            )
+        for category_name, category_files, pref_attr in categories:
+            if len(category_files) == 0:
+                continue  # Skip empty categories
 
-            if config_matches_menu:
-                imgui.pop_style_color()
+            # Set collapse state from preferences
+            imgui.set_next_item_open(getattr(self.state.preferences, pref_attr))
+            category_open = imgui.collapsing_header(category_name)
 
-            # Check if filename is hovered
-            if imgui.is_item_hovered():
-                hovered_this_frame = filename
+            # Update preference when user clicks header
+            if imgui.is_item_clicked():
+                setattr(self.state.preferences, pref_attr, not getattr(self.state.preferences, pref_attr))
 
-            # X button on same line (right after the selectable)
-            imgui.same_line()
-            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
-            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
-            if imgui.small_button(f"X##{filename}"):
-                self.delete_confirm_filename = filename
-            imgui.pop_style_color(2)
+            if category_open:
+                # Render configs in this category
+                for filename in category_files:
+                    # Check if config's watercolor mode matches the menu's mode
+                    config = self.cached_configs.get(filename)
+                    config_matches_menu = config and config.watercolor_mode == menu_watercolor_mode
 
-            # Also check hover on X button for preview
-            if imgui.is_item_hovered():
-                hovered_this_frame = filename
+                    # Apply blue highlight for matching configs
+                    if config_matches_menu:
+                        imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(0.4, 0.7, 1.0, 1.0))
 
-            if clicked:
-                # Multi-load mode: add to service directly without closing menu
-                if self.state.multi_load.multi_load_enabled:
-                    # Get config from cache or load it
-                    if filename in self.cached_configs:
-                        config = self.cached_configs[filename]
-                        if self.multi_load_service:
-                            success = self.multi_load_service.add_config(config, filename)
-                            if success:
-                                print(f"Config added to multi-load: {filename}")
-                            else:
-                                print(f"Failed to add config: multi-load list is full ({self.multi_load_service.get_config_count()}/64)")
-                # Normal mode: finalize selection (closes menu)
-                else:
-                    self._load_filename = filename
-                    self._request_load_file = True
-                    self._load_watercolor_override = menu_watercolor_mode
-                    self.currently_open_project = filename
-                    # Clear everything to prevent hover code from re-applying
-                    self.cached_config = None
-                    self.cached_configs = {}
-                    self.currently_previewing = None
-                    self.preview_rule_pushed = False
-                    imgui.close_current_popup()
+                    # Selectable for filename with calculated width
+                    clicked, _ = imgui.selectable(
+                        filename, False,
+                        imgui.SelectableFlags_.no_auto_close_popups,
+                        imgui.ImVec2(max_text_width + 10, 0)
+                    )
+
+                    if config_matches_menu:
+                        imgui.pop_style_color()
+
+                    # Check if filename is hovered
+                    if imgui.is_item_hovered():
+                        hovered_this_frame = filename
+
+                    # X button on same line (right after the selectable)
+                    imgui.same_line()
+                    imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+                    imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+                    if imgui.small_button(f"X##{category_name}_{filename}"):
+                        self.delete_confirm_filename = filename
+                    imgui.pop_style_color(2)
+
+                    # Also check hover on X button for preview
+                    if imgui.is_item_hovered():
+                        hovered_this_frame = filename
+
+                    if clicked:
+                        # Multi-load mode: add to service directly without closing menu
+                        if self.state.multi_load.multi_load_enabled:
+                            # Get config from cache or load it
+                            if filename in self.cached_configs:
+                                config = self.cached_configs[filename]
+                                if self.multi_load_service:
+                                    success = self.multi_load_service.add_config(config, filename)
+                                    if success:
+                                        print(f"Config added to multi-load: {filename}")
+                                    else:
+                                        print(f"Failed to add config: multi-load list is full ({self.multi_load_service.get_config_count()}/64)")
+                        # Normal mode: finalize selection (closes menu)
+                        else:
+                            self._load_filename = filename
+                            self._request_load_file = True
+                            self._load_watercolor_override = menu_watercolor_mode
+                            self.currently_open_project = filename
+                            # Clear everything to prevent hover code from re-applying
+                            self.cached_config = None
+                            self.cached_configs = {}
+                            self.currently_previewing = None
+                            self.preview_rule_pushed = False
+                            imgui.close_current_popup()
 
         return hovered_this_frame
 

@@ -95,7 +95,7 @@ class App:
     def _ensure_default_config(self):
         """Ensure _Default.json exists in physics_configs directory. Create it if missing."""
         import numpy as np
-        default_path = self.configs_dir / "_Default.json"
+        default_path = self.configs_dir / "Core/_Default.json"
         if not default_path.exists():
             # Create default config from fresh SimState
             default_state = SimState()
@@ -108,7 +108,7 @@ class App:
 
     def _load_default_config(self):
         """Load _Default.json on startup."""
-        default_path = self.configs_dir / "_Default.json"
+        default_path = self.configs_dir / "Core/_Default.json"
         config = self.config_saver.load_from_file(default_path)
         if config is not None:
             rule = self.config_saver.apply_config(config, self.ui.state.sim)
@@ -490,7 +490,7 @@ class App:
             if filename:
                 # Multi-load mode: add config to service instead of replacing current
                 if ui_state.multi_load.multi_load_enabled:
-                    filepath = self.configs_dir / f"{filename}.json"
+                    filepath = self.ui._get_config_path(filename)
                     config = self.config_saver.load_from_file(filepath)
                     if config is not None:
                         success = self.multi_load_service.add_config(config, filename)
@@ -512,7 +512,7 @@ class App:
                         self.ui.update_physics_defaults(filename)
                     else:
                         # No preview active - load fresh from file
-                        filepath = self.configs_dir / f"{filename}.json"
+                        filepath = self.ui._get_config_path(filename)
                         config = self.config_saver.load_from_file(filepath)
                         if config is not None:
                             rule = self.config_saver.apply_config(
@@ -530,7 +530,7 @@ class App:
         if ui_state.request_delete_file:
             filename = ui_state.delete_filename
             if filename:
-                filepath = self.configs_dir / f"{filename}.json"
+                filepath = self.ui._get_config_path(filename)
                 if filepath.exists():
                     filepath.unlink()
                     print(f"Config deleted: {filepath}")
@@ -546,7 +546,7 @@ class App:
         if ui_state.request_preview_config:
             filename = ui_state.preview_filename
             if filename:
-                filepath = self.configs_dir / f"{filename}.json"
+                filepath = self.ui._get_config_path(filename)#self.configs_dir / f"{filename}.json"
                 config = self.config_saver.load_from_file(filepath)
                 if config and config.rule is not None:
                     self.rule_manager.push_rule(config.rule)

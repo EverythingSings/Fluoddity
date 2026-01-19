@@ -35,6 +35,11 @@ class PreferencesState:
     physics_group_forces: bool = True  # Default: open (global force mult, drag)
     physics_group_advanced: bool = False  # Default: collapsed
 
+    # Load menu collapsed states (True = expanded/open, False = collapsed)
+    load_menu_core_open: bool = True  # Default: open
+    load_menu_custom_open: bool = True  # Default: open
+    load_menu_advanced_open: bool = False  # Default: collapsed
+
     # Recording preferences
     max_frames: int = 1800  # 150 * 12
     motion_blur_samples: int = 12
