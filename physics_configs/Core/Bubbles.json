@@ -11,6 +11,7 @@
     "global_force_mult": 0.3738688826560974,
     "sensor_distance": 1.6399999856948853,
     "trail_persistence": 0.9430000185966492,
+    "trail_diffusion": 1.0,
     "hazard_rate": 0.0
   },
   "slider_ranges": {
@@ -74,6 +75,12 @@
       0.0,
       1.0
     ],
+    "Trail Diffusion": [
+      0.0,
+      1.0,
+      0.0,
+      1.0
+    ],
     "Hazard Rate": [
       0.0,
       0.05,
@@ -93,6 +100,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "x": 0.0
     },
     "y": {
@@ -106,6 +115,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "y": 0.0
     },
     "cohort": {
@@ -119,6 +130,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "cohort": 0.0
     }
   },
@@ -126,16 +139,16 @@
   "settings": {
     "disable_symmetry": false,
     "absolute_orientation": 0,
+    "orientation_mix": 1.0,
     "boundary_conditions": 2,
     "initial_conditions": 0,
     "num_cohorts": 64,
-    "rule_seed": 0.41999998688697815,
-    "orientation_mix": 1.0
+    "rule_seed": 0.41999998688697815
   },
   "appearance": {
     "ink_weight": 2.312000036239624,
-    "hue_sensitivity": 0.5,
-    "color_by_cohort": true,
+    "hue_sensitivity": 0.0729999989271164,
+    "color_by_cohort": false,
     "watercolor_mode": false,
     "emboss_mode": 0,
     "emboss_intensity": 0.0,

@@ -2420,23 +2420,12 @@ class UI:
             if category_open:
                 # Render configs in this category
                 for filename in category_files:
-                    # Check if config's watercolor mode matches the menu's mode
-                    config = self.cached_configs.get(filename)
-                    config_matches_menu = config and config.watercolor_mode == menu_watercolor_mode
-
-                    # Apply blue highlight for matching configs
-                    if config_matches_menu:
-                        imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(0.4, 0.7, 1.0, 1.0))
-
                     # Selectable for filename with calculated width
                     clicked, _ = imgui.selectable(
                         filename, False,
                         imgui.SelectableFlags_.no_auto_close_popups,
                         imgui.ImVec2(max_text_width + 10, 0)
                     )
-
-                    if config_matches_menu:
-                        imgui.pop_style_color()
 
                     # Check if filename is hovered
                     if imgui.is_item_hovered():
