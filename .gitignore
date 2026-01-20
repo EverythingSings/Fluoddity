@@ -33,6 +33,10 @@ imgui.ini
 # physics_configs/*.txt
 docs/todos.txt
 
+# User-specific configuration files
+preferences.config
+physics_configs/Custom/
+
 # PyInstaller build artifacts
 build/
 dist/
