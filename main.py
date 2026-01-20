@@ -569,6 +569,7 @@ class App:
                 filepath = self.ui._get_config_path(filename)#self.configs_dir / f"{filename}.json"
                 config = self.config_saver.load_from_file(filepath)
                 if config and config.rule is not None:
+                    ui_state.sim.rule_seed = config.rule_seed
                     self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
                     self.sim.apply_rule(config.rule)
                     self.preview_rule_active = True
