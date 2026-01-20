@@ -142,6 +142,7 @@ class UI:
         self._request_reload = False
         self._request_reset = False
         self._request_full_reset = False
+        self._request_randomize_mutations = False
         self._toggle_recording = False
         self._request_screenshot = False
         self._request_save_config = False
@@ -317,7 +318,7 @@ class UI:
             elif key == self.keybindings.get_key("toggle_pause"):
                 self.state.sim.going = not self.state.sim.going
             elif key == self.keybindings.get_key("randomize_mutations"):
-                self.state.sim.rule_seed = random.random()
+                self._request_randomize_mutations = True
             elif key == self.keybindings.get_key("toggle_mouse_mode"):
                 # Toggle mouse mode between Select Particle and Draw Trail
                 if self.state.preferences.mouse_mode == "Select Particle":
@@ -376,6 +377,7 @@ class UI:
         self.state.request_reload = self._request_reload
         self.state.request_reset = self._request_reset
         self.state.request_full_reset = self._request_full_reset
+        self.state.request_randomize_mutations = self._request_randomize_mutations
         self.state.toggle_recording = self._toggle_recording
         self.state.request_screenshot = self._request_screenshot
         self.state.request_save_config = self._request_save_config
@@ -415,6 +417,7 @@ class UI:
         self._request_reload = False
         self._request_reset = False
         self._request_full_reset = False
+        self._request_randomize_mutations = False
         self._toggle_recording = False
         self._request_screenshot = False
         self._request_save_config = False
@@ -608,7 +611,7 @@ class UI:
                                        file_menu_min.y + file_menu_size.y))
 
                 if imgui.menu_item("New", "", False)[0]:
-                    self._load_filename = "_Default"
+                    self._load_filename = "Core/_Default"
                     self._request_load_file = True
                     self._load_watercolor_override = None
                 self._delayed_tooltip("Start a fresh config. Loads from _Default")
@@ -1082,7 +1085,7 @@ class UI:
 
             imgui.bullet_text(f"Ctrl+{self.keybindings.get_key_display_name('copy_config_with_ctrl')} - Copy config to clipboard")
             imgui.bullet_text(f"Ctrl+{self.keybindings.get_key_display_name('paste_config_with_ctrl')} - Paste config from clipboard")
-            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_mutations')} - Randomize rule seed")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_mutations')} - Randomize Mutation seed")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('exit_keybinding')} - Exit application")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('record_screen')} - Toggle video recording")
             imgui.bullet_text("Shift+P - Take screenshot")
@@ -1093,7 +1096,7 @@ class UI:
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('reload_shaders')} - Reload shaders")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_help')} - Show tutorial")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_mouse_mode')} - Toggle mouse mode")
-            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_rules')} - Full reset (push zero rule + reset sim)")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_rules')} - Full randomize:Fresh rules, new mutation seed")
 
             imgui.spacing()
             imgui.text("Mouse Controls")
@@ -1102,7 +1105,8 @@ class UI:
             imgui.text("Select Particle mode:")
             imgui.indent(20)
             imgui.bullet_text("Left click - Push active rule (select particle)")
-            imgui.bullet_text("Right click - Pop active rule (revert)")
+            imgui.bullet_text("Right click - Pop active rule (undo)")
+            imgui.bullet_text("You can undo particle selection and randomize actions.")
             imgui.unindent(20)
 
             imgui.text("Draw Trail mode:")
@@ -1890,8 +1894,12 @@ class UI:
         if self.force_close_physics_menus and not physics_any_menu_open_this_frame:
             self.force_close_physics_menus = False
 
-        # Display currently open project
+        # Display currently open project and rule seed
         imgui.text(f"Project: {self.currently_open_project}")
+        imgui.same_line()
+        # Convert rule_seed (0.0-1.0 float) to short hex format
+        seed_hex = format(int(self.state.sim.rule_seed * 0xFFFF), '04x')
+        imgui.text_colored(imgui.ImVec4( 0.5, 0.8, 1.0, 1.0),f"Mutation Seed: #{seed_hex}")
         imgui.separator()
 
         # === Basics Group (Trail sensors and rule mutation) ===

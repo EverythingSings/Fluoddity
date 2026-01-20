@@ -37,6 +37,7 @@ class UIState:
     request_reload: bool = False
     request_reset: bool = False
     request_full_reset: bool = False
+    request_randomize_mutations: bool = False
     toggle_recording: bool = False
     request_screenshot: bool = False
     request_world_size_change: bool = False

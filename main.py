@@ -2,6 +2,7 @@ import glfw
 import moderngl
 import time
 import numpy as np
+import random
 from pathlib import Path
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
@@ -112,7 +113,7 @@ class App:
         config = self.config_saver.load_from_file(default_path)
         if config is not None:
             rule = self.config_saver.apply_config(config, self.ui.state.sim)
-            self.rule_manager.push_rule(rule)
+            self.rule_manager.push_rule(rule, self.ui.state.sim.rule_seed)
             self.sim.apply_rule(rule)
             print(f"Loaded default config from {default_path}")
             self.ui.update_physics_defaults("_Default")
@@ -376,11 +377,25 @@ class App:
         if ui_state.request_reset:
             self.sim.reset()
 
-        # Full reset (Z key) - push zero rule (undoable) and reset entities
+        # Full reset (Z key) - reset entities, apply zero rule, randomize, push new state
         if ui_state.request_full_reset:
             self.sim.reset()
-            zero_rule = self.rule_manager.push_zero_rule()
+            zero_rule = np.zeros((10, 8), dtype=np.float32)
             self.sim.apply_rule(zero_rule)
+            # Randomize seed for new mutations
+            ui_state.sim.rule_seed = random.random()
+            # Push new state (so stack top matches current, undo goes to previous)
+            self.rule_manager.push_rule(zero_rule, ui_state.sim.rule_seed)
+
+        # Randomize mutations (M key) - randomize seed and push new state
+        if ui_state.request_randomize_mutations:
+            current_rule = self.rule_manager.get_current_rule()
+            if current_rule is not None:
+                # Randomize seed for new mutations
+                ui_state.sim.rule_seed = random.random()
+                # Push new state (same rule, new seed) so stack top matches current
+                self.rule_manager.push_rule(current_rule.copy(), ui_state.sim.rule_seed)
+                self.sim.apply_rule(current_rule)
 
         # Handle sweep preview restore: ANY click (including on imgui) re-enables sweeps
         restored_sweep_preview = False
@@ -434,7 +449,7 @@ class App:
                     if entity_id >= 0 and entity_id < self.sim.entity_count:
                         print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
                         rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
-                        self.rule_manager.push_rule(rule)
+                        self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
                         self.sim.apply_rule(rule)
                         self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
                     else:
@@ -450,9 +465,12 @@ class App:
                     # If no active sweeps, right click does nothing
                 # When parameter sweeps are disabled and in Select Particle mode, undo rule
                 elif ui_state.preferences.mouse_mode == "Select Particle":
-                    # Normal mode: pop rule from history
-                    prev_rule = self.rule_manager.pop_rule()
-                    self.sim.apply_rule(prev_rule)
+                    # Normal mode: pop rule from history and restore seed
+                    if self.rule_manager.length()>1:#don't pop the last one
+                        prev_rule, prev_seed = self.rule_manager.pop_rule()
+                        if prev_seed is not None:
+                            ui_state.sim.rule_seed = prev_seed
+                        self.sim.apply_rule(prev_rule)
 
         # Handle config save (Ctrl+C)
         if ui_state.request_save_config:
@@ -467,7 +485,7 @@ class App:
             if config_string:
                 rule = self.config_saver.load_from_string(config_string, ui_state.sim)
                 if rule is not None:
-                    self.rule_manager.push_rule(rule)
+                    self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
                     self.sim.apply_rule(rule)
                     print("Config loaded from clipboard")
                 else:
@@ -519,7 +537,7 @@ class App:
                                 config, ui_state.sim,
                                 watercolor_override=ui_state.load_watercolor_override
                             )
-                            self.rule_manager.push_rule(rule)
+                            self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
                             self.sim.apply_rule(rule)
                             print(f"Config loaded from {filepath}")
                             self.ui.update_physics_defaults(filename)
@@ -538,7 +556,9 @@ class App:
         # Handle clear preview (unhover or close submenu) - must happen before new preview
         if ui_state.request_clear_preview:
             if self.preview_rule_active:
-                prev_rule = self.rule_manager.pop_rule()
+                prev_rule, prev_seed = self.rule_manager.pop_rule()
+                if prev_seed is not None:
+                    ui_state.sim.rule_seed = prev_seed
                 self.sim.apply_rule(prev_rule)
                 self.preview_rule_active = False
 
@@ -549,23 +569,26 @@ class App:
                 filepath = self.ui._get_config_path(filename)#self.configs_dir / f"{filename}.json"
                 config = self.config_saver.load_from_file(filepath)
                 if config and config.rule is not None:
-                    self.rule_manager.push_rule(config.rule)
+                    self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
                     self.sim.apply_rule(config.rule)
                     self.preview_rule_active = True
 
         # Handle rule history preview - clear must happen BEFORE new preview
         if ui_state.request_clear_history_preview:
             if self.history_preview_rule_active:
-                prev_rule = self.rule_manager.pop_rule()
+                prev_rule, prev_seed = self.rule_manager.pop_rule()
                 self.ui.history_window_labels.pop()  # Also remove the preview's label
+                if prev_seed is not None:
+                    ui_state.sim.rule_seed = prev_seed
                 self.sim.apply_rule(prev_rule)
                 self.history_preview_rule_active = False
 
         if ui_state.request_preview_history_rule:
             idx = ui_state.history_preview_index
             if 0 <= idx < len(self.rule_manager.rule_history):
-                rule_to_preview = self.rule_manager.rule_history[idx].copy()
-                self.rule_manager.push_rule(rule_to_preview)
+                rule_to_preview, seed_to_preview = self.rule_manager.rule_history[idx]
+                rule_to_preview = rule_to_preview.copy()
+                self.rule_manager.push_rule(rule_to_preview, seed_to_preview)
                 self.sim.apply_rule(rule_to_preview)
                 self.history_preview_rule_active = True
 
@@ -579,14 +602,16 @@ class App:
             idx = ui_state.history_preview_index
             if 0 <= idx < len(self.rule_manager.rule_history):
                 # Move rule to top with metadata
-                rule_to_load = self.rule_manager.rule_history[idx].copy()
+                rule_to_load, seed_to_load = self.rule_manager.rule_history[idx]
+                rule_to_load = rule_to_load.copy()
                 label_to_preserve = self.ui.history_window_labels[idx]
 
                 self.rule_manager.rule_history.pop(idx)
                 self.ui.history_window_labels.pop(idx)
 
-                self.rule_manager.push_rule(rule_to_load)
+                self.rule_manager.push_rule(rule_to_load, seed_to_load)
                 self.ui.history_window_labels.append(label_to_preserve)
+                ui_state.sim.rule_seed = seed_to_load
                 self.sim.apply_rule(rule_to_load)
 
         if ui_state.request_delete_history_rule:
