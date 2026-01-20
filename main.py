@@ -864,9 +864,10 @@ class App:
                     draw_size=ui_state.preferences.draw_size,
                     draw_power=draw_power_value,
                     multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None,
+                    is_preview_active=self.preview_rule_active,
                     tiling_mode=tiling_mode
                 )
-
+            
             # Generate view texture only once at the end
             raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 
