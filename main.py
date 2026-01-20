@@ -31,8 +31,8 @@ class App:
         self.ctx = moderngl.create_context()
         self.ctx.gc_mode = 'auto'
 
-        # Always on top
-        glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE)
+        # Always on top ONLY FOR WHEN LIVE EDITING THE SHADERS, NOT IN DISTRIBUTION
+        #glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE)
 
         # Load preferences first to get world_size
         loaded_prefs = load_preferences()
