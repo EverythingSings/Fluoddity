@@ -1,16 +1,16 @@
-# Hive
-
-[Add a brief description of your particle physics simulation project here]
+# Fluoddity
+This is a 2D particle system explorer with evolvable behavior. There is a well considered algorithm that runs the actual particle physics, with an extensively Claude-Coded user interface built around it.
 
 ## Features
 
-- [Feature 1]
-- [Feature 2]
-- [Feature 3]
+TODO
 
 ## Screenshots
 
-[Add screenshots here from the Screenshots/ folder]
+<img width="1920" height="1129" alt="lavalamp_20260120_152448" src="https://github.com/user-attachments/assets/e8eda829-40d1-4add-afd6-80548a34cf5c" />
+<img width="1920" height="1129" alt="lavalamp_20260120_152543" src="https://github.com/user-attachments/assets/6bf3ce1c-8a7f-487f-ad9e-1da67f73686c" />
+<img width="1920" height="1129" alt="lavalamp_20260120_152527" src="https://github.com/user-attachments/assets/f1c1b933-f5fd-4802-b2b6-7887d483b71d" />
+
 
 ## Installation
 
@@ -29,11 +29,7 @@
 
 ## Usage
 
-[Add instructions on how to run and use the application]
-
-```bash
-python main.py
-```
+Run main.py
 
 ## Building
 
