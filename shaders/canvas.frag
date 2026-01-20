@@ -33,7 +33,7 @@ struct PhysicsSetting {
 uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
 uniform PhysicsSetting TRAIL_DIFFUSION_SETTING;
 
-#define COHORTS 64
+#define COHORTS 64//TODO THIS IS A HACK, OFTEN WRONG. Cohort sweeps a little broken
 
 // SYNCHRONIZED: This function must match entity_update.glsl and sim.py::calculate_setting
 // Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
@@ -124,7 +124,7 @@ void main() {
     // Convert texcoord from [0,1] to [-1,1] for position-based sweeps
     vec2 world_pos = texcoord * 2.0 - 1.0;
     float trail_persistence = calculate_setting(TRAIL_PERSISTENCE_SETTING, world_pos, 0.0);
-
+    trail_persistence = min(trail_persistence,0.999);
     can_out = can_color * trail_persistence + (1 - trail_persistence) * brush_color;
 
     // Draw trail mode: add velocity based on mouse drag

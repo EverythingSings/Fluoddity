@@ -9,7 +9,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from state import UIState, SimState, CameraState, RecordingState
 from services.config_saver import ConfigSaver, PhysicsConfig
-from keybinding_management import KeybindingManager
+from utilities.keybinding_management import KeybindingManager
 
 
 @dataclass
@@ -1045,6 +1045,22 @@ class UI:
         if recording_active:
             imgui.pop_style_color()
 
+    def _get_key_combo(self, action: str, modifier: str = "") -> str:
+        """
+        Get a formatted key combination string for display.
+
+        Args:
+            action: The action name from keyboard_controls.json
+            modifier: Optional modifier like "Ctrl+" or "Shift+"
+
+        Returns:
+            Formatted string like "Ctrl+C" or "WASD"
+        """
+        key = self.keybindings.get_key_display_name(action)
+        if modifier:
+            return f"{modifier}{key}"
+        return key
+
     def render_controls_window(self):
         """Render the Controls help window (closeable)."""
         expanded, self.state.preferences.show_controls_window = imgui.begin("Controls", True)
@@ -1053,22 +1069,31 @@ class UI:
             imgui.text("Keyboard Controls")
             imgui.separator()
 
-            imgui.bullet_text("WASD - Move camera")
-            imgui.bullet_text("Q/E - Zoom out/in")
-            imgui.bullet_text("Ctrl+C - Copy config to clipboard")
-            imgui.bullet_text("Ctrl+V - Paste config from clipboard")
-            imgui.bullet_text("Space - Randomize rule seed")
-            imgui.bullet_text("Escape - Exit application")
-            imgui.bullet_text("P - Toggle video recording")
+            # Camera movement keys
+            w = self.keybindings.get_key_display_name("camera_forward")
+            a = self.keybindings.get_key_display_name("camera_left")
+            s = self.keybindings.get_key_display_name("camera_backward")
+            d = self.keybindings.get_key_display_name("camera_right")
+            imgui.bullet_text(f"{w}{a}{s}{d} - Move camera")
+
+            q = self.keybindings.get_key_display_name("camera_out")
+            e = self.keybindings.get_key_display_name("camera_in")
+            imgui.bullet_text(f"{q}/{e} - Zoom out/in")
+
+            imgui.bullet_text(f"Ctrl+{self.keybindings.get_key_display_name('copy_config_with_ctrl')} - Copy config to clipboard")
+            imgui.bullet_text(f"Ctrl+{self.keybindings.get_key_display_name('paste_config_with_ctrl')} - Paste config from clipboard")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_mutations')} - Randomize rule seed")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('exit_keybinding')} - Exit application")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('record_screen')} - Toggle video recording")
             imgui.bullet_text("Shift+P - Take screenshot")
-            imgui.bullet_text("G - Pause/resume simulation")
-            imgui.bullet_text("R - Reset particles to Initial Conditions")
-            imgui.bullet_text("F - Toggle parameter sweeps")
-            imgui.bullet_text("V - Toggle watercolor mode")
-            imgui.bullet_text("U - Reload shaders")
-            imgui.bullet_text("H - Show tutorial")
-            imgui.bullet_text("T - Toggle mouse mode")
-            imgui.bullet_text("Z - Full reset (push zero rule + reset sim)")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_pause')} - Pause/resume simulation")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('reset_keybinding')} - Reset particles to Initial Conditions")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_parameter_sweep')} - Toggle parameter sweeps")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_watercolor')} - Toggle watercolor mode")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('reload_shaders')} - Reload shaders")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_help')} - Show tutorial")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_mouse_mode')} - Toggle mouse mode")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_rules')} - Full reset (push zero rule + reset sim)")
 
             imgui.spacing()
             imgui.text("Mouse Controls")
@@ -1108,7 +1133,8 @@ class UI:
             imgui.text("How to Use")
             imgui.separator()
 
-            imgui.bullet_text("Enable sweeps: Additional Settings -> Parameter Sweeps (or press F)")
+            sweep_key = self.keybindings.get_key_display_name('toggle_parameter_sweep')
+            imgui.bullet_text(f"Enable sweeps: Additional Settings -> Parameter Sweeps (or press {sweep_key})")
             imgui.bullet_text("Each parameter can sweep on X-axis, Y-axis, or by Cohort")
             imgui.bullet_text("The swept parameter will vary from slider_min to slider_max")
             imgui.bullet_text("Each slider has up/down buttons to its left which\nwiden/narrow the slider range.")
@@ -1161,13 +1187,20 @@ class UI:
             imgui.spacing()
             if imgui.collapsing_header("Basics", imgui.TreeNodeFlags_.default_open):
                 imgui.text_wrapped("(see help->Controls for more)")
-                imgui.bullet_text("Move the camera around with WASD.")
-                imgui.bullet_text("Zoom in or out with Q/E or scroll wheel.")
-                imgui.bullet_text("Press R to reset the simulation.")
-                imgui.bullet_text("Press G to toggle pause.")
+                # Camera movement keys
+                w = self.keybindings.get_key_display_name("camera_forward")
+                a = self.keybindings.get_key_display_name("camera_left")
+                s = self.keybindings.get_key_display_name("camera_backward")
+                d = self.keybindings.get_key_display_name("camera_right")
+                imgui.bullet_text(f"Move the camera around with {w}{a}{s}{d}.")
+                q = self.keybindings.get_key_display_name("camera_out")
+                e = self.keybindings.get_key_display_name("camera_in")
+                imgui.bullet_text(f"Zoom in or out with {q}/{e} or scroll wheel.")
+                imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('reset_keybinding')} to reset the simulation.")
+                imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_pause')} to toggle pause.")
                 imgui.bullet_text("Click to draw trails or select particles.")
-                imgui.bullet_text("Press T to toggle between drawing and selecting.")
-                imgui.bullet_text("Press H to toggle this Help window.")
+                imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_mouse_mode')} to toggle between drawing and selecting.")
+                imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_help')} to toggle this Help window.")
             
             imgui.spacing()
             if imgui.collapsing_header("Rules"):
@@ -1179,10 +1212,12 @@ class UI:
                 )
             imgui.spacing()
             if imgui.collapsing_header("Save/Load"):
+                copy_key = self.keybindings.get_key_display_name('copy_config_with_ctrl')
+                paste_key = self.keybindings.get_key_display_name('paste_config_with_ctrl')
                 imgui.text_wrapped(
                     "Create something you like? Save it as a new preset with File->Save"
                     "The active rule, current mutations, and everything on the physics panel will be restored when you load the save (Physics Sliders, Additional Settings, and Appearance) "
-                    "You can also press Ctrl-C to copy a 'save string' to your clipboard, and Ctrl-V to load a save string from the clipboard. "
+                    f"You can also press Ctrl-{copy_key} to copy a 'save string' to your clipboard, and Ctrl-{paste_key} to load a save string from the clipboard. "
                 )
 
             imgui.spacing()
@@ -1198,11 +1233,12 @@ class UI:
 
             imgui.spacing()
             if imgui.collapsing_header("Mutations"):
+                randomize_key = self.keybindings.get_key_display_name('randomize_rules')
                 imgui.text_wrapped(
                     "Particles are grouped into 'Cohorts'. Each cohort shares a single mutation, so all the particles in a given cohort behave the same. "
                     "When the mutation Rate is greater than 0, different cohorts can behave differently, sometimes radically so. "
                     "The new rules generated by these mutations can also be selected as the active rule, so you can evolve particle behavior over many iterations. "
-                    "If you want to reset all the cohorts to random Rules, press Z. (this can be undone with right click)"
+                    f"If you want to reset all the cohorts to random Rules, press {randomize_key}. (this can be undone with right click)"
                 )
 
             imgui.spacing()
@@ -1252,13 +1288,14 @@ class UI:
         expanded, self.show_video_recording_window = imgui.begin("Screen Recording", True)
 
         if expanded:
+            record_key = self.keybindings.get_key_display_name('record_screen')
             if recording_active:
                 imgui.text_colored(imgui.ImVec4(1.0, 0.3, 0.3, 1.0), "RECORDING IN PROGRESS")
-                imgui.text("Press P to stop recording")
+                imgui.text(f"Press {record_key} to stop recording")
                 imgui.separator()
 
-            imgui.text("Press P to start/stop video recording")
-            imgui.text("Press Shift+P to take a screenshot")
+            imgui.text(f"Press {record_key} to start/stop video recording")
+            imgui.text(f"Press Shift+{record_key} to take a screenshot")
             imgui.spacing()
 
             # Video Length (in seconds) - converts to/from max_frames internally
@@ -1758,7 +1795,8 @@ class UI:
                     "Parameter Sweeps",
                     self.state.sim.parameter_sweeps_enabled
                 )
-                self._delayed_tooltip("Enable parameter sweeps to vary physics across the canvas.\nPress F to toggle. See Help -> Parameter Sweeps for details.")
+                sweep_key = self.keybindings.get_key_display_name('toggle_parameter_sweep')
+                self._delayed_tooltip(f"Enable parameter sweeps to vary physics across the canvas.\nPress {sweep_key} to toggle. See Help -> Parameter Sweeps for details.")
 
                 imgui.end_menu()
 

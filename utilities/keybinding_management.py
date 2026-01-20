@@ -113,6 +113,24 @@ class KeybindingManager:
         """
         return self.bindings.get(action)
 
+    def get_key_display_name(self, action: str) -> str:
+        """
+        Get the human-readable key name for a given action.
+
+        Args:
+            action: The action name (e.g., "camera_forward", "record_screen")
+
+        Returns:
+            The key name as a string (e.g., "W", "SPACE"), or "?" if not bound
+        """
+        # Load the raw config to get the original key name
+        try:
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+                return config.get(action, "?").upper()
+        except Exception:
+            return "?"
+
     def reload(self):
         """Reload keybindings from the JSON file."""
         self.bindings.clear()
