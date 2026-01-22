@@ -1,15 +1,14 @@
 # Fluoddity
 I struggle to describe Fluoddity. Think somewhere between interactive lava lamp and evolvable ant farm. 
-Sometimes it looks like a meandering river, a candle flame, or branching lightning. Sometimes it's more like looking under a microscope as little amoebas devour each other and break apart. And sometimes, it's stranger than all that.
+Sometimes I'll see a meandering river, a candle flame, or branching lightning. Sometimes it's more like looking under a microscope as little amoebas devour each other and break apart. And sometimes, it's stranger than all that.
 
 <img width="1920" height="1129" alt="lavalamp_20260120_152448" src="https://github.com/user-attachments/assets/e8eda829-40d1-4add-afd6-80548a34cf5c" />
 <img width="1920" height="1129" alt="lavalamp_20260120_152543" src="https://github.com/user-attachments/assets/6bf3ce1c-8a7f-487f-ad9e-1da67f73686c" />
 <img width="1920" height="1129" alt="lavalamp_20260120_152527" src="https://github.com/user-attachments/assets/f1c1b933-f5fd-4802-b2b6-7887d483b71d" />
 
-Fluoddity is a 2d particle system, capable of realtime performance with hundreds of thousands of particles on modern cards.  
-There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it. The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models: https://cargocollective.com/sagejenson/physarum
+Fluoddity is a 2d particle system designed for realtime exploration. I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them). There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it. The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models: https://cargocollective.com/sagejenson/physarum
 I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. (If you have trouble with the link, just google "sage jenson Physarum") 
-I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them)
+
 
 Any advice or criticism is welcome. This is a toy I made for myself and I am more artist than engineer. 
 
@@ -18,18 +17,19 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
  - particle selection/mutation to customize particle behavior
  - mouse drawing mode for making trails
  - Save/load system for physics + behavior
- - save strings with copy/paste from clipboard
+ - save strings with copy/pa
+ - te from clipboard
  - parameter sweeps mode allows varying physics sliders across the canvas. X and Y sweeps for exploring 2d parameter space.
  - variable physics frequency with motion blur
  - ffmpeg based video recording
  - Emboss visual effect (currently the only use for traditional density trails)
-
+ - Experimental system for mixing different saved configs.
 ## Design
 Particles in Fluoddity have no direct interactions with each-other. Instead, they leave trails as they move. These trails decay and diffuse over time. Particles respond to the density and direction of trails around them.
-There is no fixed rule that determines how particles respond to their sensors. Instead, each particle has a simple neural-net like brain with just 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
+There is no fixed rule that determines how particles respond to their senses. Instead, each particle has a simple neural-net like brain with just 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
 
 ## Screenshots
-
+TODO- actual screenshots with visible UI
 
 ## Model
 Fluoddity generalizes the traditional physarum model in a couple ways.
@@ -46,7 +46,7 @@ Rotate the whole world by 90°, and nothing should change: the dynamics are inde
 -Chiral:
 Reflect the world across the X axis and nothing should change: the dynamics are identical when viewed in a mirror. Particles in the traditional physarum model display bilateral symmetry, they are not "left handed" or "right handed". Without this property, fluoddity particles show clockwise/counterclockwise bias, and the behavior space consists mostly of particles which are always turning left, or always turning right. This symmetry is achieved by calculating physics twice: once in mirrored coordinates, and averaging the results.
 
-Enforcing these symmetries drastically reduces the density of boring and degenerate Rules.
+Enforcing these symmetries drastically reduces the prevalence of boring and degenerate Rules.
 
 ### Future Exploration
 - Trail diffusion step replaced with arbitrary continuous cellular automata. advection along flow lines could be interesting
