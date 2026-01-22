@@ -8,7 +8,8 @@ Sometimes it looks like a meandering river, a candle flame, or branching lightni
 
 Fluoddity is a 2d particle system, capable of realtime performance with hundreds of thousands of particles on modern cards.  
 There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it. The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models: https://cargocollective.com/sagejenson/physarum
-I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. (If you have trouble with the link, just google "sage jenson Physarum") I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them)
+I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. (If you have trouble with the link, just google "sage jenson Physarum") 
+I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them)
 
 Any advice or criticism is welcome. This is a toy I made for myself and I am more artist than engineer. 
 
@@ -33,9 +34,9 @@ There is no fixed rule that determines how particles respond to their sensors. I
 ## Model
 Fluoddity generalizes the traditional physarum model in a couple ways.
 ### Trail interference
-Particle trails have a vector velocity/flow component which records the net "current" of particles. Thus, particle trails can interfere, and the trails from an equal number of particles flowing in opposite directions will cancel out.
+Particle trails have a velocity/flow vector which records the net "current" of particles. Thus, particle trails can interfere, and the trails from an equal number of particles flowing in opposite directions will cancel out.
 ### Behavior - Rules
-Particle behavior is governed by a somewhat arbitrary black box function called a 'Rule'. I use a simple sum of sin waves because I wanted smooth, periodic noise. Trail sensor values are fed into this noise function, and the outputs are used to accelerate and reposition the particle.
+Particle behavior is governed by a somewhat arbitrary black box function called a 'Rule'. I use a simple sum of sin waves because i wanted smooth, periodic noise. Trail sensor values are fed into this noise function, and the outputs are used to accelerate and reposition the particle.
 ### "Strafe"
 In addition to forces causing acceleration, each paricle has a limited ability to "strafe", changing position independently from velocity. This is the least "principled" of my generalizations, but it is incredibly simple and enables some really beautiful patterns. Strafe allows particles to leave velocity trails which disagree with their direction of travel, enabling things like "swimming upstream" without turning around or "sidle to the left" without losing track of which way is "forward". 
 ### Symmetry
@@ -47,6 +48,14 @@ Reflect the world across the X axis and nothing should change: the dynamics are 
 
 Enforcing these symmetries drastically reduces the density of boring and degenerate Rules.
 
+### Future Exploration
+- Trail diffusion step replaced with arbitrary continuous cellular automata. advection along flow lines could be interesting
+- More than just two sensors.
+- Disentangle "local orientation" from "particle velocity". Strafe mechanic hints at this being worthwhile.
+- Particle internal state/ memory. Current particle behavior is memoryless.
+- Trails need not correspond to particle velocity. "Trail vector" could be just another output of the Rule function. Trail dimensionality could be increased.
+- A more universal framework for describing these kinds of systems. One could generalize all the way to continuous cellular automata + continuous turmites.
+  
 ### Requirements
 
 - Python 3.x
