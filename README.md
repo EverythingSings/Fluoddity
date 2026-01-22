@@ -25,7 +25,7 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
 
 ## Design
 Particles in Fluoddity have no direct interactions. Instead, they leave trails as they move. These trails decay and diffuse over time. Particles respond to the density and direction of trails around them.
-There is no fixed rule that determines how particles respond to their sensors. Instead, each particle has a simple neural-net like brain with 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
+There is no fixed rule that determines how particles respond to their sensors. Instead, each particle has a simple neural-net like brain with just 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
 
 ## Screenshots
 
@@ -34,11 +34,18 @@ There is no fixed rule that determines how particles respond to their sensors. I
 Fluoddity generalizes the traditional physarum model in a couple ways.
 ### Trail interference
 Particle trails have a vector velocity/flow component which records the net "current" of particles. Thus, particle trails can interfere, and the trails from an equal number of particles flowing in opposite directions will cancel out.
-### Behavior
-Particle behavior is governed by a somewhat arbitrary black box function. I use a simple sum of sin waves because I wanted smooth, periodic noise. Trail sensor values are fed into this noise function, and the outputs are used to accelerate and reposition the particle.
+### Behavior - Rules
+Particle behavior is governed by a somewhat arbitrary black box function called a 'Rule'. I use a simple sum of sin waves because I wanted smooth, periodic noise. Trail sensor values are fed into this noise function, and the outputs are used to accelerate and reposition the particle.
 ### "Strafe"
-In addition to forces causing acceleration, each paricle has a limited ability to "strafe", changing position independently from velocity. This is the least "principled" of my generalizations, but it is incredibly simple and enables some really beautiful patterns. Strafe allows particles to leave velocity trails which disagree with their direction of travel, enabling things like "swimming upstream" without turning around or "shifting to the left" without losing track of which way is "forward". 
-## Installation
+In addition to forces causing acceleration, each paricle has a limited ability to "strafe", changing position independently from velocity. This is the least "principled" of my generalizations, but it is incredibly simple and enables some really beautiful patterns. Strafe allows particles to leave velocity trails which disagree with their direction of travel, enabling things like "swimming upstream" without turning around or "sidle to the left" without losing track of which way is "forward". 
+### Symmetry
+the traditional physarum model has some important symmetries that we would like to impose on our otherwise arbitrary noise functions. These symmetries can be toggled (or dialed down) in additional settings.
+-Rotational: 
+Rotate the whole world by 90°, and nothing should change: the dynamics are independent of global orientation. Particles should never favor the bottom left corner of the screen, for example. Achieving this symmetry is as simple as calculating all sensors/forces in a local coordinate system where "up" == particle velocity.
+-Chiral:
+Reflect the world across the X axis and nothing should change: the dynamics are identical when viewed in a mirror. Particles in the traditional physarum model display bilateral symmetry, they are not "left handed" or "right handed". Without this property, fluoddity particles show clockwise/counterclockwise bias, and the behavior space consists mostly of particles which are always turning left, or always turning right. This symmetry is achieved by calculating physics twice: once in mirrored coordinates, and averaging the results.
+
+Enforcing these symmetries drastically reduces the density of boring and degenerate Rules.
 
 ### Requirements
 
