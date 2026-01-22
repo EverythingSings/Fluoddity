@@ -24,7 +24,7 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
  - Emboss visual effect (currently the only use for traditional density trails)
 
 ## Design
-Particles in Fluoddity have no direct interactions. Instead, they leave trails as they move. These trails decay and diffuse over time. Particles respond to the density and direction of trails around them.
+Particles in Fluoddity have no direct interactions with each-other. Instead, they leave trails as they move. These trails decay and diffuse over time. Particles respond to the density and direction of trails around them.
 There is no fixed rule that determines how particles respond to their sensors. Instead, each particle has a simple neural-net like brain with just 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
 
 ## Screenshots
