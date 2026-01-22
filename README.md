@@ -8,7 +8,7 @@ Sometimes it looks like a meandering river, a candle flame, or branching lightni
 
 Fluoddity is a 2d particle system, capable of realtime performance with hundreds of thousands of particles on modern cards.  
 There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it. The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models: https://cargocollective.com/sagejenson/physarum
-I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them)
+I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. (If you have trouble with the link, just google "sage jenson Physarum") I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them)
 
 Any advice or criticism is welcome. This is a toy I made for myself and I am more artist than engineer. 
 
@@ -20,7 +20,7 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
  - save strings with copy/paste from clipboard
  - parameter sweeps mode allows varying physics sliders across the canvas. X and Y sweeps for exploring 2d parameter space.
  - variable physics frequency with motion blur
- - ffmpeg video recording
+ - ffmpeg based video recording
  - Emboss visual effect (currently the only use for traditional density trails)
 
 ## Design
