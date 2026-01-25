@@ -1,13 +1,10 @@
--camera.py -> screentotex fallback for 0 size
-tune slider ranges
+cohort isolation view
 
 -Text entry box with absolute orientation -> Text
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
 -emboss only positive
 -trail persistence stop at .9999 or something
--script for determing reasonable slider ranges
--Z no longer reset sim
 
 Orientation mode: 
     intrinsic
