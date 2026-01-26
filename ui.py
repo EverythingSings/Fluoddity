@@ -2510,7 +2510,10 @@ class UI:
                     # Show tooltip with notes content if notes exist, or hint if no notes
                     if imgui.is_item_hovered():
                         if has_notes:
-                            imgui.set_tooltip(config.notes)
+                            # Wrap notes at ~50 characters for readable tooltip
+                            import textwrap
+                            wrapped = textwrap.fill(config.notes, width=50)
+                            imgui.set_tooltip(wrapped)
                         else:
                             imgui.set_tooltip("N will be highlighted if there are any notes to display here")
 
