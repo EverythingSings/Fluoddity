@@ -117,6 +117,9 @@ class PhysicsConfig:
     # Rule data (10 centers * 8 floats = 80 floats)
     rule: np.ndarray = field(default_factory=lambda: np.zeros((10, 8), dtype=np.float32))
 
+    # User notes (optional)
+    notes: str = ""
+
     def to_dict(self) -> dict:
         """Convert config to JSON-serializable dict."""
         return {
@@ -161,6 +164,7 @@ class PhysicsConfig:
                 'emboss_smoothness': self.emboss_smoothness,
             },
             'rule': self.rule.flatten().tolist(),
+            'notes': self.notes,
         }
 
     @classmethod
@@ -170,6 +174,7 @@ class PhysicsConfig:
         settings = data.get('settings', {})
         appearance = data.get('appearance', {})
         sweeps = data.get('sweeps', {})
+        notes = data.get('notes', '')
 
         # Parse rule from flat list
         rule_list = data.get('rule', [0.0] * 80)
@@ -220,6 +225,7 @@ class PhysicsConfig:
             emboss_intensity=appearance.get('emboss_intensity', 0.5),
             emboss_smoothness=appearance.get('emboss_smoothness', 0.1),
             rule=rule,
+            notes=notes,
         )
 
     def to_json(self, indent: int = 2) -> str:
@@ -273,6 +279,7 @@ class ConfigSaver:
             emboss_intensity=sim_state.emboss_intensity,
             emboss_smoothness=sim_state.emboss_smoothness,
             rule=rule.copy(),
+            notes=sim_state.notes,
         )
 
     def apply_config(self, config: PhysicsConfig, sim_state: SimState,
@@ -332,6 +339,9 @@ class ConfigSaver:
         sim_state.emboss_mode = config.emboss_mode
         sim_state.emboss_intensity = config.emboss_intensity
         sim_state.emboss_smoothness = config.emboss_smoothness
+
+        # User notes
+        sim_state.notes = config.notes
 
         return config.rule.copy()
 

@@ -34,6 +34,8 @@ class PreferencesState:
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)
     physics_group_forces: bool = True  # Default: open (global force mult, drag)
     physics_group_advanced: bool = False  # Default: collapsed
+    physics_group_additional: bool = False  # Default: collapsed
+    physics_group_notes: bool = False  # Default: collapsed
 
     # Load menu collapsed states (True = expanded/open, False = collapsed)
     load_menu_core_open: bool = True  # Default: open

@@ -41,6 +41,9 @@ class SimState:
     emboss_intensity: float = 0.5
     emboss_smoothness: float = 0.1
 
+    # User notes (saved with physics config)
+    notes: str = ""
+
     # Slider range customizations: [current_min, current_max, default_min, default_max]
     slider_ranges: dict[str, list[float]] = field(default_factory=dict)
 

@@ -1710,102 +1710,6 @@ class UI:
                                            physics_menu_bar_min.x + physics_menu_bar_size.x,
                                            physics_menu_bar_min.y + physics_menu_bar_size.y))
 
-            if imgui.begin_menu("Additional Settings", not self.force_close_physics_menus):
-                physics_any_menu_open_this_frame = True
-                # Add this menu's bounding box to the list
-                additional_settings_menu_min = imgui.get_window_pos()
-                additional_settings_menu_size = imgui.get_window_size()
-                physics_menu_rectangles.append((additional_settings_menu_min.x, additional_settings_menu_min.y,
-                                               additional_settings_menu_min.x + additional_settings_menu_size.x,
-                                               additional_settings_menu_min.y + additional_settings_menu_size.y))
-
-                # Boundary Conditions (with per-option tooltips)
-                boundary_options = ["Bounce", "Reset", "Wrap"]
-                boundary_tooltips = [
-                    "Particles bounce off the edges of the canvas",
-                    "Particles are reset to their initial conditions when leaving the canvas",
-                    "Particles wrap seamlessly to the other side of the canvas"
-                ]
-                imgui.set_next_item_width(100)
-                if imgui.begin_combo("Boundary Conditions", boundary_options[self.state.sim.boundary_conditions]):
-                    for i, option in enumerate(boundary_options):
-                        is_selected = (self.state.sim.boundary_conditions == i)
-                        if imgui.selectable(option, is_selected)[0]:
-                            self.state.sim.boundary_conditions = i
-                        self._delayed_tooltip(boundary_tooltips[i])
-                        if is_selected:
-                            imgui.set_item_default_focus()
-                    imgui.end_combo()
-
-                # Initial Conditions (with per-option tooltips)
-                initial_options = ["Grid", "Random", "Ring"]
-                initial_tooltips = [
-                    "Particles start in a grid, organized by cohort",
-                    "Particles are spread uniformly across the canvas",
-                    "Particles start distributed around a circle, organized by cohort"
-                ]
-                imgui.set_next_item_width(100)
-                if imgui.begin_combo("Initial Conditions", initial_options[self.state.sim.initial_conditions]):
-                    for i, option in enumerate(initial_options):
-                        is_selected = (self.state.sim.initial_conditions == i)
-                        if imgui.selectable(option, is_selected)[0]:
-                            self.state.sim.initial_conditions = i
-                        self._delayed_tooltip(initial_tooltips[i])
-                        if is_selected:
-                            imgui.set_item_default_focus()
-                    imgui.end_combo()
-
-                # Number of Cohorts
-                imgui.set_next_item_width(100)
-                _, self.state.sim.num_cohorts = imgui.slider_int(
-                    "Number of Cohorts",
-                    self.state.sim.num_cohorts,
-                    1, 144
-                )
-                self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
-
-                imgui.separator()
-
-                # Disable Symmetry
-                _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
-                    "Disable Symmetry",
-                    self.state.sim.DISABLE_SYMMETRY
-                )
-                self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior,\nleading to clockwise/counterclockwise bias.\nTurn it on to see why we go through trouble\nof calculating \"mirror world\" behavior in entity_update.glsl")
-
-                # Absolute Orientation (combo box with 3 modes)
-                combo_items = ["Off", "Y axis", "Radial"]
-                clicked, current = imgui.combo(
-                    "Absolute Orientation",
-                    self.state.sim.ABSOLUTE_ORIENTATION,
-                    combo_items
-                )
-                if clicked:
-                    self.state.sim.ABSOLUTE_ORIENTATION = current
-                self._delayed_tooltip("What direction are particles 'facing'? Which way is 'up'?\nOff: use particle velocity\nY axis: align to y axis\nRadial: align to center of canvas")
-                # Orientation Mix (only visible if Absolute Orientation != Off)
-                if self.state.sim.ABSOLUTE_ORIENTATION != 0:
-                    imgui.set_next_item_width(100)
-                    _, self.state.sim.ORIENTATION_MIX = imgui.slider_float(
-                        "Orientation Mix",
-                        self.state.sim.ORIENTATION_MIX,
-                        0.0, 1.0,
-                        "%.2f"
-                    )
-                    self._delayed_tooltip("Blend factor for orientation calculations (0.0 = velocity only, 1.0 = full absolute orientation)")
-
-                imgui.separator()
-
-                # Parameter Sweeps toggle (moved from Extras menu)
-                _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
-                    "Parameter Sweeps",
-                    self.state.sim.parameter_sweeps_enabled
-                )
-                sweep_key = self.keybindings.get_key_display_name('toggle_parameter_sweep')
-                self._delayed_tooltip(f"Enable parameter sweeps to vary physics across the canvas.\nPress {sweep_key} to toggle. See Help -> Parameter Sweeps for details.")
-
-                imgui.end_menu()
-
             # Appearance menu
             if imgui.begin_menu("Appearance", not self.force_close_physics_menus):
                 physics_any_menu_open_this_frame = True
@@ -2128,6 +2032,114 @@ class UI:
             )
             self.render_custom_tooltip("Hazard Rate",
                 "Probability per frame that particles reset to initial conditions. Gives particles a probabalistic 'lifetime' after which they reset.")
+
+        # === Additional Settings Group ===
+        imgui.set_next_item_open(self.state.preferences.physics_group_additional)
+        additional_open = imgui.collapsing_header("Additional Settings")
+        if imgui.is_item_toggled_open():
+            self.state.preferences.physics_group_additional = additional_open
+        if additional_open:
+            # Boundary Conditions (with per-option tooltips)
+            boundary_options = ["Bounce", "Reset", "Wrap"]
+            boundary_tooltips = [
+                "Particles bounce off the edges of the canvas",
+                "Particles are reset to their initial conditions when leaving the canvas",
+                "Particles wrap seamlessly to the other side of the canvas"
+            ]
+            imgui.set_next_item_width(100)
+            if imgui.begin_combo("Boundary Conditions", boundary_options[self.state.sim.boundary_conditions]):
+                for i, option in enumerate(boundary_options):
+                    is_selected = (self.state.sim.boundary_conditions == i)
+                    if imgui.selectable(option, is_selected)[0]:
+                        self.state.sim.boundary_conditions = i
+                    self._delayed_tooltip(boundary_tooltips[i])
+                    if is_selected:
+                        imgui.set_item_default_focus()
+                imgui.end_combo()
+
+            # Initial Conditions (with per-option tooltips)
+            initial_options = ["Grid", "Random", "Ring"]
+            initial_tooltips = [
+                "Particles start in a grid, organized by cohort",
+                "Particles are spread uniformly across the canvas",
+                "Particles start distributed around a circle, organized by cohort"
+            ]
+            imgui.set_next_item_width(100)
+            if imgui.begin_combo("Initial Conditions", initial_options[self.state.sim.initial_conditions]):
+                for i, option in enumerate(initial_options):
+                    is_selected = (self.state.sim.initial_conditions == i)
+                    if imgui.selectable(option, is_selected)[0]:
+                        self.state.sim.initial_conditions = i
+                    self._delayed_tooltip(initial_tooltips[i])
+                    if is_selected:
+                        imgui.set_item_default_focus()
+                imgui.end_combo()
+
+            # Number of Cohorts
+            imgui.set_next_item_width(100)
+            _, self.state.sim.num_cohorts = imgui.slider_int(
+                "Number of Cohorts",
+                self.state.sim.num_cohorts,
+                1, 144
+            )
+            self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
+
+            imgui.separator()
+
+            # Disable Symmetry
+            _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
+                "Disable Symmetry",
+                self.state.sim.DISABLE_SYMMETRY
+            )
+            self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior,\nleading to clockwise/counterclockwise bias.\nTurn it on to see why we go through trouble\nof calculating \"mirror world\" behavior in entity_update.glsl")
+
+            # Absolute Orientation (combo box with 3 modes)
+            combo_items = ["Off", "Y axis", "Radial"]
+            clicked, current = imgui.combo(
+                "Absolute Orientation",
+                self.state.sim.ABSOLUTE_ORIENTATION,
+                combo_items
+            )
+            if clicked:
+                self.state.sim.ABSOLUTE_ORIENTATION = current
+            self._delayed_tooltip("What direction are particles 'facing'? Which way is 'up'?\nOff: use particle velocity\nY axis: align to y axis\nRadial: align to center of canvas")
+
+            # Orientation Mix (only visible if Absolute Orientation != Off)
+            if self.state.sim.ABSOLUTE_ORIENTATION != 0:
+                imgui.set_next_item_width(100)
+                _, self.state.sim.ORIENTATION_MIX = imgui.slider_float(
+                    "Orientation Mix",
+                    self.state.sim.ORIENTATION_MIX,
+                    0.0, 1.0,
+                    "%.2f"
+                )
+                self._delayed_tooltip("Blend factor for orientation calculations (0.0 = velocity only, 1.0 = full absolute orientation)")
+
+            imgui.separator()
+
+            # Parameter Sweeps toggle
+            _, self.state.sim.parameter_sweeps_enabled = imgui.checkbox(
+                "Parameter Sweeps",
+                self.state.sim.parameter_sweeps_enabled
+            )
+            sweep_key = self.keybindings.get_key_display_name('toggle_parameter_sweep')
+            self._delayed_tooltip(f"Enable parameter sweeps to vary physics across the canvas.\nPress {sweep_key} to toggle. See Help -> Parameter Sweeps for details.")
+
+        # === Notes Group ===
+        imgui.set_next_item_open(self.state.preferences.physics_group_notes)
+        notes_open = imgui.collapsing_header("Notes")
+        if imgui.is_item_toggled_open():
+            self.state.preferences.physics_group_notes = notes_open
+        if notes_open:
+            imgui.set_next_item_width(-1)
+            changed, new_notes = imgui.input_text_multiline(
+                "##notes",
+                self.state.sim.notes,
+                imgui.ImVec2(0, 80)
+            )
+            if changed:
+                self.state.sim.notes = new_notes
+            self._delayed_tooltip("Optional notes to save with this config.\nThese will be saved when you save the config.")
 
         imgui.separator()
 
@@ -2479,7 +2491,33 @@ class UI:
                     if imgui.is_item_hovered():
                         hovered_this_frame = filename
 
-                    # X button on same line (right after the selectable)
+                    # N button for notes indicator (between filename and X button)
+                    imgui.same_line()
+                    config = self.cached_configs.get(filename)
+                    has_notes = config is not None and config.notes and config.notes.strip()
+
+                    if has_notes:
+                        # Lit blue when notes exist
+                        imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.2, 0.4, 0.8, 1.0))
+                        imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.3, 0.5, 0.9, 1.0))
+                    else:
+                        # Dull gray when no notes
+                        imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.3, 0.3, 0.3, 0.5))
+                        imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.3, 0.3, 0.3, 0.5))
+
+                    imgui.small_button(f"N##{category_name}_{filename}_notes")
+
+                    # Show tooltip with notes content if notes exist
+                    if has_notes and imgui.is_item_hovered():
+                        imgui.set_tooltip(config.notes)
+
+                    imgui.pop_style_color(2)
+
+                    # Also check hover on N button for preview
+                    if imgui.is_item_hovered():
+                        hovered_this_frame = filename
+
+                    # X button on same line (after the N button)
                     imgui.same_line()
                     imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
                     imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
