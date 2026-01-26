@@ -3,7 +3,6 @@ cohort isolation view
 -Text entry box with absolute orientation -> Text
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
--emboss only positive
 -trail persistence stop at .9999 or something
 
 Orientation mode: 

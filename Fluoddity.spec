@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for SimScratch particle simulation
+PyInstaller spec file for Fluoddity particle simulation
 
 Usage:
-    pyinstaller SimScratch.spec
+    pyinstaller Fluoddity.spec
 
-This will create a dist/SimScratch folder with all dependencies bundled.
+This will create a dist/Fluoddity folder with all dependencies bundled.
 """
 
 import os
@@ -101,7 +101,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='SimScratch',
+    name='Fluoddity',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -121,5 +121,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='SimScratch',
+    name='Fluoddity',
 )
