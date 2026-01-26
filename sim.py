@@ -80,6 +80,8 @@ class Sim:
         self.canvas.use()
         self.ctx.clear()
 
+        #reestablish view options for canvas/brush view modes
+        self.view_options = [self.can, self.brush_tex]
     def setup_shaders(self):
         canvas_dim = self.get_canvas_dimensions()
         canvas_shape = (canvas_dim, canvas_dim)
