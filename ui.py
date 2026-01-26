@@ -1331,7 +1331,7 @@ class UI:
                 v_max=12,
                 format=f"x%d ({current_hz}hz)"
             )
-            self._delayed_tooltip("Physics steps per frame for video/screenshots.\nHigher values = smoother motion blur.\nAlso determines screenshot quality (samples blended together).")
+            self._delayed_tooltip("Physics steps per frame for video/screenshots.\nHigher values = faster physics with smoother motion blur.\nAlso determines screenshot exposure (# of samples to blend together).")
 
             if recording_active:
                 imgui.end_disabled()
@@ -1763,7 +1763,7 @@ class UI:
                 if self.state.sim.emboss_mode != 0:
                     # Emboss Intensity slider
                     _, self.state.sim.emboss_intensity = imgui.slider_float(
-                        "Emboss Intensity", self.state.sim.emboss_intensity, -1.0, 1.0
+                        "Emboss Intensity", self.state.sim.emboss_intensity, 0.0, 1.0
                     )
                     self._delayed_tooltip("Intensity of emboss lighting effect. Negative values invert.")
 

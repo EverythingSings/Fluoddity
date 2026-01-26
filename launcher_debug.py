@@ -1,5 +1,5 @@
 """
-Debug launcher for SimScratch - keeps console open on error
+Debug launcher for Fluoddity - keeps console open on error
 """
 import sys
 import traceback
@@ -12,7 +12,7 @@ def main():
         app.run()
     except Exception as e:
         print("\n" + "="*60)
-        print("ERROR: SimScratch crashed!")
+        print("ERROR: Fluoddity crashed!")
         print("="*60)
         print(f"\nError: {e}")
         print("\nFull traceback:")

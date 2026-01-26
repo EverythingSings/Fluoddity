@@ -1,7 +1,7 @@
-# Build script for SimScratch
+# Build script for Fluoddity
 # This script activates the virtual environment (if needed), runs PyInstaller, and fixes shader paths
 
-Write-Host "=== SimScratch Build Script ===" -ForegroundColor Cyan
+Write-Host "=== Fluoddity Build Script ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Step 1: Check if virtual environment is already activated, if not activate it
@@ -18,7 +18,7 @@ if ($env:VIRTUAL_ENV) {
 
 # Step 2: Run PyInstaller
 Write-Host "[2/3] Running PyInstaller..." -ForegroundColor Yellow
-python -m PyInstaller --clean --noconfirm SimScratch.spec
+python -m PyInstaller --clean --noconfirm Fluoddity.spec
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: PyInstaller build failed" -ForegroundColor Red
     exit 1
@@ -26,8 +26,8 @@ if ($LASTEXITCODE -ne 0) {
 
 # Step 3: Move shaders folder to correct location
 Write-Host "[3/3] Moving shaders folder..." -ForegroundColor Yellow
-$shadersSource = "dist\SimScratch\_internal\shaders"
-$shadersDestination = "dist\SimScratch\shaders"
+$shadersSource = "dist\Fluoddity\_internal\shaders"
+$shadersDestination = "dist\Fluoddity\shaders"
 
 if (Test-Path $shadersSource) {
     # Remove destination if it exists
@@ -43,6 +43,6 @@ if (Test-Path $shadersSource) {
 
 Write-Host ""
 Write-Host "=== Build Complete! ===" -ForegroundColor Green
-Write-Host "Executable location: dist\SimScratch\SimScratch.exe" -ForegroundColor Cyan
+Write-Host "Executable location: dist\Fluoddity\Fluoddity.exe" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "To test the build, run: .\dist\SimScratch\SimScratch.exe" -ForegroundColor Cyan
+Write-Host "To test the build, run: .\dist\Fluoddity\Fluoddity.exe" -ForegroundColor Cyan

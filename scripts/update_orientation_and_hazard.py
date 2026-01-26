@@ -117,7 +117,7 @@ def main():
     config_dir = Path('physics_configs')
     if not config_dir.exists():
         print(f"Error: Config directory '{config_dir}' not found")
-        print("Make sure you're running this script from the SimScratch root directory")
+        print("Make sure you're running this script from the Fluoddity root directory")
         return
 
     config_files = list(config_dir.glob('*.json'))

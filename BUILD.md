@@ -1,6 +1,6 @@
-# Building SimScratch Distribution
+# Building Fluoddity Distribution
 
-This document explains how to build a distributable version of SimScratch using PyInstaller.
+This document explains how to build a distributable version of Fluoddity using PyInstaller.
 
 ## Prerequisites
 
@@ -8,7 +8,7 @@ This document explains how to build a distributable version of SimScratch using 
 
 ### FFmpeg (Required for Video Recording)
 
-SimScratch uses FFmpeg for video recording. If you want video recording to work in the built application:
+Fluoddity uses FFmpeg for video recording. If you want video recording to work in the built application:
 
 1. **Download FFmpeg:**
    - Windows: Download from [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html) or [https://www.gyan.dev/ffmpeg/builds/](https://www.gyan.dev/ffmpeg/builds/)
@@ -74,25 +74,25 @@ If you prefer to build manually:
 .\Scratch.venv\Scripts\Activate.ps1
 
 # Run PyInstaller
-python -m PyInstaller --clean --noconfirm SimScratch.spec
+python -m PyInstaller --clean --noconfirm Fluoddity.spec
 
 # Move shaders folder
-Move-Item -Path "dist\SimScratch\_internal\shaders" -Destination "dist\SimScratch\shaders"
+Move-Item -Path "dist\Fluoddity\_internal\shaders" -Destination "dist\Fluoddity\shaders"
 ```
 
 **Note:** The build uses `launcher_debug.py` which will keep the console window open if there's a crash, making it easier to debug startup issues.
 
-This will create a `dist/SimScratch` folder containing:
-- `SimScratch.exe` (or `SimScratch` on Unix-like systems) - The main executable
+This will create a `dist/Fluoddity` folder containing:
+- `Fluoddity.exe` (or `Fluoddity` on Unix-like systems) - The main executable
 - All required DLLs and dependencies
 - `shaders/` directory with all GLSL shader files
 - Python runtime and libraries
 
 ## Distribution
 
-The entire `dist/SimScratch` folder can be distributed as-is. Users can:
+The entire `dist/Fluoddity` folder can be distributed as-is. Users can:
 1. Copy the folder to their desired location
-2. Run `SimScratch.exe` directly
+2. Run `Fluoddity.exe` directly
 
 The application will create the following in its working directory:
 - `preferences.config` - User preferences (UI settings, parameter sweeps, etc.)
@@ -103,15 +103,15 @@ The application will create the following in its working directory:
 - The build is platform-specific (Windows .exe on Windows, etc.)
 - Total folder size will be approximately 50-100 MB depending on dependencies
 - First run may be slightly slower as Windows/antivirus scans the executable
-- The console window can be hidden by changing `console=True` to `console=False` in `SimScratch.spec`
+- The console window can be hidden by changing `console=True` to `console=False` in `Fluoddity.spec`
 
 ## Troubleshooting
 
 ### Missing DLLs
-If the built application fails to start due to missing DLLs, check the PyInstaller output for warnings and add any missing modules to the `hiddenimports` list in `SimScratch.spec`.
+If the built application fails to start due to missing DLLs, check the PyInstaller output for warnings and add any missing modules to the `hiddenimports` list in `Fluoddity.spec`.
 
 ### Shader Loading Issues
-If shaders fail to load, verify that the `shaders/` directory is present in the `dist/SimScratch` folder with all `.vert`, `.frag`, and `.glsl` files.
+If shaders fail to load, verify that the `shaders/` directory is present in the `dist/Fluoddity` folder with all `.vert`, `.frag`, and `.glsl` files.
 
 ### ModernGL/OpenGL Issues
 ModernGL requires OpenGL support. The user's system must have:
@@ -123,7 +123,7 @@ If video recording fails with "FFmpeg not found":
 1. **If building:** Install FFmpeg, add it to PATH, and rebuild
 2. **If distributing:** Either bundle FFmpeg with the build (see above), or instruct users to:
    - Download FFmpeg from [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
-   - Place `ffmpeg.exe` in the same folder as `SimScratch.exe`, or
+   - Place `ffmpeg.exe` in the same folder as `Fluoddity.exe`, or
    - Install FFmpeg and add it to their system PATH
 
 The application will show a helpful error message if FFmpeg is not found.
@@ -137,5 +137,5 @@ To clean previous build artifacts:
 rm -rf build/ dist/
 
 # Clean PyInstaller cache (if needed)
-pyinstaller --clean SimScratch.spec
+pyinstaller --clean Fluoddity.spec
 ```
