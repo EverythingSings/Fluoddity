@@ -2135,11 +2135,12 @@ class UI:
             changed, new_notes = imgui.input_text_multiline(
                 "##notes",
                 self.state.sim.notes,
-                imgui.ImVec2(0, 80)
+                imgui.ImVec2(0, 80),
+                imgui.InputTextFlags_.word_wrap | imgui.InputTextFlags_.ctrl_enter_for_new_line
             )
             if changed:
                 self.state.sim.notes = new_notes
-            self._delayed_tooltip("Optional notes to save with this config.\nThese will be saved when you save the config.")
+            self._delayed_tooltip("Optional notes to save with this config.\nThese will be saved when you save the config.\nEnter to finish editing, Ctrl+Enter for newline.")
 
         imgui.separator()
 
