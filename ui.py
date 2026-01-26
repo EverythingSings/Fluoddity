@@ -2507,9 +2507,12 @@ class UI:
 
                     imgui.small_button(f"N##{category_name}_{filename}_notes")
 
-                    # Show tooltip with notes content if notes exist
-                    if has_notes and imgui.is_item_hovered():
-                        imgui.set_tooltip(config.notes)
+                    # Show tooltip with notes content if notes exist, or hint if no notes
+                    if imgui.is_item_hovered():
+                        if has_notes:
+                            imgui.set_tooltip(config.notes)
+                        else:
+                            imgui.set_tooltip("N will be highlighted if there are any notes to display here")
 
                     imgui.pop_style_color(2)
 
