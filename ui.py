@@ -1379,7 +1379,7 @@ class UI:
                 self.state.preferences.filename_prefix,
                 256
             )
-            self._delayed_tooltip("Defaults to 'animation' if left empty. All filenames get timestamps appended")
+            self._delayed_tooltip("Defaults to 'animation' if left empty. Saves to documents/Fluoddity/ All filenames get timestamps appended")
 
         imgui.end()
 
