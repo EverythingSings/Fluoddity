@@ -2,6 +2,7 @@ import moderngl
 import numpy as np
 from PIL import Image
 import os
+from utilities.paths import get_screenshots_dir
 
 def create_supersample_shader(ctx, supersample_k):
     """Create a shader program for spatial supersampling only (NO temporal, NO gamma)."""
@@ -190,15 +191,15 @@ def save_frame_gpu(frame_data, ctx, supersample_k=1, return_array=False):
     img = Image.fromarray(pixels, 'RGB')
 
     # Create Screenshots directory if it doesn't exist
-    if not os.path.exists('Screenshots'):
-        os.mkdir('Screenshots')
+    screenshots_dir = get_screenshots_dir()
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
 
     # Increment output counter and save
     gpu_resources['output_counter'] += 1
-    filename = f"Screenshots/frame_{gpu_resources['output_counter']:04d}.png"
+    filename = screenshots_dir / f"frame_{gpu_resources['output_counter']:04d}.png"
     img.save(filename)
 
-    return filename
+    return str(filename)
 
 
 def reset_gpu_frame_counter():

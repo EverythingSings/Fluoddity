@@ -1,5 +1,6 @@
 from .save_frame_gpu import save_frame_gpu, reset_gpu_frame_counter
 from .ffmpeg_recorder import FFmpegVideoRecorder
+from .paths import get_videos_dir
 from datetime import datetime
 
 class VidSaver:
@@ -36,7 +37,9 @@ class VidSaver:
             # Create timestamped filename in Videos folder
             timestamp = datetime.now().strftime('%H-%M-%S')
             prefix = filename_prefix if filename_prefix else "animation"
-            output_path = f"Videos/{prefix}-{timestamp}.mp4"
+            videos_dir = get_videos_dir()
+            videos_dir.mkdir(parents=True, exist_ok=True)
+            output_path = str(videos_dir / f"{prefix}-{timestamp}.mp4")
 
             self.recorder = FFmpegVideoRecorder(
                 width=output_width,

@@ -9,6 +9,7 @@ from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService
 from utilities.gl_helpers import readback_rule
+from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
 
 
@@ -34,6 +35,9 @@ class App:
         # Always on top ONLY FOR WHEN LIVE EDITING THE SHADERS, NOT IN DISTRIBUTION
         #glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE)
 
+        # Initialize user data directory (creates Documents/Fluoddity on first run)
+        initialize_user_data()
+
         # Load preferences first to get world_size
         loaded_prefs = load_preferences()
 
@@ -57,8 +61,10 @@ class App:
         self.arrow_debug_service = ArrowDebugService(self.ctx)
         self.multi_load_service = MultiLoadService()
         self.ui.multi_load_service = self.multi_load_service  # Give UI access to service
-        self.configs_dir = Path("physics_configs")
-        self.configs_dir.mkdir(exist_ok=True)
+        # Physics configs: app dir for bundled (Core/Advanced), user dir for user-created
+        self.app_configs_dir = get_app_physics_configs_dir()
+        self.user_configs_dir = get_user_physics_configs_dir()
+        self.user_configs_dir.mkdir(exist_ok=True)
 
         # Preview state
         self.preview_rule_active = False  # File->load preview
@@ -96,7 +102,7 @@ class App:
     def _ensure_default_config(self):
         """Ensure _Default.json exists in physics_configs directory. Create it if missing."""
         import numpy as np
-        default_path = self.configs_dir / "Core/_Default.json"
+        default_path = self.app_configs_dir / "Core/_Default.json"
         if not default_path.exists():
             # Create default config from fresh SimState
             default_state = SimState()
@@ -109,7 +115,7 @@ class App:
 
     def _load_default_config(self):
         """Load _Default.json on startup."""
-        default_path = self.configs_dir / "Core/_Default.json"
+        default_path = self.app_configs_dir / "Core/_Default.json"
         config = self.config_saver.load_from_file(default_path)
         if config is not None:
             rule = self.config_saver.apply_config(config, self.ui.state.sim)
@@ -264,7 +270,9 @@ class App:
                 # Rename to proper filename with timestamp
                 import os
                 if filename and os.path.exists(filename):
-                    new_filename = f"Screenshots/{prefix}_{timestamp}.png"
+                    screenshots_dir = get_screenshots_dir()
+                    screenshots_dir.mkdir(parents=True, exist_ok=True)
+                    new_filename = screenshots_dir / f"{prefix}_{timestamp}.png"
                     os.rename(filename, new_filename)
                     print(f"Screenshot saved: {new_filename}")
 
@@ -497,7 +505,7 @@ class App:
             if filename:
                 current_rule = self.rule_manager.get_current_rule()
                 config = self.config_saver.create_config(ui_state.sim, current_rule)
-                filepath = self.configs_dir / f"{filename}.json"
+                filepath = self.user_configs_dir / f"{filename}.json"
                 self.config_saver.save_to_file(config, filepath)
                 print(f"Config saved to {filepath}")
                 self.ui.update_physics_defaults(filename)

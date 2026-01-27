@@ -9,6 +9,7 @@ import json
 import glfw
 from pathlib import Path
 from typing import Dict
+from utilities.paths import get_user_keyboard_controls_path, get_default_keyboard_controls_path
 
 
 class KeybindingManager:
@@ -56,17 +57,25 @@ class KeybindingManager:
         'MINUS': glfw.KEY_MINUS, 'EQUAL': glfw.KEY_EQUAL,
     }
 
-    def __init__(self, config_path: str = "keyboard_controls.json",
-                 default_config_path: str = "default_keyboard_controls.json"):
+    def __init__(self, config_path: str = None,
+                 default_config_path: str = None):
         """
         Initialize the keybinding manager.
 
         Args:
-            config_path: Path to the active keyboard controls JSON file
-            default_config_path: Path to the default keyboard controls JSON file
+            config_path: Path to the active keyboard controls JSON file (default: Documents/Fluoddity/)
+            default_config_path: Path to the default keyboard controls JSON file (default: app directory)
         """
-        self.config_path = Path(config_path)
-        self.default_config_path = Path(default_config_path)
+        if config_path is None:
+            self.config_path = get_user_keyboard_controls_path()
+        else:
+            self.config_path = Path(config_path)
+
+        if default_config_path is None:
+            self.default_config_path = get_default_keyboard_controls_path()
+        else:
+            self.default_config_path = Path(default_config_path)
+
         self.bindings: Dict[str, int] = {}
 
         self._load_bindings()

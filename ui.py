@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from state import UIState, SimState, CameraState, RecordingState
 from services.config_saver import ConfigSaver, PhysicsConfig
 from utilities.keybinding_management import KeybindingManager
+from utilities.paths import get_user_physics_configs_dir, get_app_physics_configs_dir
 
 
 @dataclass
@@ -73,7 +74,9 @@ class UI:
         # File save/load state
         self.save_popup_open = False
         self.save_filename_buffer = ""
-        self.configs_dir = Path("physics_configs")
+        # Physics configs: app dir for bundled (Core/Advanced), user dir for user-created
+        self.app_configs_dir = get_app_physics_configs_dir()
+        self.user_configs_dir = get_user_physics_configs_dir()
         self.config_saver = ConfigSaver()
 
         # Load submenu preview state
@@ -1406,7 +1409,7 @@ class UI:
             if imgui.button("Save", imgui.ImVec2(120, 0)):
                 if self.save_filename_buffer.strip():
                     filename = self.save_filename_buffer.strip()
-                    filepath = self.configs_dir / f"{filename}.json"
+                    filepath = self.user_configs_dir / f"{filename}.json"
                     if filepath.exists():
                         # File exists, need overwrite confirmation
                         # Close save popup first, then open overwrite popup
@@ -2362,7 +2365,11 @@ class UI:
         self.physics_window_interaction = False
 
     def _refresh_config_files(self):
-        """Scan physics_configs directory for .json files, organized by category."""
+        """Scan physics_configs directories for .json files, organized by category.
+
+        Core and Advanced configs come from the app directory (bundled with app).
+        Custom configs come from the user directory (Documents/Fluoddity/physics_configs).
+        """
         self.config_files = []  # Keep for backward compatibility
         self.config_files_by_category = {
             "Core": [],
@@ -2370,46 +2377,47 @@ class UI:
             "Advanced": []
         }
 
-        if self.configs_dir.exists():
-            # Scan Core subfolder
-            core_dir = self.configs_dir / "Core"
+        # Scan Core subfolder from app directory (bundled configs)
+        if self.app_configs_dir.exists():
+            core_dir = self.app_configs_dir / "Core"
             if core_dir.exists():
                 for f in sorted(core_dir.glob("*.json")):
                     self.config_files_by_category["Core"].append(f.stem)
 
-            # Scan Custom (root level configs, not in subfolders)
-            for f in sorted(self.configs_dir.glob("*.json")):
-                self.config_files_by_category["Custom"].append(f.stem)
-                self.config_files.append(f.stem)  # Maintain backward compat list
-
-            # Scan Advanced subfolder
-            advanced_dir = self.configs_dir / "Advanced"
+            # Scan Advanced subfolder from app directory (bundled configs)
+            advanced_dir = self.app_configs_dir / "Advanced"
             if advanced_dir.exists():
                 for f in sorted(advanced_dir.glob("*.json")):
                     self.config_files_by_category["Advanced"].append(f.stem)
+
+        # Scan Custom configs from user directory (user-created configs)
+        if self.user_configs_dir.exists():
+            for f in sorted(self.user_configs_dir.glob("*.json")):
+                self.config_files_by_category["Custom"].append(f.stem)
+                self.config_files.append(f.stem)  # Maintain backward compat list
 
     def _cache_all_configs(self):
         """Load and cache all config files for preview."""
         self._refresh_config_files()
         self.cached_configs = {}
 
-        # Load Core configs from Core subfolder
+        # Load Core configs from app directory
         for filename in self.config_files_by_category["Core"]:
-            filepath = self.configs_dir / "Core" / f"{filename}.json"
+            filepath = self.app_configs_dir / "Core" / f"{filename}.json"
             config = self.config_saver.load_from_file(filepath)
             if config:
                 self.cached_configs[filename] = config
 
-        # Load Custom configs from root directory
+        # Load Custom configs from user directory
         for filename in self.config_files_by_category["Custom"]:
-            filepath = self.configs_dir / f"{filename}.json"
+            filepath = self.user_configs_dir / f"{filename}.json"
             config = self.config_saver.load_from_file(filepath)
             if config:
                 self.cached_configs[filename] = config
 
-        # Load Advanced configs from Advanced subfolder
+        # Load Advanced configs from app directory
         for filename in self.config_files_by_category["Advanced"]:
-            filepath = self.configs_dir / "Advanced" / f"{filename}.json"
+            filepath = self.app_configs_dir / "Advanced" / f"{filename}.json"
             config = self.config_saver.load_from_file(filepath)
             if config:
                 self.cached_configs[filename] = config
@@ -2423,16 +2431,16 @@ class UI:
         Returns:
             Path to the config file
         """
-        # Check Core folder
+        # Check Core folder (app directory)
         if filename in self.config_files_by_category.get("Core", []):
-            return self.configs_dir / "Core" / f"{filename}.json"
+            return self.app_configs_dir / "Core" / f"{filename}.json"
 
-        # Check Advanced folder
+        # Check Advanced folder (app directory)
         if filename in self.config_files_by_category.get("Advanced", []):
-            return self.configs_dir / "Advanced" / f"{filename}.json"
+            return self.app_configs_dir / "Advanced" / f"{filename}.json"
 
-        # Default to Custom (root directory)
-        return self.configs_dir / f"{filename}.json"
+        # Default to Custom (user directory)
+        return self.user_configs_dir / f"{filename}.json"
 
     def _render_load_submenu_content(self, menu_watercolor_mode: bool) -> str | None:
         """Render the content of a load submenu with hierarchical categories.

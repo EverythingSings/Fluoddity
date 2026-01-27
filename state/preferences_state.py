@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 import json
+from utilities.paths import get_user_preferences_path
 
 
 @dataclass
@@ -51,15 +52,20 @@ class PreferencesState:
     recording_blur_quality: int = 1  # Blur quality setting used during video recording
 
 
-def save_preferences(prefs: PreferencesState, filepath: Path | str = "preferences.config") -> None:
+def save_preferences(prefs: PreferencesState, filepath: Path | str = None) -> None:
     """Save preferences to a JSON file."""
+    if filepath is None:
+        filepath = get_user_preferences_path()
     filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     data = asdict(prefs)
     filepath.write_text(json.dumps(data, indent=2))
 
 
-def load_preferences(filepath: Path | str = "preferences.config") -> PreferencesState:
+def load_preferences(filepath: Path | str = None) -> PreferencesState:
     """Load preferences from a JSON file. Returns default preferences if file doesn't exist."""
+    if filepath is None:
+        filepath = get_user_preferences_path()
     filepath = Path(filepath)
     if not filepath.exists():
         return PreferencesState()

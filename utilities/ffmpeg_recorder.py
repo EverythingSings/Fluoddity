@@ -4,6 +4,7 @@ from datetime import datetime
 import sys
 import os
 from pathlib import Path
+from utilities.paths import get_videos_dir
 
 
 def find_ffmpeg():
@@ -93,11 +94,9 @@ class FFmpegVideoRecorder:
         # Generate output path if not provided
         if output_path is None:
             timestamp = datetime.now().strftime('%H-%M-%S')
-            output_path = f"Videos/animation-{timestamp}.mp4"
-
-        # Ensure Videos directory exists
-        import os
-        os.makedirs('Videos', exist_ok=True)
+            videos_dir = get_videos_dir()
+            videos_dir.mkdir(parents=True, exist_ok=True)
+            output_path = str(videos_dir / f"animation-{timestamp}.mp4")
 
         self.output_path = output_path
 
