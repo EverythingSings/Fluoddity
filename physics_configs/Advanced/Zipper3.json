@@ -4,7 +4,7 @@
     "axial_force": 0.3709999918937683,
     "lateral_force": -0.7070000171661377,
     "sensor_gain": 1.1360000371932983,
-    "mutation_scale": -0.0,
+    "mutation_scale": 0.6700000166893005,
     "drag": -0.35018298029899597,
     "strafe_power": 0.41996902227401733,
     "sensor_angle": -0.49000000953674316,
@@ -142,8 +142,8 @@
     "orientation_mix": 1.0,
     "boundary_conditions": 1,
     "initial_conditions": 2,
-    "num_cohorts": 110,
-    "rule_seed": 0.41999998688697815
+    "num_cohorts": 1,
+    "rule_seed": 0.7010514049675142
   },
   "appearance": {
     "ink_weight": 6.0,
@@ -235,6 +235,5 @@
     -0.39515429735183716,
     -0.9195523262023926,
     0.6620248556137085
-  ],
-  "notes": "Beautiful crystals with unusual negative Drag value. Try playing around with the Drag slider and see what changes!"
+  ]
 }

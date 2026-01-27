@@ -101,6 +101,7 @@
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
       "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "x": 0.0
     },
     "y": {
@@ -115,6 +116,7 @@
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
       "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "y": 0.0
     },
     "cohort": {
@@ -129,6 +131,7 @@
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
       "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "cohort": 0.0
     }
   },
@@ -136,11 +139,11 @@
   "settings": {
     "disable_symmetry": false,
     "absolute_orientation": 1,
+    "orientation_mix": 1.0,
     "boundary_conditions": 1,
     "initial_conditions": 1,
     "num_cohorts": 64,
-    "rule_seed": 0.42,
-    "orientation_mix": 1.0
+    "rule_seed": 0.42
   },
   "appearance": {
     "ink_weight": 1.0,
@@ -232,5 +235,6 @@
     -0.4659682810306549,
     0.8445968627929688,
     -1.1041380167007446
-  ]
+  ],
+  "notes": "Weird pseudo-perspective effect that, for me, evokes peering out over the edge of a cliff. Looks best at World Size == 1.0"
 }
