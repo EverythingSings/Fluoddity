@@ -82,11 +82,12 @@ class UI:
         # Load submenu preview state
         self.config_files: list[str] = []  # List of available config filenames (DEPRECATED: use config_files_by_category)
         self.config_files_by_category: dict[str, list[str]] = {}  # Config filenames organized by category (Core/Custom/Advanced)
-        self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs
+        self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs (keys: "Category/filename")
         self.load_submenu_was_open = False  # Track submenu open state
         self.cached_config: str | None = None  # JSON string of config when menu opened
         self.preview_rule_pushed: bool = False  # Whether we pushed a preview rule
-        self.currently_previewing: str | None = None  # Currently hovered config
+        self.currently_previewing: str | None = None  # Currently hovered config filename
+        self.currently_previewing_category: str | None = None  # Category of currently hovered config
         self.currently_open_project: str = "_Default"  # Currently open project name
         # Track which load menu is open: None=neither, False=standard, True=watercolor
         self.load_menu_watercolor_mode: bool | None = None
@@ -94,6 +95,7 @@ class UI:
 
         # Delete confirmation state
         self.delete_confirm_filename: str | None = None
+        self.delete_confirm_category: str | None = None  # Category for delete confirmation
 
         # Overwrite confirmation state
         self.overwrite_confirm_filename: str | None = None
@@ -166,8 +168,11 @@ class UI:
 
         self._save_filename = ""
         self._load_filename = ""
+        self._load_category = ""  # Category for load operation
         self._delete_filename = ""
+        self._delete_category = ""  # Category for delete operation
         self._preview_filename = ""
+        self._preview_category = ""  # Category for preview operation
 
         # Display info (received from Orchestrator)
         self._display_info = {
@@ -393,8 +398,11 @@ class UI:
         self.state.request_world_size_change = self._request_world_size_change
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
+        self.state.load_category = self._load_category
         self.state.delete_filename = self._delete_filename
+        self.state.delete_category = self._delete_category
         self.state.preview_filename = self._preview_filename
+        self.state.preview_category = self._preview_category
         self.state.load_watercolor_override = self._load_watercolor_override
 
         # Transfer history window flags
@@ -433,8 +441,11 @@ class UI:
         self._request_world_size_change = False
         self._save_filename = ""
         self._load_filename = ""
+        self._load_category = ""
         self._delete_filename = ""
+        self._delete_category = ""
         self._preview_filename = ""
+        self._preview_category = ""
         self._load_watercolor_override = None
 
         # Reset history window flags
@@ -647,6 +658,7 @@ class UI:
                             self.state.sim, self._display_info.get('current_rule'))
                         self.preview_rule_pushed = False
                         self.currently_previewing = None
+                        self.currently_previewing_category = None
                         # Lock to current watercolor mode when menu opens
                         self.load_menu_watercolor_mode = self.state.sim.watercolor_mode
 
@@ -664,10 +676,12 @@ class UI:
                         self.load_menu_watercolor_mode = not self.load_menu_watercolor_mode
                         current_menu_watercolor = self.load_menu_watercolor_mode
                         # Update any current preview with new watercolor mode
-                        if self.currently_previewing and self.currently_previewing in self.cached_configs:
-                            config = self.cached_configs[self.currently_previewing]
-                            self.config_saver.apply_config(config, self.state.sim,
-                                                          watercolor_override=current_menu_watercolor)
+                        if self.currently_previewing and self.currently_previewing_category:
+                            cache_key = f"{self.currently_previewing_category}/{self.currently_previewing}"
+                            if cache_key in self.cached_configs:
+                                config = self.cached_configs[cache_key]
+                                self.config_saver.apply_config(config, self.state.sim,
+                                                              watercolor_override=current_menu_watercolor)
                         elif self.cached_config:
                             # Restore from cache with watercolor override
                             self.config_saver.load_from_string(
@@ -680,25 +694,35 @@ class UI:
                     hovered_this_frame = self._render_load_submenu_content(current_menu_watercolor)
 
                     # Handle preview on hover (works in both normal and multi-load modes)
-                    if hovered_this_frame != self.currently_previewing:
+                    # hovered_this_frame is now a tuple (filename, category) or None
+                    hovered_filename = hovered_this_frame[0] if hovered_this_frame else None
+                    hovered_category = hovered_this_frame[1] if hovered_this_frame else None
+                    current_preview = (self.currently_previewing, self.currently_previewing_category)
+
+                    if hovered_this_frame != current_preview:
                         # First, clear any existing preview
                         if self.currently_previewing:
                             self._request_clear_preview = True
 
-                        if hovered_this_frame and hovered_this_frame in self.cached_configs:
-                            # Apply preview config with watercolor override
-                            config = self.cached_configs[hovered_this_frame]
-                            self.config_saver.apply_config(config, self.state.sim,
-                                                          watercolor_override=current_menu_watercolor)
-                            self._request_preview_config = True
-                            self._preview_filename = hovered_this_frame
-                            self.currently_previewing = hovered_this_frame
+                        if hovered_filename and hovered_category:
+                            cache_key = f"{hovered_category}/{hovered_filename}"
+                            if cache_key in self.cached_configs:
+                                # Apply preview config with watercolor override
+                                config = self.cached_configs[cache_key]
+                                self.config_saver.apply_config(config, self.state.sim,
+                                                              watercolor_override=current_menu_watercolor)
+                                self._request_preview_config = True
+                                self._preview_filename = hovered_filename
+                                self._preview_category = hovered_category
+                                self.currently_previewing = hovered_filename
+                                self.currently_previewing_category = hovered_category
                         elif hovered_this_frame is None and self.cached_config:
                             # Revert to cached state with watercolor override
                             self.config_saver.load_from_string(
                                 self.cached_config, self.state.sim,
                                 watercolor_override=current_menu_watercolor)
                             self.currently_previewing = None
+                            self.currently_previewing_category = None
 
                     imgui.end_menu()
 
@@ -836,6 +860,7 @@ class UI:
                 self._request_clear_preview = True
             self.cached_config = None
             self.currently_previewing = None
+            self.currently_previewing_category = None
             self.cached_configs = {}
             self.preview_rule_pushed = False
             self.load_menu_watercolor_mode = None  # Clear the watercolor lock
@@ -1453,16 +1478,21 @@ class UI:
             imgui.open_popup("Delete Config?")
 
         if imgui.begin_popup_modal("Delete Config?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
-            imgui.text(f"Are you sure you want to delete '{self.delete_confirm_filename}.json'?")
+            # Show category in dialog if not Custom (to clarify which file will be deleted)
+            category_hint = f" ({self.delete_confirm_category})" if self.delete_confirm_category and self.delete_confirm_category != "Custom" else ""
+            imgui.text(f"Are you sure you want to delete '{self.delete_confirm_filename}.json'{category_hint}?")
             imgui.separator()
             if imgui.button("Delete", imgui.ImVec2(120, 0)):
                 self._delete_filename = self.delete_confirm_filename
+                self._delete_category = self.delete_confirm_category or ""
                 self._request_delete_file = True
                 self.delete_confirm_filename = None
+                self.delete_confirm_category = None
                 imgui.close_current_popup()
             imgui.same_line()
             if imgui.button("Cancel", imgui.ImVec2(120, 0)):
                 self.delete_confirm_filename = None
+                self.delete_confirm_category = None
                 imgui.close_current_popup()
             imgui.end_popup()
 
@@ -2406,50 +2436,60 @@ class UI:
             filepath = self.app_configs_dir / "Core" / f"{filename}.json"
             config = self.config_saver.load_from_file(filepath)
             if config:
-                self.cached_configs[filename] = config
+                self.cached_configs[f"Core/{filename}"] = config
 
         # Load Custom configs from user directory
         for filename in self.config_files_by_category["Custom"]:
             filepath = self.user_configs_dir / f"{filename}.json"
             config = self.config_saver.load_from_file(filepath)
             if config:
-                self.cached_configs[filename] = config
+                self.cached_configs[f"Custom/{filename}"] = config
 
         # Load Advanced configs from app directory
         for filename in self.config_files_by_category["Advanced"]:
             filepath = self.app_configs_dir / "Advanced" / f"{filename}.json"
             config = self.config_saver.load_from_file(filepath)
             if config:
-                self.cached_configs[filename] = config
+                self.cached_configs[f"Advanced/{filename}"] = config
 
-    def _get_config_path(self, filename: str) -> Path:
-        """Get the full path to a config file by searching all categories.
+    def _get_config_path(self, filename: str, category: str = "") -> Path:
+        """Get the full path to a config file.
 
         Args:
             filename: Config filename without extension
+            category: Optional category (Core, Custom, Advanced). If provided,
+                     returns path directly without searching. If empty, searches
+                     categories in order: Core, Advanced, Custom.
 
         Returns:
             Path to the config file
         """
-        # Check Core folder (app directory)
+        # If category is provided, return path directly
+        if category == "Core":
+            return self.app_configs_dir / "Core" / f"{filename}.json"
+        elif category == "Advanced":
+            return self.app_configs_dir / "Advanced" / f"{filename}.json"
+        elif category == "Custom":
+            return self.user_configs_dir / f"{filename}.json"
+
+        # Fallback: search categories in order (for backward compatibility)
         if filename in self.config_files_by_category.get("Core", []):
             return self.app_configs_dir / "Core" / f"{filename}.json"
 
-        # Check Advanced folder (app directory)
         if filename in self.config_files_by_category.get("Advanced", []):
             return self.app_configs_dir / "Advanced" / f"{filename}.json"
 
         # Default to Custom (user directory)
         return self.user_configs_dir / f"{filename}.json"
 
-    def _render_load_submenu_content(self, menu_watercolor_mode: bool) -> str | None:
+    def _render_load_submenu_content(self, menu_watercolor_mode: bool) -> tuple[str, str] | None:
         """Render the content of a load submenu with hierarchical categories.
 
         Args:
             menu_watercolor_mode: The watercolor mode for this menu (False=standard, True=watercolor)
 
         Returns:
-            The hovered filename this frame, or None
+            Tuple of (filename, category) for the hovered item this frame, or None
         """
         # Check if we have any configs at all
         total_configs = sum(len(files) for files in self.config_files_by_category.values())
@@ -2465,7 +2505,7 @@ class UI:
                 if text_size.x > max_text_width:
                     max_text_width = text_size.x
 
-        hovered_this_frame = None
+        hovered_this_frame: tuple[str, str] | None = None
 
         # Render each category with collapsible headers
         categories = [
@@ -2489,20 +2529,24 @@ class UI:
             if category_open:
                 # Render configs in this category
                 for filename in category_files:
+                    # Use category-qualified key for cached_configs lookup
+                    cache_key = f"{category_name}/{filename}"
+
                     # Selectable for filename with calculated width
+                    # Use ##category suffix to ensure unique IDs even with duplicate filenames
                     clicked, _ = imgui.selectable(
-                        filename, False,
+                        f"{filename}##{category_name}", False,
                         imgui.SelectableFlags_.no_auto_close_popups,
                         imgui.ImVec2(max_text_width + 10, 0)
                     )
 
                     # Check if filename is hovered
                     if imgui.is_item_hovered():
-                        hovered_this_frame = filename
+                        hovered_this_frame = (filename, category_name)
 
                     # N button for notes indicator (between filename and X button)
                     imgui.same_line()
-                    config = self.cached_configs.get(filename)
+                    config = self.cached_configs.get(cache_key)
                     has_notes = config is not None and config.notes and config.notes.strip()
 
                     if has_notes:
@@ -2530,7 +2574,7 @@ class UI:
 
                     # Also check hover on N button for preview
                     if imgui.is_item_hovered():
-                        hovered_this_frame = filename
+                        hovered_this_frame = (filename, category_name)
 
                     # X button on same line (after the N button)
                     imgui.same_line()
@@ -2538,18 +2582,19 @@ class UI:
                     imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
                     if imgui.small_button(f"X##{category_name}_{filename}"):
                         self.delete_confirm_filename = filename
+                        self.delete_confirm_category = category_name
                     imgui.pop_style_color(2)
 
                     # Also check hover on X button for preview
                     if imgui.is_item_hovered():
-                        hovered_this_frame = filename
+                        hovered_this_frame = (filename, category_name)
 
                     if clicked:
                         # Multi-load mode: add to service directly without closing menu
                         if self.state.multi_load.multi_load_enabled:
                             # Get config from cache or load it
-                            if filename in self.cached_configs:
-                                config = self.cached_configs[filename]
+                            if cache_key in self.cached_configs:
+                                config = self.cached_configs[cache_key]
                                 if self.multi_load_service:
                                     success = self.multi_load_service.add_config(config, filename)
                                     if success:
@@ -2559,6 +2604,7 @@ class UI:
                         # Normal mode: finalize selection (closes menu)
                         else:
                             self._load_filename = filename
+                            self._load_category = category_name
                             self._request_load_file = True
                             self._load_watercolor_override = menu_watercolor_mode
                             self.currently_open_project = filename
@@ -2566,6 +2612,7 @@ class UI:
                             self.cached_config = None
                             self.cached_configs = {}
                             self.currently_previewing = None
+                            self.currently_previewing_category = None
                             self.preview_rule_pushed = False
                             imgui.close_current_popup()
 

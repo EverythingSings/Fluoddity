@@ -53,13 +53,16 @@ class UIState:
     request_delete_file: bool = False
     save_filename: str = ""  # Filename to save to (without extension)
     load_filename: str = ""  # Filename to load from (without extension)
+    load_category: str = ""  # Category for load operation (Core, Custom, Advanced)
     delete_filename: str = ""  # Filename to delete (without extension)
+    delete_category: str = ""  # Category for delete operation (Core, Custom, Advanced)
     load_watercolor_override: bool | None = None  # Override watercolor mode when loading
 
     # Config preview (for Load submenu hover)
     request_preview_config: bool = False  # Push rule for preview
     request_clear_preview: bool = False  # Pop preview rule
     preview_filename: str = ""  # Filename to preview
+    preview_category: str = ""  # Category for preview operation
 
     # Rule history window flags
     request_preview_history_rule: bool = False

@@ -513,10 +513,11 @@ class App:
         # Handle file load (menu)
         if ui_state.request_load_file:
             filename = ui_state.load_filename
+            category = ui_state.load_category
             if filename:
                 # Multi-load mode: add config to service instead of replacing current
                 if ui_state.multi_load.multi_load_enabled:
-                    filepath = self.ui._get_config_path(filename)
+                    filepath = self.ui._get_config_path(filename, category)
                     config = self.config_saver.load_from_file(filepath)
                     if config is not None:
                         success = self.multi_load_service.add_config(config, filename)
@@ -538,7 +539,7 @@ class App:
                         self.ui.update_physics_defaults(filename)
                     else:
                         # No preview active - load fresh from file
-                        filepath = self.ui._get_config_path(filename)
+                        filepath = self.ui._get_config_path(filename, ui_state.load_category)
                         config = self.config_saver.load_from_file(filepath)
                         if config is not None:
                             rule = self.config_saver.apply_config(
@@ -555,8 +556,9 @@ class App:
         # Handle file delete (menu)
         if ui_state.request_delete_file:
             filename = ui_state.delete_filename
+            category = ui_state.delete_category
             if filename:
-                filepath = self.ui._get_config_path(filename)
+                filepath = self.ui._get_config_path(filename, category)
                 if filepath.exists():
                     filepath.unlink()
                     print(f"Config deleted: {filepath}")
@@ -573,8 +575,9 @@ class App:
         # Handle config preview (hover in Load submenu)
         if ui_state.request_preview_config:
             filename = ui_state.preview_filename
+            category = ui_state.preview_category
             if filename:
-                filepath = self.ui._get_config_path(filename)#self.configs_dir / f"{filename}.json"
+                filepath = self.ui._get_config_path(filename, category)
                 config = self.config_saver.load_from_file(filepath)
                 if config and config.rule is not None:
                     ui_state.sim.rule_seed = config.rule_seed
