@@ -32,7 +32,9 @@ Particles in Fluoddity have no direct interactions with each-other. Instead, the
 There is no fixed rule that determines how particles respond to their senses. Instead, each particle has a simple neural-net like brain with just 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
 
 ## Screenshots
-TODO- actual screenshots with visible UI
+<img width="797" height="595" alt="image" src="https://github.com/user-attachments/assets/343b2f6a-c09b-41c1-a370-247c223c33a7" />
+<img width="797" height="597" alt="image" src="https://github.com/user-attachments/assets/c70ce389-fe63-4635-bb5f-bbd62bd7a317" />
+
 
 ## Model
 Fluoddity generalizes the traditional physarum model in a couple ways.
@@ -73,8 +75,10 @@ Enforcing these symmetries drastically reduces the prevalence of boring and dege
    ```
 
 ## Usage
-
-Run main.py
+Either:
+pip install requirements, then run main.py
+OR
+Download a release and run Fluoddity.exe 
 
 ## Building
 
