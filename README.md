@@ -1,3 +1,5 @@
+
+![bubbles 12 46 01 (1)](https://github.com/user-attachments/assets/ecd4a0dc-a11f-45b3-b603-b4e27e8e576b)
 # Fluoddity
 I struggle to describe Fluoddity. Think somewhere between interactive lava lamp and evolvable ant farm. 
 Sometimes I'll see a meandering river, a candle flame, or branching lightning. Sometimes it's more like looking under a microscope as little amoebas devour each other and break apart. And sometimes, it's stranger than all that.
@@ -20,8 +22,7 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
  - particle selection/mutation to customize particle behavior
  - mouse drawing mode for making trails
  - Save/load system for physics + behavior
- - save strings with copy/pa
- - te from clipboard
+ - save strings with copy/paste from clipboard
  - parameter sweeps mode allows varying physics sliders across the canvas. X and Y sweeps for exploring 2d parameter space.
  - variable physics frequency with motion blur
  - ffmpeg based video recording
