@@ -184,6 +184,9 @@ class Sim:
         self.brush.use()
         ctx.clear(0.0, 0.0, 0.0, 0.0)
 
+        # Pass frame count to shader for initialization
+        tryset(self.brush_update_program, 'frame_count', self.frame_count)
+
         # Always use additive blending
         ctx.enable(moderngl.BLEND)
         ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
@@ -237,6 +240,9 @@ class Sim:
 
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
+
+        # Pass frame count to shader for initialization
+        tryset(self.canvas_update_program, 'frame_count', self.frame_count)
 
         # Set draw mode uniforms if in draw mode
         tryset(self.canvas_update_program, 'draw_mode', draw_mode)

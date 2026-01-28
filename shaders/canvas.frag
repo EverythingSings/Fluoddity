@@ -33,6 +33,8 @@ struct PhysicsSetting {
 uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
 uniform PhysicsSetting TRAIL_DIFFUSION_SETTING;
 
+uniform int frame_count;
+
 #define COHORTS 64//TODO THIS IS A HACK, OFTEN WRONG. Cohort sweeps a little broken
 
 // SYNCHRONIZED: This function must match entity_update.glsl and sim.py::calculate_setting
@@ -109,6 +111,12 @@ float draw_kernel(float distance, float size) {
 }
 
 void main() {
+    // Clear to black on frame 0 to prevent garbage data
+    if (frame_count == 0) {
+        can_out = vec4(0, 0, 0, 1);
+        return;
+    }
+
     vec4 brush_color = texture(brush_tex, texcoord);
     vec4 can_color;
     float TRAIL_DIFFUSION = calculate_setting(TRAIL_DIFFUSION_SETTING,texcoord*2.-1,0);
