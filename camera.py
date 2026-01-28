@@ -105,7 +105,7 @@ class Camera:
             tryset(self.cam_brush_program, 'tiling_mode_enabled', tiling_mode)
             if tiling_mode:
                 # Compute view_min and view_max in world space
-                screen_aspect = width / height
+                screen_aspect = width / max(height,1)
                 # Screen corners in NDC are (-1, -1) to (1, 1)
                 # Convert to world space: world = ndc * zoom + cam_pos * vec2(1, -1)
                 # With aspect correction: world.x *= aspect
