@@ -143,7 +143,7 @@
     "boundary_conditions": 0,
     "initial_conditions": 1,
     "num_cohorts": 15,
-    "rule_seed": 0.3558876416034964
+    "rule_seed": 0.4574687982796829
   },
   "appearance": {
     "ink_weight": 4.0,
@@ -235,5 +235,6 @@
     -0.18733564019203186,
     -0.790843665599823,
     0.24190875887870789
-  ]
+  ],
+  "notes": "Very satisfying once it gets going: Yellow C shapes climb the blue-green stalactites. Both are made of the same stuff with no mutations: this is a monoculture."
 }

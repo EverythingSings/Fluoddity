@@ -1097,7 +1097,7 @@ class UI:
         expanded, self.state.preferences.show_controls_window = imgui.begin("Controls", True)
 
         if expanded:
-            imgui.text("Keyboard Controls")
+            imgui.text("Keyboard Controls\nEdit 'keyboard_controls.json' in documents/Fluoddity")
             imgui.separator()
 
             # Camera movement keys
@@ -1121,10 +1121,10 @@ class UI:
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('reset_keybinding')} - Reset particles to Initial Conditions")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_parameter_sweep')} - Toggle parameter sweeps")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_watercolor')} - Toggle watercolor mode")
-            imgui.bullet_text(f"{self.keybindings.get_key_display_name('reload_shaders')} - Reload shaders")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('reload_shaders')} - Reload shaders (Sometimes fixes frozen/black screen)")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_help')} - Show tutorial")
-            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_mouse_mode')} - Toggle mouse mode")
-            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_rules')} - Full randomize:Fresh rules, new mutation seed")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_mouse_mode')} - Toggle mouse mode: Selection/Trail Drawing")
+            imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_rules')} - Randomize particle behavior + new mutation seed")
 
             imgui.spacing()
             imgui.text("Mouse Controls")
@@ -1143,10 +1143,9 @@ class UI:
             imgui.unindent(20)
 
             imgui.spacing()
-            imgui.text("Physics Slider Tips")
+            imgui.text("Slider Tips")
             imgui.separator()
-
-            imgui.bullet_text("Right-click slider - Context menu to adjust range")
+            imgui.bullet_text("Right-click slider - Context menu to adjust range\n (context menu only for Basics/Forces/Advanced)")
             imgui.bullet_text("Ctrl+click slider - Enter custom value directly")
 
         imgui.end()
@@ -1230,8 +1229,16 @@ class UI:
                 imgui.bullet_text(f"Zoom in or out with {q}/{e} or scroll wheel.")
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('reset_keybinding')} to reset the simulation.")
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_pause')} to toggle pause.")
+                imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('randomize_mutations')} for a fresh crop of mutations.")
                 imgui.bullet_text("Click to draw trails or select particles.")
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_mouse_mode')} to toggle between drawing and selecting.")
+                imgui.separator_text("Trail Drawing Mode - White reticle visible")
+                imgui.bullet_text("Click and drag to draw trails")
+                imgui.separator_text("Particle Selection Mode - no reticle")
+                imgui.bullet_text("Click a particle to select it and other\nparticles will copy its behavior (with mutations)")
+                imgui.bullet_text("Right click to go back and undo particle selection")
+                imgui.bullet_text(f"Right click also undos Randomize actions ({self.keybindings.get_key_display_name('randomize_mutations')}/{self.keybindings.get_key_display_name('randomize_rules')})")
+                imgui.separator()
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_help')} to toggle this Help window.")
             
             imgui.spacing()
@@ -1247,15 +1254,16 @@ class UI:
                 copy_key = self.keybindings.get_key_display_name('copy_config_with_ctrl')
                 paste_key = self.keybindings.get_key_display_name('paste_config_with_ctrl')
                 imgui.text_wrapped(
-                    "Create something you like? Save it as a new preset with File->Save"
-                    "The active rule, current mutations, and everything on the physics panel will be restored when you load the save (Physics Sliders, Additional Settings, and Appearance) "
+                    "Create something you like? Save it as a new preset with File->Save. "
+                    "The active rule, current mutations, and everything on the physics panel will be restored when you load the save (Physics Sliders, Additional Settings, Appearance, and Notes) "
                     f"You can also press Ctrl-{copy_key} to copy a 'save string' to your clipboard, and Ctrl-{paste_key} to load a save string from the clipboard. "
+                    "Save strings are just text copied your clipboard, so they can be easily shared or stashed."
                 )
 
             imgui.spacing()
             if imgui.collapsing_header("Trails"):
                 imgui.text_wrapped(
-                    "Particles in hive explorer can't directly 'see' each other. "
+                    "Particles in Fluoddity can't directly 'see' each other. "
                     "Instead, they interact by leaving pheremone trails as they move, like ants. "
                     "These trails accumulate on the 'Canvas' where particles can see them. Trails spread out and fade over time. "
                     "You can try writing your own pheremone trails to the canvas with 'Draw Trails' mouse mode (Preferences -> mouse mode)"
@@ -1273,7 +1281,7 @@ class UI:
                     "The new rules generated by these mutations can also be selected as the active rule, so you can evolve particle behavior over many iterations. "
                 )
                 imgui.bullet_text(f"If you want to reset all the cohorts to totally random Rules,\npress {randomize_key}. (this can be undone with right click)")
-                imgui.bullet_text(f"If you want to see a fresh set of random rules or mutations,\npress {seed_key}. (this can be undone with right click)")
+                imgui.bullet_text(f"If you want to see a fresh set of mutations with the same\nbase Rule, press {seed_key}. (this can be undone with right click)")
 
             imgui.spacing()
             if imgui.collapsing_header("Sliders"):
@@ -1301,7 +1309,7 @@ class UI:
             imgui.text("Example Setups")
             imgui.separator()
 
-            imgui.bullet_text("x20 physics frequency with worldsize 0.3, motion blur every 4 frames")
+            imgui.bullet_text("x20 physics frequency with worldsize 0.4, motion blur every 5 frames")
             imgui.bullet_text("x5 physics frequency with worldsize 1.0, motion blur every frame")
 
             imgui.spacing()
@@ -1778,7 +1786,7 @@ class UI:
                 # Ink Weight slider (only in watercolor mode, placed right after checkbox)
                 if self.state.sim.watercolor_mode:
                     _, self.state.sim.ink_weight = imgui.slider_float(
-                        "Ink Weight", self.state.sim.ink_weight, 0.0, 4.0
+                        "Ink Weight", self.state.sim.ink_weight, 0.0, 20.0
                     )
                     self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
                 self._delayed_tooltip("Enable watercolor rendering effect.")

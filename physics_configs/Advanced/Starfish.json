@@ -11,6 +11,7 @@
     "global_force_mult": 0.11435208469629288,
     "sensor_distance": 1.0,
     "trail_persistence": 0.9732678532600403,
+    "trail_diffusion": 1.0,
     "hazard_rate": 0.0
   },
   "slider_ranges": {
@@ -74,6 +75,12 @@
       0.0,
       1.0
     ],
+    "Trail Diffusion": [
+      0.0,
+      1.0,
+      0.0,
+      1.0
+    ],
     "Hazard Rate": [
       0.0,
       0.05,
@@ -93,6 +100,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "x": 0.0
     },
     "y": {
@@ -106,6 +115,8 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "y": 0.0
     },
     "cohort": {
@@ -119,18 +130,20 @@
       "GLOBAL_FORCE_MULT": 0.0,
       "SENSOR_DISTANCE": 0.0,
       "TRAIL_PERSISTENCE": 0.0,
+      "TRAIL_DIFFUSION": 0.0,
+      "HAZARD_RATE": 0.0,
       "cohort": 0.0
     }
   },
-  "parameter_sweeps_enabled": true,
+  "parameter_sweeps_enabled": false,
   "settings": {
     "disable_symmetry": false,
     "absolute_orientation": 0,
+    "orientation_mix": 1.0,
     "boundary_conditions": 0,
     "initial_conditions": 0,
     "num_cohorts": 64,
-    "rule_seed": 0.42,
-    "orientation_mix": 1.0
+    "rule_seed": 0.42
   },
   "appearance": {
     "ink_weight": 1.0,
@@ -222,5 +235,6 @@
     0.17041942477226257,
     0.6904212832450867,
     0.6087916493415833
-  ]
+  ],
+  "notes": ""
 }

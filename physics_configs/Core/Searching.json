@@ -146,10 +146,10 @@
     "rule_seed": 0.29228493571281433
   },
   "appearance": {
-    "ink_weight": 1.0,
+    "ink_weight": 5.583000183105469,
     "hue_sensitivity": 0.12399999797344208,
     "color_by_cohort": false,
-    "watercolor_mode": false,
+    "watercolor_mode": true,
     "emboss_mode": 0,
     "emboss_intensity": 0.5519999861717224,
     "emboss_smoothness": 0.10000000149011612
