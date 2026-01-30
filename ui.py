@@ -826,7 +826,7 @@ class UI:
                     "Strong Determinism",
                     self.state.preferences.strong_determinism
                 )
-                self._delayed_tooltip("Enables double buffering for the canvas. When checked,\nevents will unfold exactly the same way after every\nsimulation reset. Comes with a ~5% performance penalty.")
+                self._delayed_tooltip("Enables double buffering for the canvas. When checked,\nevents will unfold exactly the same way after every\nsimulation reset. Comes with a small ~3% performance penalty.")
 
                 # Screen Recording Controls
                 if imgui.menu_item("Screen Recording Controls", "", self.show_video_recording_window)[0]:
