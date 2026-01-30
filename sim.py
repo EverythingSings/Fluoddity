@@ -61,11 +61,24 @@ class Sim:
         self.multi_load_buffer.bind_to_storage_buffer(3)  # Binding 3 matches shader layout
         self.multi_load_rule_buffer.bind_to_storage_buffer(4)  # Binding 4 for multi-load rules
 
-        # Create canvas texture (4-channel float32)
-        self.can = self.ctx.texture(canvas_shape, 4, dtype='f4')
-        self.can.repeat_x = True
-        self.can.repeat_y = True
-        self.canvas = self.ctx.framebuffer([self.can])
+        # Create double-buffered canvas textures (4-channel float32)
+        # We ping-pong between these to avoid reading and writing the same texture
+        self.can_textures = [
+            self.ctx.texture(canvas_shape, 4, dtype='f4'),
+            self.ctx.texture(canvas_shape, 4, dtype='f4')
+        ]
+        for tex in self.can_textures:
+            tex.repeat_x = True
+            tex.repeat_y = True
+        self.can_framebuffers = [
+            self.ctx.framebuffer([self.can_textures[0]]),
+            self.ctx.framebuffer([self.can_textures[1]])
+        ]
+        self.can_read_index = 0  # Index of texture to read from (write to the other)
+
+        # Aliases for backward compatibility
+        self.can = self.can_textures[0]
+        self.canvas = self.can_framebuffers[1]  # Write to buffer 1, read from buffer 0 initially
 
         # Create brush texture and framebuffer
         self.brush_tex = self.ctx.texture(canvas_shape, 4, dtype='f4')
@@ -73,15 +86,17 @@ class Sim:
         self.brush_tex.repeat_y = True
         self.brush = self.ctx.framebuffer([self.brush_tex])
 
-        # For camera to use
-        self.view_tex = self.can
+        # For camera to use (will be updated each frame to point to the most recently written buffer)
+        self.view_tex = self.can_textures[self.can_read_index]
 
-        # Clear canvases initially
-        self.canvas.use()
-        self.ctx.clear()
+        # Clear both canvas buffers initially
+        for fb in self.can_framebuffers:
+            fb.use()
+            self.ctx.clear()
 
         #reestablish view options for canvas/brush view modes
-        self.view_options = [self.can, self.brush_tex]
+        # Note: view_options[0] will be updated dynamically to point to current read buffer
+        self.view_options = [self.can_textures[self.can_read_index], self.brush_tex]
     def setup_shaders(self):
         canvas_dim = self.get_canvas_dimensions()
         canvas_shape = (canvas_dim, canvas_dim)
@@ -252,13 +267,26 @@ class Sim:
             tryset(self.canvas_update_program, 'draw_size', draw_size)
             tryset(self.canvas_update_program, 'draw_power', draw_power)
 
-        self.canvas.use()
+        # Double-buffer: write to the opposite buffer from the one we're reading
+        write_index = 1 - self.can_read_index
+        self.can_framebuffers[write_index].use()
         self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
+
+        # Swap buffers: the one we just wrote to becomes the new read buffer
+        self.can_read_index = write_index
+
+        # Update aliases and view options to point to current read buffer
+        self.can = self.can_textures[self.can_read_index]
+        self.canvas = self.can_framebuffers[1 - self.can_read_index]
+        self.view_options[0] = self.can_textures[self.can_read_index]
+        if self._state.current_view_option == 0:
+            self.view_tex = self.can_textures[self.can_read_index]
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
                multi_load_service=None, is_preview_active = False, tiling_mode: bool = False):
-        self.can.use(location=1)
+        # Bind the current read buffer for sampling (will write to the other one)
+        self.can_textures[self.can_read_index].use(location=1)
         self.brush_tex.use(location=3)
 
         current_time = time.time()
@@ -278,8 +306,10 @@ class Sim:
 
     def reset(self):
         old_fbo = self.ctx.fbo
-        self.canvas.use()
-        self.ctx.clear(0, 0, 0, 0)
+        # Clear both canvas buffers
+        for fb in self.can_framebuffers:
+            fb.use()
+            self.ctx.clear(0, 0, 0, 0)
         self.frame_count = 0
         self.brush.use()
         self.ctx.clear(0, 0, 0, 0)
