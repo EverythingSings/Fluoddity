@@ -520,10 +520,11 @@ class UI:
 
         # Apply global color tinting based on mode
         recording_active = self._display_info.get('recording_active', False)
+        video_pending = self._display_info.get('video_pending', False)
         sweeps_active = self.state.sim.parameter_sweeps_enabled
         color_push_count = 0
 
-        if recording_active:
+        if recording_active or video_pending:
             # Red tint for video recording mode
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 0.94))
             imgui.push_style_color(imgui.Col_.menu_bar_bg, imgui.ImVec4(0.35, 0.12, 0.12, 1.0))
@@ -820,6 +821,13 @@ class UI:
                 )
                 self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
 
+                # Strong Determinism toggle
+                _, self.state.preferences.strong_determinism = imgui.checkbox(
+                    "Strong Determinism",
+                    self.state.preferences.strong_determinism
+                )
+                self._delayed_tooltip("Enables double buffering for the canvas. When checked,\nevents will unfold exactly the same way after every\nsimulation reset. Comes with a ~5% performance penalty.")
+
                 # Screen Recording Controls
                 if imgui.menu_item("Screen Recording Controls", "", self.show_video_recording_window)[0]:
                     self.show_video_recording_window = not self.show_video_recording_window
@@ -870,9 +878,10 @@ class UI:
     def render_preferences_window(self):
         """Render the Preferences window (closeable)."""
         recording_active = self._display_info.get('recording_active', False)
+        video_pending = self._display_info.get('video_pending', False)
 
-        # Apply red tint to window background when recording
-        if recording_active:
+        # Apply red tint to window background when recording or pending
+        if recording_active or video_pending:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
 
         # Use p_open to allow closing with X button
@@ -1073,7 +1082,7 @@ class UI:
         imgui.end()
 
         # Restore normal window background color if it was changed
-        if recording_active:
+        if recording_active or video_pending:
             imgui.pop_style_color()
 
     def _get_key_combo(self, action: str, modifier: str = "") -> str:
@@ -1322,9 +1331,11 @@ class UI:
     def render_video_recording_window(self):
         """Render the Screen Recording controls window (closeable)."""
         recording_active = self._display_info.get('recording_active', False)
+        video_pending = self._display_info.get('video_pending', False)
+        scheduled_start_frame = self._display_info.get('video_scheduled_start_frame', 0)
 
-        # Apply red tint when recording
-        if recording_active:
+        # Apply red tint when recording or pending
+        if recording_active or video_pending:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
 
         expanded, self.show_video_recording_window = imgui.begin("Screen Recording", True)
@@ -1335,9 +1346,29 @@ class UI:
                 imgui.text_colored(imgui.ImVec4(1.0, 0.3, 0.3, 1.0), "RECORDING IN PROGRESS")
                 imgui.text(f"Press {record_key} to stop recording")
                 imgui.separator()
+            elif video_pending:
+                current_frame = self._display_info.get('frame_count', 0)
+                imgui.text_colored(imgui.ImVec4(1.0, 0.6, 0.3, 1.0), "WAITING FOR START FRAME")
+                imgui.text(f"Recording starts at frame {scheduled_start_frame}")
+                imgui.text(f"Frames remaining: {scheduled_start_frame - current_frame}")
+                imgui.text(f"Press {record_key} to cancel")
+                imgui.separator()
 
             imgui.text(f"Press {record_key} to start/stop video recording")
             imgui.text(f"Press Shift+{record_key} to take a screenshot")
+            imgui.spacing()
+
+            # Current frame count display
+            current_frame = self._display_info.get('frame_count', 0)
+            imgui.text(f"Current Frame: {current_frame}")
+            imgui.spacing()
+
+            # Video End Frame input
+            _, self.state.preferences.video_end_frame = imgui.input_int(
+                'Video End Frame',
+                self.state.preferences.video_end_frame
+            )
+            self._delayed_tooltip("Target frame for video to end on.\nWhen set, recording will be delayed until the\ncalculated start frame is reached.\nSet to 0 to start recording immediately.")
             imgui.spacing()
 
             # Video Length (in seconds) - converts to/from max_frames internally
@@ -1416,7 +1447,7 @@ class UI:
 
         imgui.end()
 
-        if recording_active:
+        if recording_active or video_pending:
             imgui.pop_style_color()
 
     def _delayed_tooltip(self, text: str):

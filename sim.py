@@ -211,7 +211,8 @@ class Sim:
 
     def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                    prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-                   multi_load_service=None, is_preview_active = False, tiling_mode: bool = False):
+                   multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
+                   strong_determinism: bool = False):
         # Boundary conditions mode for wrap behavior
         tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(self.canvas_update_program, 'tiling_mode', tiling_mode)
@@ -267,24 +268,30 @@ class Sim:
             tryset(self.canvas_update_program, 'draw_size', draw_size)
             tryset(self.canvas_update_program, 'draw_power', draw_power)
 
-        # Double-buffer: write to the opposite buffer from the one we're reading
-        write_index = 1 - self.can_read_index
-        self.can_framebuffers[write_index].use()
-        self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
+        if strong_determinism:
+            # Double-buffer: write to the opposite buffer from the one we're reading
+            write_index = 1 - self.can_read_index
+            self.can_framebuffers[write_index].use()
+            self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
-        # Swap buffers: the one we just wrote to becomes the new read buffer
-        self.can_read_index = write_index
+            # Swap buffers: the one we just wrote to becomes the new read buffer
+            self.can_read_index = write_index
 
-        # Update aliases and view options to point to current read buffer
-        self.can = self.can_textures[self.can_read_index]
-        self.canvas = self.can_framebuffers[1 - self.can_read_index]
-        self.view_options[0] = self.can_textures[self.can_read_index]
-        if self._state.current_view_option == 0:
-            self.view_tex = self.can_textures[self.can_read_index]
+            # Update aliases and view options to point to current read buffer
+            self.can = self.can_textures[self.can_read_index]
+            self.canvas = self.can_framebuffers[1 - self.can_read_index]
+            self.view_options[0] = self.can_textures[self.can_read_index]
+            if self._state.current_view_option == 0:
+                self.view_tex = self.can_textures[self.can_read_index]
+        else:
+            # Single-buffer: read and write same texture (non-deterministic but faster)
+            self.can_framebuffers[self.can_read_index].use()
+            self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-               multi_load_service=None, is_preview_active = False, tiling_mode: bool = False):
+               multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
+               strong_determinism: bool = False):
         # Bind the current read buffer for sampling (will write to the other one)
         self.can_textures[self.can_read_index].use(location=1)
         self.brush_tex.use(location=3)
@@ -297,7 +304,7 @@ class Sim:
         self.entity_update(ctx, multi_load_service,is_preview_active)
 
         ctx.disable(moderngl.BLEND)
-        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service,is_preview_active, tiling_mode)
+        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service,is_preview_active, tiling_mode, strong_determinism)
         self.frame_count += 1
 
         # Increment multi-load progress if active

@@ -81,6 +81,10 @@ class App:
         self.user_motion_blur = True
         self.user_blur_quality = 1
 
+        # Video pending state (waiting for scheduled start frame)
+        self.video_pending = False
+        self.video_scheduled_start_frame = 0
+
         # Screenshot state machine
         self.screenshot_pending = False  # Waiting for current frame to finish
         self.screenshot_in_progress = False  # Override frame is running
@@ -146,6 +150,12 @@ class App:
 
         # 3. Process continuous input (camera movement)
         self.process_camera_input(ui_state)
+
+        # 3.2. Check if pending video should start
+        if self.video_pending and self.sim.frame_count >= self.video_scheduled_start_frame:
+            self.video_pending = False
+            self.video_scheduled_start_frame = 0
+            self.video_service.start()
 
         # 3.5. Screenshot state machine
         # If screenshot_pending was set on previous frame, start the override frame now
@@ -340,6 +350,8 @@ class App:
             'frame_count': self.sim.frame_count,
             'tex_size': self.sim.view_tex.size,
             'recording_active': self.video_service.is_active(),
+            'video_pending': self.video_pending,
+            'video_scheduled_start_frame': self.video_scheduled_start_frame,
             'rule_history': self.rule_manager.rule_history,
         })
         self.ui.render()
@@ -366,9 +378,28 @@ class App:
             self.ui._last_applied_world_size = ui_state.preferences.world_size
             print(f"World size changed to {self.sim.world_size} (entity_count: {self.sim.entity_count}, canvas: {self.sim.get_canvas_dimensions()}x{self.sim.get_canvas_dimensions()})")
 
-        # Toggle recording
+        # Toggle recording (with delayed start support)
         if ui_state.toggle_recording:
-            self.video_service.toggle()
+            if self.video_pending:
+                # Cancel pending recording
+                self.video_pending = False
+                self.video_scheduled_start_frame = 0
+            elif self.video_service.is_active():
+                # Stop current recording
+                self.video_service.stop()
+            else:
+                # Calculate if we need to delay recording
+                video_end_frame = ui_state.preferences.video_end_frame
+                video_simulation_frames = ui_state.preferences.max_frames * ui_state.preferences.motion_blur_samples
+                scheduled_start_frame = video_end_frame - video_simulation_frames
+
+                if video_end_frame == 0 or scheduled_start_frame <= self.sim.frame_count:
+                    # Start recording immediately
+                    self.video_service.start()
+                else:
+                    # Enter pending mode - wait for scheduled start frame
+                    self.video_pending = True
+                    self.video_scheduled_start_frame = scheduled_start_frame
 
         # Screenshot request (Shift+P) - set pending flag
         if ui_state.request_screenshot and not self.screenshot_pending and not self.screenshot_in_progress:
@@ -797,7 +828,8 @@ class App:
                     draw_power=draw_power_value,
                     multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None,
                     is_preview_active = self.preview_rule_active,
-                    tiling_mode=tiling_mode
+                    tiling_mode=tiling_mode,
+                    strong_determinism=ui_state.preferences.strong_determinism
                 )
 
                 # Only render on frames matching the blur quality cadence
@@ -876,7 +908,8 @@ class App:
                     draw_power=draw_power_value,
                     multi_load_service=self.multi_load_service if ui_state.multi_load.multi_load_enabled else None,
                     is_preview_active=self.preview_rule_active,
-                    tiling_mode=tiling_mode
+                    tiling_mode=tiling_mode,
+                    strong_determinism=ui_state.preferences.strong_determinism
                 )
             
             # Generate view texture only once at the end
