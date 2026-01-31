@@ -97,7 +97,7 @@ void main() {
     // Check if particle bounding box overlaps viewport
     bool is_visible = !should_cull && (center_pos.x + max_size >= -1.0 && center_pos.x - max_size <= 1.0 &&
                        center_pos.y + max_size >= -1.0 && center_pos.y - max_size <= 1.0);
-    
+    //is_visible = is_visible&&length(floor(entities[instance_id].cohort*4)-1) <.5;
     // Generate quad vertices - collapse to center if not visible
     vec2 offsets[4] = vec2[](
         vec2(-size, -size),  // bottom-left

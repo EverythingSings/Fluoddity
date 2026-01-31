@@ -1637,8 +1637,21 @@ class UI:
                     # Hazard Rate (conditional on per-config setting)
                     if self.state.multi_load.per_config_hazard_rate:
                         imgui.begin_disabled()
+                    # Power-scaled slider for fine control at low values while reaching 0.0
+                    HAZARD_MAX = 0.05
+                    HAZARD_POWER = 3.0  # Higher = more resolution at low end
+                    # Convert actual value to slider position (0-1)
+                    slider_pos = (self.state.sim.HAZARD_RATE / HAZARD_MAX) ** (1.0 / HAZARD_POWER)
                     imgui.set_next_item_width(100)
-                    _, self.state.sim.HAZARD_RATE = imgui.slider_float("Hazard Rate", self.state.sim.HAZARD_RATE, 0.0, 0.05, "%.4f")
+                    _, new_pos = imgui.slider_float(
+                        "Hazard Rate",
+                        slider_pos,
+                        0.0,
+                        1.0,
+                        f"{self.state.sim.HAZARD_RATE:.5f}"
+                    )
+                    # Convert slider position back to actual value
+                    self.state.sim.HAZARD_RATE = HAZARD_MAX * (new_pos ** HAZARD_POWER)
                     if self.state.multi_load.per_config_hazard_rate:
                         imgui.end_disabled()
                     self._delayed_tooltip("Probability per frame that particles reset to initial conditions")
@@ -2095,13 +2108,21 @@ class UI:
                 imgui.same_line(spacing=8)
                 imgui.set_next_item_width(80)
 
-            _, self.state.sim.HAZARD_RATE = self.slider_float_with_range_menu(
-                label="Hazard Rate",
-                param_name="HAZARD_RATE",
-                value=self.state.sim.HAZARD_RATE,
-                default_min=0.0,
-                default_max=0.05,
+            # Power-scaled slider for fine control at low values while reaching 0.0
+            HAZARD_MAX = 0.05
+            HAZARD_POWER = 3.0  # Higher = more resolution at low end
+            # Convert actual value to slider position (0-1)
+            slider_pos = (self.state.sim.HAZARD_RATE / HAZARD_MAX) ** (1.0 / HAZARD_POWER)
+            imgui.set_next_item_width(140)
+            _, new_pos = imgui.slider_float(
+                "Hazard Rate",
+                slider_pos,
+                0.0,
+                1.0,
+                f"{self.state.sim.HAZARD_RATE:.5f}"
             )
+            # Convert slider position back to actual value
+            self.state.sim.HAZARD_RATE = HAZARD_MAX * (new_pos ** HAZARD_POWER)
             self.render_custom_tooltip("Hazard Rate",
                 "Probability per frame that particles reset to initial conditions. Gives particles a probabalistic 'lifetime' after which they reset.")
 
