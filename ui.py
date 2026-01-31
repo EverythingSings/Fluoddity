@@ -1642,7 +1642,6 @@ class UI:
                     HAZARD_POWER = 3.0  # Higher = more resolution at low end
                     # Convert actual value to slider position (0-1)
                     slider_pos = (self.state.sim.HAZARD_RATE / HAZARD_MAX) ** (1.0 / HAZARD_POWER)
-                    imgui.set_next_item_width(100)
                     _, new_pos = imgui.slider_float(
                         "Hazard Rate",
                         slider_pos,
@@ -2113,7 +2112,6 @@ class UI:
             HAZARD_POWER = 3.0  # Higher = more resolution at low end
             # Convert actual value to slider position (0-1)
             slider_pos = (self.state.sim.HAZARD_RATE / HAZARD_MAX) ** (1.0 / HAZARD_POWER)
-            imgui.set_next_item_width(140)
             _, new_pos = imgui.slider_float(
                 "Hazard Rate",
                 slider_pos,
