@@ -626,7 +626,8 @@ class UI:
                                        file_menu_min.y + file_menu_size.y))
 
                 if imgui.menu_item("New", "", False)[0]:
-                    self._load_filename = "Core/_Default"
+                    self._load_filename = "_Default"
+                    self._load_category = "Core"
                     self._request_load_file = True
                     self._load_watercolor_override = None
                 self._delayed_tooltip("Start a fresh config. Loads from _Default")
@@ -2823,10 +2824,8 @@ class UI:
         target_x = imgui.get_style().window_padding.x + longest_width + 8
         imgui.set_cursor_pos_x(target_x)
 
-    def _set_exclusive_sweep(self, axis: str, param_name: str, new_mode: float):
-        """Set a sweep mode, clearing any other active sweep on the same axis.
-
-        Enforces single-sweep-per-axis: only one parameter can be swept on X, Y, or Cohort.
+    def _set_sweep(self, axis: str, param_name: str, new_mode: float):
+        """Set a sweep mode for a parameter.
 
         Args:
             axis: 'x', 'y', or 'cohort'
@@ -2839,12 +2838,6 @@ class UI:
             sweeps = self.state.sim.y_sweeps
         else:  # cohort
             sweeps = self.state.sim.cohort_sweeps
-
-        # If turning on a sweep, clear all others on this axis first
-        if new_mode != 0.0:
-            for key in sweeps:
-                if key != param_name:
-                    sweeps[key] = 0.0
 
         sweeps[param_name] = new_mode
 
@@ -2880,10 +2873,10 @@ class UI:
         imgui.button(f"X##{param_name}_x", imgui.ImVec2(button_width, button_height))
         if imgui.is_item_clicked(imgui.MouseButton_.left):
             new_mode = 1.0 if x_mode == 0.0 else 0.0
-            self._set_exclusive_sweep('x', param_name, new_mode)
+            self._set_sweep('x', param_name, new_mode)
         elif imgui.is_item_clicked(imgui.MouseButton_.right):
             new_mode = -1.0 if x_mode == 0.0 else 0.0
-            self._set_exclusive_sweep('x', param_name, new_mode)
+            self._set_sweep('x', param_name, new_mode)
 
         imgui.pop_style_color(3)
         imgui.same_line(spacing=2)
@@ -2906,10 +2899,10 @@ class UI:
         imgui.button(f"Y##{param_name}_y", imgui.ImVec2(button_width, button_height))
         if imgui.is_item_clicked(imgui.MouseButton_.left):
             new_mode = 1.0 if y_mode == 0.0 else 0.0
-            self._set_exclusive_sweep('y', param_name, new_mode)
+            self._set_sweep('y', param_name, new_mode)
         elif imgui.is_item_clicked(imgui.MouseButton_.right):
             new_mode = -1.0 if y_mode == 0.0 else 0.0
-            self._set_exclusive_sweep('y', param_name, new_mode)
+            self._set_sweep('y', param_name, new_mode)
 
         imgui.pop_style_color(3)
         imgui.same_line(spacing=2)
@@ -2932,10 +2925,10 @@ class UI:
         imgui.button(f"C##{param_name}_c", imgui.ImVec2(button_width, button_height))
         if imgui.is_item_clicked(imgui.MouseButton_.left):
             new_mode = 1.0 if c_mode == 0.0 else 0.0
-            self._set_exclusive_sweep('cohort', param_name, new_mode)
+            self._set_sweep('cohort', param_name, new_mode)
         elif imgui.is_item_clicked(imgui.MouseButton_.right):
             new_mode = -1.0 if c_mode == 0.0 else 0.0
-            self._set_exclusive_sweep('cohort', param_name, new_mode)
+            self._set_sweep('cohort', param_name, new_mode)
 
         imgui.pop_style_color(3)
 

@@ -144,7 +144,7 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
         {return setting.slider_value;}
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
-    cohort = cohort / float(get_particle_cohorts()); //convert to 0..1 for mixing
+    cohort = floor(cohort) / float(get_particle_cohorts()); //convert to 0..1 for mixing
 
     // Count active sweeps and accumulate results
     float result = 0;
@@ -444,6 +444,7 @@ void main() {
 
     //Calculate position offsets for the two sensors.
     float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
+    //sample_dist *= e.vel;
     int ORIENTATION_MODE =get_particle_absolute_orientation();
     float mix_amt = min(1,ORIENTATION_MODE)*ORIENTATION_MIX;
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
