@@ -449,8 +449,8 @@ class App:
             if ui_state.left_click_this_frame:
                 # When parameter sweeps are enabled, left click updates sliders (any mouse mode)
                 if ui_state.sim.parameter_sweeps_enabled:
-                    # Only update sliders if there are active sweeps
-                    if self.sim.has_active_xy_sweep():
+                    # Only update sliders if there are active sweeps (X, Y, or Cohort)
+                    if self.sim.has_active_xy_sweep() or self.sim.has_active_cohort_sweep():
                         tex_coords = self.camera.screen_to_tex(
                             ui_state.mouse_pos,
                             self.sim.view_tex.size
@@ -496,8 +496,8 @@ class App:
             elif ui_state.right_click_this_frame:
                 # When parameter sweeps are enabled, right click enters preview mode (any mouse mode)
                 if ui_state.sim.parameter_sweeps_enabled:
-                    # Only enter preview mode if there are active sweeps
-                    if self.sim.has_active_xy_sweep():
+                    # Only enter preview mode if there are active sweeps (X, Y, or Cohort)
+                    if self.sim.has_active_xy_sweep() or self.sim.has_active_cohort_sweep():
                         # Enter sweep preview mode: disable sweeps and set pending restore
                         ui_state.sim.parameter_sweeps_enabled = False
                         ui_state.sim.sweep_preview_pending_restore = True

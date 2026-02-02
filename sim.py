@@ -365,7 +365,7 @@ class Sim:
             min_value: Minimum value for parameter sweeps
             max_value: Maximum value for parameter sweeps
             pos: (x, y) world position of entity in [-1, 1] range
-            cohort: Normalized cohort value in [0, 1] range
+            cohort: Raw cohort value in [0, num_cohorts) range (from entity buffer)
             x_sweep: Sweep mode (0.0 = off, 1.0 = normal, -1.0 = inverse)
             y_sweep: Sweep mode (0.0 = off, 1.0 = normal, -1.0 = inverse)
             cohort_sweep: Sweep mode (0.0 = off, 1.0 = normal, -1.0 = inverse)
@@ -373,12 +373,18 @@ class Sim:
         Returns:
             Effective parameter value at the given position/cohort
         """
+        import math
+
         # If no sweeps active, return slider value
         if x_sweep == 0.0 and y_sweep == 0.0 and cohort_sweep == 0.0:
             return slider_value
 
         # Convert pos from [-1, 1] to [0, 1] for mixing
         pos_norm = ((pos[0] + 1) / 2, (pos[1] + 1) / 2)
+
+        # Convert cohort to normalized [0, 1] range, matching shader:
+        # cohort = floor(cohort) / float(get_particle_cohorts())
+        cohort_norm = math.floor(cohort*self._state.num_cohorts) / float(self._state.num_cohorts)
 
         # Accumulate sweep contributions
         result = 0.0
@@ -403,9 +409,9 @@ class Sim:
         if cohort_sweep != 0.0:
             # For inverse sweep (cohort_sweep < 0), swap min and max
             if cohort_sweep > 0.0:
-                result += min_value + (max_value - min_value) * cohort
+                result += min_value + (max_value - min_value) * cohort_norm
             else:
-                result += max_value + (min_value - max_value) * cohort
+                result += max_value + (min_value - max_value) * cohort_norm
             active_sweeps += 1
 
         # Average the results to keep within min/max range
