@@ -1,3 +1,5 @@
+
+![bubbles 12 46 01 (1)](https://github.com/user-attachments/assets/ecd4a0dc-a11f-45b3-b603-b4e27e8e576b)
 # Fluoddity
 I struggle to describe Fluoddity. Think somewhere between interactive lava lamp and evolvable ant farm. 
 Sometimes I'll see a meandering river, a candle flame, or branching lightning. Sometimes it's more like looking under a microscope as little amoebas devour each other and break apart. And sometimes, it's stranger than all that.
@@ -20,8 +22,7 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
  - particle selection/mutation to customize particle behavior
  - mouse drawing mode for making trails
  - Save/load system for physics + behavior
- - save strings with copy/pa
- - te from clipboard
+ - save strings with copy/paste from clipboard
  - parameter sweeps mode allows varying physics sliders across the canvas. X and Y sweeps for exploring 2d parameter space.
  - variable physics frequency with motion blur
  - ffmpeg based video recording
@@ -32,7 +33,9 @@ Particles in Fluoddity have no direct interactions with each-other. Instead, the
 There is no fixed rule that determines how particles respond to their senses. Instead, each particle has a simple neural-net like brain with just 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
 
 ## Screenshots
-TODO- actual screenshots with visible UI
+<img width="797" height="595" alt="image" src="https://github.com/user-attachments/assets/343b2f6a-c09b-41c1-a370-247c223c33a7" />
+<img width="797" height="597" alt="image" src="https://github.com/user-attachments/assets/c70ce389-fe63-4635-bb5f-bbd62bd7a317" />
+
 
 ## Model
 Fluoddity generalizes the traditional physarum model in a couple ways.
@@ -43,10 +46,12 @@ Particle behavior is governed by a somewhat arbitrary black box function called 
 ### "Strafe"
 In addition to forces causing acceleration, each paricle has a limited ability to "strafe", changing position independently from velocity. This is the least "principled" of my generalizations, but it is incredibly simple and enables some really beautiful patterns. Strafe allows particles to leave velocity trails which disagree with their direction of travel, enabling things like "swimming upstream" without turning around or "sidle to the left" without losing track of which way is "forward". 
 ### Symmetry
-the traditional physarum model has some important symmetries that we would like to impose on our otherwise arbitrary noise functions. These symmetries can be toggled (or dialed down) in additional settings.
--Rotational: 
+The traditional physarum model has some important symmetries that we would like to impose on our otherwise arbitrary noise functions. These symmetries can be toggled (or dialed down) in additional settings.
+
+- Rotational: 
 Rotate the whole world by 90°, and nothing should change: the dynamics are independent of global orientation. Particles should never favor the bottom left corner of the screen, for example. Achieving this symmetry is as simple as calculating all sensors/forces in a local coordinate system where "up" == particle velocity.
--Chiral:
+
+- Chiral:
 Reflect the world across the X axis and nothing should change: the dynamics are identical when viewed in a mirror. Particles in the traditional physarum model display bilateral symmetry, they are not "left handed" or "right handed". Without this property, fluoddity particles show clockwise/counterclockwise bias, and the behavior space consists mostly of particles which are always turning left, or always turning right. This symmetry is achieved by calculating physics twice: once in mirrored coordinates, and averaging the results.
 
 Enforcing these symmetries drastically reduces the prevalence of boring and degenerate Rules.
@@ -73,8 +78,10 @@ Enforcing these symmetries drastically reduces the prevalence of boring and dege
    ```
 
 ## Usage
-
-Run main.py
+Either:
+pip install requirements, then run main.py
+OR
+Download a release and run Fluoddity.exe 
 
 ## Building
 
