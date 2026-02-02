@@ -4,6 +4,11 @@ cohort isolation view
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
 
+Particles (cohorts) are various sizes. Total area conserved between size groups.
+ so 100 times as many at 1/10th the size.
+  Forces etc. should be higher on smaller entities? 
+  Ie: area ~ mass and newtonian physics.
+
 Orientation mode: 
     intrinsic
         velocity
