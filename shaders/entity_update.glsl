@@ -333,7 +333,7 @@ void reset(uint index){
         float spots=float(cohorts);
         float spot_rows=ceil(sqrt(spots));
         vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
-        pR(pos,floor(cohort_val)*3.1415*2*spots);
+        //pR(pos,floor(cohort_val)*3.1415*2*spots);
         pos+=1.8*((gridcell)/spot_rows+ (1/2.*(1/spot_rows-1)));
     }
     else if(reset_mode == 1) {
@@ -445,7 +445,10 @@ void main() {
     //Calculate position offsets for the two sensors.
     float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
     //variable sample distance?
-    //sample_dist *= length(get_can(e.pos).xy)/.01;
+    //sample_dist *= (get_can(e.pos).z*10);
+    //GOOD 1./dot(normalize(e.vel),normalize(get_can(e.pos).xy));
+    //length(e.vel)/.05;//length(get_can(e.pos).xy)/.01;
+    
     int ORIENTATION_MODE =get_particle_absolute_orientation();
     float mix_amt = min(1,ORIENTATION_MODE)*ORIENTATION_MIX;
     vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
