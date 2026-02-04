@@ -1,8 +1,20 @@
 # Build script for Fluoddity
 # This script activates the virtual environment (if needed), runs PyInstaller, and fixes shader paths
 
+param(
+    [switch]$NoFfmpeg
+)
+
 Write-Host "=== Fluoddity Build Script ===" -ForegroundColor Cyan
 Write-Host ""
+
+# Set environment variable for PyInstaller spec file
+if ($NoFfmpeg) {
+    Write-Host "Building WITHOUT bundled ffmpeg (users must have ffmpeg in PATH)" -ForegroundColor Yellow
+    $env:FLUODDITY_NO_FFMPEG = "1"
+} else {
+    $env:FLUODDITY_NO_FFMPEG = ""
+}
 
 # Step 1: Check if virtual environment is already activated, if not activate it
 if ($env:VIRTUAL_ENV) {

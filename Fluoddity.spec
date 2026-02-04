@@ -35,6 +35,12 @@ glfw_binaries = collect_glfw_binaries()
 # Find ffmpeg for video recording
 def collect_ffmpeg():
     """Collect ffmpeg executable if available."""
+    # Check if we should skip bundling ffmpeg (set by build.ps1 -NoFfmpeg)
+    if os.environ.get('FLUODDITY_NO_FFMPEG'):
+        print("Skipping ffmpeg bundling (-NoFfmpeg flag set)")
+        print("         Users will need ffmpeg in their PATH for video recording")
+        return []
+
     binaries = []
     try:
         import shutil
