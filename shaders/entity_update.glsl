@@ -444,6 +444,7 @@ void main() {
 
     //Calculate position offsets for the two sensors.
     float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
+    //sample_dist *= hash(frame_count+e.pos)*2.; //JITTER EXAMPLE
     //variable sample distance?
     //sample_dist *= (get_can(e.pos).z*10);
     //GOOD 1./dot(normalize(e.vel),normalize(get_can(e.pos).xy));
