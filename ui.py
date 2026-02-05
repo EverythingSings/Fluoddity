@@ -2122,6 +2122,8 @@ class UI:
             )
             # Convert slider position back to actual value
             self.state.sim.HAZARD_RATE = HAZARD_MAX * (new_pos ** HAZARD_POWER)
+            # Add context menu for min/max adjustment (no jitter for Hazard Rate)
+            self.add_slider_context_menu("Hazard Rate", 0.0, 0.05)
             self.render_custom_tooltip("Hazard Rate",
                 "Probability per frame that particles reset to initial conditions. Gives particles a probabalistic 'lifetime' after which they reset.")
 
@@ -2706,8 +2708,14 @@ class UI:
         r, g, b = map(int, rgb_string.split(','))
         return (r / 255.0, g / 255.0, b / 255.0, 1.0)
 
-    def _label_to_param_name(self, label: str) -> str | None:
-        """Convert a slider label to its parameter name."""
+    def _label_to_param_name(self, label: str, for_jitter: bool = False) -> str | None:
+        """Convert a slider label to its parameter name.
+
+        Args:
+            label: The slider label (e.g., 'Axial Force')
+            for_jitter: If True, returns None for params where jitter is nonsensical
+                       (Hazard Rate and Mutation Scale already have inherent randomness)
+        """
         mapping = {
             'Axial Force': 'AXIAL_FORCE',
             'Lateral Force': 'LATERAL_FORCE',
@@ -2722,7 +2730,11 @@ class UI:
             'Trail Diffusion': 'TRAIL_DIFFUSION',
             'Hazard Rate': 'HAZARD_RATE',
         }
-        return mapping.get(label)
+        param_name = mapping.get(label)
+        # Hide jitter for params where it's redundant/nonsensical
+        if for_jitter and param_name in ('HAZARD_RATE', 'MUTATION_SCALE'):
+            return None
+        return param_name
 
     def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f"):
         """
@@ -2747,8 +2759,9 @@ class UI:
 
         min_val, max_val = self.state.sim.slider_ranges[label][0], self.state.sim.slider_ranges[label][1]
 
-        # Check if jitter is active for this parameter
-        jitter_amount = self.state.sim.jitters.get(param_name, 0.0)
+        # Check if jitter is active for this parameter (skip for params where jitter is hidden)
+        jitter_param = self._label_to_param_name(label, for_jitter=True)
+        jitter_amount = self.state.sim.jitters.get(param_name, 0.0) if jitter_param else 0.0
         has_jitter = jitter_amount > 0.0
 
         # Apply orange tint when jitter is active
@@ -2831,8 +2844,8 @@ class UI:
 
             imgui.separator()
 
-            # Jitter control
-            param_name = self._label_to_param_name(slider_name)
+            # Jitter control (hidden for Hazard Rate and Mutation Scale)
+            param_name = self._label_to_param_name(slider_name, for_jitter=True)
             if param_name:
                 current_jitter = self.state.sim.jitters.get(param_name, 0.0)
                 imgui.text("Jitter")
