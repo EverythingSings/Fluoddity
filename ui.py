@@ -2820,6 +2820,18 @@ class UI:
 
         # Create context menu (right-click on the previous item)
         if imgui.begin_popup_context_item(f"{slider_name}_context"):
+            # Jitter control at top (hidden for Hazard Rate and Mutation Scale)
+            param_name = self._label_to_param_name(slider_name, for_jitter=True)
+            if param_name:
+                current_jitter = self.state.sim.jitters.get(param_name, 0.0)
+                imgui.text("Jitter")
+                changed_jitter, new_jitter = imgui.slider_float(
+                    f"##jitter_{slider_name}", current_jitter, 0.0, 2.0, "%.2f")
+                if changed_jitter:
+                    self.state.sim.jitters[param_name] = new_jitter
+                self._delayed_tooltip("Adds random jitter to this setting per-particle per-frame.\nOften results in a softer, fuzzier look.")
+                imgui.separator()
+
             imgui.text(f"Adjust Range: {slider_name}")
             imgui.separator()
 
@@ -2841,21 +2853,6 @@ class UI:
                 self.state.sim.slider_ranges[slider_name][0] = def_min
                 self.state.sim.slider_ranges[slider_name][1] = def_max
                 range_changed = True
-
-            imgui.separator()
-
-            # Jitter control (hidden for Hazard Rate and Mutation Scale)
-            param_name = self._label_to_param_name(slider_name, for_jitter=True)
-            if param_name:
-                current_jitter = self.state.sim.jitters.get(param_name, 0.0)
-                imgui.text("Jitter")
-                changed_jitter, new_jitter = imgui.slider_float(
-                    f"##jitter_{slider_name}", current_jitter, 0.0, 2.0, "%.2f")
-                if changed_jitter:
-                    self.state.sim.jitters[param_name] = new_jitter
-                if imgui.is_item_hovered():
-                    imgui.set_tooltip("Adds per-frame random variation to this parameter.\n"
-                                     "Value is proportional: 0.5 = +/-50% variation.")
 
             imgui.separator()
 

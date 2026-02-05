@@ -130,6 +130,7 @@ void main() {
     vec4 brush_color = texture(brush_tex, texcoord);
     vec4 can_color;
     float TRAIL_DIFFUSION = calculate_setting(TRAIL_DIFFUSION_SETTING,texcoord*2.-1,0);
+    TRAIL_DIFFUSION = clamp(TRAIL_DIFFUSION,0.001,1.0);//keeps jitter from exceeding the valid domain
     if(TRAIL_DIFFUSION>0){
         TRAIL_DIFFUSION= TRAIL_DIFFUSION*TRAIL_DIFFUSION;//better scaling for slider
         TRAIL_DIFFUSION = 4/(pow(5,(TRAIL_DIFFUSION))-1);//better scaling for slider
@@ -142,7 +143,7 @@ void main() {
     // Convert texcoord from [0,1] to [-1,1] for position-based sweeps
     vec2 world_pos = texcoord * 2.0 - 1.0;
     float trail_persistence = calculate_setting(TRAIL_PERSISTENCE_SETTING, world_pos, 0.0);
-    trail_persistence = min(trail_persistence,0.999);
+    trail_persistence = clamp(trail_persistence,0.0,0.999);
     can_out = can_color * trail_persistence + (1 - trail_persistence) * brush_color;
 
     // Draw trail mode: add velocity based on mouse drag
