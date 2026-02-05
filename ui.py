@@ -2706,10 +2706,29 @@ class UI:
         r, g, b = map(int, rgb_string.split(','))
         return (r / 255.0, g / 255.0, b / 255.0, 1.0)
 
+    def _label_to_param_name(self, label: str) -> str | None:
+        """Convert a slider label to its parameter name."""
+        mapping = {
+            'Axial Force': 'AXIAL_FORCE',
+            'Lateral Force': 'LATERAL_FORCE',
+            'Sensor Gain': 'SENSOR_GAIN',
+            'Mutation Scale': 'MUTATION_SCALE',
+            'Drag': 'DRAG',
+            'Strafe Power': 'STRAFE_POWER',
+            'Sensor Angle': 'SENSOR_ANGLE',
+            'Global Force Mult': 'GLOBAL_FORCE_MULT',
+            'Sensor Distance': 'SENSOR_DISTANCE',
+            'Trail Persistence': 'TRAIL_PERSISTENCE',
+            'Trail Diffusion': 'TRAIL_DIFFUSION',
+            'Hazard Rate': 'HAZARD_RATE',
+        }
+        return mapping.get(label)
+
     def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f"):
         """
         Create a slider with an adjustable min/max context menu and reset to defaults.
         Right-click the slider to adjust its range or reset value.
+        Shows jitter range when jitter > 0 with orange tint.
 
         Args:
             label: Display label for the slider
@@ -2728,8 +2747,32 @@ class UI:
 
         min_val, max_val = self.state.sim.slider_ranges[label][0], self.state.sim.slider_ranges[label][1]
 
+        # Check if jitter is active for this parameter
+        jitter_amount = self.state.sim.jitters.get(param_name, 0.0)
+        has_jitter = jitter_amount > 0.0
+
+        # Apply orange tint when jitter is active
+        if has_jitter:
+            imgui.push_style_color(imgui.Col_.frame_bg, imgui.ImVec4(0.4, 0.25, 0.1, 0.54))
+            imgui.push_style_color(imgui.Col_.frame_bg_hovered, imgui.ImVec4(0.5, 0.3, 0.1, 0.7))
+            imgui.push_style_color(imgui.Col_.frame_bg_active, imgui.ImVec4(0.6, 0.35, 0.1, 0.8))
+            imgui.push_style_color(imgui.Col_.slider_grab, imgui.ImVec4(0.9, 0.6, 0.2, 1.0))
+            imgui.push_style_color(imgui.Col_.slider_grab_active, imgui.ImVec4(1.0, 0.7, 0.3, 1.0))
+
+        # Custom format showing jitter range when jitter is active
+        if has_jitter:
+            jitter_min = value * (1.0 - jitter_amount)
+            jitter_max = value * (1.0 + jitter_amount)
+            display_format = f"%.3f ({jitter_min:.3f}, {jitter_max:.3f})"
+        else:
+            display_format = format
+
         # Create the slider
-        changed, new_value = imgui.slider_float(label, value, min_val, max_val, format=format)
+        changed, new_value = imgui.slider_float(label, value, min_val, max_val, format=display_format)
+
+        # Pop orange style colors
+        if has_jitter:
+            imgui.pop_style_color(5)
 
         # Add context menu
         _, _, reset_requested, _ = self.add_slider_context_menu(label, default_min, default_max)
@@ -2785,6 +2828,21 @@ class UI:
                 self.state.sim.slider_ranges[slider_name][0] = def_min
                 self.state.sim.slider_ranges[slider_name][1] = def_max
                 range_changed = True
+
+            imgui.separator()
+
+            # Jitter control
+            param_name = self._label_to_param_name(slider_name)
+            if param_name:
+                current_jitter = self.state.sim.jitters.get(param_name, 0.0)
+                imgui.text("Jitter")
+                changed_jitter, new_jitter = imgui.slider_float(
+                    f"##jitter_{slider_name}", current_jitter, 0.0, 2.0, "%.2f")
+                if changed_jitter:
+                    self.state.sim.jitters[param_name] = new_jitter
+                if imgui.is_item_hovered():
+                    imgui.set_tooltip("Adds per-frame random variation to this parameter.\n"
+                                     "Value is proportional: 0.5 = +/-50% variation.")
 
             imgui.separator()
 

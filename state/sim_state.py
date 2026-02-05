@@ -95,3 +95,19 @@ class SimState:
         'TRAIL_DIFFUSION': 0.0,
         'HAZARD_RATE': 0.0,
     })
+    # Jitter settings: per-parameter temporal randomness (0.0-2.0)
+    # Jitter is proportional: 0.5 means ±50% random variation per frame
+    jitters: dict[str, float] = field(default_factory=lambda: {
+        'AXIAL_FORCE': 0.0,
+        'LATERAL_FORCE': 0.0,
+        'SENSOR_GAIN': 0.0,
+        'MUTATION_SCALE': 0.0,
+        'DRAG': 0.0,
+        'STRAFE_POWER': 0.0,
+        'SENSOR_ANGLE': 0.0,
+        'GLOBAL_FORCE_MULT': 0.0,
+        'SENSOR_DISTANCE': 0.0,
+        'TRAIL_PERSISTENCE': 0.0,
+        'TRAIL_DIFFUSION': 0.0,
+        'HAZARD_RATE': 0.0,
+    })

@@ -28,6 +28,7 @@ struct PhysicsSetting {
     float x_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
     float y_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
     float cohort_sweep; // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
+    float jitter;       // 0.0 = off, higher = more randomness (proportional to result)
 };
 
 uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
@@ -40,8 +41,8 @@ uniform int frame_count;
 // SYNCHRONIZED: This function must match entity_update.glsl and sim.py::calculate_setting
 // Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
 float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
-    //if no sweep modes are active, just return slider value
-    if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0)
+    //if no sweep modes are active and no jitter, just return slider value
+    if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0 && setting.jitter == 0.0)
         {return setting.slider_value;}
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
@@ -78,8 +79,17 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
         active_sweeps++;
     }
 
-    // Average the results to keep within min/max range
-    return active_sweeps > 0 ? result / float(active_sweeps) : setting.slider_value;
+    // Average the results or use slider_value if no sweeps
+    result = active_sweeps > 0 ? result / float(active_sweeps) : setting.slider_value;
+
+    // Apply jitter: random variation proportional to the result value
+    // Uses a simple hash function since canvas.frag doesn't have access to entity_update's hash()
+    if(setting.jitter != 0.0) {
+        float random = fract(sin(dot(pos + float(frame_count) * 0.01, vec2(12.9898, 78.233))) * 43758.5453) * 2.0 - 1.0;
+        result += setting.jitter * result * random;
+    }
+
+    return result;
 }
 
 vec4 getCan(vec2 p, sampler2D sam) {

@@ -238,6 +238,8 @@ class Sim:
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', 0.0)
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', 0.0)
             tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', 0.0)
+        # Always apply jitter (independent of parameter_sweeps_enabled)
+        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.jitter', self._state.jitters.get('TRAIL_PERSISTENCE', 0.0))
 
         # Assign TRAIL_DIFFUSION as a PhysicsSetting struct
         min_val, max_val = self._get_slider_range('Trail Diffusion', 0.0, 1.0)
@@ -253,6 +255,8 @@ class Sim:
             tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.x_sweep', 0.0)
             tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.y_sweep', 0.0)
             tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', 0.0)
+        # Always apply jitter (independent of parameter_sweeps_enabled)
+        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.jitter', self._state.jitters.get('TRAIL_DIFFUSION', 0.0))
 
         tryset(self.canvas_update_program, 'can_tex', 1)
         tryset(self.canvas_update_program, 'brush_tex', 3)
@@ -418,7 +422,7 @@ class Sim:
         return result / active_sweeps if active_sweeps > 0 else slider_value
 
     def _assign_physics_setting(self, uniform_name: str, slider_value: float, slider_label: str, param_name: str, default_min: float, default_max: float):
-        """Assign a PhysicsSetting struct uniform with dynamically fetched min/max ranges and sweep states."""
+        """Assign a PhysicsSetting struct uniform with dynamically fetched min/max ranges, sweep states, and jitter."""
         min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
 
         tryset(self.entity_update_program, f'{uniform_name}.slider_value', slider_value)
@@ -433,6 +437,8 @@ class Sim:
             tryset(self.entity_update_program, f'{uniform_name}.x_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.y_sweep', 0.0)
             tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', 0.0)
+        # Always apply jitter (independent of parameter_sweeps_enabled)
+        tryset(self.entity_update_program, f'{uniform_name}.jitter', self._state.jitters.get(param_name, 0.0))
 
     def _calculate_weighted_trail_settings(self, multi_load_service) -> tuple[float, float]:
         """Calculate weighted average trail settings based on multi-load window.
@@ -579,11 +585,11 @@ class Sim:
         for i in range(config_count):
             config = multi_load_service.get_config(i)
             if config is None:
-                # Write zeros for missing configs (10×6 floats + 6 ints + 3 floats = 276 bytes)
-                data.extend(bytes(276))
+                # Write zeros for missing configs (10×7 floats + 6 ints + 3 floats = 316 bytes)
+                data.extend(bytes(316))
                 continue
 
-            # Pack physics parameters (10 PhysicsSetting structs, each 6 floats)
+            # Pack physics parameters (10 PhysicsSetting structs, each 7 floats)
             params = [
                 ('axial_force', 'AXIAL_FORCE', -1.0, 1.0),
                 ('lateral_force', 'LATERAL_FORCE', -1.0, 1.0),
@@ -601,13 +607,14 @@ class Sim:
                 slider_value = getattr(config, attr_name)
                 min_val, max_val = self._get_slider_range(attr_name.replace('_', ' ').title(), default_min, default_max)
                 if config.parameter_sweeps_enabled:
-                    x_sweep = config.x_sweeps.get(param_name, 0.0) 
+                    x_sweep = config.x_sweeps.get(param_name, 0.0)
                     y_sweep = config.y_sweeps.get(param_name, 0.0)
                 else:
                     x_sweep = 0
                     y_sweep = 0
                 cohort_sweep = config.cohort_sweeps.get(param_name, 0.0)
-                data.extend(struct.pack('6f', slider_value, min_val, max_val, x_sweep, y_sweep, cohort_sweep))
+                jitter = config.jitters.get(param_name, 0.0)
+                data.extend(struct.pack('7f', slider_value, min_val, max_val, x_sweep, y_sweep, cohort_sweep, jitter))
 
             # Pack simulation settings (6 ints)
             data.extend(struct.pack('6i',

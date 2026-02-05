@@ -28,6 +28,7 @@ struct PhysicsSetting {
     float x_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
     float y_sweep;      // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
     float cohort_sweep; // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
+    float jitter;       // 0.0 = off, higher = more randomness (proportional to result)
 };
 uniform float WORLD_SIZE;
 uniform int frame_count;
@@ -139,8 +140,8 @@ int get_particle_cohorts() {
 // SYNCHRONIZED: This function must match canvas.frag and sim.py::calculate_setting
 // Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
 float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
-    //if no sweep modes are active, just return slider value
-    if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0)
+    //if no sweep modes are active and no jitter, just return slider value
+    if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0 && setting.jitter == 0.0)
         {return setting.slider_value;}
     //otherwise calculate parameter sweeps
     pos = (pos+1)/2.;//convert to 0..1 for use as a mix coefficient
@@ -177,8 +178,17 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
         active_sweeps++;
     }
 
-    // Average the results to keep within min/max range
-    return active_sweeps > 0 ? result / float(active_sweeps) : setting.slider_value;
+    // Average the results or use slider_value if no sweeps
+    result = active_sweeps > 0 ? result / float(active_sweeps) : setting.slider_value;
+
+    // Apply jitter: random variation proportional to the result value
+    // hash() returns 0..1, so (hash(...)*2.-1.) returns -1..1
+    if(setting.jitter != 0.0) {
+        float random = hash(vec2(float(frame_count), pos.x + pos.y * 1000.0)) * 2.0 - 1.0;
+        result += setting.jitter * result * random;
+    }
+
+    return result;
 }
 
 
@@ -444,7 +454,7 @@ void main() {
 
     //Calculate position offsets for the two sensors.
     float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
-    //sample_dist *= hash(frame_count+e.pos)*2.; //JITTER EXAMPLE
+    
     //variable sample distance?
     //sample_dist *= (get_can(e.pos).z*10);
     //GOOD 1./dot(normalize(e.vel),normalize(get_can(e.pos).xy));

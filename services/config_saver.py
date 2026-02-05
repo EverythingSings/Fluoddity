@@ -61,6 +61,11 @@ def _default_sweeps() -> dict[str, float]:
     return {p: 0.0 for p in PHYSICS_PARAMS}
 
 
+def _default_jitters() -> dict[str, float]:
+    """Create default jitters dict with all params set to 0.0."""
+    return {p: 0.0 for p in PHYSICS_PARAMS}
+
+
 def _default_slider_ranges() -> dict[str, list[float]]:
     """Create default slider ranges dict: [cur_min, cur_max, default_min, default_max]."""
     return {
@@ -95,6 +100,9 @@ class PhysicsConfig:
     y_sweeps: dict[str, float] = field(default_factory=_default_sweeps)
     cohort_sweeps: dict[str, float] = field(default_factory=_default_sweeps)
     parameter_sweeps_enabled: bool = False
+
+    # Jitter settings: {param_name: jitter_amount} where amount is 0.0-2.0
+    jitters: dict[str, float] = field(default_factory=_default_jitters)
 
     # Simulation settings
     disable_symmetry: bool = False
@@ -144,6 +152,7 @@ class PhysicsConfig:
                 'y': self.y_sweeps,
                 'cohort': self.cohort_sweeps,
             },
+            'jitters': self.jitters,
             'parameter_sweeps_enabled': self.parameter_sweeps_enabled,
             'settings': {
                 'disable_symmetry': self.disable_symmetry,
@@ -188,6 +197,10 @@ class PhysicsConfig:
         cohort_sweeps = _default_sweeps()
         cohort_sweeps.update(sweeps.get('cohort', {}))
 
+        # Ensure jitters dict has all params (backwards compatibility: default 0.0)
+        jitters = _default_jitters()
+        jitters.update(data.get('jitters', {}))
+
         # Ensure slider_ranges has all sliders (fill missing with defaults)
         slider_ranges = _default_slider_ranges()
         slider_ranges.update(data.get('slider_ranges', {}))
@@ -209,6 +222,7 @@ class PhysicsConfig:
             x_sweeps=x_sweeps,
             y_sweeps=y_sweeps,
             cohort_sweeps=cohort_sweeps,
+            jitters=jitters,
             parameter_sweeps_enabled=data.get('parameter_sweeps_enabled', False),
             disable_symmetry=settings.get('disable_symmetry', False),
             absolute_orientation=int(settings.get('absolute_orientation', 0)),
@@ -263,6 +277,7 @@ class ConfigSaver:
             x_sweeps=sim_state.x_sweeps.copy(),
             y_sweeps=sim_state.y_sweeps.copy(),
             cohort_sweeps=sim_state.cohort_sweeps.copy(),
+            jitters=sim_state.jitters.copy(),
             parameter_sweeps_enabled=sim_state.parameter_sweeps_enabled,
             disable_symmetry=sim_state.DISABLE_SYMMETRY,
             absolute_orientation=sim_state.ABSOLUTE_ORIENTATION,
@@ -321,6 +336,10 @@ class ConfigSaver:
         sim_state.cohort_sweeps.clear()
         sim_state.cohort_sweeps.update(config.cohort_sweeps)
         sim_state.parameter_sweeps_enabled = config.parameter_sweeps_enabled
+
+        # Jitter states (full replacement)
+        sim_state.jitters.clear()
+        sim_state.jitters.update(config.jitters)
 
         # Simulation settings
         sim_state.DISABLE_SYMMETRY = config.disable_symmetry
