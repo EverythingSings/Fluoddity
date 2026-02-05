@@ -2820,6 +2820,21 @@ class UI:
 
         # Create context menu (right-click on the previous item)
         if imgui.begin_popup_context_item(f"{slider_name}_context"):
+            # Auto-close if mouse moves too far away from popup
+            popup_pos = imgui.get_window_pos()
+            popup_size = imgui.get_window_size()
+            mouse_pos = imgui.get_mouse_pos()
+
+            # Calculate distance from mouse to popup rectangle
+            popup_min_x, popup_min_y = popup_pos.x, popup_pos.y
+            popup_max_x, popup_max_y = popup_pos.x + popup_size.x, popup_pos.y + popup_size.y
+            dx = max(popup_min_x - mouse_pos.x, 0, mouse_pos.x - popup_max_x)
+            dy = max(popup_min_y - mouse_pos.y, 0, mouse_pos.y - popup_max_y)
+            distance = (dx * dx + dy * dy) ** 0.5
+
+            if distance > self.state.preferences.menu_close_threshold:
+                imgui.close_current_popup()
+
             # Jitter control at top (hidden for Hazard Rate and Mutation Scale)
             param_name = self._label_to_param_name(slider_name, for_jitter=True)
             if param_name:
