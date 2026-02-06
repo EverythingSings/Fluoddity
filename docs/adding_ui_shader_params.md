@@ -59,18 +59,32 @@ def entity_update(self, ctx: moderngl.Context):
 
 ### Step 4: Add ImGui Widget in UI
 
-**File:** `ui.py` in `render_main_window()` method
+**File:** `ui/physics_window.py` in the appropriate slider group method
 
-Add the slider (or other widget):
+Add the slider using the shared helper from `slider_widgets.py`:
 
 ```python
+# Simple slider:
 _, self.state.sim.SENSOR_DISTANCE = imgui.slider_float(
     label="Sensor Distance",
     v=self.state.sim.SENSOR_DISTANCE,
     v_min=0.0,
     v_max=5.0,
 )
+
+# Or use the full-featured slider with context menu (right-click for range/jitter/sweep):
+self.slider_float_with_range_menu(
+    "Sensor Distance",
+    "SENSOR_DISTANCE",
+    description="Controls how far each particle looks ahead to sense trails."
+)
 ```
+
+The `slider_float_with_range_menu` method (in `ui/slider_widgets.py`) automatically provides:
+- Right-click context menu for adjusting slider range
+- Optional jitter (per-frame per-entity randomization)
+- Parameter sweep assignment (X/Y/Cohort)
+- Tooltip with animated shader visualization
 
 ## Common ImGui Widget Patterns
 
@@ -105,7 +119,7 @@ _, self.state.sim.PARAM = imgui.input_float("Label", self.state.sim.PARAM)
 | 1 | `state/sim_state.py` | Add field to dataclass |
 | 2 | `shaders/*.glsl` | Add `uniform` declaration and use it |
 | 3 | `sim.py` | Add `tryset()` call in update method |
-| 4 | `ui.py` | Add ImGui widget in render method |
+| 4 | `ui/physics_window.py` | Add ImGui widget in appropriate slider group |
 
 ## Notes
 

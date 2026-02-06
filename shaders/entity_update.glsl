@@ -185,7 +185,7 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     // Apply jitter: random variation proportional to the result value
     // hash() returns 0..1, so (hash(...)*2.-1.) returns -1..1
     if(setting.jitter != 0.0) {
-        float random = hash(vec2(float(frame_count), pos.x + pos.y * 1000.0)) * 2.0 - 1.0;
+        float random = hash(vec2(float(frame_count)+result, pos.x + pos.y * 1000.0)) * 2.0 - 1.0;
         result += setting.jitter * result * random;
     }
 
