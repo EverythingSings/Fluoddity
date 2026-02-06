@@ -97,6 +97,9 @@ class App:
         # Track previous view option for camera repositioning when leaving tiling mode
         self.prev_view_option = 0
 
+        # Deferred entity selection state (waits one frame for rule buffer to be written)
+        self._pending_entity_selection = None  # Tuple of (entity_id, entity_pos, entity_cohort) or None
+
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
         self._load_default_config()
@@ -486,11 +489,10 @@ class App:
 
                     # Bounds check: ensure entity_id is valid for current buffer size
                     if entity_id >= 0 and entity_id < self.sim.entity_count:
-                        print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort}")
-                        rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
-                        self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
-                        self.sim.apply_rule(rule)
-                        self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+                        print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort} - requesting rule buffer update")
+                        # Request deferred rule buffer update (will be read back next frame after sim.update)
+                        self.sim.request_rule_buffer_update(entity_id)
+                        self._pending_entity_selection = (entity_id, entity_pos, entity_cohort)
                     else:
                         print(f"Warning: entity_id {entity_id} out of bounds (max: {self.sim.entity_count - 1})")
             elif ui_state.right_click_this_frame:
@@ -832,6 +834,20 @@ class App:
                     strong_determinism=ui_state.preferences.strong_determinism
                 )
 
+                # Check for deferred entity selection (rule buffer was written this frame)
+                # Only check on first physics step to avoid multiple readbacks per display frame
+                if step == 0 and self._pending_entity_selection is not None:
+                    pending_entity_id = self.sim.consume_pending_rule_readback()
+                    if pending_entity_id is not None:
+                        entity_id, entity_pos, entity_cohort = self._pending_entity_selection
+                        self._pending_entity_selection = None
+                        # Now read back the rule (buffer was just written by entity_update)
+                        rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
+                        self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
+                        self.sim.apply_rule(rule)
+                        self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+                        print(f"Deferred rule readback complete for entity {entity_id}")
+
                 # Only render on frames matching the blur quality cadence
                 if step % motion_blur_render_cadence != 0:
                     continue
@@ -911,7 +927,21 @@ class App:
                     tiling_mode=tiling_mode,
                     strong_determinism=ui_state.preferences.strong_determinism
                 )
-            
+
+                # Check for deferred entity selection (rule buffer was written this frame)
+                # Only check on first physics step to avoid multiple readbacks per display frame
+                if step == 0 and self._pending_entity_selection is not None:
+                    pending_entity_id = self.sim.consume_pending_rule_readback()
+                    if pending_entity_id is not None:
+                        entity_id, entity_pos, entity_cohort = self._pending_entity_selection
+                        self._pending_entity_selection = None
+                        # Now read back the rule (buffer was just written by entity_update)
+                        rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
+                        self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
+                        self.sim.apply_rule(rule)
+                        self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+                        print(f"Deferred rule readback complete for entity {entity_id}")
+
             # Generate view texture only once at the end
             raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 

@@ -54,6 +54,7 @@ uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
 uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
+uniform bool WRITE_RULES; // Set true for one frame when rule buffer readback is needed
 
 // Multi-load control uniforms (small, stay as uniforms)
 uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
@@ -541,5 +542,9 @@ void main() {
 
     //Commit new entity state to buffers
     entities[index]=e;
-    rules[index] = current_rule;
+
+    // Only write rules when explicitly requested (expensive - 320 bytes per particle)
+    if(WRITE_RULES) {
+        rules[index] = current_rule;
+    }
 }

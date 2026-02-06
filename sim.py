@@ -28,6 +28,10 @@ class Sim:
         self._state = SimState()
         self._camera_state = None  # Will be set by apply_camera_state
 
+        # Deferred rule buffer update mechanism (avoids 192MB/frame write cost)
+        self._pending_rule_buffer_update = False  # Set true to trigger rule buffer write next frame
+        self._pending_entity_id = None  # Entity ID to read back after rule buffer is written
+
     def get_entity_count(self) -> int:
         """Calculate entity count based on world size."""
         return int(600000 * self.world_size)
@@ -156,6 +160,9 @@ class Sim:
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
         tryset(self.entity_update_program, 'WORLD_SIZE', self.world_size)
+
+        # Only write rules to buffer when explicitly requested (avoids 192MB/frame cost)
+        tryset(self.entity_update_program, 'WRITE_RULES', self._pending_rule_buffer_update)
 
         # Multi-load mode: set uniform arrays for all loaded configs
         if multi_load_service and multi_load_service.is_active() and not is_preview_active:
@@ -663,6 +670,35 @@ class Sim:
     def get_rule_buffer(self) -> moderngl.Buffer:
         """Expose rule buffer for rule readback."""
         return self.rule_buffer
+
+    def request_rule_buffer_update(self, entity_id: int) -> None:
+        """Request a one-time rule buffer write for the next frame.
+
+        This triggers the expensive rule buffer write (192MB) for exactly one frame,
+        allowing subsequent readback of the mutated rule for the specified entity.
+
+        Args:
+            entity_id: The entity index to read back after the buffer is written
+        """
+        self._pending_rule_buffer_update = True
+        self._pending_entity_id = entity_id
+
+    def consume_pending_rule_readback(self) -> int | None:
+        """Check if a rule readback is ready and consume the pending state.
+
+        Call this AFTER entity_update has run. If a rule buffer update was pending,
+        this returns the entity ID to read back and clears the pending state.
+
+        Returns:
+            Entity ID to read back, or None if no readback is pending
+        """
+        if self._pending_rule_buffer_update and self._pending_entity_id is not None:
+            entity_id = self._pending_entity_id
+            # Clear the pending state - the rule buffer has been written this frame
+            self._pending_rule_buffer_update = False
+            self._pending_entity_id = None
+            return entity_id
+        return None
 
     def update_sliders_from_particle(self, pos: tuple[float, float], cohort: float) -> None:
         """Update all slider values based on effective values at a particle's position/cohort.
