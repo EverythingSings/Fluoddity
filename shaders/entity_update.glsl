@@ -448,6 +448,19 @@ void main() {
     }
     Entity e=entities[index];
     float cohort = get_cohort(index);
+
+    Rule current_rule=get_particle_target_rule();
+    //if a few arbitrary coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
+    if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
+        current_rule = Rule(generate_random_centers(get_particle_rule_seed()+floor(cohort)));
+    }
+    //Each cohort gets a random mutation
+    mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),e.pos,cohort),get_particle_rule_seed()+floor(cohort));
+    // Only write rules when explicitly requested (expensive - 320 bytes per particle)
+    if(WRITE_RULES) {
+        rules[index] = current_rule;
+    }
+    
     //frame_count == 0 signals a simulation reset
     if (frame_count==0||calculate_setting(get_particle_hazard_rate(),e.pos,cohort)>hash(vec2(float(index)/float(ACTIVE_COUNT),frame_count))){reset(index);return;}
 
@@ -475,14 +488,7 @@ void main() {
     vec4 ltap = get_can(e.pos+left_sensor_offset);
     vec4 rtap = get_can(e.pos+right_sensor_offset);
 
-    Rule current_rule=get_particle_target_rule();
-    //if a few arbitrary coefficients are exactly 0, then assume target_rule is all 0s (no target) and generate a random rule instead.
-    if(current_rule.centers[0].frequency==vec4(0) && current_rule.centers[5].amplitude==vec4(0)){
-        current_rule = Rule(generate_random_centers(get_particle_rule_seed()+floor(cohort)));
-    }
-    //Each cohort gets a random mutation
-    mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),e.pos,cohort),get_particle_rule_seed()+floor(cohort));
-
+    
     //rescale sensor values
     float sensor_scaling = SQRT_WORLD_SIZE*38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
     ltap *= sensor_scaling;
@@ -543,8 +549,5 @@ void main() {
     //Commit new entity state to buffers
     entities[index]=e;
 
-    // Only write rules when explicitly requested (expensive - 320 bytes per particle)
-    if(WRITE_RULES) {
-        rules[index] = current_rule;
-    }
+
 }

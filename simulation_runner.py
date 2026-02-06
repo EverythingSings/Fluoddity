@@ -1,0 +1,250 @@
+"""Simulation runner: physics stepping, frame assembly, and video recording."""
+import glfw
+import numpy as np
+
+
+class SimulationRunner:
+    """Runs physics simulation steps with frame assembly and video recording.
+
+    Handles both motion-blur (temporal accumulation) and non-motion-blur paths,
+    deduplicating the shared physics stepping and frame assembly logic.
+    """
+
+    def __init__(self, sim, camera, video_service, command_handler, window):
+        self.sim = sim
+        self.camera = camera
+        self.video_service = video_service
+        self.command_handler = command_handler
+        self.window = window
+
+        # Mouse tracking for draw trail mode
+        self.prev_mouse_tex_coords = (0.0, 0.0)
+
+    def run_simulation_frame(self, ui_state, sweep_mode, sweep_reticle_pos,
+                              sweep_reticle_visible, screen_aspect,
+                              watercolor_mode=False, tiling_mode=False,
+                              screenshot_in_progress=False):
+        """Run simulation step(s) with frame assembly and video recording."""
+        self._screenshot_in_progress = screenshot_in_progress
+        self.camera.watercolor_mode = watercolor_mode
+        speedmult = ui_state.preferences.speedmult
+        motion_blur = ui_state.preferences.motion_blur
+
+        # Calculate mouse screen coordinates for draw overlay
+        width, height = glfw.get_framebuffer_size(self.window)
+        mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
+        mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
+        mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
+
+        # Compute view bounds for tiling mode
+        view_min, view_max = self._compute_view_bounds(tiling_mode, screen_aspect)
+
+        # Calculate draw mode parameters
+        draw_mode, mouse_tex_coords, draw_power_value = self._compute_draw_params(
+            ui_state, tiling_mode
+        )
+
+        # Build shared frame assembly kwargs (used by both paths)
+        assemble_kwargs = self._build_assemble_kwargs(
+            ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
+            screen_aspect, mouse_screen_coords, tiling_mode, view_min, view_max
+        )
+
+        if motion_blur:
+            self._run_with_motion_blur(
+                ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
+                tiling_mode, assemble_kwargs
+            )
+        else:
+            self._run_without_motion_blur(
+                ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
+                tiling_mode, assemble_kwargs
+            )
+
+        # Update previous mouse position for next frame
+        if draw_mode:
+            self.prev_mouse_tex_coords = mouse_tex_coords
+
+    def _compute_view_bounds(self, tiling_mode, screen_aspect):
+        """Compute view bounds for tiling mode."""
+        view_min = (0.0, 0.0)
+        view_max = (0.0, 0.0)
+        if tiling_mode:
+            view_min_ndc = np.array([-1.0, -1.0])
+            view_max_ndc = np.array([1.0, 1.0])
+            view_min = view_min_ndc * self.camera.zoom + self.camera.position * np.array([1.0, -1.0])
+            view_max = view_max_ndc * self.camera.zoom + self.camera.position * np.array([1.0, -1.0])
+            view_min[0] *= screen_aspect
+            view_max[0] *= screen_aspect
+        return view_min, view_max
+
+    def _compute_draw_params(self, ui_state, tiling_mode):
+        """Calculate draw mode parameters."""
+        # Disable trail drawing when parameter sweeps are active
+        draw_mode = (ui_state.preferences.mouse_mode == "Draw Trail" and
+                     not ui_state.sim.parameter_sweeps_enabled)
+        mouse_tex_coords = (0.0, 0.0)
+        draw_power_value = 0.0
+
+        if draw_mode:
+            mouse_tex_coords = self.camera.screen_to_tex(
+                ui_state.mouse_pos, self.sim.can.size
+            )
+            if tiling_mode:
+                mouse_tex_coords = (
+                    np.fmod(mouse_tex_coords[0] + 10.0, 1.0),
+                    np.fmod(mouse_tex_coords[1] + 10.0, 1.0)
+                )
+            if ui_state.mouse_left_held:
+                draw_power_value = ui_state.preferences.draw_power
+
+        return draw_mode, mouse_tex_coords, draw_power_value
+
+    def _get_emboss_params(self, ui_state):
+        """Get emboss texture and effective intensity from ui_state."""
+        emboss_mode = ui_state.sim.emboss_mode
+        if emboss_mode == 1:
+            emboss_tex = self.sim.can
+        elif emboss_mode == 2:
+            emboss_tex = self.sim.brush_tex
+        else:
+            emboss_tex = None
+        effective_emboss_intensity = 0.0 if emboss_mode == 0 else ui_state.sim.emboss_intensity
+        return emboss_tex, emboss_mode, effective_emboss_intensity
+
+    def _get_trail_draw_radius(self, ui_state):
+        """Calculate trail draw radius (0 when recording, screenshotting, sweeping, or not in Draw Trail mode)."""
+        if ui_state.preferences.mouse_mode != "Draw Trail":
+            return 0
+        if self.video_service.is_active():
+            return 0
+        if self._screenshot_in_progress:
+            return 0
+        if ui_state.sim.parameter_sweeps_enabled:
+            return 0
+        return ui_state.preferences.draw_size
+
+    def _build_assemble_kwargs(self, ui_state, sweep_mode, sweep_reticle_pos,
+                                sweep_reticle_visible, screen_aspect,
+                                mouse_screen_coords, tiling_mode, view_min, view_max):
+        """Build the kwargs dict for frame_assembler.assemble_frame().
+
+        These are shared between motion-blur and non-motion-blur paths.
+        Only total_samples and current_sample_index differ between the two.
+        """
+        emboss_tex, emboss_mode, effective_emboss_intensity = self._get_emboss_params(ui_state)
+
+        return dict(
+            view_mode=ui_state.sim.current_view_option,
+            sweep_mode=sweep_mode,
+            sweep_reticle_pos=sweep_reticle_pos,
+            sweep_reticle_visible=sweep_reticle_visible,
+            screen_aspect=screen_aspect,
+            brightness=self.camera.BRIGHTNESS,
+            exposure=ui_state.preferences.exposure,
+            ink_weight=ui_state.sim.ink_weight,
+            watercolor_mode=ui_state.sim.watercolor_mode,
+            emboss_tex=emboss_tex,
+            camera_position=tuple(self.camera.position),
+            camera_zoom=self.camera.zoom,
+            emboss_intensity=effective_emboss_intensity,
+            emboss_smoothness=ui_state.sim.emboss_smoothness,
+            trail_draw_radius=self._get_trail_draw_radius(ui_state),
+            mouse_screen_coords=mouse_screen_coords,
+            tiling_mode=tiling_mode,
+            view_min=tuple(view_min),
+            view_max=tuple(view_max),
+        )
+
+    def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
+                           draw_power_value, tiling_mode, step_index):
+        """Run a single physics step and handle deferred entity selection.
+
+        Args:
+            step_index: Current step within the frame (0-based).
+                        Entity selection only checked on step 0.
+        """
+        self.sim.update(
+            self.camera.ctx,
+            draw_mode=draw_mode,
+            mouse_pos=mouse_tex_coords,
+            prev_mouse_pos=self.prev_mouse_tex_coords,
+            draw_size=ui_state.preferences.draw_size,
+            draw_power=draw_power_value,
+            multi_load_service=(
+                self.command_handler.multi_load_service
+                if ui_state.multi_load.multi_load_enabled else None
+            ),
+            is_preview_active=self.command_handler.preview_rule_active,
+            tiling_mode=tiling_mode,
+            strong_determinism=ui_state.preferences.strong_determinism
+        )
+
+        # Check for deferred entity selection only on first physics step
+        if step_index == 0 and self.command_handler.has_pending_entity_selection:
+            self.command_handler.try_complete_entity_selection(ui_state)
+
+    def _process_assembled_frame(self, assembled_tex, ui_state):
+        """Handle a completed assembled frame: store it and feed to video recorder."""
+        if assembled_tex is None:
+            return
+        self.camera.assembled_texture = assembled_tex
+        if self.video_service.is_active():
+            self.video_service.process_frame(
+                self.camera.ctx,
+                assembled_tex,
+                ui_state.preferences.max_frames,
+                ui_state.preferences.supersample_k,
+                ui_state.preferences.filename_prefix
+            )
+
+    def _run_with_motion_blur(self, ui_state, speedmult, draw_mode,
+                               mouse_tex_coords, draw_power_value,
+                               tiling_mode, assemble_kwargs):
+        """Motion blur path: temporal accumulation with multiple render calls."""
+        motion_blur_render_cadence = ui_state.preferences.blur_quality
+        total_render_samples = (speedmult + motion_blur_render_cadence - 1) // motion_blur_render_cadence
+        render_sample_index = 0
+
+        for step in range(speedmult):
+            self._run_physics_step(
+                ui_state, draw_mode, mouse_tex_coords, draw_power_value,
+                tiling_mode, step
+            )
+
+            # Only render on frames matching the blur quality cadence
+            if step % motion_blur_render_cadence != 0:
+                continue
+
+            raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
+
+            assembled_tex = self.camera.frame_assembler.assemble_frame(
+                raw_view_tex,
+                total_samples=total_render_samples,
+                current_sample_index=render_sample_index,
+                **assemble_kwargs
+            )
+            render_sample_index += 1
+
+            self._process_assembled_frame(assembled_tex, ui_state)
+
+    def _run_without_motion_blur(self, ui_state, speedmult, draw_mode,
+                                  mouse_tex_coords, draw_power_value,
+                                  tiling_mode, assemble_kwargs):
+        """Non-motion-blur path: multiple physics steps, single render call."""
+        for step in range(speedmult):
+            self._run_physics_step(
+                ui_state, draw_mode, mouse_tex_coords, draw_power_value,
+                tiling_mode, step
+            )
+
+        raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
+
+        assembled_tex = self.camera.frame_assembler.assemble_frame(
+            raw_view_tex,
+            total_samples=1,
+            current_sample_index=0,
+            **assemble_kwargs
+        )
+
+        self._process_assembled_frame(assembled_tex, ui_state)
