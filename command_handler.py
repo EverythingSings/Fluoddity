@@ -25,7 +25,8 @@ class CommandHandler:
 
         # Preview state
         self.preview_rule_active = False  # File->load preview
-        self.history_preview_rule_active = False  # History window preview
+        self.clipboard_preview_active = False  # Config clipboard preview
+        self._clipboard_cached_config = None  # Full config saved before clipboard preview
 
         # Video pending state (waiting for scheduled start frame)
         self.video_pending = False
@@ -110,8 +111,8 @@ class CommandHandler:
         # Handle preview commands (file browser)
         self._handle_preview_commands(ui_state)
 
-        # Handle history commands
-        self._handle_history_commands(ui_state)
+        # Handle config clipboard commands
+        self._handle_clipboard_commands(ui_state)
 
         return None
 
@@ -237,8 +238,10 @@ class CommandHandler:
         # Config save (Ctrl+C)
         if ui_state.request_save_config:
             current_rule = self.rule_manager.get_current_rule()
-            config_string = self.config_saver.save_to_string(ui_state.sim, current_rule)
+            config = self.config_saver.create_config(ui_state.sim, current_rule)
+            config_string = self.config_saver.encode_clipboard(config)
             self.ui.set_clipboard(config_string)
+            self.ui.add_to_config_clipboard(config, self.ui.currently_open_project)
             print(f"Config copied to clipboard ({len(config_string)} chars)")
 
         # Config load (Ctrl+V)
@@ -348,70 +351,90 @@ class CommandHandler:
                     self.sim.apply_rule(config.rule)
                     self.preview_rule_active = True
 
-    def _handle_history_commands(self, ui_state):
-        """Handle rule history preview, load, and delete commands."""
-        # Clear history preview (must happen before new preview)
-        if ui_state.request_clear_history_preview:
-            if self.history_preview_rule_active:
-                prev_rule, prev_seed = self.rule_manager.pop_rule()
-                self.ui.history_window_labels.pop()
-                if prev_seed is not None:
-                    ui_state.sim.rule_seed = prev_seed
-                self.sim.apply_rule(prev_rule)
-                self.history_preview_rule_active = False
+    def _handle_clipboard_commands(self, ui_state):
+        """Handle config clipboard preview, load, delete, and import-to-multiload."""
+        # Clear clipboard preview (must happen before new preview)
+        if ui_state.request_clear_clipboard_preview:
+            if self.clipboard_preview_active:
+                self.rule_manager.pop_rule()
+                # Restore the full cached config (not just the rule)
+                if self._clipboard_cached_config is not None:
+                    rule = self.config_saver.apply_config(
+                        self._clipboard_cached_config, ui_state.sim)
+                    self.sim.apply_rule(rule)
+                    self._clipboard_cached_config = None
+                self.clipboard_preview_active = False
 
-        # New history preview
-        if ui_state.request_preview_history_rule:
-            idx = ui_state.history_preview_index
-            if 0 <= idx < len(self.rule_manager.rule_history):
-                rule_to_preview, seed_to_preview = self.rule_manager.rule_history[idx]
-                rule_to_preview = rule_to_preview.copy()
-                self.rule_manager.push_rule(rule_to_preview, seed_to_preview)
-                self.sim.apply_rule(rule_to_preview)
-                self.history_preview_rule_active = True
+        # New clipboard preview
+        if ui_state.request_preview_clipboard_config:
+            idx = ui_state.clipboard_config_index
+            if 0 <= idx < len(self.ui.config_clipboard):
+                # Cache current full config before applying preview
+                if not self.clipboard_preview_active:
+                    current_rule = self.rule_manager.get_current_rule()
+                    self._clipboard_cached_config = self.config_saver.create_config(
+                        ui_state.sim, current_rule)
+                config, _label = self.ui.config_clipboard[idx]
+                rule = self.config_saver.apply_config(config, ui_state.sim)
+                self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
+                self.sim.apply_rule(rule)
+                self.clipboard_preview_active = True
 
-        # Load history rule
-        if ui_state.request_load_history_rule:
-            self._load_history_rule(ui_state)
+        # Load clipboard config (click)
+        if ui_state.request_load_clipboard_config:
+            self._load_clipboard_config(ui_state)
 
-        # Delete history rule
-        if ui_state.request_delete_history_rule:
-            self._delete_history_rule(ui_state)
+        # Delete clipboard entry
+        if ui_state.request_delete_clipboard_config:
+            self._delete_clipboard_config(ui_state)
 
-    def _load_history_rule(self, ui_state):
-        """Load a rule from history (move to top)."""
-        # Clear preview first
-        if self.history_preview_rule_active:
+        # Import clipboard to multi-load
+        if ui_state.request_import_clipboard_to_multiload:
+            self._import_clipboard_to_multiload()
+
+    def _load_clipboard_config(self, ui_state):
+        """Load a config from the clipboard (apply it permanently)."""
+        # Clear preview first (discard cached config since we're committing)
+        if self.clipboard_preview_active:
             self.rule_manager.pop_rule()
-            self.ui.history_window_labels.pop()
-            self.history_preview_rule_active = False
+            self.clipboard_preview_active = False
+            self._clipboard_cached_config = None
 
-        idx = ui_state.history_preview_index
-        if 0 <= idx < len(self.rule_manager.rule_history):
-            rule_to_load, seed_to_load = self.rule_manager.rule_history[idx]
-            rule_to_load = rule_to_load.copy()
-            label_to_preserve = self.ui.history_window_labels[idx]
+        idx = ui_state.clipboard_config_index
+        if 0 <= idx < len(self.ui.config_clipboard):
+            config, label = self.ui.config_clipboard[idx]
+            rule = self.config_saver.apply_config(config, ui_state.sim)
+            self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
+            self.sim.apply_rule(rule)
+            # Extract original filename from label (everything before the *)
+            original_filename = label.rsplit("*", 1)[0]
+            self.ui.update_physics_defaults(original_filename)
+            print(f"Config loaded from clipboard: {label}")
 
-            self.rule_manager.rule_history.pop(idx)
-            self.ui.history_window_labels.pop(idx)
-
-            self.rule_manager.push_rule(rule_to_load, seed_to_load)
-            self.ui.history_window_labels.append(label_to_preserve)
-            ui_state.sim.rule_seed = seed_to_load
-            self.sim.apply_rule(rule_to_load)
-
-    def _delete_history_rule(self, ui_state):
-        """Delete a rule from history."""
-        # Clear preview first
-        if self.history_preview_rule_active:
+    def _delete_clipboard_config(self, ui_state):
+        """Delete an entry from the config clipboard."""
+        # Clear preview first, restore cached config
+        if self.clipboard_preview_active:
             self.rule_manager.pop_rule()
-            self.ui.history_window_labels.pop()
-            self.history_preview_rule_active = False
+            if self._clipboard_cached_config is not None:
+                rule = self.config_saver.apply_config(
+                    self._clipboard_cached_config, ui_state.sim)
+                self.sim.apply_rule(rule)
+                self._clipboard_cached_config = None
+            self.clipboard_preview_active = False
 
-        idx = ui_state.history_preview_index
-        if 0 <= idx < len(self.rule_manager.rule_history):
-            self.rule_manager.rule_history.pop(idx)
-            self.ui.history_window_labels.pop(idx)
+        idx = ui_state.clipboard_config_index
+        if 0 <= idx < len(self.ui.config_clipboard):
+            self.ui.config_clipboard.pop(idx)
 
-            current_rule = self.rule_manager.get_current_rule()
-            self.sim.apply_rule(current_rule)
+    def _import_clipboard_to_multiload(self):
+        """Replace multi-load configs with contents of config clipboard."""
+        # Clear existing multi-load configs
+        while self.multi_load_service.get_config_count() > 0:
+            self.multi_load_service.remove_config(0)
+
+        # Add each clipboard entry
+        for config, label in self.ui.config_clipboard:
+            self.multi_load_service.add_config(config, label)
+
+        print(f"Imported {len(self.ui.config_clipboard)} configs from clipboard to multi-load")

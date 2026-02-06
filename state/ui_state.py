@@ -64,9 +64,10 @@ class UIState:
     preview_filename: str = ""  # Filename to preview
     preview_category: str = ""  # Category for preview operation
 
-    # Rule history window flags
-    request_preview_history_rule: bool = False
-    request_clear_history_preview: bool = False
-    request_load_history_rule: bool = False
-    request_delete_history_rule: bool = False
-    history_preview_index: int = -1
+    # Config clipboard flags
+    request_preview_clipboard_config: bool = False
+    request_clear_clipboard_preview: bool = False
+    request_load_clipboard_config: bool = False
+    request_delete_clipboard_config: bool = False
+    request_import_clipboard_to_multiload: bool = False
+    clipboard_config_index: int = -1

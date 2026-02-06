@@ -496,6 +496,9 @@ class PhysicsWindowMixin:
             self.state.multi_load.current_progress = self.multi_load_service.current_progress
 
         imgui.separator()
+        if imgui.button("Import from Config Clipboard"):
+            self._request_import_clipboard_to_multiload = True
+        imgui.separator()
         imgui.text(f"Loaded Configurations ({config_count}/64)")
         imgui.separator()
 

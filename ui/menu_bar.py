@@ -238,6 +238,10 @@ class MenuBarMixin:
                 if imgui.menu_item("Screen Recording Controls", "", self.show_video_recording_window)[0]:
                     self.show_video_recording_window = not self.show_video_recording_window
 
+                # Config Clipboard window
+                if imgui.menu_item("Config Clipboard - EXPERIMENTAL", "", self.show_history_window)[0]:
+                    self.show_history_window = not self.show_history_window
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

@@ -271,7 +271,6 @@ class App:
             'recording_active': self.video_service.is_active(),
             'video_pending': cmd.video_pending,
             'video_scheduled_start_frame': cmd.video_scheduled_start_frame,
-            'rule_history': self.rule_manager.rule_history,
         })
         self.ui.render()
 

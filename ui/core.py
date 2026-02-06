@@ -81,10 +81,11 @@ class UI(
         self.show_video_recording_window = False  # Video recording controls window
         self.show_sidebar = True  # Controls visibility of Physics Settings and Preferences windows
 
-        # Rule history window state
-        self.show_history_window = False
-        self.history_window_labels: list[tuple[int, str, str]] = []  # [(jersey_num, digit1_rgb, digit2_rgb), ...]
-        self.currently_previewing_index: int | None = None
+        # Config clipboard state
+        self.show_history_window = False  # Toggled by Extras menu
+        self.config_clipboard: list[tuple] = []  # [(PhysicsConfig, display_label), ...]
+        self.clipboard_counter: int = 0  # Global jersey counter (00, 01, 02...)
+        self.clipboard_previewing_index: int | None = None
 
         # Tooltip state - track which slider was last hovered
         self.last_hovered_slider = None
@@ -180,12 +181,13 @@ class UI(
         self._request_clear_preview = False
         self._request_world_size_change = False
 
-        # Rule history window flags
-        self._request_preview_history_rule = False
-        self._request_clear_history_preview = False
-        self._request_load_history_rule = False
-        self._request_delete_history_rule = False
-        self._history_preview_index = -1
+        # Config clipboard flags
+        self._request_preview_clipboard_config = False
+        self._request_clear_clipboard_preview = False
+        self._request_load_clipboard_config = False
+        self._request_delete_clipboard_config = False
+        self._request_import_clipboard_to_multiload = False
+        self._clipboard_config_index = -1
 
         self._save_filename = ""
         self._load_filename = ""
@@ -426,12 +428,13 @@ class UI(
         self.state.preview_category = self._preview_category
         self.state.load_watercolor_override = self._load_watercolor_override
 
-        # Transfer history window flags
-        self.state.request_preview_history_rule = self._request_preview_history_rule
-        self.state.request_clear_history_preview = self._request_clear_history_preview
-        self.state.request_load_history_rule = self._request_load_history_rule
-        self.state.request_delete_history_rule = self._request_delete_history_rule
-        self.state.history_preview_index = self._history_preview_index
+        # Transfer config clipboard flags
+        self.state.request_preview_clipboard_config = self._request_preview_clipboard_config
+        self.state.request_clear_clipboard_preview = self._request_clear_clipboard_preview
+        self.state.request_load_clipboard_config = self._request_load_clipboard_config
+        self.state.request_delete_clipboard_config = self._request_delete_clipboard_config
+        self.state.request_import_clipboard_to_multiload = self._request_import_clipboard_to_multiload
+        self.state.clipboard_config_index = self._clipboard_config_index
 
         # Read clipboard content if load is requested
         if self._request_load_config:
@@ -469,12 +472,13 @@ class UI(
         self._preview_category = ""
         self._load_watercolor_override = None
 
-        # Reset history window flags
-        self._request_preview_history_rule = False
-        self._request_clear_history_preview = False
-        self._request_load_history_rule = False
-        self._request_delete_history_rule = False
-        self._history_preview_index = -1
+        # Reset config clipboard flags
+        self._request_preview_clipboard_config = False
+        self._request_clear_clipboard_preview = False
+        self._request_load_clipboard_config = False
+        self._request_delete_clipboard_config = False
+        self._request_import_clipboard_to_multiload = False
+        self._clipboard_config_index = -1
 
         return self.state
 
@@ -485,6 +489,12 @@ class UI(
     def set_clipboard(self, text: str) -> None:
         """Set clipboard content (used by orchestrator for config save)."""
         glfw.set_clipboard_string(self.window, text)
+
+    def add_to_config_clipboard(self, config, filename: str) -> None:
+        """Add a config snapshot to the config clipboard."""
+        label = f"{filename}*{self.clipboard_counter:02d}"
+        self.config_clipboard.append((config, label))
+        self.clipboard_counter += 1
 
     def update_physics_defaults(self, filename: str) -> None:
         """Update current physics defaults from current sim state (called after file load/save)."""

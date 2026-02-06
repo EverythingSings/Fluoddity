@@ -1,96 +1,68 @@
-"""Rule history window with preview and tooltip shader rendering."""
+"""Config clipboard window with preview, and tooltip shader rendering."""
 import time
-import random
-import colorsys
 import moderngl
 from imgui_bundle import imgui
 
 
 class HistoryWindowMixin:
-    """Mixin for rule history window. Combined into UI via multiple inheritance."""
+    """Mixin for config clipboard window and physics tooltips. Combined into UI via multiple inheritance."""
 
     def render_history_window(self):
-        """Render rule history window with preview."""
-        imgui.begin("Rule History")
+        """Render config clipboard window with hover preview."""
+        imgui.begin("Config Clipboard - EXPERIMENTAL")
 
-        rule_history = self._display_info.get('rule_history', [])
+        imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), "Press Ctrl+C to add a checkpoint")
+        imgui.separator()
 
-        if not rule_history:
-            imgui.text_colored(imgui.ImVec4(1.0, 0.5, 0.5, 1.0), "No rules in history")
+        if not self.config_clipboard:
+            imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), "No checkpoints yet")
             imgui.end()
             return
 
-        # Sync metadata with rule history
-        # When adding new rules, append new labels
-        while len(self.history_window_labels) < len(rule_history):
-            self.history_window_labels.append(self._generate_rule_label())
-        # When removing old rules (from beginning), remove old labels (from beginning)
-        while len(self.history_window_labels) > len(rule_history):
-            self.history_window_labels.pop(0)
-
-        # Determine how many rules to show (hide topmost if previewing)
-        num_rules_to_show = len(rule_history)
-        if self.currently_previewing_index is not None:
-            # Previewing - hide the topmost element (it's the preview copy)
-            num_rules_to_show -= 1
-
-        # Render rules (newest first, but skip the preview if active)
+        # Render entries (newest first)
         hovered_this_frame = None
 
-        for i in range(num_rules_to_show - 1, -1, -1):
-            # Get jersey number and colors
-            jersey_number, color1_rgb, color2_rgb = self.history_window_labels[i]
-            color1 = self._parse_rgb_color(color1_rgb)
-            color2 = self._parse_rgb_color(color2_rgb)
+        for i in range(len(self.config_clipboard) - 1, -1, -1):
+            _config, label = self.config_clipboard[i]
 
-            # Extract digits from jersey number
-            digit1 = jersey_number // 10
-            digit2 = jersey_number % 10
-
-            # Render colored digits
-            imgui.text_colored(imgui.ImVec4(*color1), str(digit1))
-            imgui.same_line(spacing=0)
-            imgui.text_colored(imgui.ImVec4(*color2), str(digit2))
-            imgui.same_line(spacing=2)
-
-            # Invisible selectable for click/hover detection
+            # Selectable label for click/hover detection
             clicked, _ = imgui.selectable(
-                f"##{i}",
-                False,
+                f"{label}##clip_{i}",
+                self.clipboard_previewing_index == i,
                 imgui.SelectableFlags_.none,
-                imgui.ImVec2(10, 0)  # Small width just for the hitbox
+                imgui.ImVec2(0, 0)
             )
 
             if imgui.is_item_hovered():
                 hovered_this_frame = i
 
-            # X button
+            # X button on the same line
             imgui.same_line()
             imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
-            if imgui.small_button(f"X##history_{i}"):
-                self._request_delete_history_rule = True
-                self._history_preview_index = i
+            if imgui.small_button(f"X##clip_{i}"):
+                self._request_delete_clipboard_config = True
+                self._clipboard_config_index = i
             imgui.pop_style_color(2)
 
             if imgui.is_item_hovered():
                 hovered_this_frame = i
 
             if clicked:
-                self._request_load_history_rule = True
-                self._history_preview_index = i
+                self._request_load_clipboard_config = True
+                self._clipboard_config_index = i
 
         # Handle preview state changes
-        if hovered_this_frame != self.currently_previewing_index:
-            if self.currently_previewing_index is not None:
-                self._request_clear_history_preview = True
+        if hovered_this_frame != self.clipboard_previewing_index:
+            if self.clipboard_previewing_index is not None:
+                self._request_clear_clipboard_preview = True
 
             if hovered_this_frame is not None:
-                self._request_preview_history_rule = True
-                self._history_preview_index = hovered_this_frame
-                self.currently_previewing_index = hovered_this_frame
+                self._request_preview_clipboard_config = True
+                self._clipboard_config_index = hovered_this_frame
+                self.clipboard_previewing_index = hovered_this_frame
             else:
-                self.currently_previewing_index = None
+                self.clipboard_previewing_index = None
 
         imgui.end()
 
@@ -216,30 +188,3 @@ class HistoryWindowMixin:
 
         # Reset interaction flag for next frame
         self.physics_window_interaction = False
-
-    def _generate_rule_label(self) -> tuple[int, str, str]:
-        """Generate random jersey number with colored digits.
-
-        Returns:
-            tuple: (jersey_number, digit1_rgb_string, digit2_rgb_string)
-                   e.g., (42, "255,128,64", "64,255,128")
-        """
-        # Generate random jersey number (00-99)
-        jersey_number = random.randint(0, 99)
-
-        label_digits = []
-        for _ in range(2):
-            hue = random.randint(0, 255) / 255.0
-            sat = random.randint(0, 150) / 255.0
-            val = 1.0  # Brightness fixed at 255
-
-            r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
-            r_int, g_int, b_int = int(r * 255), int(g * 255), int(b * 255)
-            label_digits.append(f"{r_int},{g_int},{b_int}")
-
-        return (jersey_number, label_digits[0], label_digits[1])
-
-    def _parse_rgb_color(self, rgb_string: str) -> tuple[float, float, float, float]:
-        """Parse RGB string to ImVec4 color."""
-        r, g, b = map(int, rgb_string.split(','))
-        return (r / 255.0, g / 255.0, b / 255.0, 1.0)
