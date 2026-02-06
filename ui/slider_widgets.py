@@ -71,6 +71,13 @@ class SliderWidgetsMixin:
         if has_jitter:
             imgui.pop_style_color(5)
 
+        # Show delayed tooltip explaining jitter when slider is orange-tinted
+        if has_jitter:
+            self._delayed_tooltip(
+                "Parameter varies randomly within the listed range.\n"
+                "Right-click for context menu with jitter slider."
+            )
+
         # Add context menu
         _, _, reset_requested, _ = self.add_slider_context_menu(label, default_min, default_max)
 
