@@ -1,5 +1,6 @@
 """Reusable slider widgets with context menus, sweep buttons, and range adjustment."""
 from imgui_bundle import imgui
+from .physics_params import PARAM_BY_LABEL
 
 
 class SliderWidgetsMixin:
@@ -10,28 +11,14 @@ class SliderWidgetsMixin:
 
         Args:
             label: The slider label (e.g., 'Axial Force')
-            for_jitter: If True, returns None for params where jitter is nonsensical
-                       (Hazard Rate and Mutation Scale already have inherent randomness)
+            for_jitter: If True, returns None for params where jitter is hidden
         """
-        mapping = {
-            'Axial Force': 'AXIAL_FORCE',
-            'Lateral Force': 'LATERAL_FORCE',
-            'Sensor Gain': 'SENSOR_GAIN',
-            'Mutation Scale': 'MUTATION_SCALE',
-            'Drag': 'DRAG',
-            'Strafe Power': 'STRAFE_POWER',
-            'Sensor Angle': 'SENSOR_ANGLE',
-            'Global Force Mult': 'GLOBAL_FORCE_MULT',
-            'Sensor Distance': 'SENSOR_DISTANCE',
-            'Trail Persistence': 'TRAIL_PERSISTENCE',
-            'Trail Diffusion': 'TRAIL_DIFFUSION',
-            'Hazard Rate': 'HAZARD_RATE',
-        }
-        param_name = mapping.get(label)
-        # Hide jitter for params where it's redundant/nonsensical
-        if for_jitter and param_name in ('HAZARD_RATE', 'MUTATION_SCALE'):
+        pdef = PARAM_BY_LABEL.get(label)
+        if pdef is None:
             return None
-        return param_name
+        if for_jitter and pdef.hide_jitter:
+            return None
+        return pdef.name
 
     def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f"):
         """
@@ -384,3 +371,51 @@ class SliderWidgetsMixin:
 
         # Add tooltip when hovering over the button group
         self._delayed_tooltip("Up arrow widens slider range. Down arrow narrows range")
+
+    def render_physics_slider(self, pdef):
+        """Render a complete physics slider from its PhysicsParamDef.
+
+        Handles sweep buttons, range adjust buttons, the slider itself
+        (including power-scaled sliders like Hazard Rate), context menu,
+        and tooltip. Reads/writes the value on self.state.sim.
+
+        Args:
+            pdef: A PhysicsParamDef instance from physics_params.py
+        """
+        value = getattr(self.state.sim, pdef.name)
+
+        # Sweep buttons + range adjust (only when sweeps enabled)
+        if self.state.sim.parameter_sweeps_enabled:
+            self.render_sweep_buttons(pdef.name)
+            imgui.same_line(spacing=2)
+            self.render_range_adjust_buttons(
+                pdef.name, pdef.label, value,
+                pdef.default_min, pdef.default_max,
+                hard_min=pdef.hard_min, hard_max=pdef.hard_max,
+            )
+            imgui.same_line(spacing=8)
+            imgui.set_next_item_width(80)
+
+        if pdef.is_power_scaled:
+            # Power-scaled slider (e.g. Hazard Rate): fine control at low values
+            slider_pos = (value / pdef.default_max) ** (1.0 / pdef.power_exponent)
+            _, new_pos = imgui.slider_float(
+                pdef.label, slider_pos, 0.0, 1.0,
+                f"{value:.5f}"
+            )
+            new_value = pdef.default_max * (new_pos ** pdef.power_exponent)
+            setattr(self.state.sim, pdef.name, new_value)
+            # Context menu without jitter (power-scaled params hide jitter)
+            self.add_slider_context_menu(pdef.label, pdef.default_min, pdef.default_max)
+        else:
+            # Standard slider with range menu
+            _, new_value = self.slider_float_with_range_menu(
+                label=pdef.label,
+                param_name=pdef.name,
+                value=value,
+                default_min=pdef.default_min,
+                default_max=pdef.default_max,
+            )
+            setattr(self.state.sim, pdef.name, new_value)
+
+        self.render_custom_tooltip(pdef.label, pdef.description)

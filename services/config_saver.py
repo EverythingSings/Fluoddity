@@ -12,46 +12,14 @@ import numpy as np
 from dataclasses import dataclass, field
 from pathlib import Path
 from state import SimState
+from ui.physics_params import (
+    PHYSICS_PARAMS as _PARAM_DEFS,
+    PHYSICS_PARAM_NAMES as PHYSICS_PARAMS,
+    DEFAULT_SLIDER_RANGES,
+)
 
-
-# Physics parameter names in order
-PHYSICS_PARAMS = [
-    'AXIAL_FORCE', 'LATERAL_FORCE', 'SENSOR_GAIN', 'MUTATION_SCALE',
-    'DRAG', 'STRAFE_POWER', 'SENSOR_ANGLE', 'GLOBAL_FORCE_MULT',
-    'SENSOR_DISTANCE', 'TRAIL_PERSISTENCE', 'TRAIL_DIFFUSION', 'HAZARD_RATE'
-]
-
-# Mapping from param names to slider labels
-PARAM_TO_LABEL = {
-    'AXIAL_FORCE': 'Axial Force',
-    'LATERAL_FORCE': 'Lateral Force',
-    'SENSOR_GAIN': 'Sensor Gain',
-    'MUTATION_SCALE': 'Mutation Scale',
-    'DRAG': 'Drag',
-    'STRAFE_POWER': 'Strafe Power',
-    'SENSOR_ANGLE': 'Sensor Angle',
-    'GLOBAL_FORCE_MULT': 'Global Force Mult',
-    'SENSOR_DISTANCE': 'Sensor Distance',
-    'TRAIL_PERSISTENCE': 'Trail Persistence',
-    'TRAIL_DIFFUSION': 'Trail Diffusion',
-    'HAZARD_RATE': 'Hazard Rate',
-}
-
-# Default slider ranges: [default_min, default_max]
-DEFAULT_SLIDER_RANGES = {
-    'Axial Force': [-1.0, 1.0],
-    'Lateral Force': [-1.0, 1.0],
-    'Sensor Gain': [0.0, 5.0],
-    'Mutation Scale': [-0.5, 0.5],
-    'Drag': [-1.0, 1.0],
-    'Strafe Power': [0.0, 0.5],
-    'Sensor Angle': [-1.0, 1.0],
-    'Global Force Mult': [0.0, 2.0],
-    'Sensor Distance': [0.0, 4.0],
-    'Trail Persistence': [0.0, 1.0],
-    'Trail Diffusion': [0.0, 1.0],
-    'Hazard Rate': [0.0, 0.05],
-}
+# Derived from single source of truth (ui/physics_params.py)
+PARAM_TO_LABEL = {p.name: p.label for p in _PARAM_DEFS}
 
 CONFIG_VERSION = 7
 DEFAULT_RULE_SEED = 0.42
