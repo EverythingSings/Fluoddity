@@ -322,7 +322,7 @@ void main() {
             fragColor.xyz *= asinh(len * TONEMAP_SOFTNESS) / (len * TONEMAP_SOFTNESS);
         }
 
-    }
+    
     //Conditionally draw sweep reticle and mouse draw reticle
     vec2 overlay_uv=uv;
     if(view_mode < 2){overlay_uv = canvas_uv_to_screen(uv);}
@@ -333,4 +333,5 @@ void main() {
             fragColor.xyz += draw_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
         }
         //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
+    }
 }

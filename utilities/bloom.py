@@ -33,7 +33,7 @@ class BloomProcessor:
 
     def process(self, source_texture: moderngl.Texture,
                 threshold: float, intensity: float,
-                radius: float) -> moderngl.Texture:
+                radius: float, tonemap_softness: float = 3.0) -> moderngl.Texture:
         """Apply bloom and return the composited texture.
 
         ``source_texture`` is read but never written to.  The returned
@@ -52,6 +52,8 @@ class BloomProcessor:
         r["downsample_vao"].render()
 
         # -- 2. Downsample chain (mip 0 -> 1 -> … -> N) ---------------
+        #    First pass inverse-tonemaps from display to linear HDR.
+        r["downsample_prog"]["tonemap_softness"] = tonemap_softness
         for i in range(self.MIP_LEVELS):
             src_tex = r["copy_tex"] if i == 0 else r["mip_textures"][i - 1]
             sw, sh = src_tex.size
@@ -79,13 +81,14 @@ class BloomProcessor:
             r["upsample_prog"]["bloom_radius"] = radius
             r["upsample_vao"].render()
 
-        # -- 4. Composite: original + bloom * intensity ----------------
+        # -- 4. Composite: inverse-tonemap original, add bloom, re-tonemap
         r["composite_fbo"].use()
         source_texture.use(location=0)
         r["mip_textures"][0].use(location=1)
         r["composite_prog"]["original_tex"] = 0
         r["composite_prog"]["bloom_tex"] = 1
         r["composite_prog"]["bloom_intensity"] = intensity
+        r["composite_prog"]["tonemap_softness"] = tonemap_softness
         r["composite_vao"].render()
 
         return r["composite_tex"]
@@ -168,6 +171,8 @@ class BloomProcessor:
             mh = max(1, mh // 2)
             tex = ctx.texture((mw, mh), 4, dtype="f4")
             tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            tex.repeat_x=False
+            tex.repeat_y=False
             mip_textures.append(tex)
             mip_fbos.append(ctx.framebuffer(color_attachments=[tex]))
 
@@ -193,11 +198,32 @@ class BloomProcessor:
 uniform sampler2D original_tex;
 uniform sampler2D bloom_tex;
 uniform float bloom_intensity;
+uniform float tonemap_softness;
 in vec2 uv;
 out vec4 fragColor;
+
+vec3 inverse_asinh(vec3 color) {
+    float len = length(color);
+    if (len > 0.0) {
+        color = normalize(color) * sinh(len * tonemap_softness) / tonemap_softness;
+    }
+    return color;
+}
+
+vec3 forward_asinh(vec3 color) {
+    float len = length(color);
+    if (len > 0.0) {
+        color *= asinh(len * tonemap_softness) / (len * tonemap_softness);
+    }
+    return color;
+}
+
 void main() {
     vec3 original = texture(original_tex, uv).rgb;
     vec3 bloom = texture(bloom_tex, uv).rgb;
-    fragColor = vec4(original + bloom * bloom_intensity, 1.0);
+    // Undo asinh curve, add bloom in linear space, re-apply asinh
+    vec3 linear_original = inverse_asinh(original);
+    vec3 combined = linear_original + bloom * bloom_intensity;
+    fragColor = vec4(forward_asinh(combined), 1.0);
 }
 """

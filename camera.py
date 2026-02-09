@@ -146,12 +146,16 @@ class Camera:
         self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
 
-    def apply_bloom(self, texture, threshold, intensity, radius):
+    def apply_bloom(self, texture, threshold, intensity, radius,
+                    tonemap_softness=3.0):
         """Apply bloom post-processing. Lazily initializes GPU resources."""
         if self._bloom_processor is None:
             from utilities.bloom import BloomProcessor
             self._bloom_processor = BloomProcessor(self.ctx)
-        return self._bloom_processor.process(texture, threshold, intensity, radius)
+        return self._bloom_processor.process(
+            texture, threshold, intensity, radius,
+            tonemap_softness=tonemap_softness,
+        )
 
     def render(self, sim_going: bool = True, current_view_option: int = 2,
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
@@ -217,7 +221,10 @@ class Camera:
             )
             # assemble_frame returns the texture immediately when total_samples=1
             if bloom_enabled and TEX_TO_VIEW is not None:
-                TEX_TO_VIEW = self.apply_bloom(TEX_TO_VIEW, bloom_threshold, bloom_intensity, bloom_radius)
+                TEX_TO_VIEW = self.apply_bloom(
+                    TEX_TO_VIEW, bloom_threshold, bloom_intensity, bloom_radius,
+                    tonemap_softness=tonemap_softness,
+                )
 
         # Render to screen
         self.ctx.screen.use()

@@ -195,6 +195,7 @@ class SimulationRunner:
                 ui_state.preferences.bloom_threshold,
                 ui_state.preferences.bloom_intensity,
                 ui_state.preferences.bloom_radius,
+                tonemap_softness=ui_state.preferences.tonemap_softness,
             )
         self.camera.assembled_texture = assembled_tex
         if self.video_service.is_active():
