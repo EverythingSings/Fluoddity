@@ -11,6 +11,7 @@ uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
 uniform float BRIGHTNESS;           // Global brightness multiplier (applied before gamma)
 uniform float EXPOSURE;//undo gamma from last frame and blend it with this frame, allows long exposure effect
+uniform float TONEMAP_SOFTNESS;    // Asinh stretch parameter (higher = more highlight compression)
 #define BRIGHTNESS_CONSTANT (3.*BRIGHTNESS)
 uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()
 uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
@@ -299,7 +300,7 @@ void main() {
     if (is_first_frame) {
         vec3 previous_frame = texture(accumulation_buffer, uv).rgb;
         float previous_len = length(previous_frame);
-        previous_frame=safenorm(previous_frame)*pow(previous_len,1./(1-.575));
+        previous_frame=safenorm(previous_frame)*sinh(previous_len*TONEMAP_SOFTNESS)/TONEMAP_SOFTNESS;
         previous_frame/=BRIGHTNESS_CONSTANT;
         fragColor = vec4(mix(current_color,previous_frame,EXPOSURE-.0001), 1.0);
     } else {
@@ -318,7 +319,7 @@ void main() {
         fragColor.xyz *= BRIGHTNESS_CONSTANT;
         float len = length(fragColor.xyz);
         if (len > 0.0) {
-            fragColor.xyz /= pow(len, 0.575);
+            fragColor.xyz *= asinh(len * TONEMAP_SOFTNESS) / (len * TONEMAP_SOFTNESS);
         }
 
     }

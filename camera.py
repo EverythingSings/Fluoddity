@@ -151,7 +151,7 @@ class Camera:
                 emboss_intensity: float = 0.5, emboss_smoothness: float = 0.1,
                 draw_trail_mode: bool = False, draw_size: float = 0.0,
                 mouse_screen_coords: tuple = (0.5, 0.5), exposure: float = 0.0,
-                tiling_mode: bool = False):
+                tiling_mode: bool = False, tonemap_softness: float = 1.0):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
 
@@ -200,7 +200,8 @@ class Camera:
                 mouse_screen_coords=mouse_screen_coords,
                 tiling_mode=tiling_mode,
                 view_min=tuple(view_min),
-                view_max=tuple(view_max)
+                view_max=tuple(view_max),
+                tonemap_softness=tonemap_softness
             )
             # assemble_frame returns the texture immediately when total_samples=1
 

@@ -223,7 +223,10 @@ class PhysicsWindowMixin:
 
                 imgui.separator()
 
-                # Watercolor Mode checkbox
+                # Watercolor Mode checkbox (only available in camera views)
+                watercolor_disabled = self.state.sim.current_view_option < 2
+                if watercolor_disabled:
+                    imgui.begin_disabled()
                 _, self.state.sim.watercolor_mode = imgui.checkbox(
                     "Watercolor Mode (V)",
                     self.state.sim.watercolor_mode
@@ -235,7 +238,9 @@ class PhysicsWindowMixin:
                         "Ink Weight", self.state.sim.ink_weight, 0.0, 20.0
                     )
                     self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
-                self._delayed_tooltip("Enable watercolor rendering effect.")
+                self._delayed_tooltip("Enable watercolor rendering effect." + ("\nSwitch to Camera view to enable." if watercolor_disabled else ""))
+                if watercolor_disabled:
+                    imgui.end_disabled()
 
                 imgui.separator()
 
@@ -425,7 +430,12 @@ class PhysicsWindowMixin:
                 if not self.state.sim.color_by_cohort:
                     imgui.set_next_item_width(100)
                     _, self.state.sim.hue_sensitivity = imgui.slider_float("Hue Sensitivity", self.state.sim.hue_sensitivity, -1.0, 1.0)
+                watercolor_disabled_adv = self.state.sim.current_view_option < 2
+                if watercolor_disabled_adv:
+                    imgui.begin_disabled()
                 _, self.state.sim.watercolor_mode = imgui.checkbox("Watercolor Mode", self.state.sim.watercolor_mode)
+                if watercolor_disabled_adv:
+                    imgui.end_disabled()
                 if self.state.sim.watercolor_mode:
                     imgui.set_next_item_width(100)
                     _, self.state.sim.ink_weight = imgui.slider_float("Ink Weight", self.state.sim.ink_weight, 0.0, 4.0)

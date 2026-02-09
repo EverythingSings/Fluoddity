@@ -14,7 +14,8 @@ class PreferencesState:
     blur_quality: int = 2  # Motion blur render cadence (1 = every frame, 2 = every 2 frames, etc.)
     world_size: float = 0.40  # World size multiplier (affects entity count and canvas dimensions)
     rule_seed: float = 0.0
-    brightness: float = 1.0  # Global brightness multiplier
+    brightness: float = 5.0  # Global brightness multiplier
+    tonemap_softness: float = 3.0  # Asinh tonemap stretch (higher = more highlight compression)
     exposure: float = 0.0  # Frame blending for motion blur effect (0=disabled, 1=long exposure)
 
     # UI preferences

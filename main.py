@@ -309,7 +309,8 @@ class App:
             draw_size=ui_state.preferences.draw_size,
             mouse_screen_coords=mouse_screen_coords,
             exposure=ui_state.preferences.exposure,
-            tiling_mode=tiling_mode
+            tiling_mode=tiling_mode,
+            tonemap_softness=ui_state.preferences.tonemap_softness
         )
 
     def _save_screenshot(self, ui_state):

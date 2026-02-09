@@ -195,10 +195,19 @@ class PreferencesWindowMixin:
             _, self.state.preferences.brightness = imgui.slider_float(
                 "Brightness",
                 self.state.preferences.brightness,
-                0.0, 4.0,
+                0.0, 10.0,
                 format="%.2f"
             )
             self._delayed_tooltip("Global brightness multiplier for the output.")
+
+            # Tonemap Softness slider
+            _, self.state.preferences.tonemap_softness = imgui.slider_float(
+                "Tonemap Softness",
+                self.state.preferences.tonemap_softness,
+                0.1, 5.0,
+                format="%.2f"
+            )
+            self._delayed_tooltip("Controls highlight compression (asinh stretch).\nLow values = more linear (brighter highlights).\nHigh values = more logarithmic (reveals faint detail).")
 
             # Exposure / Cheap Blur slider
             _, self.state.preferences.exposure = imgui.slider_float(

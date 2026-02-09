@@ -154,6 +154,7 @@ class SimulationRunner:
             tiling_mode=tiling_mode,
             view_min=tuple(view_min),
             view_max=tuple(view_max),
+            tonemap_softness=ui_state.preferences.tonemap_softness,
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
