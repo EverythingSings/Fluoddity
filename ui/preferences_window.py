@@ -160,6 +160,8 @@ class PreferencesWindowMixin:
                     self.state.camera.cam_brush_mode = True
                 else:
                     self.state.camera.cam_brush_mode = False
+                    # Watercolor is unsupported in canvas/brush views
+                    self.state.sim.watercolor_mode = False
 
             # Physics tooltips checkbox
             _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
@@ -195,7 +197,7 @@ class PreferencesWindowMixin:
             _, self.state.preferences.brightness = imgui.slider_float(
                 "Brightness",
                 self.state.preferences.brightness,
-                0.0, 10.0,
+                0.01, 10.0,
                 format="%.2f"
             )
             self._delayed_tooltip("Global brightness multiplier for the output.")
