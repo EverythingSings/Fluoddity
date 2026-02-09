@@ -189,6 +189,13 @@ class SimulationRunner:
         """Handle a completed assembled frame: store it and feed to video recorder."""
         if assembled_tex is None:
             return
+        if ui_state.preferences.bloom_enabled:
+            assembled_tex = self.camera.apply_bloom(
+                assembled_tex,
+                ui_state.preferences.bloom_threshold,
+                ui_state.preferences.bloom_intensity,
+                ui_state.preferences.bloom_radius,
+            )
         self.camera.assembled_texture = assembled_tex
         if self.video_service.is_active():
             self.video_service.process_frame(

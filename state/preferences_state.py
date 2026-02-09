@@ -17,6 +17,10 @@ class PreferencesState:
     brightness: float = 5.0  # Global brightness multiplier
     tonemap_softness: float = 3.0  # Asinh tonemap stretch (higher = more highlight compression)
     exposure: float = 0.0  # Frame blending for motion blur effect (0=disabled, 1=long exposure)
+    bloom_enabled: bool = False  # Whether bloom post-processing is active
+    bloom_threshold: float = 0.8  # Brightness threshold for bloom extraction
+    bloom_intensity: float = 0.5  # Bloom contribution strength
+    bloom_radius: float = 1.0  # Bloom blur spread
 
     # UI preferences
     show_preferences_window: bool = True  # Whether preferences window is visible

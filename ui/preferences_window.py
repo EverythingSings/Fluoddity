@@ -220,6 +220,40 @@ class PreferencesWindowMixin:
             )
             self._delayed_tooltip("Blend frames together for a cheap motion blur or set near 1 for a long exposure effect.")
 
+            # Bloom checkbox + sliders
+            _, self.state.preferences.bloom_enabled = imgui.checkbox(
+                "Bloom",
+                self.state.preferences.bloom_enabled
+            )
+            self._delayed_tooltip("Add a glow effect around bright areas.")
+
+            if self.state.preferences.bloom_enabled:
+                imgui.indent(20)
+                _, self.state.preferences.bloom_threshold = imgui.slider_float(
+                    "Threshold",
+                    self.state.preferences.bloom_threshold,
+                    0.0, 2.0,
+                    format="%.2f"
+                )
+                self._delayed_tooltip("Brightness cutoff for bloom extraction.\nLower = more glow everywhere.")
+
+                _, self.state.preferences.bloom_intensity = imgui.slider_float(
+                    "Intensity",
+                    self.state.preferences.bloom_intensity,
+                    0.0, 3.0,
+                    format="%.2f"
+                )
+                self._delayed_tooltip("Strength of the bloom glow.")
+
+                _, self.state.preferences.bloom_radius = imgui.slider_float(
+                    "Radius",
+                    self.state.preferences.bloom_radius,
+                    0.1, 3.0,
+                    format="%.2f"
+                )
+                self._delayed_tooltip("Spread of the bloom blur kernel.")
+                imgui.unindent(20)
+
         imgui.end()
 
         # Restore normal window background color if it was changed

@@ -81,6 +81,9 @@ class Camera:
         self.frame_assembler = FrameAssembler(self.ctx, self.cam_brush_target)
         self.assembled_texture = None
 
+        # Bloom processor (lazily initialized on first use)
+        self._bloom_processor = None
+
     def generate_view_texture(self, tiling_mode: bool = False):
         """Generate raw view texture (PRE-gamma correction) based on current mode.
 
@@ -143,6 +146,13 @@ class Camera:
         self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
 
+    def apply_bloom(self, texture, threshold, intensity, radius):
+        """Apply bloom post-processing. Lazily initializes GPU resources."""
+        if self._bloom_processor is None:
+            from utilities.bloom import BloomProcessor
+            self._bloom_processor = BloomProcessor(self.ctx)
+        return self._bloom_processor.process(texture, threshold, intensity, radius)
+
     def render(self, sim_going: bool = True, current_view_option: int = 2,
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
                 sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
@@ -151,7 +161,9 @@ class Camera:
                 emboss_intensity: float = 0.5, emboss_smoothness: float = 0.1,
                 draw_trail_mode: bool = False, draw_size: float = 0.0,
                 mouse_screen_coords: tuple = (0.5, 0.5), exposure: float = 0.0,
-                tiling_mode: bool = False, tonemap_softness: float = 1.0):
+                tiling_mode: bool = False, tonemap_softness: float = 1.0,
+                bloom_enabled: bool = False, bloom_threshold: float = 0.8,
+                bloom_intensity: float = 0.5, bloom_radius: float = 1.0):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
 
@@ -204,6 +216,8 @@ class Camera:
                 tonemap_softness=tonemap_softness
             )
             # assemble_frame returns the texture immediately when total_samples=1
+            if bloom_enabled and TEX_TO_VIEW is not None:
+                TEX_TO_VIEW = self.apply_bloom(TEX_TO_VIEW, bloom_threshold, bloom_intensity, bloom_radius)
 
         # Render to screen
         self.ctx.screen.use()

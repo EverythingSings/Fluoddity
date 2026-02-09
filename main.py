@@ -310,7 +310,11 @@ class App:
             mouse_screen_coords=mouse_screen_coords,
             exposure=ui_state.preferences.exposure,
             tiling_mode=tiling_mode,
-            tonemap_softness=ui_state.preferences.tonemap_softness
+            tonemap_softness=ui_state.preferences.tonemap_softness,
+            bloom_enabled=ui_state.preferences.bloom_enabled,
+            bloom_threshold=ui_state.preferences.bloom_threshold,
+            bloom_intensity=ui_state.preferences.bloom_intensity,
+            bloom_radius=ui_state.preferences.bloom_radius
         )
 
     def _save_screenshot(self, ui_state):
