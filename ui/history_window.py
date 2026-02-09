@@ -26,15 +26,22 @@ class HistoryWindowMixin:
             _config, label = self.config_clipboard[i]
 
             # Selectable label for click/hover detection
+            # Use allow_overlap so the X button can receive clicks on the same line
             clicked, _ = imgui.selectable(
                 f"{label}##clip_{i}",
                 self.clipboard_previewing_index == i,
-                imgui.SelectableFlags_.none,
+                imgui.SelectableFlags_.allow_overlap,
                 imgui.ImVec2(0, 0)
             )
 
             if imgui.is_item_hovered():
                 hovered_this_frame = i
+
+            # Right-click opens rename popup
+            if imgui.is_item_clicked(imgui.MouseButton_.right):
+                self._clipboard_renaming_index = i
+                self._clipboard_rename_buffer = label
+                imgui.open_popup(f"rename_clip_{i}")
 
             # X button on the same line
             imgui.same_line()
@@ -51,6 +58,24 @@ class HistoryWindowMixin:
             if clicked:
                 self._request_load_clipboard_config = True
                 self._clipboard_config_index = i
+
+            # Rename popup
+            if imgui.begin_popup(f"rename_clip_{i}"):
+                imgui.text("Rename:")
+                imgui.set_next_item_width(200)
+                # Auto-focus the input on first appearance
+                if imgui.is_window_appearing():
+                    imgui.set_keyboard_focus_here()
+                changed, self._clipboard_rename_buffer = imgui.input_text(
+                    f"##rename_input_{i}", self._clipboard_rename_buffer)
+                if imgui.is_item_deactivated_after_edit():
+                    # Enter pressed or focus lost after editing — commit rename
+                    if self._clipboard_rename_buffer.strip():
+                        config, _old_label = self.config_clipboard[i]
+                        self.config_clipboard[i] = (config, self._clipboard_rename_buffer.strip())
+                    self._clipboard_renaming_index = None
+                    imgui.close_current_popup()
+                imgui.end_popup()
 
         # Handle preview state changes
         if hovered_this_frame != self.clipboard_previewing_index:

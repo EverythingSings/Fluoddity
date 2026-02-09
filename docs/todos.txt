@@ -4,9 +4,6 @@ cohort isolation view
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
 
-Need a new jitter slider per physics slider.
-Additional Settings -> jitter checkbox?
-Checkbox next to slider to enable?
 
 Particles (cohorts) are various sizes. Total area conserved between size groups.
  so 100 times as many at 1/10th the size.

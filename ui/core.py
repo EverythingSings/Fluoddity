@@ -86,6 +86,8 @@ class UI(
         self.config_clipboard: list[tuple] = []  # [(PhysicsConfig, display_label), ...]
         self.clipboard_counter: int = 0  # Global jersey counter (00, 01, 02...)
         self.clipboard_previewing_index: int | None = None
+        self._clipboard_renaming_index: int | None = None  # Which entry is being renamed
+        self._clipboard_rename_buffer: str = ""  # Text input buffer for rename
 
         # Tooltip state - track which slider was last hovered
         self.last_hovered_slider = None
