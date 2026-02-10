@@ -243,6 +243,10 @@ void main() {
         vec2 fill_vector;
         if (fill_direction_type == 0) {
             fill_vector = vec2(sin(fixed_direction_heading), cos(fixed_direction_heading));
+        } else if (fill_direction_type == 3) {
+            // Fixed Direction - Negative (heading + PI)
+            float neg_heading = fixed_direction_heading + 3.1415;
+            fill_vector = vec2(sin(neg_heading), cos(neg_heading));
         } else if (fill_direction_type == 1) {
             vec2 to_center = vec2(0.5) - texcoord;
             float len = length(to_center);

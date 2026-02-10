@@ -9,7 +9,11 @@ class HistoryWindowMixin:
 
     def render_history_window(self):
         """Render config clipboard window with hover preview."""
-        imgui.begin("Config Clipboard - EXPERIMENTAL")
+        expanded, opened = imgui.begin("Config Clipboard - EXPERIMENTAL", True)
+        if not opened:
+            self.show_history_window = False
+            imgui.end()
+            return
 
         imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), "Press Ctrl+C to add a checkpoint")
         imgui.separator()

@@ -141,8 +141,8 @@ class MenuBarMixin:
 
                 imgui.end_menu()
 
-            # Sidebar toggle button (shows/hides Physics Settings and Preferences)
-            if imgui.menu_item("Show/Hide Sidebar (X)", "", self.show_sidebar)[0]:
+            # Window toggle button (shows/hides Physics Settings, Preferences, Drawing Controls, Config Clipboard, Screen Recording)
+            if imgui.menu_item("Show/Hide Windows (X)", "", self.show_sidebar)[0]:
                 self.show_sidebar = not self.show_sidebar
 
             # Reset menu
@@ -184,9 +184,17 @@ class MenuBarMixin:
                     # Reset preferences to defaults (equivalent to deleting preferences.config)
                     from state.preferences_state import PreferencesState
                     self.state.preferences = PreferencesState()
-
-
                 self._delayed_tooltip("Restore all preferences and ui state to factory settings. \nEquivalent to deleting preferences.config, or running this\nprogram for the first time. Physics config saves are not affected.")
+
+                # Reset camera
+                if imgui.menu_item("Reset camera", "", False)[0]:
+                    self._request_camera_reset = True
+                self._delayed_tooltip("Return camera to default position and zoom level.")
+
+                # Reset canvas and fields
+                if imgui.menu_item("Reset Canvas and Fields", "", False)[0]:
+                    self._request_clear_canvas_and_fields = True
+                self._delayed_tooltip("Clear canvas, brush, and all field textures to zero.")
 
                 imgui.end_menu()
 

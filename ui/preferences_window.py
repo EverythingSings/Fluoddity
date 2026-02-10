@@ -148,7 +148,7 @@ class PreferencesWindowMixin:
             imgui.text("View")
 
             # View dropdown - conditionally show Force/Strafe field views
-            view_items = self.view_option_labels + ['Camera (Particles rendered as dots)', 'Camera[Tiled] - EXPERIMENTAL']
+            view_items = self.view_option_labels + ['Camera (Particles rendered as dots)', 'Camera [Tiled]']
             adp = getattr(self, 'advanced_drawing_processor', None)
             if adp is not None and adp.field_texture is not None:
                 view_items = view_items + ['Force Field', 'Strafe Field']

@@ -49,6 +49,8 @@ class UIState:
     toggle_recording: bool = False
     request_screenshot: bool = False
     request_world_size_change: bool = False
+    request_camera_reset: bool = False
+    request_clear_canvas_and_fields: bool = False
 
     # Config save/load (Ctrl+C/Ctrl+V)
     request_save_config: bool = False

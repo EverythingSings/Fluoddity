@@ -105,6 +105,10 @@ void main() {
         if (fill_direction_type == 0) {
             // Fixed direction
             fill_vector = vec2(sin(fixed_direction_heading), cos(fixed_direction_heading));
+        } else if (fill_direction_type == 3) {
+            // Fixed Direction - Negative (heading + PI)
+            float neg_heading = fixed_direction_heading + 3.1415;
+            fill_vector = vec2(sin(neg_heading), cos(neg_heading));
         } else if (fill_direction_type == 1) {
             // Radial In (toward center 0.5, 0.5)
             vec2 to_center = vec2(0.5) - texcoord;

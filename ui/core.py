@@ -191,6 +191,8 @@ class UI(
         self._request_clear_force_field = False
         self._request_clear_strafe_field = False
         self._request_clear_canvas = False
+        self._request_camera_reset = False
+        self._request_clear_canvas_and_fields = False
 
         # Config clipboard flags
         self._request_preview_clipboard_config = False
@@ -378,7 +380,7 @@ class UI(
                 # Full reset (one-shot, not hold)
                 self._request_full_reset = True
             elif key == self.keybindings.get_key("toggle_sidebar"):
-                # Toggle sidebar (Physics Settings and Preferences windows)
+                # Toggle windows (Physics Settings, Preferences, Drawing Controls, Config Clipboard, Screen Recording)
                 self.show_sidebar = not self.show_sidebar
             elif key == self.keybindings.get_key("exit_keybinding"):
                 glfw.set_window_should_close(window, True)
@@ -440,6 +442,8 @@ class UI(
         self.state.request_clear_force_field = self._request_clear_force_field
         self.state.request_clear_strafe_field = self._request_clear_strafe_field
         self.state.request_clear_canvas = self._request_clear_canvas
+        self.state.request_camera_reset = self._request_camera_reset
+        self.state.request_clear_canvas_and_fields = self._request_clear_canvas_and_fields
 
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
@@ -490,6 +494,8 @@ class UI(
         self._request_clear_force_field = False
         self._request_clear_strafe_field = False
         self._request_clear_canvas = False
+        self._request_camera_reset = False
+        self._request_clear_canvas_and_fields = False
         self._save_filename = ""
         self._load_filename = ""
         self._load_category = ""
@@ -637,16 +643,16 @@ class UI(
         if self.state.preferences.show_performance_window:
             self.render_performance_window()
 
-        # Render Screen Recording window if visible
-        if self.show_video_recording_window:
+        # Render Screen Recording window if visible (hidden when windows toggled off)
+        if self.show_sidebar and self.show_video_recording_window:
             self.render_video_recording_window()
 
-        # Render history window if visible
-        if self.show_history_window:
+        # Render history window if visible (hidden when windows toggled off)
+        if self.show_sidebar and self.show_history_window:
             self.render_history_window()
 
-        # Render Advanced Drawing window if enabled
-        if self.state.preferences.advanced_drawing_enabled:
+        # Render Advanced Drawing window if enabled (hidden when windows toggled off)
+        if self.show_sidebar and self.state.preferences.advanced_drawing_enabled:
             self.render_advanced_drawing_window()
 
         if self.show_demo_window:

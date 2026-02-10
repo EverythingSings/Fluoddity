@@ -201,6 +201,9 @@ class App:
         self.was_recording = is_recording
 
         # 5. Apply state to components
+        if ui_state.request_camera_reset:
+            ui_state.camera.position[:] = [0.0, 0.0]
+            ui_state.camera.zoom = 1.0
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)

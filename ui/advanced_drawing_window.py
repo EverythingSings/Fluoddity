@@ -96,6 +96,9 @@ class AdvancedDrawingWindowMixin:
                 if imgui.selectable("Fixed Direction", False)[0]:
                     self._request_fill_operation = True
                     self._fill_direction_type = 0
+                if imgui.selectable("Fixed Direction - Negative", False)[0]:
+                    self._request_fill_operation = True
+                    self._fill_direction_type = 3
                 if imgui.selectable("Radial - In", False)[0]:
                     self._request_fill_operation = True
                     self._fill_direction_type = 1
