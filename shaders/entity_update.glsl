@@ -508,7 +508,11 @@ void main() {
     //e.color is interpreted as vec4(hue,saturation,brightness,alpha)
     //We just set brightness to 1 and modulate hue and saturation
     e.color.x = get_particle_hue_sensitivity()*col_params.x;//hue can be anything
-    e.color.y = sin(col_params.y)/2.+.5;//saturation must be 0..1
+    //Hardcoding saturation for now. 
+    //low saturation arises naturally due to a mix of hues from different particles. 
+    //Use col_params.y for something else?
+    //e.color.y = sin(col_params.y)/2.+.5;//saturation must be 0..1
+    e.color.y = .8;
 
     if(get_particle_color_by_cohort()) {e.color.x = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
     e.color.z=1;//brightness 1.
