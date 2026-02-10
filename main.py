@@ -267,13 +267,26 @@ class App:
         # 7.5. Render arrow debug overlay if enabled
         if ui_state.preferences.debug_arrows:
             width, height = glfw.get_framebuffer_size(self.window)
+            adv_prefs = ui_state.preferences
+            adv_active = adv_prefs.advanced_drawing_enabled
+            field_tex = self.advanced_drawing_processor.field_texture
+            # Use field_texture for force/strafe targets, canvas for trails
+            if adv_active and not adv_prefs.advanced_draw_canvas and field_tex is not None:
+                arrow_texture = field_tex
+                arrow_resolution = field_tex.size
+                use_zw = adv_prefs.advanced_draw_strafe_field
+            else:
+                arrow_texture = self.sim.can
+                arrow_resolution = self.sim.can.size
+                use_zw = False
             self.arrow_debug_service.render(
-                canvas_texture=self.sim.can,
+                canvas_texture=arrow_texture,
                 cam_pos=tuple(self.camera.position),
                 cam_zoom=self.camera.zoom,
-                canvas_resolution=self.sim.can.size,
+                canvas_resolution=arrow_resolution,
                 window_size=(width, height),
-                arrow_sensitivity=ui_state.preferences.arrow_sensitivity
+                arrow_sensitivity=ui_state.preferences.arrow_sensitivity,
+                use_zw_channels=use_zw,
             )
 
         # 8. Update UI display info and render

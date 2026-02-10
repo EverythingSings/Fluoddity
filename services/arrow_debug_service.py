@@ -50,7 +50,8 @@ class ArrowDebugService:
 
     def render(self, canvas_texture: moderngl.Texture, cam_pos: tuple[float, float],
                cam_zoom: float, canvas_resolution: tuple[int, int],
-               window_size: tuple[int, int], arrow_sensitivity: float):
+               window_size: tuple[int, int], arrow_sensitivity: float,
+               use_zw_channels: bool = False):
         """
         Render arrow overlay.
 
@@ -75,6 +76,7 @@ class ArrowDebugService:
         tryset(self.program, 'canvas_resolution', canvas_resolution)
         tryset(self.program, 'window_size', window_size)
         tryset(self.program, 'arrow_sensitivity', arrow_sensitivity)
+        tryset(self.program, 'use_zw_channels', use_zw_channels)
 
         # Enable alpha blending for overlay
         self.ctx.enable(moderngl.BLEND)

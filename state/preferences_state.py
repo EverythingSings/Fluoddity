@@ -45,6 +45,7 @@ class PreferencesState:
     fixed_direction_heading: float = 0.0  # Range -PI to PI, heading for Fixed Direction mode
     force_field_strength: float = 1.0  # Multiplier for force field effect (log scale 0.0001-10.0)
     strafe_field_strength: float = 1.0  # Multiplier for strafe field effect (log scale 0.0001-10.0)
+    draw_target_overlay_opacity: float = 0.0  # Opacity of draw target field overlay in frame assembly (0-1)
 
     # Physics slider group collapsed states (True = expanded/open, False = collapsed)
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)

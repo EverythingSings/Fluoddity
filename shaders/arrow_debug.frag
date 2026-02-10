@@ -5,13 +5,14 @@ uniform float cam_zoom;
 uniform vec2 canvas_resolution;
 uniform vec2 window_size;
 uniform float arrow_sensitivity;
+uniform bool use_zw_channels; // When true, read velocity from .zw instead of .xy
 
 in vec2 uv;
 out vec4 fragColor;
 
 // Arrow visualization parameters
-const float GRID_COLS = 16.0;
-const float GRID_ROWS = 16.0;
+const float GRID_COLS = 22.0;
+const float GRID_ROWS = 22.0;
 const float ARROW_THICKNESS = 0.08;
 const float HEAD_LENGTH = 0.35;
 const float HEAD_WIDTH = 0.25;
@@ -58,7 +59,8 @@ vec2 get_velocity(vec2 world_pos) {
     }
 
     vec4 canvas_sample = texture(canvas_texture, canvas_uv);
-    return canvas_sample.xy * pow(2.0, arrow_sensitivity);  // Velocity is stored in RG channels
+    vec2 raw = use_zw_channels ? canvas_sample.zw : canvas_sample.xy;
+    return raw * pow(2.0, arrow_sensitivity);
 }
 
 // Signed distance to a line segment

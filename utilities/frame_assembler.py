@@ -76,7 +76,8 @@ class FrameAssembler:
                        view_max=(0.0, 0.0), tonemap_softness=1.0,
                        brush_mode=0, fixed_direction_heading=0.0,
                        field_texture=None, advanced_drawing_resources_initialized=False,
-                       force_field_checked=False, strafe_field_checked=False):
+                       force_field_checked=False, strafe_field_checked=False,
+                       draw_target_overlay_opacity=0.0):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -171,6 +172,7 @@ class FrameAssembler:
                advanced_drawing_resources_initialized)
         tryset(self.resources['shader'], 'force_field_checked', force_field_checked)
         tryset(self.resources['shader'], 'strafe_field_checked', strafe_field_checked)
+        tryset(self.resources['shader'], 'draw_target_overlay_opacity', draw_target_overlay_opacity)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()

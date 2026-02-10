@@ -176,12 +176,15 @@ class PreferencesWindowMixin:
             )
             self._delayed_tooltip("Enable verbose tooltip and vector diagram for physics sliders.")
 
-            # View Trail Arrows checkbox (renamed from Debug Arrows)
+            # Arrow debug checkbox - label changes when advanced drawing is open
+            arrow_label = ("View Draw Target Arrows"
+                           if self.state.preferences.advanced_drawing_enabled
+                           else "View Trail Arrows")
             _, self.state.preferences.debug_arrows = imgui.checkbox(
-                "View Trail Arrows",
+                arrow_label,
                 self.state.preferences.debug_arrows
             )
-            self._delayed_tooltip("Render a grid of arrows to help visualize canvas' vector field.")
+            self._delayed_tooltip("Render a grid of arrows to help visualize the active draw target's vector field.")
 
             # Arrow sensitivity slider (only show when debug arrows enabled)
             if self.state.preferences.debug_arrows:

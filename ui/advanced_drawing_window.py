@@ -36,26 +36,7 @@ class AdvancedDrawingWindowMixin:
             ]
             _, prefs.brush_mode = imgui.combo("Brush Mode", prefs.brush_mode, brush_modes)
 
-            # === 3. Fill Popup ===
-            if imgui.button("Fill..."):
-                imgui.open_popup("fill_popup")
-            self._delayed_tooltip(
-                "Apply the brush to the entire canvas/field for one frame.\n"
-                "Uses full kernel coverage (weight=1.0 everywhere)."
-            )
-            if imgui.begin_popup("fill_popup"):
-                if imgui.selectable("Fixed Direction", False)[0]:
-                    self._request_fill_operation = True
-                    self._fill_direction_type = 0
-                if imgui.selectable("Radial - In", False)[0]:
-                    self._request_fill_operation = True
-                    self._fill_direction_type = 1
-                if imgui.selectable("Radial - Out", False)[0]:
-                    self._request_fill_operation = True
-                    self._fill_direction_type = 2
-                imgui.end_popup()
-
-            # === 4. Fixed Direction Heading slider ===
+            # === 3. Fixed Direction Heading slider ===
             _, prefs.fixed_direction_heading = imgui.slider_float(
                 "Fixed Direction Heading",
                 prefs.fixed_direction_heading,
@@ -70,7 +51,7 @@ class AdvancedDrawingWindowMixin:
 
             imgui.separator()
 
-            # === 5. Active Draw Target (mutually exclusive radio buttons) ===
+            # === 4. Active Draw Target (mutually exclusive radio buttons) ===
             imgui.text("Active Draw Target")
 
             # Determine current selection: 0=canvas, 1=force, 2=strafe
@@ -103,6 +84,25 @@ class AdvancedDrawingWindowMixin:
             prefs.advanced_draw_canvas = (target == 0)
             prefs.advanced_draw_force_field = (target == 1)
             prefs.advanced_draw_strafe_field = (target == 2)
+
+            # === 5. Fill Popup ===
+            if imgui.button("Fill..."):
+                imgui.open_popup("fill_popup")
+            self._delayed_tooltip(
+                "Apply the brush to the entire canvas/field for one frame.\n"
+                "Uses full kernel coverage (weight=1.0 everywhere)."
+            )
+            if imgui.begin_popup("fill_popup"):
+                if imgui.selectable("Fixed Direction", False)[0]:
+                    self._request_fill_operation = True
+                    self._fill_direction_type = 0
+                if imgui.selectable("Radial - In", False)[0]:
+                    self._request_fill_operation = True
+                    self._fill_direction_type = 1
+                if imgui.selectable("Radial - Out", False)[0]:
+                    self._request_fill_operation = True
+                    self._fill_direction_type = 2
+                imgui.end_popup()
 
             # === 6. Dynamic Clear button ===
             clear_labels = ["Trails/Canvas", "Force Field", "Strafe Field"]
@@ -158,6 +158,29 @@ class AdvancedDrawingWindowMixin:
             self._delayed_tooltip(
                 "Multiplier for strafe field effects.\n"
                 "Logarithmic scale: 0.0001 to 10.0, default 1.0."
+            )
+
+            imgui.separator()
+
+            # === 9. View Draw Target Arrows (coupled to preferences debug_arrows) ===
+            _, prefs.debug_arrows = imgui.checkbox(
+                "View Draw Target Arrows", prefs.debug_arrows
+            )
+            self._delayed_tooltip(
+                "Render a grid of arrows to help visualize the active draw target's vector field."
+            )
+
+            # === 10. Draw Target Overlay Opacity ===
+            _, prefs.draw_target_overlay_opacity = imgui.slider_float(
+                "Draw Target Overlay Opacity",
+                prefs.draw_target_overlay_opacity,
+                0.0,
+                1.0,
+                format="%.2f",
+            )
+            self._delayed_tooltip(
+                "Opacity of the force/strafe field color overlay in the main view.\n"
+                "0 = hidden, 1 = fully visible."
             )
 
         imgui.end()

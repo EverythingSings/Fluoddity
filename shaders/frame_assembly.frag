@@ -6,6 +6,7 @@ uniform sampler2D field_texture;                    // Force/Strafe field (.xy=f
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
 uniform bool force_field_checked;   // Whether Force Field checkbox is active
 uniform bool strafe_field_checked;  // Whether Strafe Field checkbox is active
+uniform float draw_target_overlay_opacity; // Opacity of field color overlay (0-1)
 uniform bool is_first_frame;
 uniform bool final_sample;
 uniform int view_mode;  // 0=can, 1=brush_tex, 2=cam_brush
@@ -348,9 +349,9 @@ void main() {
             //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
         
 
-        //conditionally draw field indicator
+        //conditionally draw field overlay
         //CURRENTLY TURNED OFF. MAYBE INCLUDE LATER
-        if(advanced_drawing_resources_initialized&& (view_mode==2||view_mode==3)){
+        if(advanced_drawing_resources_initialized&& draw_target_overlay_opacity>0.0 && (view_mode==2||view_mode==3)){
             vec2 field_uv = screen_to_canvas_uv(uv);
             vec4 field = vec4(0);
             if(tiling_mode_enabled||clamp(field_uv,vec2(0),vec2(1))==field_uv){
@@ -358,7 +359,7 @@ void main() {
             }
             vec3 force_col = 8*hsv2rgb(vec3(atan(field.y,field.x)/2./3.1415,.75,length(field.xy)));
             vec3 strafe_col = 8*hsv2rgb(vec3(atan(field.w,field.z)/2./3.1415,.75,length(field.zw)));
-            //fragColor.xyz +=force_col+strafe_col;
+            fragColor.xyz +=draw_target_overlay_opacity*(force_col+strafe_col);
         }
     }
 }

@@ -91,7 +91,8 @@ void main() {
         // Hard circle erase within draw_size radius (doubled to match reticle)
         if (distance_to_mouse < draw_size * 2) {
             // Zero out channels corresponding to active fields
-            fragColor = vec4(0.0);
+            fragColor.xy = force_field_active?vec2(0.0):fragColor.xy;
+            fragColor.zw = strafe_field_active?vec2(0.0):fragColor.zw;
         } else {
             discard;
         }

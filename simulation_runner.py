@@ -213,6 +213,7 @@ class SimulationRunner:
                 and self.advanced_drawing_processor.field_texture is not None),
             force_field_checked=adv_prefs.advanced_draw_force_field if advanced_active else False,
             strafe_field_checked=adv_prefs.advanced_draw_strafe_field if advanced_active else False,
+            draw_target_overlay_opacity=adv_prefs.draw_target_overlay_opacity if advanced_active else 0.0,
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
