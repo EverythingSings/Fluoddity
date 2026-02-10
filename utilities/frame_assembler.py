@@ -73,7 +73,8 @@ class FrameAssembler:
                        emboss_tex=None, camera_position=(0.0, 0.0), camera_zoom=1.0,
                        emboss_intensity=0.0, emboss_smoothness=0.1, trail_draw_radius=0.0,
                        mouse_screen_coords=(0.5, 0.5), tiling_mode=False, view_min=(0.0, 0.0),
-                       view_max=(0.0, 0.0), tonemap_softness=1.0):
+                       view_max=(0.0, 0.0), tonemap_softness=1.0,
+                       brush_mode=0, fixed_direction_heading=0.0):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -157,6 +158,9 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'view_min', view_min)
         tryset(self.resources['shader'], 'view_max', view_max)
         tryset(self.resources['shader'], 'TONEMAP_SOFTNESS', tonemap_softness)
+        # Advanced drawing reticle uniforms
+        tryset(self.resources['shader'], 'brush_mode', brush_mode)
+        tryset(self.resources['shader'], 'fixed_direction_heading', fixed_direction_heading)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()

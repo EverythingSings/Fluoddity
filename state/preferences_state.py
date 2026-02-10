@@ -36,6 +36,14 @@ class PreferencesState:
     draw_power: float = 1.0  # Velocity strength when drawing trails
     menu_close_threshold: float = 80.0  # Distance in pixels before menus auto-close
 
+    # Advanced Drawing preferences
+    advanced_drawing_enabled: bool = False  # Whether Advanced Drawing window is shown
+    advanced_draw_canvas: bool = True  # "Trails / Canvas (Default)" checkbox
+    advanced_draw_force_field: bool = False  # "Force Field" checkbox
+    advanced_draw_strafe_field: bool = False  # "Strafe Field" checkbox
+    brush_mode: int = 0  # 0=Mouse Direction, 1=Inverse, 2=Fixed, 3=Attract, 4=Repel
+    fixed_direction_heading: float = 0.0  # Range -PI to PI, heading for Fixed Direction mode
+
     # Physics slider group collapsed states (True = expanded/open, False = collapsed)
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)
     physics_group_forces: bool = True  # Default: open (global force mult, drag)

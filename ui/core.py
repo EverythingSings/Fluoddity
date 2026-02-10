@@ -24,6 +24,7 @@ from .history_window import HistoryWindowMixin
 from .preferences_window import PreferencesWindowMixin
 from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
+from .advanced_drawing_window import AdvancedDrawingWindowMixin
 
 
 @dataclass
@@ -42,6 +43,7 @@ class UI(
     HistoryWindowMixin,
     ConfigBrowserMixin,
     SliderWidgetsMixin,
+    AdvancedDrawingWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -182,6 +184,11 @@ class UI(
         self._request_preview_config = False
         self._request_clear_preview = False
         self._request_world_size_change = False
+
+        # Advanced drawing one-shot flags
+        self._request_fill_operation = False
+        self._fill_direction_type = 0
+        self._request_clear_fields = False
 
         # Config clipboard flags
         self._request_preview_clipboard_config = False
@@ -407,6 +414,8 @@ class UI(
         # Continuous mouse state (for draw trail mode) - respects imgui capture
         left_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
         self.state.mouse_left_held = left_button_pressed and not imgui.get_io().want_capture_mouse
+        right_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
+        self.state.mouse_right_held = right_button_pressed and not imgui.get_io().want_capture_mouse
         self.state.scroll_delta = self._scroll_delta
         self.state.request_reload = self._request_reload
         self.state.request_reset = self._request_reset
@@ -422,6 +431,12 @@ class UI(
         self.state.request_preview_config = self._request_preview_config
         self.state.request_clear_preview = self._request_clear_preview
         self.state.request_world_size_change = self._request_world_size_change
+
+        # Transfer advanced drawing flags
+        self.state.request_fill_operation = self._request_fill_operation
+        self.state.fill_direction_type = self._fill_direction_type
+        self.state.request_clear_fields = self._request_clear_fields
+
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
         self.state.load_category = self._load_category
@@ -466,6 +481,9 @@ class UI(
         self._request_preview_config = False
         self._request_clear_preview = False
         self._request_world_size_change = False
+        self._request_fill_operation = False
+        self._fill_direction_type = 0
+        self._request_clear_fields = False
         self._save_filename = ""
         self._load_filename = ""
         self._load_category = ""
@@ -620,6 +638,10 @@ class UI(
         # Render history window if visible
         if self.show_history_window:
             self.render_history_window()
+
+        # Render Advanced Drawing window if enabled
+        if self.state.preferences.advanced_drawing_enabled:
+            self.render_advanced_drawing_window()
 
         if self.show_demo_window:
             imgui.show_demo_window()

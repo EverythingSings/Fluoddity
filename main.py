@@ -11,6 +11,7 @@ from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
 from camera_input import process_camera_input
+from utilities.advanced_drawing import AdvancedDrawingProcessor
 
 
 class App:
@@ -63,6 +64,7 @@ class App:
         self.config_saver = ConfigSaver()
         self.arrow_debug_service = ArrowDebugService(self.ctx)
         self.multi_load_service = MultiLoadService()
+        self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
         self.ui.multi_load_service = self.multi_load_service
 
         # Physics configs directories
@@ -78,7 +80,8 @@ class App:
         )
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
-            self.command_handler, self.window
+            self.command_handler, self.window,
+            advanced_drawing_processor=self.advanced_drawing_processor
         )
 
         # Frame timing
@@ -351,6 +354,7 @@ class App:
         ui_state = self.ui.get_state()
         save_preferences(ui_state.preferences)
 
+        self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()
         self.ui.cleanup()
         glfw.terminate()

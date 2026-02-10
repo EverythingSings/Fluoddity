@@ -1,0 +1,142 @@
+"""Advanced Drawing processor: force/strafe field GPU texture management.
+
+GPU resources are lazily initialized on first use, so there is zero
+performance impact when advanced drawing is disabled.
+"""
+
+import moderngl
+from utilities.gl_helpers import read_shader, tryset
+
+
+class AdvancedDrawingProcessor:
+    """Manages force/strafe field texture with lazy GPU resource creation.
+
+    The field texture is RGBA float32 where:
+      .xy = force field
+      .zw = strafe field
+
+    All GPU resources (shader, texture, FBO, VAO) are created lazily on the
+    first call to ``process()`` and recreated if the canvas size changes.
+    """
+
+    def __init__(self, ctx: moderngl.Context):
+        self.ctx = ctx
+        self._resources = None  # lazily created
+        self._width = 0
+        self._height = 0
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    @property
+    def field_texture(self):
+        """Return the force/strafe field texture, or None if not initialized."""
+        if self._resources is None:
+            return None
+        return self._resources["field_tex"]
+
+    def process(self, canvas_width, canvas_height,
+                draw_mode, mouse_pos, prev_mouse_pos,
+                draw_size, draw_power,
+                brush_mode, fixed_direction_heading,
+                force_field_active, strafe_field_active,
+                tiling_mode, erase_mode,
+                fill_mode=False, fill_direction_type=0):
+        """Draw to the force/strafe field texture. Called once per render frame.
+
+        Uses a two-pass approach:
+          Pass 1 (erase): no blending, outputs vec4(0) in circle, discard outside
+          Pass 2 (draw/fill): additive blending (ONE, ONE), outputs delta
+        """
+        self._ensure_resources(canvas_width, canvas_height)
+        r = self._resources
+
+        r["field_fbo"].use()
+
+        # Set common uniforms
+        tryset(r["program"], "mouse", mouse_pos)
+        tryset(r["program"], "previous_mouse", prev_mouse_pos)
+        tryset(r["program"], "draw_size", draw_size)
+        tryset(r["program"], "draw_power", draw_power)
+        tryset(r["program"], "brush_mode", brush_mode)
+        tryset(r["program"], "fixed_direction_heading", fixed_direction_heading)
+        tryset(r["program"], "force_field_active", force_field_active)
+        tryset(r["program"], "strafe_field_active", strafe_field_active)
+        tryset(r["program"], "tiling_mode", tiling_mode)
+
+        # Pass 1: Erase (if right-click held) - no blending
+        if erase_mode:
+            tryset(r["program"], "erase_mode", True)
+            tryset(r["program"], "draw_mode", False)
+            tryset(r["program"], "fill_mode", False)
+            self.ctx.disable(moderngl.BLEND)
+            r["vao"].render(mode=moderngl.TRIANGLE_FAN, vertices=4)
+
+        # Pass 2: Draw or fill (if active) - additive blending
+        if draw_mode or fill_mode:
+            tryset(r["program"], "erase_mode", False)
+            tryset(r["program"], "draw_mode", draw_mode)
+            tryset(r["program"], "fill_mode", fill_mode)
+            tryset(r["program"], "fill_direction_type", fill_direction_type)
+            self.ctx.enable(moderngl.BLEND)
+            self.ctx.blend_func = moderngl.ONE, moderngl.ONE
+            self.ctx.blend_equation = moderngl.FUNC_ADD
+            r["vao"].render(mode=moderngl.TRIANGLE_FAN, vertices=4)
+            self.ctx.disable(moderngl.BLEND)
+
+    def clear_fields(self):
+        """Clear the force/strafe field texture to zero."""
+        if self._resources is not None:
+            self._resources["field_fbo"].clear()
+
+    def cleanup(self):
+        """Release all GPU resources."""
+        if self._resources is None:
+            return
+        r = self._resources
+        r["field_fbo"].release()
+        r["field_tex"].release()
+        r["program"].release()
+        r["vao"].release()
+        self._resources = None
+        self._width = 0
+        self._height = 0
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _ensure_resources(self, w, h):
+        if self._resources is not None and self._width == w and self._height == h:
+            return
+        self.cleanup()
+        self._width = w
+        self._height = h
+
+        ctx = self.ctx
+
+        # Reuse canvas.vert (gl_VertexID-based fullscreen quad, no VBO needed)
+        vert_src = read_shader("shaders/canvas.vert")
+        frag_src = read_shader("shaders/field_drawing.frag")
+
+        program = ctx.program(
+            vertex_shader=vert_src,
+            fragment_shader=frag_src,
+        )
+
+        # Empty VAO — canvas.vert generates vertices via gl_VertexID
+        vao = ctx.vertex_array(program, [])
+
+        # Force/Strafe field texture: RGBA f4
+        field_tex = ctx.texture((w, h), 4, dtype="f4")
+        field_tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+        field_tex.repeat_x = True
+        field_tex.repeat_y = True
+        field_fbo = ctx.framebuffer(color_attachments=[field_tex])
+        field_fbo.clear()  # Start with zeros
+
+        self._resources = dict(
+            program=program, vao=vao,
+            field_tex=field_tex, field_fbo=field_fbo,
+        )

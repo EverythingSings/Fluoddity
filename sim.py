@@ -219,7 +219,10 @@ class Sim:
     def can_update(self, ctx: moderngl.Context, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                    prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
                    multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
-                   strong_determinism: bool = False):
+                   strong_determinism: bool = False,
+                   brush_mode: int = 0, fixed_direction_heading: float = 0.0,
+                   erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
+                   canvas_draw_active: bool = True):
         # Boundary conditions mode for wrap behavior
         tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(self.canvas_update_program, 'tiling_mode', tiling_mode)
@@ -273,7 +276,13 @@ class Sim:
 
         # Set draw mode uniforms if in draw mode
         tryset(self.canvas_update_program, 'draw_mode', draw_mode)
-        if draw_mode and mouse_pos is not None and prev_mouse_pos is not None:
+        tryset(self.canvas_update_program, 'brush_mode', brush_mode)
+        tryset(self.canvas_update_program, 'fixed_direction_heading', fixed_direction_heading)
+        tryset(self.canvas_update_program, 'erase_mode', erase_mode)
+        tryset(self.canvas_update_program, 'fill_mode', fill_mode)
+        tryset(self.canvas_update_program, 'fill_direction_type', fill_direction_type)
+        tryset(self.canvas_update_program, 'canvas_draw_active', canvas_draw_active)
+        if (draw_mode or erase_mode or fill_mode) and mouse_pos is not None and prev_mouse_pos is not None:
             tryset(self.canvas_update_program, 'mouse', mouse_pos)
             tryset(self.canvas_update_program, 'previous_mouse', prev_mouse_pos)
             tryset(self.canvas_update_program, 'draw_size', draw_size)
@@ -302,7 +311,10 @@ class Sim:
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
                multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
-               strong_determinism: bool = False):
+               strong_determinism: bool = False,
+               brush_mode: int = 0, fixed_direction_heading: float = 0.0,
+               erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
+               canvas_draw_active: bool = True):
         # Bind the current read buffer for sampling (will write to the other one)
         self.can_textures[self.can_read_index].use(location=1)
         self.brush_tex.use(location=3)
@@ -315,7 +327,10 @@ class Sim:
         self.entity_update(ctx, multi_load_service,is_preview_active)
 
         ctx.disable(moderngl.BLEND)
-        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power, multi_load_service,is_preview_active, tiling_mode, strong_determinism)
+        self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power,
+                        multi_load_service, is_preview_active, tiling_mode, strong_determinism,
+                        brush_mode, fixed_direction_heading, erase_mode, fill_mode,
+                        fill_direction_type, canvas_draw_active)
         self.frame_count += 1
 
         # Increment multi-load progress if active

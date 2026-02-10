@@ -242,6 +242,16 @@ class MenuBarMixin:
                 if imgui.menu_item("Config Clipboard - EXPERIMENTAL", "", self.show_history_window)[0]:
                     self.show_history_window = not self.show_history_window
 
+                # Advanced Drawing toggle
+                _, self.state.preferences.advanced_drawing_enabled = imgui.checkbox(
+                    "Advanced Drawing",
+                    self.state.preferences.advanced_drawing_enabled
+                )
+                self._delayed_tooltip(
+                    "Open the Drawing Controls window for advanced\n"
+                    "brush modes, force fields, and strafe fields."
+                )
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

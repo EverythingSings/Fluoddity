@@ -10,12 +10,14 @@ class SimulationRunner:
     deduplicating the shared physics stepping and frame assembly logic.
     """
 
-    def __init__(self, sim, camera, video_service, command_handler, window):
+    def __init__(self, sim, camera, video_service, command_handler, window,
+                 advanced_drawing_processor=None):
         self.sim = sim
         self.camera = camera
         self.video_service = video_service
         self.command_handler = command_handler
         self.window = window
+        self.advanced_drawing_processor = advanced_drawing_processor
 
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
@@ -44,6 +46,44 @@ class SimulationRunner:
             ui_state, tiling_mode
         )
 
+        # Compute erase mode (right-click drag in Draw Trail mode)
+        erase_mode = (draw_mode and ui_state.mouse_right_held
+                      and not ui_state.mouse_left_held)
+
+        # Advanced Drawing: force/strafe field update (once per render frame, not per physics frame)
+        if self.advanced_drawing_processor is not None:
+            adv_prefs = ui_state.preferences
+            if adv_prefs.advanced_drawing_enabled and (
+                adv_prefs.advanced_draw_force_field or adv_prefs.advanced_draw_strafe_field
+            ):
+                field_draw_active = (draw_mode and ui_state.mouse_left_held
+                                     and draw_power_value > 0.0)
+                # Erase scope: only erase fields that are checked as draw targets
+                field_erase = (erase_mode and (
+                    adv_prefs.advanced_draw_force_field or adv_prefs.advanced_draw_strafe_field
+                ))
+                self.advanced_drawing_processor.process(
+                    canvas_width=self.sim.can.size[0],
+                    canvas_height=self.sim.can.size[1],
+                    draw_mode=field_draw_active,
+                    mouse_pos=mouse_tex_coords,
+                    prev_mouse_pos=self.prev_mouse_tex_coords,
+                    draw_size=adv_prefs.draw_size,
+                    draw_power=adv_prefs.draw_power,
+                    brush_mode=adv_prefs.brush_mode,
+                    fixed_direction_heading=adv_prefs.fixed_direction_heading,
+                    force_field_active=adv_prefs.advanced_draw_force_field,
+                    strafe_field_active=adv_prefs.advanced_draw_strafe_field,
+                    tiling_mode=tiling_mode,
+                    erase_mode=field_erase,
+                    fill_mode=ui_state.request_fill_operation,
+                    fill_direction_type=ui_state.fill_direction_type,
+                )
+
+            # Handle clear fields request
+            if ui_state.request_clear_fields:
+                self.advanced_drawing_processor.clear_fields()
+
         # Build shared frame assembly kwargs (used by both paths)
         assemble_kwargs = self._build_assemble_kwargs(
             ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
@@ -53,16 +93,16 @@ class SimulationRunner:
         if motion_blur:
             self._run_with_motion_blur(
                 ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, assemble_kwargs
+                tiling_mode, assemble_kwargs, erase_mode=erase_mode
             )
         else:
             self._run_without_motion_blur(
                 ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, assemble_kwargs
+                tiling_mode, assemble_kwargs, erase_mode=erase_mode
             )
 
         # Update previous mouse position for next frame
-        if draw_mode:
+        if draw_mode or erase_mode:
             self.prev_mouse_tex_coords = mouse_tex_coords
 
     def _compute_view_bounds(self, tiling_mode, screen_aspect):
@@ -134,6 +174,9 @@ class SimulationRunner:
         """
         emboss_tex, emboss_mode, effective_emboss_intensity = self._get_emboss_params(ui_state)
 
+        adv_prefs = ui_state.preferences
+        advanced_active = adv_prefs.advanced_drawing_enabled
+
         return dict(
             view_mode=ui_state.sim.current_view_option,
             sweep_mode=sweep_mode,
@@ -155,30 +198,61 @@ class SimulationRunner:
             view_min=tuple(view_min),
             view_max=tuple(view_max),
             tonemap_softness=ui_state.preferences.tonemap_softness,
+            brush_mode=adv_prefs.brush_mode if advanced_active else 0,
+            fixed_direction_heading=adv_prefs.fixed_direction_heading if advanced_active else 0.0,
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
-                           draw_power_value, tiling_mode, step_index):
+                           draw_power_value, tiling_mode, step_index,
+                           erase_mode=False):
         """Run a single physics step and handle deferred entity selection.
 
         Args:
             step_index: Current step within the frame (0-based).
                         Entity selection only checked on step 0.
+            erase_mode: Whether right-click eraser is active.
         """
+        adv_prefs = ui_state.preferences
+        advanced_active = adv_prefs.advanced_drawing_enabled
+
+        # Brush mode and heading (only apply when advanced drawing is open)
+        brush_mode = adv_prefs.brush_mode if advanced_active else 0
+        fixed_heading = adv_prefs.fixed_direction_heading if advanced_active else 0.0
+
+        # Canvas draw active: when advanced drawing is closed, canvas always gets drawn.
+        # When open, only if canvas checkbox is checked.
+        canvas_draw_active = (not advanced_active) or adv_prefs.advanced_draw_canvas
+
+        # Canvas erase scope: erase canvas if it's a draw target
+        canvas_erase = erase_mode and canvas_draw_active
+
+        # Fill mode for canvas: only on first physics step to avoid repeating
+        canvas_fill = (ui_state.request_fill_operation and canvas_draw_active
+                       and step_index == 0)
+
+        # Only send draw_power if canvas is actually a draw target
+        effective_draw_power = draw_power_value if canvas_draw_active else 0.0
+
         self.sim.update(
             self.camera.ctx,
             draw_mode=draw_mode,
             mouse_pos=mouse_tex_coords,
             prev_mouse_pos=self.prev_mouse_tex_coords,
             draw_size=ui_state.preferences.draw_size,
-            draw_power=draw_power_value,
+            draw_power=effective_draw_power,
             multi_load_service=(
                 self.command_handler.multi_load_service
                 if ui_state.multi_load.multi_load_enabled else None
             ),
             is_preview_active=self.command_handler.preview_rule_active,
             tiling_mode=tiling_mode,
-            strong_determinism=ui_state.preferences.strong_determinism
+            strong_determinism=ui_state.preferences.strong_determinism,
+            brush_mode=brush_mode,
+            fixed_direction_heading=fixed_heading,
+            erase_mode=canvas_erase,
+            fill_mode=canvas_fill,
+            fill_direction_type=ui_state.fill_direction_type,
+            canvas_draw_active=canvas_draw_active,
         )
 
         # Check for deferred entity selection only on first physics step
@@ -209,7 +283,7 @@ class SimulationRunner:
 
     def _run_with_motion_blur(self, ui_state, speedmult, draw_mode,
                                mouse_tex_coords, draw_power_value,
-                               tiling_mode, assemble_kwargs):
+                               tiling_mode, assemble_kwargs, erase_mode=False):
         """Motion blur path: temporal accumulation with multiple render calls."""
         motion_blur_render_cadence = ui_state.preferences.blur_quality
         total_render_samples = (speedmult + motion_blur_render_cadence - 1) // motion_blur_render_cadence
@@ -218,7 +292,7 @@ class SimulationRunner:
         for step in range(speedmult):
             self._run_physics_step(
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, step
+                tiling_mode, step, erase_mode=erase_mode
             )
 
             # Only render on frames matching the blur quality cadence
@@ -239,12 +313,12 @@ class SimulationRunner:
 
     def _run_without_motion_blur(self, ui_state, speedmult, draw_mode,
                                   mouse_tex_coords, draw_power_value,
-                                  tiling_mode, assemble_kwargs):
+                                  tiling_mode, assemble_kwargs, erase_mode=False):
         """Non-motion-blur path: multiple physics steps, single render call."""
         for step in range(speedmult):
             self._run_physics_step(
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, step
+                tiling_mode, step, erase_mode=erase_mode
             )
 
         raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)

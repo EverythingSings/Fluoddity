@@ -29,6 +29,12 @@ class UIState:
 
     # Continuous mouse state (respects imgui capture)
     mouse_left_held: bool = False
+    mouse_right_held: bool = False  # For right-click eraser in Draw Trail mode
+
+    # Advanced drawing one-shot flags
+    request_fill_operation: bool = False  # Fill entire canvas/field for one frame
+    fill_direction_type: int = 0  # 0=fixed, 1=radial_in, 2=radial_out
+    request_clear_fields: bool = False  # Clear force/strafe field textures
 
     # Scroll input (for zoom-around-pointer)
     scroll_delta: float = 0.0

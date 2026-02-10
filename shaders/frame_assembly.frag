@@ -18,6 +18,11 @@ uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
 uniform float TRAIL_DRAW_RADIUS;    // Draw size for trail drawing overlay (0 when not active)
 uniform vec2 mouse_screen_coords;   // Mouse position in normalized screen coords (0-1)
 
+// Advanced drawing reticle uniforms
+// brush_mode codes: 0=mouse_dir, 1=inverse, 2=fixed, 3=attract, 4=repel
+uniform int brush_mode;
+uniform float fixed_direction_heading;
+
 // Camera state for screen-to-canvas UV conversion
 uniform vec2 camera_position;       // Camera position in world space
 uniform float camera_zoom;          // Camera zoom level

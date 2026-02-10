@@ -13,6 +13,15 @@ uniform vec2 previous_mouse;
 uniform float draw_size;
 uniform float draw_power;
 
+// Advanced drawing uniforms
+// brush_mode codes: 0=mouse_dir, 1=inverse, 2=fixed, 3=attract, 4=repel
+uniform int brush_mode;
+uniform float fixed_direction_heading;
+uniform bool erase_mode;       // Right-click eraser active
+uniform bool fill_mode;        // Fill entire canvas for one frame
+uniform int fill_direction_type; // 0=fixed, 1=radial_in, 2=radial_out
+uniform bool canvas_draw_active; // Whether canvas is a draw target
+
 // Boundary conditions
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 
@@ -112,6 +121,29 @@ vec4 getBlur(vec2 pos, sampler2D sam,float diffusion_constant) {
     return (getCan(pos, sam) * K + nc + sc + wc + ec) / (4. + K);
 }
 
+// Calculate draw vector based on brush mode
+vec2 calculate_draw_vector(int mode, vec2 mouse_vel, float heading,
+                           vec2 pixel_pos, vec2 mouse_p) {
+    if (mode == 0) {
+        return mouse_vel;                       // Mouse Direction
+    } else if (mode == 1) {
+        return -mouse_vel;                      // Inverse Mouse Direction
+    } else if (mode == 2) {
+        return vec2(sin(heading), cos(heading)); // Fixed Direction (0 = up)
+    } else if (mode == 3) {
+        // In - Attract (toward mouse)
+        vec2 to_mouse = mouse_p - pixel_pos;
+        float len = length(to_mouse);
+        return len > 0.0 ? to_mouse / len : vec2(0.0);
+    } else if (mode == 4) {
+        // Out - Repel (away from mouse)
+        vec2 from_mouse = pixel_pos - mouse_p;
+        float len = length(from_mouse);
+        return len > 0.0 ? from_mouse / len : vec2(0.0);
+    }
+    return vec2(0.0);
+}
+
 // Gaussian kernel for draw trail mode
 float draw_kernel(float distance, float size) {
     // Gaussian: exp(-distance^2 / (2 * sigma^2))
@@ -147,37 +179,80 @@ void main() {
     can_out = can_color * trail_persistence + (1 - trail_persistence) * brush_color;
 
     // Draw trail mode: add velocity based on mouse drag
-    if (draw_mode && draw_power > 0.0) {
+    if (draw_mode && canvas_draw_active && draw_power > 0.0) {
         float distance_to_mouse;
 
-        // Calculate velocity to add based on mouse movement
-        vec2 mouse_velocity = (mouse - previous_mouse);
+        // Calculate raw mouse velocity for tiling correction
+        vec2 raw_mouse_vel = (mouse - previous_mouse);
 
         if (tiling_mode) {
             // In tiling mode, check 9-cell neighborhood (3x3) for wrapped distance
             // This allows trail drawing across wrapped edges/corners
             float min_distance = 999.0;
-            vec2 min_velocity = vec2(999);
+            vec2 min_draw_vector = vec2(999);
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
                     vec2 wrapped_mouse = mouse + vec2(dx, dy);
                     float dist = length(texcoord - wrapped_mouse);
                     min_distance = min(min_distance, dist);
                     vec2 vel = (wrapped_mouse-previous_mouse);
-                    min_velocity = length(vel)<length(min_velocity)?vel:min_velocity;
+                    min_draw_vector = length(vel)<length(min_draw_vector)?vel:min_draw_vector;
                 }
             }
             distance_to_mouse = min_distance;
-            mouse_velocity = min_velocity;
+            raw_mouse_vel = min_draw_vector;
         } else {
             // Normal mode: direct distance calculation
             distance_to_mouse = length(texcoord - mouse);
         }
 
-        mouse_velocity *= draw_power/5;
+        // Apply brush mode to get final draw vector
+        vec2 draw_vector = calculate_draw_vector(
+            brush_mode, raw_mouse_vel, fixed_direction_heading,
+            texcoord, mouse
+        );
+        draw_vector *= draw_power/5;
 
         // Apply Gaussian kernel and add to velocity channels (RG)
         float kernel_weight = draw_kernel(distance_to_mouse, draw_size);
-        can_out.xy += mouse_velocity * kernel_weight/draw_size*(1-trail_persistence);
+        can_out.xy += draw_vector * kernel_weight/draw_size*(1-trail_persistence);
+    }
+
+    // Right-click eraser: hard circle erase within draw_size radius
+    if (erase_mode && canvas_draw_active) {
+        float erase_distance;
+        if (tiling_mode) {
+            float min_dist = 999.0;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    vec2 wrapped = mouse + vec2(dx, dy);
+                    min_dist = min(min_dist, length(texcoord - wrapped));
+                }
+            }
+            erase_distance = min_dist;
+        } else {
+            erase_distance = length(texcoord - mouse);
+        }
+        if (erase_distance < draw_size) {
+            can_out = vec4(0.0, 0.0, 0.0, 1.0);
+        }
+    }
+
+    // Fill mode: apply brush to entire canvas for one frame (no kernel, no persistence factor)
+    if (fill_mode && canvas_draw_active && draw_power > 0.0) {
+        vec2 fill_vector;
+        if (fill_direction_type == 0) {
+            fill_vector = vec2(sin(fixed_direction_heading), cos(fixed_direction_heading));
+        } else if (fill_direction_type == 1) {
+            vec2 to_center = vec2(0.5) - texcoord;
+            float len = length(to_center);
+            fill_vector = len > 0.0 ? to_center / len : vec2(0.0);
+        } else {
+            vec2 from_center = texcoord - vec2(0.5);
+            float len = length(from_center);
+            fill_vector = len > 0.0 ? from_center / len : vec2(0.0);
+        }
+        fill_vector *= draw_power / 5.0;
+        can_out.xy += fill_vector;
     }
 }
