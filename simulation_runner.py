@@ -200,6 +200,13 @@ class SimulationRunner:
             tonemap_softness=ui_state.preferences.tonemap_softness,
             brush_mode=adv_prefs.brush_mode if advanced_active else 0,
             fixed_direction_heading=adv_prefs.fixed_direction_heading if advanced_active else 0.0,
+            field_texture=(self.advanced_drawing_processor.field_texture
+                           if self.advanced_drawing_processor is not None else None),
+            advanced_drawing_resources_initialized=(
+                self.advanced_drawing_processor is not None
+                and self.advanced_drawing_processor.field_texture is not None),
+            force_field_checked=adv_prefs.advanced_draw_force_field if advanced_active else False,
+            strafe_field_checked=adv_prefs.advanced_draw_strafe_field if advanced_active else False,
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
@@ -253,7 +260,8 @@ class SimulationRunner:
             fill_mode=canvas_fill,
             fill_direction_type=ui_state.fill_direction_type,
             canvas_draw_active=canvas_draw_active,
-            field_texture = self.advanced_drawing_processor.field_texture
+            field_texture = self.advanced_drawing_processor.field_texture,
+            field_strength_mult=adv_prefs.field_strength_mult if advanced_active else 1.0,
         )
 
         # Check for deferred entity selection only on first physics step

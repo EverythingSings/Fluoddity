@@ -77,6 +77,28 @@ class AdvancedDrawingWindowMixin:
                 "0 = up (positive Y), PI/2 = right."
             )
 
+            # === Field Strength Multiplier (logarithmic: 0.0001 to 10.0, default 1.0) ===
+            FIELD_MIN_EXP = -4.0  # 10^-4 = 0.0001
+            FIELD_MAX_EXP = 1.0   # 10^1 = 10.0
+            FIELD_EXP_RANGE = FIELD_MAX_EXP - FIELD_MIN_EXP  # 5.0
+            if prefs.field_strength_mult > 0:
+                slider_pos = (math.log10(prefs.field_strength_mult) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
+            else:
+                slider_pos = 0.0
+            slider_pos = max(0.0, min(1.0, slider_pos))
+            _, new_pos = imgui.slider_float(
+                "Field Strength",
+                slider_pos,
+                0.0,
+                1.0,
+                f"{prefs.field_strength_mult:.4f}",
+            )
+            prefs.field_strength_mult = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_pos)
+            self._delayed_tooltip(
+                "Multiplier for force/strafe field effects.\n"
+                "Logarithmic scale: 0.0001 to 10.0, default 1.0."
+            )
+
             imgui.separator()
 
             # === Fill Popup (click to open) ===

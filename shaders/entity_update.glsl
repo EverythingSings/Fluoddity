@@ -36,6 +36,7 @@ uniform Rule target_rule;
 uniform sampler2D canvas; //trails canvas
 uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
+uniform float field_strength_mult; // Multiplier for force/strafe field effects
 uniform vec2 canvas_resolution;
 uniform PhysicsSetting DRAG_SETTING; 
 uniform PhysicsSetting STRAFE_POWER_SETTING;
@@ -535,7 +536,7 @@ void main() {
     e.pos += strafe*calculate_setting(get_particle_strafe_power(),e.pos,cohort);
 
     //ADVANCED DRAWING force / strafe
-    vec4 draw_sample = get_field(e.pos);
+    vec4 draw_sample = field_strength_mult*get_field(e.pos);
     e.vel += .01*draw_sample.xy;
     e.pos += .01*draw_sample.zw;
 

@@ -43,6 +43,7 @@ class PreferencesState:
     advanced_draw_strafe_field: bool = False  # "Strafe Field" checkbox
     brush_mode: int = 0  # 0=Mouse Direction, 1=Inverse, 2=Fixed, 3=Attract, 4=Repel
     fixed_direction_heading: float = 0.0  # Range -PI to PI, heading for Fixed Direction mode
+    field_strength_mult: float = 1.0  # Multiplier for force/strafe field effect (log scale 0.0001-10.0)
 
     # Physics slider group collapsed states (True = expanded/open, False = collapsed)
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)

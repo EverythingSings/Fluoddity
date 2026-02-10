@@ -74,7 +74,9 @@ class FrameAssembler:
                        emboss_intensity=0.0, emboss_smoothness=0.1, trail_draw_radius=0.0,
                        mouse_screen_coords=(0.5, 0.5), tiling_mode=False, view_min=(0.0, 0.0),
                        view_max=(0.0, 0.0), tonemap_softness=1.0,
-                       brush_mode=0, fixed_direction_heading=0.0):
+                       brush_mode=0, fixed_direction_heading=0.0,
+                       field_texture=None, advanced_drawing_resources_initialized=False,
+                       force_field_checked=False, strafe_field_checked=False):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -130,6 +132,8 @@ class FrameAssembler:
         self.resources['accumulation_texture'].use(location=1)  # accumulation_buffer
         if emboss_tex is not None:
             emboss_tex.use(location=2)  # emboss_tex
+        if field_texture is not None:
+            field_texture.use(location=3)  # field_texture
 
         # Set uniforms
         self.resources['shader']['input_frame'] = 0
@@ -161,6 +165,12 @@ class FrameAssembler:
         # Advanced drawing reticle uniforms
         tryset(self.resources['shader'], 'brush_mode', brush_mode)
         tryset(self.resources['shader'], 'fixed_direction_heading', fixed_direction_heading)
+        # Advanced drawing field texture and checkbox state
+        tryset(self.resources['shader'], 'field_texture', 3)
+        tryset(self.resources['shader'], 'advanced_drawing_resources_initialized',
+               advanced_drawing_resources_initialized)
+        tryset(self.resources['shader'], 'force_field_checked', force_field_checked)
+        tryset(self.resources['shader'], 'strafe_field_checked', strafe_field_checked)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()

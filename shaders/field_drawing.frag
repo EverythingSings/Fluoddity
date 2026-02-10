@@ -42,17 +42,17 @@ vec2 calculate_draw_vector(int mode, vec2 mouse_vel, float heading,
     } else if (mode == 1) {
         return -mouse_vel;                      // Inverse Mouse Direction
     } else if (mode == 2) {
-        return vec2(sin(heading), cos(heading)); // Fixed Direction (0 = up)
+        return .01*vec2(sin(heading), cos(heading)); // Fixed Direction (0 = up)
     } else if (mode == 3) {
         // In - Attract (toward mouse)
         vec2 to_mouse = mouse_p - pixel_pos;
         float len = length(to_mouse);
-        return len > 0.0 ? to_mouse / len : vec2(0.0);
+        return len > 0.0 ? .01*to_mouse / len : vec2(0.0);
     } else if (mode == 4) {
         // Out - Repel (away from mouse)
         vec2 from_mouse = pixel_pos - mouse_p;
         float len = length(from_mouse);
-        return len > 0.0 ? from_mouse / len : vec2(0.0);
+        return len > 0.0 ? .01*from_mouse / len : vec2(0.0);
     }
     return vec2(0.0);
 }
@@ -120,8 +120,8 @@ void main() {
         fill_vector *= draw_power / 5.0;
 
         fragColor = vec4(0.0);
-        if (force_field_active)  fragColor.xy = fill_vector;
-        if (strafe_field_active) fragColor.zw = fill_vector;
+        if (force_field_active)  fragColor.xy = .01*fill_vector;
+        if (strafe_field_active) fragColor.zw = .1*fill_vector;
         return;
     }
 

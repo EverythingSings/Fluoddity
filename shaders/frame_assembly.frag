@@ -2,6 +2,10 @@
 uniform sampler2D input_frame;
 uniform sampler2D accumulation_buffer;
 uniform sampler2D emboss_tex;       // Texture for emboss (canvas or brush, based on mode)
+uniform sampler2D field_texture;                    // Force/Strafe field (.xy=force, .zw=strafe)
+uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
+uniform bool force_field_checked;   // Whether Force Field checkbox is active
+uniform bool strafe_field_checked;  // Whether Strafe Field checkbox is active
 uniform bool is_first_frame;
 uniform bool final_sample;
 uniform int view_mode;  // 0=can, 1=brush_tex, 2=cam_brush
@@ -332,15 +336,29 @@ void main() {
         }
 
     
-    //Conditionally draw sweep reticle and mouse draw reticle
-    vec2 overlay_uv=uv;
-    if(view_mode < 2 || view_mode >= 4){overlay_uv = canvas_uv_to_screen(uv);}
-        if(PARAMETER_SWEEP_MODE){
-            fragColor.xyz += sweep_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
+        //Conditionally draw sweep reticle and mouse draw reticle
+        vec2 overlay_uv=uv;
+        if(view_mode < 2 || view_mode >= 4){overlay_uv = canvas_uv_to_screen(uv);}
+            if(PARAMETER_SWEEP_MODE){
+                fragColor.xyz += sweep_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
+            }
+            if(TRAIL_DRAW_RADIUS > 0.0 && EXPOSURE<.25){
+                fragColor.xyz += draw_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
+            }
+            //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
+        
+
+        //conditionally draw field indicator
+        //CURRENTLY TURNED OFF. MAYBE INCLUDE LATER
+        if(advanced_drawing_resources_initialized&& (view_mode==2||view_mode==3)){
+            vec2 field_uv = screen_to_canvas_uv(uv);
+            vec4 field = vec4(0);
+            if(tiling_mode_enabled||clamp(field_uv,vec2(0),vec2(1))==field_uv){
+                field = texture(field_texture,field_uv);
+            }
+            vec3 force_col = 8*hsv2rgb(vec3(atan(field.y,field.x)/2./3.1415,.75,length(field.xy)));
+            vec3 strafe_col = 8*hsv2rgb(vec3(atan(field.w,field.z)/2./3.1415,.75,length(field.zw)));
+            //fragColor.xyz +=force_col+strafe_col;
         }
-        if(TRAIL_DRAW_RADIUS > 0.0 && EXPOSURE<.25){
-            fragColor.xyz += draw_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
-        }
-        //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
     }
 }
