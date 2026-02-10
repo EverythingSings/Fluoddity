@@ -188,7 +188,9 @@ class UI(
         # Advanced drawing one-shot flags
         self._request_fill_operation = False
         self._fill_direction_type = 0
-        self._request_clear_fields = False
+        self._request_clear_force_field = False
+        self._request_clear_strafe_field = False
+        self._request_clear_canvas = False
 
         # Config clipboard flags
         self._request_preview_clipboard_config = False
@@ -435,7 +437,9 @@ class UI(
         # Transfer advanced drawing flags
         self.state.request_fill_operation = self._request_fill_operation
         self.state.fill_direction_type = self._fill_direction_type
-        self.state.request_clear_fields = self._request_clear_fields
+        self.state.request_clear_force_field = self._request_clear_force_field
+        self.state.request_clear_strafe_field = self._request_clear_strafe_field
+        self.state.request_clear_canvas = self._request_clear_canvas
 
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
@@ -483,7 +487,9 @@ class UI(
         self._request_world_size_change = False
         self._request_fill_operation = False
         self._fill_direction_type = 0
-        self._request_clear_fields = False
+        self._request_clear_force_field = False
+        self._request_clear_strafe_field = False
+        self._request_clear_canvas = False
         self._save_filename = ""
         self._load_filename = ""
         self._load_category = ""

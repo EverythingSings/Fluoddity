@@ -80,9 +80,15 @@ class SimulationRunner:
                     fill_direction_type=ui_state.fill_direction_type,
                 )
 
-            # Handle clear fields request
-            if ui_state.request_clear_fields:
-                self.advanced_drawing_processor.clear_fields()
+            # Handle selective field clear requests
+            if ui_state.request_clear_force_field:
+                self.advanced_drawing_processor.clear_force_field()
+            if ui_state.request_clear_strafe_field:
+                self.advanced_drawing_processor.clear_strafe_field()
+
+        # Handle clear canvas request
+        if ui_state.request_clear_canvas:
+            self.sim.clear_canvas()
 
         # Build shared frame assembly kwargs (used by both paths)
         assemble_kwargs = self._build_assemble_kwargs(
@@ -261,7 +267,8 @@ class SimulationRunner:
             fill_direction_type=ui_state.fill_direction_type,
             canvas_draw_active=canvas_draw_active,
             field_texture = self.advanced_drawing_processor.field_texture,
-            field_strength_mult=adv_prefs.field_strength_mult if advanced_active else 1.0,
+            force_field_strength=adv_prefs.force_field_strength if advanced_active else 1.0,
+            strafe_field_strength=adv_prefs.strafe_field_strength if advanced_active else 1.0,
         )
 
         # Check for deferred entity selection only on first physics step

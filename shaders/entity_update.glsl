@@ -36,7 +36,8 @@ uniform Rule target_rule;
 uniform sampler2D canvas; //trails canvas
 uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
-uniform float field_strength_mult; // Multiplier for force/strafe field effects
+uniform float force_field_strength; // Multiplier for force field effects
+uniform float strafe_field_strength; // Multiplier for strafe field effects
 uniform vec2 canvas_resolution;
 uniform PhysicsSetting DRAG_SETTING; 
 uniform PhysicsSetting STRAFE_POWER_SETTING;
@@ -320,7 +321,7 @@ vec4 get_can(vec2 p){
     return texture(canvas, uv);
 }
 vec4 get_field(vec2 p){
-    //if(!advanced_drawing_resources_initialized)return vec4(0);
+    if(!advanced_drawing_resources_initialized)return vec4(0);
     vec2 res=textureSize(field_texture,0);
     vec2 aspect=vec2(1,res.x/res.y);
     vec2 uv = p/2*aspect+.5;
@@ -536,9 +537,9 @@ void main() {
     e.pos += strafe*calculate_setting(get_particle_strafe_power(),e.pos,cohort);
 
     //ADVANCED DRAWING force / strafe
-    vec4 draw_sample = field_strength_mult*get_field(e.pos);
-    e.vel += .01*draw_sample.xy;
-    e.pos += .01*draw_sample.zw;
+    vec4 draw_sample =get_field(e.pos);
+    e.vel += .01*force_field_strength*draw_sample.xy;
+    e.pos += .01*strafe_field_strength*draw_sample.zw;
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
     int boundary_mode = get_particle_boundary_conditions();

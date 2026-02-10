@@ -4,6 +4,7 @@ GPU resources are lazily initialized on first use, so there is zero
 performance impact when advanced drawing is disabled.
 """
 
+import numpy as np
 import moderngl
 from utilities.gl_helpers import read_shader, tryset
 
@@ -89,6 +90,24 @@ class AdvancedDrawingProcessor:
         """Clear the force/strafe field texture to zero."""
         if self._resources is not None:
             self._resources["field_fbo"].clear()
+
+    def clear_force_field(self):
+        """Clear only the force field channels (.xy) to zero, preserving strafe (.zw)."""
+        if self._resources is None:
+            return
+        tex = self._resources["field_tex"]
+        data = np.frombuffer(tex.read(), dtype=np.float32).reshape(tex.height, tex.width, 4).copy()
+        data[:, :, 0:2] = 0.0
+        tex.write(data.tobytes())
+
+    def clear_strafe_field(self):
+        """Clear only the strafe field channels (.zw) to zero, preserving force (.xy)."""
+        if self._resources is None:
+            return
+        tex = self._resources["field_tex"]
+        data = np.frombuffer(tex.read(), dtype=np.float32).reshape(tex.height, tex.width, 4).copy()
+        data[:, :, 2:4] = 0.0
+        tex.write(data.tobytes())
 
     def cleanup(self):
         """Release all GPU resources."""

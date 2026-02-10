@@ -156,7 +156,8 @@ class Sim:
     
     def entity_update(self, ctx: moderngl.Context, multi_load_service=None,
                       is_preview_active=False, field_texture_bound=False,
-                      field_strength_mult: float = 1.0):
+                      force_field_strength: float = 1.0,
+                      strafe_field_strength: float = 1.0):
         '''
         Run a single physics update on all particles
         '''
@@ -167,7 +168,8 @@ class Sim:
         # Advanced drawing field texture
         tryset(self.entity_update_program, 'field_texture', 5)
         tryset(self.entity_update_program, 'advanced_drawing_resources_initialized', field_texture_bound)
-        tryset(self.entity_update_program, 'field_strength_mult', field_strength_mult)
+        tryset(self.entity_update_program, 'force_field_strength', force_field_strength)
+        tryset(self.entity_update_program, 'strafe_field_strength', strafe_field_strength)
 
         # Only write rules to buffer when explicitly requested (avoids 192MB/frame cost)
         tryset(self.entity_update_program, 'WRITE_RULES', self._pending_rule_buffer_update)
@@ -324,7 +326,8 @@ class Sim:
                erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
                canvas_draw_active: bool = True,
                field_texture=None,
-               field_strength_mult: float = 1.0):
+               force_field_strength: float = 1.0,
+               strafe_field_strength: float = 1.0):
         # Bind the current read buffer for sampling (will write to the other one)
         self.can_textures[self.can_read_index].use(location=1)
         self.brush_tex.use(location=3)
@@ -340,7 +343,8 @@ class Sim:
         ctx.memory_barrier()
         self.entity_update(ctx, multi_load_service, is_preview_active,
                            field_texture_bound=field_texture is not None,
-                           field_strength_mult=field_strength_mult)
+                           force_field_strength=force_field_strength,
+                           strafe_field_strength=strafe_field_strength)
 
         ctx.disable(moderngl.BLEND)
         self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power,
@@ -352,6 +356,14 @@ class Sim:
         # Increment multi-load progress if active
         if multi_load_service and multi_load_service.is_active():
             multi_load_service.increment_progress()
+
+    def clear_canvas(self):
+        """Clear only the trail/canvas textures (not particles or frame count)."""
+        old_fbo = self.ctx.fbo
+        for fb in self.can_framebuffers:
+            fb.use()
+            self.ctx.clear(0, 0, 0, 0)
+        old_fbo.use()
 
     def reset(self):
         old_fbo = self.ctx.fbo

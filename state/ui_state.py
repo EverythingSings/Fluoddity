@@ -34,7 +34,9 @@ class UIState:
     # Advanced drawing one-shot flags
     request_fill_operation: bool = False  # Fill entire canvas/field for one frame
     fill_direction_type: int = 0  # 0=fixed, 1=radial_in, 2=radial_out
-    request_clear_fields: bool = False  # Clear force/strafe field textures
+    request_clear_force_field: bool = False  # Clear force field channels
+    request_clear_strafe_field: bool = False  # Clear strafe field channels
+    request_clear_canvas: bool = False  # Clear trails/canvas textures
 
     # Scroll input (for zoom-around-pointer)
     scroll_delta: float = 0.0
