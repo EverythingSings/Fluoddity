@@ -14,7 +14,7 @@ The physics engine itself is a generalization of this excellent Sage Jenson page
 https://cargocollective.com/sagejenson/physarum
 
 I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. 
-## Fluoddity-Core https://github.com/aphid91/Fluoddity-Core
+## Fluoddity-Core: https://github.com/aphid91/Fluoddity-Core
 The algorithm that drives the Fluoddity particle system is pretty simple, but Fluoddity itself has a lot of bells and whistles. Fluoddity-Core exists as a minimal shell that is easier to understand and tinker with. It has just enough machinery to load and run a basic Fluoddity config with no UI fluff. Fluoddity-Core also hosts a Claude-Code port of the core engine to webgl that runs on github pages (This is the demo linked above).
 Any advice or criticism is welcome. This is a toy I made for myself and I am more artist than engineer. 
 
