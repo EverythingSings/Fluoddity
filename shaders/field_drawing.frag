@@ -120,7 +120,7 @@ void main() {
         fill_vector *= draw_power / 5.0;
 
         fragColor = vec4(0.0);
-        if (force_field_active)  fragColor.xy = .01*fill_vector;
+        if (force_field_active)  fragColor.xy = .03*fill_vector;
         if (strafe_field_active) fragColor.zw = .1*fill_vector;
         return;
     }
