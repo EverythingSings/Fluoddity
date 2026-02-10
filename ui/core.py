@@ -342,8 +342,8 @@ class UI(
             elif ctrl_pressed and key == self.keybindings.get_key("paste_config_with_ctrl"):
                 self._request_load_config = True
             elif key == self.keybindings.get_key("toggle_watercolor"):
-                # Toggle watercolor mode (only in camera views)
-                if self.state.sim.current_view_option >= 2:
+                # Toggle watercolor mode (only in camera views, not field views)
+                if self.state.sim.current_view_option in (2, 3):
                     self.state.sim.watercolor_mode = not self.state.sim.watercolor_mode
             elif key == self.keybindings.get_key("reload_shaders"):
                 # Reload shaders

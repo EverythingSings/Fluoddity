@@ -88,8 +88,8 @@ void main() {
         tiling_distance(texcoord, mouse, previous_mouse, tiling_mode,
                         distance_to_mouse, unused_vel);
 
-        // Hard circle erase within draw_size radius
-        if (distance_to_mouse < draw_size) {
+        // Hard circle erase within draw_size radius (doubled to match reticle)
+        if (distance_to_mouse < draw_size * 2) {
             // Zero out channels corresponding to active fields
             fragColor = vec4(0.0);
         } else {

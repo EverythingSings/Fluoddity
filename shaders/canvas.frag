@@ -233,7 +233,7 @@ void main() {
         } else {
             erase_distance = length(texcoord - mouse);
         }
-        if (erase_distance < draw_size) {
+        if (erase_distance < draw_size*2) {//Match the reticle size from frame_assembly.frag
             can_out = vec4(0.0, 0.0, 0.0, 1.0);
         }
     }

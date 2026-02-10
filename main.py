@@ -66,6 +66,7 @@ class App:
         self.multi_load_service = MultiLoadService()
         self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
         self.ui.multi_load_service = self.multi_load_service
+        self.ui.advanced_drawing_processor = self.advanced_drawing_processor
 
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()
@@ -205,6 +206,15 @@ class App:
         self.camera.apply_state(ui_state.camera)
         self.multi_load_service.apply_state(ui_state.multi_load)
         self.camera.BRIGHTNESS = ui_state.preferences.brightness
+
+        # 5.0.1 Force/Strafe field view modes: override view_tex with field texture
+        if ui_state.sim.current_view_option in (4, 5):
+            field_tex = self.advanced_drawing_processor.field_texture
+            if field_tex is not None:
+                self.sim.view_tex = field_tex
+            else:
+                # Field texture not initialized yet — fall back to canvas view
+                ui_state.sim.current_view_option = 0
 
         # 5.1. Multi-load conflict prevention
         if ui_state.multi_load.multi_load_enabled:

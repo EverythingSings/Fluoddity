@@ -79,22 +79,24 @@ class AdvancedDrawingWindowMixin:
 
             imgui.separator()
 
-            # === Fill Dropdown ===
-            if imgui.begin_menu("Fill..."):
-                if imgui.menu_item("Fixed Direction", "", False)[0]:
-                    self._request_fill_operation = True
-                    self._fill_direction_type = 0
-                if imgui.menu_item("Radial - In", "", False)[0]:
-                    self._request_fill_operation = True
-                    self._fill_direction_type = 1
-                if imgui.menu_item("Radial - Out", "", False)[0]:
-                    self._request_fill_operation = True
-                    self._fill_direction_type = 2
-                imgui.end_menu()
+            # === Fill Popup (click to open) ===
+            if imgui.button("Fill..."):
+                imgui.open_popup("fill_popup")
             self._delayed_tooltip(
                 "Apply the brush to the entire canvas/field for one frame.\n"
                 "Uses full kernel coverage (weight=1.0 everywhere)."
             )
+            if imgui.begin_popup("fill_popup"):
+                if imgui.selectable("Fixed Direction",False)[0]:
+                    self._request_fill_operation = True
+                    self._fill_direction_type = 0
+                if imgui.selectable("Radial - In",False)[0]:
+                    self._request_fill_operation = True
+                    self._fill_direction_type = 1
+                if imgui.selectable("Radial - Out",False)[0]:
+                    self._request_fill_operation = True
+                    self._fill_direction_type = 2
+                imgui.end_popup()
 
             imgui.separator()
 

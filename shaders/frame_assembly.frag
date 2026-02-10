@@ -180,7 +180,7 @@ vec3 emboss(vec2 uv){
         // In tiling mode, use tiled UV for emboss texture
         canv_uv = tiled_sample_uv_emboss(uv);
     } else {
-        canv_uv = view_mode >= 2 ? screen_to_canvas_uv(uv) : uv;
+        canv_uv = (view_mode == 2 || view_mode == 3) ? screen_to_canvas_uv(uv) : uv;
     }
     vec2 grad = gradient(emboss_tex, canv_uv, .01*EMBOSS_SMOOTHNESS);
     grad *= max(abs(canv_uv-.5).x,abs(canv_uv-.5).y)>.5?0:1;
@@ -286,6 +286,10 @@ void main() {
     vec3 current_color;
     if (tiling_mode_enabled) {
         current_color = sample_tiled_color(uv);
+    } else if (view_mode == 5) {
+        // Strafe field view: use .zw channels as the vector field (displayed via .xy)
+        vec4 field_sample = texture(input_frame, uv);
+        current_color = vec3(field_sample.z, field_sample.w, 0.0);
     } else {
         current_color = texture(input_frame, uv).rgb;
     }
@@ -315,8 +319,8 @@ void main() {
 
     // Apply gamma correction only on final sample (AFTER accumulation)
     if (final_sample) {
-        //if we are in canvas or brush view, we must interpret raw texture before gamma correction and display:
-        if(view_mode < 2){
+        //if we are in canvas, brush, or field view, we must interpret raw texture before gamma correction and display:
+        if(view_mode < 2 || view_mode == 4 || view_mode == 5){
             fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
         }
         // Apply brightness multiplier before gamma correction
@@ -330,7 +334,7 @@ void main() {
     
     //Conditionally draw sweep reticle and mouse draw reticle
     vec2 overlay_uv=uv;
-    if(view_mode < 2){overlay_uv = canvas_uv_to_screen(uv);}
+    if(view_mode < 2 || view_mode >= 4){overlay_uv = canvas_uv_to_screen(uv);}
         if(PARAMETER_SWEEP_MODE){
             fragColor.xyz += sweep_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
         }

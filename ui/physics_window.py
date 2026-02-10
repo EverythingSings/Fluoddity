@@ -223,8 +223,8 @@ class PhysicsWindowMixin:
 
                 imgui.separator()
 
-                # Watercolor Mode checkbox (only available in camera views)
-                watercolor_disabled = self.state.sim.current_view_option < 2
+                # Watercolor Mode checkbox (only available in camera views, not field views)
+                watercolor_disabled = self.state.sim.current_view_option not in (2, 3)
                 if watercolor_disabled:
                     imgui.begin_disabled()
                 _, self.state.sim.watercolor_mode = imgui.checkbox(
@@ -430,7 +430,7 @@ class PhysicsWindowMixin:
                 if not self.state.sim.color_by_cohort:
                     imgui.set_next_item_width(100)
                     _, self.state.sim.hue_sensitivity = imgui.slider_float("Hue Sensitivity", self.state.sim.hue_sensitivity, -1.0, 1.0)
-                watercolor_disabled_adv = self.state.sim.current_view_option < 2
+                watercolor_disabled_adv = self.state.sim.current_view_option not in (2, 3)
                 if watercolor_disabled_adv:
                     imgui.begin_disabled()
                 _, self.state.sim.watercolor_mode = imgui.checkbox("Watercolor Mode", self.state.sim.watercolor_mode)

@@ -135,7 +135,7 @@ class SimulationRunner:
                     np.fmod(mouse_tex_coords[0] + 10.0, 1.0),
                     np.fmod(mouse_tex_coords[1] + 10.0, 1.0)
                 )
-            if ui_state.mouse_left_held:
+            if ui_state.mouse_left_held or ui_state.request_fill_operation:
                 draw_power_value = ui_state.preferences.draw_power
 
         return draw_mode, mouse_tex_coords, draw_power_value
@@ -253,6 +253,7 @@ class SimulationRunner:
             fill_mode=canvas_fill,
             fill_direction_type=ui_state.fill_direction_type,
             canvas_draw_active=canvas_draw_active,
+            field_texture = self.advanced_drawing_processor.field_texture
         )
 
         # Check for deferred entity selection only on first physics step

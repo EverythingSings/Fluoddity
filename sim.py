@@ -118,6 +118,7 @@ class Sim:
 
         tryset(self.entity_update_program, 'canvas_resolution', canvas_shape)
         tryset(self.entity_update_program, 'canvas', 1)
+        tryset(self.entity_update_program, 'field_texture', 5)
 
         # 2. Brush update shaders (instanced rendering)
         self.brush_vertex_source = read_shader('shaders/brush.vert')
@@ -153,13 +154,18 @@ class Sim:
 
 
     
-    def entity_update(self, ctx: moderngl.Context, multi_load_service=None,is_preview_active = False):
+    def entity_update(self, ctx: moderngl.Context, multi_load_service=None,
+                      is_preview_active=False, field_texture_bound=False):
         '''
         Run a single physics update on all particles
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
         tryset(self.entity_update_program, 'WORLD_SIZE', self.world_size)
+
+        # Advanced drawing field texture
+        tryset(self.entity_update_program, 'field_texture', 5)
+        tryset(self.entity_update_program, 'advanced_drawing_resources_initialized', field_texture_bound)
 
         # Only write rules to buffer when explicitly requested (avoids 192MB/frame cost)
         tryset(self.entity_update_program, 'WRITE_RULES', self._pending_rule_buffer_update)
@@ -314,17 +320,23 @@ class Sim:
                strong_determinism: bool = False,
                brush_mode: int = 0, fixed_direction_heading: float = 0.0,
                erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
-               canvas_draw_active: bool = True):
+               canvas_draw_active: bool = True,
+               field_texture=None):
         # Bind the current read buffer for sampling (will write to the other one)
         self.can_textures[self.can_read_index].use(location=1)
         self.brush_tex.use(location=3)
+
+        # Bind advanced drawing field texture if available
+        if field_texture is not None:
+            field_texture.use(location=5)
 
         current_time = time.time()
         self.time = current_time - self.start_time_stamp
 
         self.brush_update(ctx)
         ctx.memory_barrier()
-        self.entity_update(ctx, multi_load_service,is_preview_active)
+        self.entity_update(ctx, multi_load_service, is_preview_active,
+                           field_texture_bound=field_texture is not None)
 
         ctx.disable(moderngl.BLEND)
         self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power,
