@@ -4,6 +4,7 @@
 I struggle to describe Fluoddity. Think somewhere between interactive lava lamp and evolvable ant farm. 
 Sometimes I'll see a meandering river, a candle flame, or branching lightning. Sometimes it's more like looking under a microscope as little amoebas devour each other and break apart. And sometimes, it's stranger than all that.
 
+## WebGL Demo: https://aphid91.github.io/Fluoddity-Core/
 <img width="1920" height="1129" alt="lavalamp_20260120_152448" src="https://github.com/user-attachments/assets/e8eda829-40d1-4add-afd6-80548a34cf5c" />
 <img width="1920" height="1129" alt="lavalamp_20260120_152543" src="https://github.com/user-attachments/assets/6bf3ce1c-8a7f-487f-ad9e-1da67f73686c" />
 <img width="1920" height="1129" alt="lavalamp_20260120_152527" src="https://github.com/user-attachments/assets/f1c1b933-f5fd-4802-b2b6-7887d483b71d" />
@@ -12,9 +13,9 @@ Fluoddity is a 2d particle system designed for realtime exploration. I've been t
 The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models: 
 https://cargocollective.com/sagejenson/physarum
 
-I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. (If you have trouble with the link, just google "sage jenson Physarum") 
-
-
+I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. 
+## Fluoddity-Core https://github.com/aphid91/Fluoddity-Core
+The algorithm that drives the Fluoddity particle system is pretty simple, but Fluoddity itself has a lot of bells and whistles. Fluoddity-Core exists as a minimal shell that is easier to understand and tinker with. It has just enough machinery to load and run a basic Fluoddity config with no UI fluff. Fluoddity-Core also hosts a Claude-Code port of the core engine to webgl that runs on github pages (This is the demo linked above).
 Any advice or criticism is welcome. This is a toy I made for myself and I am more artist than engineer. 
 
 ## Features
