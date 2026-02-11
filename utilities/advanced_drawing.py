@@ -109,6 +109,36 @@ class AdvancedDrawingProcessor:
         data[:, :, 2:4] = 0.0
         tex.write(data.tobytes())
 
+    def snapshot_field_data(self) -> np.ndarray | None:
+        """Readback field texture from GPU to CPU as float32 array.
+
+        Returns:
+            (height, width, 4) float32 numpy array, or None if not initialized.
+        """
+        if self._resources is None:
+            return None
+        tex = self._resources["field_tex"]
+        return np.frombuffer(tex.read(), dtype=np.float32).reshape(tex.height, tex.width, 4).copy()
+
+    def write_field_data(self, data: np.ndarray) -> None:
+        """Write CPU float32 data to GPU field texture.
+
+        Handles dimension mismatch via bilinear resize.
+        No-op if GPU resources are not initialized.
+        """
+        if self._resources is None:
+            return
+        from utilities.field_texture_io import write_field_to_gpu
+        write_field_to_gpu(self._resources["field_tex"], data)
+
+    def ensure_initialized(self, canvas_dim: int) -> None:
+        """Lazily initialize GPU resources if not yet created.
+
+        Called by the config system when loading a config that has field data
+        but the advanced drawing system hasn't been used yet this session.
+        """
+        self._ensure_resources(canvas_dim, canvas_dim)
+
     def cleanup(self):
         """Release all GPU resources."""
         if self._resources is None:

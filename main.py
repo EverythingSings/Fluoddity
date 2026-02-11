@@ -77,7 +77,8 @@ class App:
         self.command_handler = CommandHandler(
             self.sim, self.camera, self.ui, self.rule_manager,
             self.entity_picker, self.video_service, self.config_saver,
-            self.multi_load_service, self.user_configs_dir
+            self.multi_load_service, self.user_configs_dir,
+            advanced_drawing_processor=self.advanced_drawing_processor
         )
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,

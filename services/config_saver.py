@@ -96,9 +96,13 @@ class PhysicsConfig:
     # User notes (optional)
     notes: str = ""
 
+    # Field strength multipliers (only stored when field texture is present)
+    force_field_strength: float | None = None
+    strafe_field_strength: float | None = None
+
     def to_dict(self) -> dict:
         """Convert config to JSON-serializable dict."""
-        return {
+        d = {
             'version': CONFIG_VERSION,
             'physics': {
                 'axial_force': self.axial_force,
@@ -143,6 +147,12 @@ class PhysicsConfig:
             'rule': self.rule.flatten().tolist(),
             'notes': self.notes,
         }
+        if self.force_field_strength is not None:
+            d['field_strengths'] = {
+                'force': self.force_field_strength,
+                'strafe': self.strafe_field_strength,
+            }
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> 'PhysicsConfig':
@@ -152,6 +162,11 @@ class PhysicsConfig:
         appearance = data.get('appearance', {})
         sweeps = data.get('sweeps', {})
         notes = data.get('notes', '')
+
+        # Parse optional field strengths
+        field_strengths = data.get('field_strengths')
+        force_field_strength = field_strengths['force'] if field_strengths else None
+        strafe_field_strength = field_strengths['strafe'] if field_strengths else None
 
         # Parse rule from flat list
         rule_list = data.get('rule', [0.0] * 80)
@@ -208,6 +223,8 @@ class PhysicsConfig:
             emboss_smoothness=appearance.get('emboss_smoothness', 0.1),
             rule=rule,
             notes=notes,
+            force_field_strength=force_field_strength,
+            strafe_field_strength=strafe_field_strength,
         )
 
     def to_json(self, indent: int = 2) -> str:
@@ -223,8 +240,14 @@ class PhysicsConfig:
 class ConfigSaver:
     """Service for saving/loading physics configurations."""
 
-    def create_config(self, sim_state: SimState, rule: np.ndarray | None) -> PhysicsConfig:
-        """Create a PhysicsConfig from current state."""
+    def create_config(self, sim_state: SimState, rule: np.ndarray | None,
+                      field_strengths: tuple[float, float] | None = None) -> PhysicsConfig:
+        """Create a PhysicsConfig from current state.
+
+        Args:
+            field_strengths: Optional (force_field_strength, strafe_field_strength) tuple.
+                Only set when a non-zero field texture is being saved alongside.
+        """
         if rule is None:
             rule = np.zeros((10, 8), dtype=np.float32)
 
@@ -263,6 +286,8 @@ class ConfigSaver:
             emboss_smoothness=sim_state.emboss_smoothness,
             rule=rule.copy(),
             notes=sim_state.notes,
+            force_field_strength=field_strengths[0] if field_strengths else None,
+            strafe_field_strength=field_strengths[1] if field_strengths else None,
         )
 
     def apply_config(self, config: PhysicsConfig, sim_state: SimState,

@@ -27,7 +27,7 @@ class HistoryWindowMixin:
         hovered_this_frame = None
 
         for i in range(len(self.config_clipboard) - 1, -1, -1):
-            _config, label = self.config_clipboard[i]
+            _config, label, _field = self.config_clipboard[i]
 
             # Selectable label for click/hover detection
             # Use allow_overlap so the X button can receive clicks on the same line
@@ -75,8 +75,8 @@ class HistoryWindowMixin:
                 if imgui.is_item_deactivated_after_edit():
                     # Enter pressed or focus lost after editing — commit rename
                     if self._clipboard_rename_buffer.strip():
-                        config, _old_label = self.config_clipboard[i]
-                        self.config_clipboard[i] = (config, self._clipboard_rename_buffer.strip())
+                        config, _old_label, field = self.config_clipboard[i]
+                        self.config_clipboard[i] = (config, self._clipboard_rename_buffer.strip(), field)
                     self._clipboard_renaming_index = None
                     imgui.close_current_popup()
                 imgui.end_popup()

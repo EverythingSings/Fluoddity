@@ -68,6 +68,11 @@ class MenuBarMixin:
                         self.currently_previewing_category = None
                         # Lock to current watercolor mode when menu opens
                         self.load_menu_watercolor_mode = self.state.sim.watercolor_mode
+                        # Cache field strengths for restoration
+                        self._cached_field_strengths = (
+                            self.state.preferences.force_field_strength,
+                            self.state.preferences.strafe_field_strength,
+                        )
 
                     # Use locked watercolor mode
                     current_menu_watercolor = self.load_menu_watercolor_mode
@@ -89,11 +94,19 @@ class MenuBarMixin:
                                 config = self.cached_configs[cache_key]
                                 self.config_saver.apply_config(config, self.state.sim,
                                                               watercolor_override=current_menu_watercolor)
+                                # Re-apply field strengths from config
+                                if config.force_field_strength is not None:
+                                    self.state.preferences.force_field_strength = config.force_field_strength
+                                    self.state.preferences.strafe_field_strength = config.strafe_field_strength
                         elif self.cached_config:
                             # Restore from cache with watercolor override
                             self.config_saver.load_from_string(
                                 self.cached_config, self.state.sim,
                                 watercolor_override=current_menu_watercolor)
+                            # Restore cached field strengths
+                            if self._cached_field_strengths is not None:
+                                self.state.preferences.force_field_strength = self._cached_field_strengths[0]
+                                self.state.preferences.strafe_field_strength = self._cached_field_strengths[1]
 
                     # Lock watercolor mode to menu's mode
                     self.state.sim.watercolor_mode = current_menu_watercolor
@@ -118,6 +131,10 @@ class MenuBarMixin:
                                 config = self.cached_configs[cache_key]
                                 self.config_saver.apply_config(config, self.state.sim,
                                                               watercolor_override=current_menu_watercolor)
+                                # Apply field strengths from config if present
+                                if config.force_field_strength is not None:
+                                    self.state.preferences.force_field_strength = config.force_field_strength
+                                    self.state.preferences.strafe_field_strength = config.strafe_field_strength
                                 self._request_preview_config = True
                                 self._preview_filename = hovered_filename
                                 self._preview_category = hovered_category
@@ -128,6 +145,10 @@ class MenuBarMixin:
                             self.config_saver.load_from_string(
                                 self.cached_config, self.state.sim,
                                 watercolor_override=current_menu_watercolor)
+                            # Restore cached field strengths
+                            if self._cached_field_strengths is not None:
+                                self.state.preferences.force_field_strength = self._cached_field_strengths[0]
+                                self.state.preferences.strafe_field_strength = self._cached_field_strengths[1]
                             self.currently_previewing = None
                             self.currently_previewing_category = None
 
@@ -252,7 +273,7 @@ class MenuBarMixin:
 
                 # Advanced Drawing toggle
                 _, self.state.preferences.advanced_drawing_enabled = imgui.checkbox(
-                    "Advanced Drawing",
+                    "Advanced Drawing - EXPERIMENTAL",
                     self.state.preferences.advanced_drawing_enabled
                 )
                 self._delayed_tooltip(
@@ -294,6 +315,11 @@ class MenuBarMixin:
                 self.config_saver.load_from_string(self.cached_config, self.state.sim)
             if self.currently_previewing:
                 self._request_clear_preview = True
+            # Restore cached field strengths
+            if hasattr(self, '_cached_field_strengths') and self._cached_field_strengths is not None:
+                self.state.preferences.force_field_strength = self._cached_field_strengths[0]
+                self.state.preferences.strafe_field_strength = self._cached_field_strengths[1]
+                self._cached_field_strengths = None
             self.cached_config = None
             self.currently_previewing = None
             self.currently_previewing_category = None

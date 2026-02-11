@@ -85,7 +85,7 @@ class UI(
 
         # Config clipboard state
         self.show_history_window = False  # Toggled by Extras menu
-        self.config_clipboard: list[tuple] = []  # [(PhysicsConfig, display_label), ...]
+        self.config_clipboard: list[tuple] = []  # [(PhysicsConfig, display_label, field_snapshot), ...]
         self.clipboard_counter: int = 0  # Global jersey counter (00, 01, 02...)
         self.clipboard_previewing_index: int | None = None
         self._clipboard_renaming_index: int | None = None  # Which entry is being renamed
@@ -523,10 +523,14 @@ class UI(
         """Set clipboard content (used by orchestrator for config save)."""
         glfw.set_clipboard_string(self.window, text)
 
-    def add_to_config_clipboard(self, config, filename: str) -> None:
-        """Add a config snapshot to the config clipboard."""
+    def add_to_config_clipboard(self, config, filename: str, field_snapshot=None) -> None:
+        """Add a config snapshot to the config clipboard.
+
+        Args:
+            field_snapshot: Optional numpy float32 array of field texture data.
+        """
         label = f"{filename}*{self.clipboard_counter:02d}"
-        self.config_clipboard.append((config, label))
+        self.config_clipboard.append((config, label, field_snapshot))
         self.clipboard_counter += 1
 
     def update_physics_defaults(self, filename: str) -> None:
