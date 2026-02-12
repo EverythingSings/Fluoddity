@@ -277,8 +277,8 @@ class SimulationRunner:
             fill_direction_type=ui_state.fill_direction_type,
             canvas_draw_active=canvas_draw_active,
             field_texture = self.advanced_drawing_processor.field_texture,
-            force_field_strength=adv_prefs.force_field_strength if advanced_active else 1.0,
-            strafe_field_strength=adv_prefs.strafe_field_strength if advanced_active else 1.0,
+            force_field_strength=adv_prefs.force_field_strength,
+            strafe_field_strength=adv_prefs.strafe_field_strength,
         )
 
         # Check for deferred entity selection only on first physics step
