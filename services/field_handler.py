@@ -106,10 +106,12 @@ class FieldHandler:
     def apply_for_config(self, config, json_filepath, ui_state):
         """Load and apply field texture from a file-based config.
 
-        Reads the companion _fields.png via cache. Lazily initializes GPU
-        resources if needed. Clears field texture if no PNG exists.
+        Reads the companion _fields.png via cache (pre-resized to current
+        canvas dimensions). Lazily initializes GPU resources if needed.
+        Clears field texture if no PNG exists.
         """
-        field_data = self.cache.get(json_filepath)
+        canvas_dim = self.sim.get_canvas_dimensions()
+        field_data = self.cache.get(json_filepath, canvas_dim, canvas_dim)
 
         if field_data is not None:
             if self.adv_draw:
