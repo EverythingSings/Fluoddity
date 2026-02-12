@@ -225,6 +225,8 @@ class ConfigBrowserMixin:
                             self.currently_previewing = None
                             self.currently_previewing_category = None
                             self.preview_rule_pushed = False
+                            # Clear cached field strengths so menu-close doesn't overwrite
+                            self._cached_field_strengths = None
                             imgui.close_current_popup()
 
         return hovered_this_frame

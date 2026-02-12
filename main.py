@@ -6,6 +6,7 @@ from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService
+from services.field_handler import FieldHandler
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
@@ -74,11 +75,12 @@ class App:
         self.user_configs_dir.mkdir(exist_ok=True)
 
         # Create delegated handlers
+        self.field_handler = FieldHandler(self.advanced_drawing_processor, self.sim)
         self.command_handler = CommandHandler(
             self.sim, self.camera, self.ui, self.rule_manager,
             self.entity_picker, self.video_service, self.config_saver,
             self.multi_load_service, self.user_configs_dir,
-            advanced_drawing_processor=self.advanced_drawing_processor
+            field_handler=self.field_handler
         )
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,

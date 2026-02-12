@@ -2,10 +2,6 @@
 import random
 import numpy as np
 from utilities.gl_helpers import readback_rule
-from utilities.field_texture_io import is_field_nonzero, save_field_png
-from services.field_texture_cache import FieldTextureCache
-
-MAX_FIELD_SNAPSHOTS = 20  # Max clipboard entries with non-None field snapshots
 
 
 class CommandHandler:
@@ -17,7 +13,7 @@ class CommandHandler:
 
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, multi_load_service, user_configs_dir,
-                 advanced_drawing_processor=None):
+                 field_handler=None):
         self.sim = sim
         self.camera = camera
         self.ui = ui
@@ -27,19 +23,12 @@ class CommandHandler:
         self.config_saver = config_saver
         self.multi_load_service = multi_load_service
         self.user_configs_dir = user_configs_dir
-        self.adv_draw = advanced_drawing_processor
+        self.field_handler = field_handler
 
         # Preview state
         self.preview_rule_active = False  # File->load preview
         self.clipboard_preview_active = False  # Config clipboard preview
         self._clipboard_cached_config = None  # Full config saved before clipboard preview
-
-        # Field texture preview state
-        self.field_texture_cache = FieldTextureCache(max_size=20)
-        self._cached_field_data = None  # Snapshot before file preview
-        self._cached_field_strengths = None  # (force, strafe) before file preview
-        self._clipboard_cached_field_data = None  # Snapshot before clipboard preview
-        self._clipboard_cached_field_strengths = None  # (force, strafe) before clipboard preview
 
         # Video pending state (waiting for scheduled start frame)
         self.video_pending = False
@@ -248,21 +237,14 @@ class CommandHandler:
 
     def _handle_config_commands(self, ui_state):
         """Handle config save/load/delete commands."""
+        fh = self.field_handler
+
         # Config save (Ctrl+C)
         if ui_state.request_save_config:
             current_rule = self.rule_manager.get_current_rule()
 
-            # Snapshot field texture if it exists and is non-zero
-            field_snapshot = None
-            field_strengths = None
-            if self.adv_draw and self.adv_draw.field_texture is not None:
-                field_data = self.adv_draw.snapshot_field_data()
-                if field_data is not None and is_field_nonzero(field_data):
-                    field_snapshot = field_data
-                    field_strengths = (
-                        ui_state.preferences.force_field_strength,
-                        ui_state.preferences.strafe_field_strength,
-                    )
+            field_snapshot, field_strengths = (
+                fh.snapshot_with_strengths(ui_state) if fh else (None, None))
 
             config = self.config_saver.create_config(
                 ui_state.sim, current_rule, field_strengths=field_strengths)
@@ -270,7 +252,8 @@ class CommandHandler:
             self.ui.set_clipboard(config_string)
             self.ui.add_to_config_clipboard(
                 config, self.ui.currently_open_project, field_snapshot=field_snapshot)
-            self._enforce_field_snapshot_cap()
+            if fh:
+                fh.enforce_snapshot_cap(self.ui.config_clipboard)
             print(f"Config copied to clipboard ({len(config_string)} chars)")
 
         # Config load (Ctrl+V)
@@ -281,9 +264,8 @@ class CommandHandler:
                 if rule is not None:
                     self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
                     self.sim.apply_rule(rule)
-                    # System clipboard has no field pixel data - clear field texture
-                    if self.adv_draw and self.adv_draw.field_texture is not None:
-                        self.adv_draw.clear_fields()
+                    if fh:
+                        fh.apply_last_copied(ui_state)
                     print("Config loaded from clipboard")
                 else:
                     print("Failed to load config from clipboard")
@@ -304,11 +286,8 @@ class CommandHandler:
                 filepath = self.ui._get_config_path(filename, category)
                 if filepath.exists():
                     filepath.unlink()
-                    # Also delete companion field PNG
-                    fields_path = filepath.with_name(filepath.stem + "_fields.png")
-                    if fields_path.exists():
-                        fields_path.unlink()
-                    self.field_texture_cache.invalidate(filepath)
+                    if fh:
+                        fh.delete_field_png(filepath)
                     print(f"Config deleted: {filepath}")
 
     def _handle_file_save(self, ui_state):
@@ -317,34 +296,21 @@ class CommandHandler:
         if not filename:
             return
 
+        fh = self.field_handler
         current_rule = self.rule_manager.get_current_rule()
 
-        # Snapshot field texture if it exists and is non-zero
-        field_data = None
-        field_strengths = None
-        if self.adv_draw and self.adv_draw.field_texture is not None:
-            field_data = self.adv_draw.snapshot_field_data()
-            if field_data is not None and is_field_nonzero(field_data):
-                field_strengths = (
-                    ui_state.preferences.force_field_strength,
-                    ui_state.preferences.strafe_field_strength,
-                )
-            else:
-                field_data = None  # All zeros, treat as no field
+        field_data, field_strengths = (
+            fh.snapshot_with_strengths(ui_state) if fh else (None, None))
 
         config = self.config_saver.create_config(
             ui_state.sim, current_rule, field_strengths=field_strengths)
         filepath = self.user_configs_dir / f"{filename}.json"
         self.config_saver.save_to_file(config, filepath)
 
-        # Save or clean up companion _fields.png
-        fields_png_path = self.user_configs_dir / f"{filename}_fields.png"
-        if field_data is not None:
-            save_field_png(field_data, fields_png_path)
-        elif fields_png_path.exists():
-            fields_png_path.unlink()  # Remove stale field PNG
+        if fh:
+            fh.save_field_png(field_data, filename, self.user_configs_dir)
+            fh.invalidate_cache(filepath)
 
-        self.field_texture_cache.invalidate(filepath)
         print(f"Config saved to {filepath}")
         self.ui.update_physics_defaults(filename)
 
@@ -354,6 +320,8 @@ class CommandHandler:
         category = ui_state.load_category
         if not filename:
             return
+
+        fh = self.field_handler
 
         # Multi-load mode (ignores fields entirely)
         if ui_state.multi_load.multi_load_enabled:
@@ -374,8 +342,8 @@ class CommandHandler:
         if self.preview_rule_active:
             # Preview already applied config, rule, and field texture - just finalize
             self.preview_rule_active = False
-            self._cached_field_data = None  # Discard cached field (we're keeping preview)
-            self._cached_field_strengths = None
+            if fh:
+                fh.discard_preview_cache()
             if ui_state.load_watercolor_override is not None:
                 ui_state.sim.watercolor_mode = ui_state.load_watercolor_override
             print(f"Config loaded (from preview): {filename}")
@@ -391,7 +359,8 @@ class CommandHandler:
                 )
                 self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
                 self.sim.apply_rule(rule)
-                self._apply_field_for_config(config, filepath, ui_state)
+                if fh:
+                    fh.apply_for_config(config, filepath, ui_state)
                 print(f"Config loaded from {filepath}")
                 self.ui.update_physics_defaults(filename)
             else:
@@ -399,6 +368,8 @@ class CommandHandler:
 
     def _handle_preview_commands(self, ui_state):
         """Handle config preview (hover in Load submenu) and clear preview."""
+        fh = self.field_handler
+
         # Clear preview must happen before new preview
         if ui_state.request_clear_preview:
             if self.preview_rule_active:
@@ -408,15 +379,8 @@ class CommandHandler:
                 self.sim.apply_rule(prev_rule)
                 self.preview_rule_active = False
 
-                # Restore cached field texture
-                if self.adv_draw and self.adv_draw.field_texture is not None:
-                    if self._cached_field_data is not None:
-                        self.adv_draw.write_field_data(self._cached_field_data)
-
-                # Restore cached field strengths (always restore unconditionally)
-                if self._cached_field_strengths is not None:
-                    ui_state.preferences.force_field_strength = self._cached_field_strengths[0]
-                    ui_state.preferences.strafe_field_strength = self._cached_field_strengths[1]
+                if fh:
+                    fh.restore_from_preview(ui_state)
 
         # New preview
         if ui_state.request_preview_config:
@@ -427,26 +391,21 @@ class CommandHandler:
                 config = self.config_saver.load_from_file(filepath)
                 if config and config.rule is not None:
                     # Cache field texture on first preview entry
-                    if not self.preview_rule_active:
-                        if self.adv_draw and self.adv_draw.field_texture is not None:
-                            self._cached_field_data = self.adv_draw.snapshot_field_data()
-                        else:
-                            self._cached_field_data = None
-                        self._cached_field_strengths = (
-                            ui_state.preferences.force_field_strength,
-                            ui_state.preferences.strafe_field_strength,
-                        )
+                    if not self.preview_rule_active and fh:
+                        fh.cache_for_preview(ui_state)
 
                     ui_state.sim.rule_seed = config.rule_seed
                     self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
                     self.sim.apply_rule(config.rule)
                     self.preview_rule_active = True
 
-                    # Load field texture for preview
-                    self._apply_field_for_config(config, filepath, ui_state)
+                    if fh:
+                        fh.apply_for_config(config, filepath, ui_state)
 
     def _handle_clipboard_commands(self, ui_state):
         """Handle config clipboard preview, load, delete, and import-to-multiload."""
+        fh = self.field_handler
+
         # Clear clipboard preview (must happen before new preview)
         if ui_state.request_clear_clipboard_preview:
             if self.clipboard_preview_active:
@@ -458,17 +417,8 @@ class CommandHandler:
                     self.sim.apply_rule(rule)
                     self._clipboard_cached_config = None
 
-                # Restore cached field texture
-                if self.adv_draw and self.adv_draw.field_texture is not None:
-                    if self._clipboard_cached_field_data is not None:
-                        self.adv_draw.write_field_data(self._clipboard_cached_field_data)
-                    self._clipboard_cached_field_data = None
-
-                # Restore cached field strengths
-                if self._clipboard_cached_field_strengths is not None:
-                    ui_state.preferences.force_field_strength = self._clipboard_cached_field_strengths[0]
-                    ui_state.preferences.strafe_field_strength = self._clipboard_cached_field_strengths[1]
-                    self._clipboard_cached_field_strengths = None
+                if fh:
+                    fh.restore_from_clipboard_preview(ui_state)
 
                 self.clipboard_preview_active = False
 
@@ -481,15 +431,8 @@ class CommandHandler:
                     current_rule = self.rule_manager.get_current_rule()
                     self._clipboard_cached_config = self.config_saver.create_config(
                         ui_state.sim, current_rule)
-                    # Cache field texture
-                    if self.adv_draw and self.adv_draw.field_texture is not None:
-                        self._clipboard_cached_field_data = self.adv_draw.snapshot_field_data()
-                    else:
-                        self._clipboard_cached_field_data = None
-                    self._clipboard_cached_field_strengths = (
-                        ui_state.preferences.force_field_strength,
-                        ui_state.preferences.strafe_field_strength,
-                    )
+                    if fh:
+                        fh.cache_for_clipboard_preview(ui_state)
 
                 config, _label, field_snapshot = self.ui.config_clipboard[idx]
                 rule = self.config_saver.apply_config(config, ui_state.sim)
@@ -497,8 +440,8 @@ class CommandHandler:
                 self.sim.apply_rule(rule)
                 self.clipboard_preview_active = True
 
-                # Apply field snapshot from clipboard entry
-                self._apply_field_snapshot(field_snapshot, config, ui_state)
+                if fh:
+                    fh.apply_snapshot(field_snapshot, config, ui_state)
 
         # Load clipboard config (click)
         if ui_state.request_load_clipboard_config:
@@ -514,13 +457,15 @@ class CommandHandler:
 
     def _load_clipboard_config(self, ui_state):
         """Load a config from the clipboard (apply it permanently)."""
+        fh = self.field_handler
+
         # Clear preview first (discard cached config since we're committing)
         if self.clipboard_preview_active:
             self.rule_manager.pop_rule()
             self.clipboard_preview_active = False
             self._clipboard_cached_config = None
-            self._clipboard_cached_field_data = None
-            self._clipboard_cached_field_strengths = None
+            if fh:
+                fh.discard_clipboard_preview_cache()
 
         idx = ui_state.clipboard_config_index
         if 0 <= idx < len(self.ui.config_clipboard):
@@ -529,8 +474,8 @@ class CommandHandler:
             self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
             self.sim.apply_rule(rule)
 
-            # Apply field snapshot permanently
-            self._apply_field_snapshot(field_snapshot, config, ui_state)
+            if fh:
+                fh.apply_snapshot(field_snapshot, config, ui_state)
 
             # Extract original filename from label (everything before the *)
             original_filename = label.rsplit("*", 1)[0]
@@ -539,6 +484,8 @@ class CommandHandler:
 
     def _delete_clipboard_config(self, ui_state):
         """Delete an entry from the config clipboard."""
+        fh = self.field_handler
+
         # Clear preview first, restore cached config
         if self.clipboard_preview_active:
             self.rule_manager.pop_rule()
@@ -548,17 +495,8 @@ class CommandHandler:
                 self.sim.apply_rule(rule)
                 self._clipboard_cached_config = None
 
-            # Restore cached field texture
-            if self.adv_draw and self.adv_draw.field_texture is not None:
-                if self._clipboard_cached_field_data is not None:
-                    self.adv_draw.write_field_data(self._clipboard_cached_field_data)
-                self._clipboard_cached_field_data = None
-
-            # Restore cached field strengths
-            if self._clipboard_cached_field_strengths is not None:
-                ui_state.preferences.force_field_strength = self._clipboard_cached_field_strengths[0]
-                ui_state.preferences.strafe_field_strength = self._clipboard_cached_field_strengths[1]
-                self._clipboard_cached_field_strengths = None
+            if fh:
+                fh.restore_from_clipboard_preview(ui_state)
 
             self.clipboard_preview_active = False
 
@@ -577,76 +515,3 @@ class CommandHandler:
             self.multi_load_service.add_config(config, label)
 
         print(f"Imported {len(self.ui.config_clipboard)} configs from clipboard to multi-load")
-
-    # --- Field texture helpers ---
-
-    def _apply_field_for_config(self, config, json_filepath, ui_state):
-        """Apply field texture from a file-based config (load or preview).
-
-        Loads the _fields.png companion file via cache. If the field texture
-        doesn't exist yet but there IS field data, lazily initializes GPU resources.
-        """
-        field_data = self.field_texture_cache.get(json_filepath)
-
-        if field_data is not None:
-            # Config has an associated field PNG - load it
-            if self.adv_draw:
-                if self.adv_draw.field_texture is None:
-                    # Lazily initialize GPU resources
-                    canvas_dim = self.sim.get_canvas_dimensions()
-                    self.adv_draw.ensure_initialized(canvas_dim)
-                self.adv_draw.write_field_data(field_data)
-        else:
-            # No field PNG - clear field texture if it exists
-            if self.adv_draw and self.adv_draw.field_texture is not None:
-                self.adv_draw.clear_fields()
-
-        # Apply field strengths from config
-        if config.force_field_strength is not None:
-            ui_state.preferences.force_field_strength = config.force_field_strength
-            ui_state.preferences.strafe_field_strength = config.strafe_field_strength
-        elif field_data is None:
-            # No field data and no field strengths - reset to defaults
-            ui_state.preferences.force_field_strength = 1.0
-            ui_state.preferences.strafe_field_strength = 1.0
-
-    def _apply_field_snapshot(self, field_snapshot, config, ui_state):
-        """Apply a field snapshot from a clipboard entry.
-
-        field_snapshot is an np.ndarray or None.
-        """
-        if field_snapshot is not None:
-            # Clipboard entry has field data
-            if self.adv_draw:
-                if self.adv_draw.field_texture is None:
-                    canvas_dim = self.sim.get_canvas_dimensions()
-                    self.adv_draw.ensure_initialized(canvas_dim)
-                self.adv_draw.write_field_data(field_snapshot)
-        else:
-            # No field data - clear field texture if it exists
-            if self.adv_draw and self.adv_draw.field_texture is not None:
-                self.adv_draw.clear_fields()
-
-        # Apply field strengths from config
-        if config.force_field_strength is not None:
-            ui_state.preferences.force_field_strength = config.force_field_strength
-            ui_state.preferences.strafe_field_strength = config.strafe_field_strength
-        elif field_snapshot is None:
-            ui_state.preferences.force_field_strength = 1.0
-            ui_state.preferences.strafe_field_strength = 1.0
-
-    def _enforce_field_snapshot_cap(self):
-        """Cap at MAX_FIELD_SNAPSHOTS clipboard entries with non-None field snapshots.
-
-        Nulls out the oldest field snapshot when exceeded.
-        """
-        entries_with_fields = []
-        for i, entry in enumerate(self.ui.config_clipboard):
-            _config, _label, field_snapshot = entry
-            if field_snapshot is not None:
-                entries_with_fields.append(i)
-
-        while len(entries_with_fields) > MAX_FIELD_SNAPSHOTS:
-            oldest_idx = entries_with_fields.pop(0)
-            config, label, _ = self.ui.config_clipboard[oldest_idx]
-            self.ui.config_clipboard[oldest_idx] = (config, label, None)
