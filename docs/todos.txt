@@ -1,5 +1,4 @@
-cohort isolation view
-
+REVERT SHOULDNT CHANGE WATERCOLOR MODE
 -Text entry box with absolute orientation -> Text
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
