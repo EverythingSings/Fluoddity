@@ -121,7 +121,11 @@ class SimulationRunner:
             self.prev_mouse_tex_coords = mouse_tex_coords
 
     def _compute_view_bounds(self, tiling_mode, screen_aspect):
-        """Compute view bounds for tiling mode."""
+        """Compute view bounds for tiling mode.
+
+        Uses letterbox-corrected aspect to match the vertex shader's coordinate
+        system (which letterboxes a square canvas into a non-square window).
+        """
         view_min = (0.0, 0.0)
         view_max = (0.0, 0.0)
         if tiling_mode:
@@ -129,8 +133,11 @@ class SimulationRunner:
             view_max_ndc = np.array([1.0, 1.0])
             view_min = view_min_ndc * self.camera.zoom + self.camera.position * np.array([1.0, -1.0])
             view_max = view_max_ndc * self.camera.zoom + self.camera.position * np.array([1.0, -1.0])
-            view_min[0] *= screen_aspect
-            view_max[0] *= screen_aspect
+            # Letterbox-corrected: max(aspect,1) for X, max(1/aspect,1) for Y
+            view_min[0] *= max(screen_aspect, 1.0)
+            view_max[0] *= max(screen_aspect, 1.0)
+            view_min[1] *= max(1.0 / screen_aspect, 1.0)
+            view_max[1] *= max(1.0 / screen_aspect, 1.0)
         return view_min, view_max
 
     def _compute_draw_params(self, ui_state, tiling_mode):
@@ -212,6 +219,7 @@ class SimulationRunner:
             tiling_mode=tiling_mode,
             view_min=tuple(view_min),
             view_max=tuple(view_max),
+            tiling_scale=(max(screen_aspect, 1.0), max(1.0 / screen_aspect, 1.0)),
             tonemap_softness=ui_state.preferences.tonemap_softness,
             brush_mode=adv_prefs.brush_mode if advanced_active else 0,
             fixed_direction_heading=adv_prefs.fixed_direction_heading if advanced_active else 0.0,

@@ -315,7 +315,7 @@ class HelpWindowsMixin:
             imgui.spacing()
             total_sim_frames = self.state.preferences.max_frames * self.state.preferences.motion_blur_samples
             video_end_frame = self.state.preferences.video_end_frame
-            if video_end_frame > 0:
+            if video_end_frame > 0 and video_end_frame - total_sim_frames >= current_frame:
                 start_frame = video_end_frame - total_sim_frames
                 end_frame = video_end_frame
             else:

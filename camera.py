@@ -107,20 +107,19 @@ class Camera:
             # Tiling mode uniforms
             tryset(self.cam_brush_program, 'tiling_mode_enabled', tiling_mode)
             if tiling_mode:
-                # Compute view_min and view_max in world space
-                screen_aspect = width / max(height,1)
-                # Screen corners in NDC are (-1, -1) to (1, 1)
-                # Convert to world space: world = ndc * zoom + cam_pos * vec2(1, -1)
-                # With aspect correction: world.x *= aspect
+                # Compute view_min and view_max in entity-position space
+                screen_aspect = width / max(height, 1)
                 view_min_ndc = np.array([-1.0, -1.0])
                 view_max_ndc = np.array([1.0, 1.0])
 
                 view_min = view_min_ndc * self.zoom + self.position * np.array([1.0, -1.0])
                 view_max = view_max_ndc * self.zoom + self.position * np.array([1.0, -1.0])
 
-                # Apply aspect correction
-                view_min[0] *= screen_aspect
-                view_max[0] *= screen_aspect
+                # Letterbox-corrected: max(aspect,1) for X, max(1/aspect,1) for Y
+                view_min[0] *= max(screen_aspect, 1.0)
+                view_max[0] *= max(screen_aspect, 1.0)
+                view_min[1] *= max(1.0 / screen_aspect, 1.0)
+                view_max[1] *= max(1.0 / screen_aspect, 1.0)
 
                 tryset(self.cam_brush_program, 'view_min', tuple(view_min))
                 tryset(self.cam_brush_program, 'view_max', tuple(view_max))
@@ -179,8 +178,11 @@ class Camera:
             view_max_ndc = np.array([1.0, 1.0])
             view_min = view_min_ndc * self.zoom + self.position * np.array([1.0, -1.0])
             view_max = view_max_ndc * self.zoom + self.position * np.array([1.0, -1.0])
-            view_min[0] *= screen_aspect
-            view_max[0] *= screen_aspect
+            # Letterbox-corrected: max(aspect,1) for X, max(1/aspect,1) for Y
+            view_min[0] *= max(screen_aspect, 1.0)
+            view_max[0] *= max(screen_aspect, 1.0)
+            view_min[1] *= max(1.0 / screen_aspect, 1.0)
+            view_max[1] *= max(1.0 / screen_aspect, 1.0)
 
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
@@ -217,6 +219,7 @@ class Camera:
                 tiling_mode=tiling_mode,
                 view_min=tuple(view_min),
                 view_max=tuple(view_max),
+                tiling_scale=(max(screen_aspect, 1.0), max(1.0 / screen_aspect, 1.0)),
                 tonemap_softness=tonemap_softness
             )
             # assemble_frame returns the texture immediately when total_samples=1

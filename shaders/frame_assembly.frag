@@ -40,6 +40,7 @@ uniform float EMBOSS_SMOOTHNESS;    // Emboss sampling epsilon
 uniform bool tiling_mode_enabled;   // Whether tiling mode is active
 uniform vec2 view_min;              // World-space minimum of view rectangle
 uniform vec2 view_max;              // World-space maximum of view rectangle
+uniform vec2 tiling_scale;          // Letterbox-corrected aspect: (max(aspect,1), max(1/aspect,1))
 
 // Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
 // Must match the value in cam_brush.vert. Smaller = more margin for edge blending.
@@ -170,8 +171,8 @@ vec2 tiled_sample_uv_emboss(vec2 screen_uv) {
     ndc *= camera_zoom;
     // Apply camera position offset (world space)
     vec2 world = ndc + camera_position * vec2(1.0, -1.0);
-    // Apply aspect ratio correction
-    world.x *= screen_aspect;
+    // Apply letterbox-corrected aspect scaling
+    world *= tiling_scale;
     return fract((world + 1.0) / 2.0);
 }
 
@@ -196,10 +197,10 @@ vec3 emboss(vec2 uv){
 // Tiling mode: sample color with edge blending for seamless tiling.
 // Handles particles whose sprites hang over the edge of the canonical tile.
 vec3 sample_tiled_color(vec2 screen_uv) {
-    // Convert screen UV to world position
+    // Convert screen UV to world position using letterbox-corrected aspect
     vec2 ndc = screen_uv * 2.0 - 1.0;
     vec2 world_pos = ndc * camera_zoom + camera_position * vec2(1, -1);
-    world_pos.x *= screen_aspect;
+    world_pos *= tiling_scale;
 
     // Extract canonical position (which particle lives here?)
     vec2 p = mod(world_pos + 1.0, 2.0) - 1.0;
@@ -219,16 +220,13 @@ vec3 sample_tiled_color(vec2 screen_uv) {
     vec2 rendered_world_pos = p + n_min * 2.0;
 
     // Convert back to screen UV (reverse of the world_pos calculation above)
-    rendered_world_pos.x /= screen_aspect;
+    rendered_world_pos /= tiling_scale;
     vec2 rendered_ndc = (rendered_world_pos - camera_position * vec2(1, -1)) / camera_zoom;
     rendered_ndc *= TILING_MARGIN;
     vec2 sample_uv = rendered_ndc * 0.5 + 0.5;
 
     // Tile size in sample_uv space (how far to offset for opposite edge)
-    vec2 tile_size_uv = vec2(
-        TILING_MARGIN / (screen_aspect * camera_zoom),
-        TILING_MARGIN / camera_zoom
-    );
+    vec2 tile_size_uv = TILING_MARGIN / (tiling_scale * camera_zoom);
 
     // Sample primary location
     vec3 color = texture(input_frame, sample_uv).rgb;
