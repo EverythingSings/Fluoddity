@@ -1,4 +1,10 @@
 REVERT SHOULDNT CHANGE WATERCOLOR MODE
+WATERCOLOR MODE SHOULD DISABLE BLOOM
+screen record physics slider -> 100x max
+screen record "starting frame -> ending frame display"
+Resize while in tiled camera bug?
+
+cohort isolation view
 -Text entry box with absolute orientation -> Text
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
