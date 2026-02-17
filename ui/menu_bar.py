@@ -264,8 +264,10 @@ class MenuBarMixin:
 
                     imgui.separator()
 
-                    _, pls.lock_rule = imgui.checkbox("Lock Rule", pls.lock_rule)
-                    self._delayed_tooltip("Prevent the target rule and mutation seed\nfrom being changed by config loads/pastes.")
+                    changed, pls.lock_rule = imgui.checkbox("Lock Rule", pls.lock_rule)
+                    if changed:
+                        pls._locks['rule_seed'] = pls.lock_rule
+                    self._delayed_tooltip("Prevent the target rule and mutation seed\nfrom being changed by config loads/pastes.\nMutation seed can also be locked independently via Alt-click.")
 
                     _, pls.lock_force_field = imgui.checkbox(
                         "Lock Force Field", pls.lock_force_field)

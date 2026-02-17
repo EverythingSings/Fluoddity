@@ -51,8 +51,6 @@ class ParameterLockService:
     def is_locked(self, param_name: str) -> bool:
         if not self.enabled:
             return False
-        if param_name == 'rule_seed' and self.lock_rule:
-            return True
         return self._locks.get(param_name, False)
 
     def toggle_lock(self, param_name: str):

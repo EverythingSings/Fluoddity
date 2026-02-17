@@ -426,7 +426,8 @@ class CommandHandler:
 
                     pls = self.param_lock_service
                     if not (pls and pls.should_block_rule_push()):
-                        ui_state.sim.rule_seed = config.rule_seed
+                        if not (pls and pls.is_locked('rule_seed')):
+                            ui_state.sim.rule_seed = config.rule_seed
                         self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
                         self.sim.apply_rule(config.rule)
                         self._preview_rule_was_pushed = True
