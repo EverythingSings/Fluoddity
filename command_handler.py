@@ -110,6 +110,14 @@ class CommandHandler:
         # Handle config save/load/delete
         self._handle_config_commands(ui_state)
 
+        # Handle field image load requests
+        if ui_state.request_load_force_field_image and ui_state.field_load_image_path:
+            if self.field_handler:
+                self.field_handler.load_field_from_image(ui_state.field_load_image_path, "force")
+        if ui_state.request_load_strafe_field_image and ui_state.field_load_image_path:
+            if self.field_handler:
+                self.field_handler.load_field_from_image(ui_state.field_load_image_path, "strafe")
+
         # Handle preview commands (file browser)
         self._handle_preview_commands(ui_state)
 

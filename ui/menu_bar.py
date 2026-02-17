@@ -281,6 +281,16 @@ class MenuBarMixin:
                     "brush modes, force fields, and strafe fields."
                 )
 
+                # Load Field submenu
+                if imgui.begin_menu("Load Field"):
+                    if imgui.menu_item("Load Force Field...", "", False)[0]:
+                        self._open_field_loader("force")
+                    self._delayed_tooltip("Load a PNG/JPEG image as a force field.\nR=magnitude, G=angle (polar coordinates).")
+                    if imgui.menu_item("Load Strafe Field...", "", False)[0]:
+                        self._open_field_loader("strafe")
+                    self._delayed_tooltip("Load a PNG/JPEG image as a strafe field.\nR=magnitude, G=angle (polar coordinates).")
+                    imgui.end_menu()
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

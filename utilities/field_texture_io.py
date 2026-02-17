@@ -125,6 +125,46 @@ def write_field_to_gpu(field_tex, data: np.ndarray) -> None:
     field_tex.write(data.astype(np.float32).tobytes())
 
 
+def load_image_as_polar_field(filepath: Path, target_h: int, target_w: int) -> np.ndarray | None:
+    """Load a PNG/JPEG image and convert R/G channels from polar to cartesian.
+
+    Polar mapping:
+        R channel = magnitude [0, 1]
+        G channel = theta mapped to [0, 2*pi]
+
+    Cartesian output:
+        x = magnitude * cos(theta)
+        y = magnitude * sin(theta)
+
+    The result is resized to (target_h, target_w) via bilinear interpolation
+    to match the field texture dimensions.
+
+    Returns:
+        (target_h, target_w, 2) float32 numpy array of (x, y) values,
+        or None if the image could not be loaded.
+    """
+    try:
+        img = Image.open(str(filepath)).convert("RGB")
+    except Exception as e:
+        print(f"Warning: failed to open image {filepath}: {e}")
+        return None
+
+    img_array = np.array(img, dtype=np.float32) / 255.0
+    magnitude = img_array[:, :, 0]  # R channel
+    theta = img_array[:, :, 1] * (2.0 * np.pi)  # G channel -> [0, 2*pi]
+
+    x = magnitude * np.cos(theta)
+    y = magnitude * np.sin(theta)
+
+    cartesian = np.stack([x, y], axis=-1)
+
+    h, w = cartesian.shape[:2]
+    if h != target_h or w != target_w:
+        cartesian = _bilinear_resize(cartesian, target_h, target_w)
+
+    return cartesian.astype(np.float32)
+
+
 def _bilinear_resize(data: np.ndarray, new_h: int, new_w: int) -> np.ndarray:
     """Resize a (h, w, channels) float32 array using bilinear interpolation."""
     old_h, old_w, channels = data.shape

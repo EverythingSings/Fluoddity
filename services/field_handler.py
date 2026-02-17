@@ -242,6 +242,43 @@ class FieldHandler:
             ui_state.preferences.force_field_strength = 1.0
             ui_state.preferences.strafe_field_strength = 1.0
 
+    def load_field_from_image(self, filepath: str, target: str):
+        """Load an image file and write its polar-to-cartesian data to a field.
+
+        Args:
+            filepath: Path to the PNG/JPEG image file.
+            target: "force" to write .xy channels, "strafe" to write .zw channels.
+        """
+        from pathlib import Path
+        from utilities.field_texture_io import load_image_as_polar_field
+
+        canvas_dim = self.sim.get_canvas_dimensions()
+        cartesian = load_image_as_polar_field(Path(filepath), canvas_dim, canvas_dim)
+        if cartesian is None:
+            print(f"Failed to load field image: {filepath}")
+            return
+
+        if self.adv_draw is None:
+            print("Warning: advanced drawing processor not available")
+            return
+
+        if self.adv_draw.field_texture is None:
+            self.adv_draw.ensure_initialized(canvas_dim)
+
+        existing = self.adv_draw.snapshot_field_data()
+        if existing is None:
+            existing = np.zeros((canvas_dim, canvas_dim, 4), dtype=np.float32)
+
+        if target == "force":
+            existing[:, :, 0] = cartesian[:, :, 0]
+            existing[:, :, 1] = cartesian[:, :, 1]
+        elif target == "strafe":
+            existing[:, :, 2] = cartesian[:, :, 0]
+            existing[:, :, 3] = cartesian[:, :, 1]
+
+        self.adv_draw.write_field_data(existing)
+        print(f"Loaded {target} field from image: {filepath}")
+
     def enforce_snapshot_cap(self, config_clipboard):
         """Null out oldest field snapshots if >MAX_FIELD_SNAPSHOTS entries have data."""
         entries_with_fields = []

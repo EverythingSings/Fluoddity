@@ -74,6 +74,11 @@ class UIState:
     preview_filename: str = ""  # Filename to preview
     preview_category: str = ""  # Category for preview operation
 
+    # Field loader (load image as force/strafe field)
+    request_load_force_field_image: bool = False
+    request_load_strafe_field_image: bool = False
+    field_load_image_path: str = ""
+
     # Config clipboard flags
     request_preview_clipboard_config: bool = False
     request_clear_clipboard_preview: bool = False

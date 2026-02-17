@@ -25,6 +25,7 @@ from .preferences_window import PreferencesWindowMixin
 from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
 from .advanced_drawing_window import AdvancedDrawingWindowMixin
+from .field_loader_window import FieldLoaderWindowMixin
 
 
 @dataclass
@@ -44,6 +45,7 @@ class UI(
     ConfigBrowserMixin,
     SliderWidgetsMixin,
     AdvancedDrawingWindowMixin,
+    FieldLoaderWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -209,6 +211,12 @@ class UI(
         self._delete_category = ""  # Category for delete operation
         self._preview_filename = ""
         self._preview_category = ""  # Category for preview operation
+
+        # Field loader one-shot flags
+        self._request_load_force_field_image = False
+        self._request_load_strafe_field_image = False
+        self._field_load_image_path = ""
+        self._init_field_loader_state()
 
         # Display info (received from Orchestrator)
         self._display_info = {
@@ -445,6 +453,11 @@ class UI(
         self.state.request_camera_reset = self._request_camera_reset
         self.state.request_clear_canvas_and_fields = self._request_clear_canvas_and_fields
 
+        # Transfer field loader flags
+        self.state.request_load_force_field_image = self._request_load_force_field_image
+        self.state.request_load_strafe_field_image = self._request_load_strafe_field_image
+        self.state.field_load_image_path = self._field_load_image_path
+
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
         self.state.load_category = self._load_category
@@ -496,6 +509,9 @@ class UI(
         self._request_clear_canvas = False
         self._request_camera_reset = False
         self._request_clear_canvas_and_fields = False
+        self._request_load_force_field_image = False
+        self._request_load_strafe_field_image = False
+        self._field_load_image_path = ""
         self._save_filename = ""
         self._load_filename = ""
         self._load_category = ""
@@ -658,6 +674,9 @@ class UI(
         # Render Advanced Drawing window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.advanced_drawing_enabled:
             self.render_advanced_drawing_window()
+
+        # Render field loader window (transient, not gated by sidebar)
+        self.render_field_loader_window()
 
         if self.show_demo_window:
             imgui.show_demo_window()
