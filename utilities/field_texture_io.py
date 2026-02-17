@@ -150,6 +150,7 @@ def load_image_as_polar_field(filepath: Path, target_h: int, target_w: int) -> n
         return None
 
     img_array = np.array(img, dtype=np.float32) / 255.0
+    img_array = img_array[::-1]  # flip vertically: image origin is top-left, texture origin is bottom-left
     magnitude = img_array[:, :, 0]  # R channel
     theta = img_array[:, :, 1] * (2.0 * np.pi)  # G channel -> [0, 2*pi]
 
