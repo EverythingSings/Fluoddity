@@ -229,14 +229,20 @@ class PreferencesWindowMixin:
             )
             self._delayed_tooltip("Blend frames together for a cheap motion blur or set near 1 for a long exposure effect.")
 
-            # Bloom checkbox + sliders
+            # Bloom checkbox + sliders (disabled in watercolor mode)
+            watercolor_active = self.state.sim.watercolor_mode
+            if watercolor_active:
+                imgui.begin_disabled()
             _, self.state.preferences.bloom_enabled = imgui.checkbox(
                 "Bloom",
                 self.state.preferences.bloom_enabled
             )
-            self._delayed_tooltip("Add a glow effect around bright areas.")
+            if watercolor_active:
+                self._delayed_tooltip("Bloom is disabled in Watercolor mode.")
+            else:
+                self._delayed_tooltip("Add a glow effect around bright areas.")
 
-            if self.state.preferences.bloom_enabled:
+            if self.state.preferences.bloom_enabled and not watercolor_active:
                 imgui.indent(20)
                 _, self.state.preferences.bloom_threshold = imgui.slider_float(
                     "Threshold",
@@ -262,6 +268,8 @@ class PreferencesWindowMixin:
                 )
                 self._delayed_tooltip("Spread of the bloom blur kernel.")
                 imgui.unindent(20)
+            if watercolor_active:
+                imgui.end_disabled()
 
         imgui.end()
 

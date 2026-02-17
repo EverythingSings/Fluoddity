@@ -183,7 +183,7 @@ class MenuBarMixin:
                     # Trigger file load equivalent to File->Load
                     self._load_filename = self.currently_open_project
                     self._request_load_file = True
-                    self._load_watercolor_override = None  # Keep current watercolor mode
+                    self._load_watercolor_override = self.state.sim.watercolor_mode  # Preserve current watercolor mode
                 self._delayed_tooltip(f"Equivalent to File -> Load {self.currently_open_project}")
 
                 # Reset all slider ranges

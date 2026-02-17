@@ -289,7 +289,7 @@ class SimulationRunner:
         """Handle a completed assembled frame: store it and feed to video recorder."""
         if assembled_tex is None:
             return
-        if ui_state.preferences.bloom_enabled:
+        if ui_state.preferences.bloom_enabled and not ui_state.sim.watercolor_mode:
             assembled_tex = self.camera.apply_bloom(
                 assembled_tex,
                 ui_state.preferences.bloom_threshold,

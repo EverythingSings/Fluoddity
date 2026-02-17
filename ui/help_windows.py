@@ -311,6 +311,23 @@ class HelpWindowsMixin:
                     "(Locked during recording)"
                 )
 
+            # Frame range display
+            imgui.spacing()
+            total_sim_frames = self.state.preferences.max_frames * self.state.preferences.motion_blur_samples
+            video_end_frame = self.state.preferences.video_end_frame
+            if video_end_frame > 0:
+                start_frame = video_end_frame - total_sim_frames
+                end_frame = video_end_frame
+            else:
+                start_frame = current_frame
+                end_frame = current_frame + total_sim_frames
+            imgui.text_colored(
+                imgui.ImVec4(0.6, 0.8, 1.0, 1.0),
+                f"Frame Range: {start_frame} --- {end_frame}"
+            )
+            self._delayed_tooltip(f"Estimated recording range based on current settings.\nTotal simulation frames: {total_sim_frames}\n({self.state.preferences.max_frames} output frames x {self.state.preferences.motion_blur_samples} physics steps)")
+            imgui.spacing()
+
             # Motion Blur checkbox (overrides preferences during recording)
             _, self.state.preferences.recording_motion_blur = imgui.checkbox(
                 "Motion Blur (Recording)",

@@ -220,7 +220,7 @@ class Camera:
                 tonemap_softness=tonemap_softness
             )
             # assemble_frame returns the texture immediately when total_samples=1
-            if bloom_enabled and TEX_TO_VIEW is not None:
+            if bloom_enabled and not watercolor_mode and TEX_TO_VIEW is not None:
                 TEX_TO_VIEW = self.apply_bloom(
                     TEX_TO_VIEW, bloom_threshold, bloom_intensity, bloom_radius,
                     tonemap_softness=tonemap_softness,
