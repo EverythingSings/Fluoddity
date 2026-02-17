@@ -28,11 +28,18 @@ class PhysicsWindowMixin:
         physics_any_menu_open_this_frame = self._render_physics_normal_menu_bar()
 
         # Display currently open project and rule seed
+        pls = self.param_lock_service
         imgui.text(f"Project: {self.currently_open_project}")
         imgui.same_line()
         # Convert rule_seed (0.0-1.0 float) to short hex format
         seed_hex = format(int(self.state.sim.rule_seed * 0xFFFF), '04x')
-        imgui.text_colored(imgui.ImVec4( 0.5, 0.8, 1.0, 1.0),f"Mutation Seed: #{seed_hex}")
+        seed_locked = pls and pls.is_locked('rule_seed')
+        if seed_locked:
+            imgui.text_colored(imgui.ImVec4(1.0, 0.3, 0.3, 1.0), f"[L]Mutation Seed: #{seed_hex}")
+        else:
+            imgui.text_colored(imgui.ImVec4(0.5, 0.8, 1.0, 1.0), f"Mutation Seed: #{seed_hex}")
+        if pls and pls.check_alt_click():
+            pls.toggle_lock('rule_seed')
         imgui.separator()
 
         # === Basics Group (Trail sensors and rule mutation) ===
@@ -75,8 +82,10 @@ class PhysicsWindowMixin:
                 "Particles are reset to their initial conditions when leaving the canvas",
                 "Particles wrap seamlessly to the other side of the canvas"
             ]
+            bc_lock_colors = pls.push_locked_style('boundary_conditions') if pls else 0
+            bc_label = pls.get_display_label('boundary_conditions', "Boundary Conditions") if pls else "Boundary Conditions"
             imgui.set_next_item_width(100)
-            if imgui.begin_combo("Boundary Conditions", boundary_options[self.state.sim.boundary_conditions]):
+            if imgui.begin_combo(bc_label, boundary_options[self.state.sim.boundary_conditions]):
                 for i, option in enumerate(boundary_options):
                     is_selected = (self.state.sim.boundary_conditions == i)
                     if imgui.selectable(option, is_selected)[0]:
@@ -85,6 +94,10 @@ class PhysicsWindowMixin:
                     if is_selected:
                         imgui.set_item_default_focus()
                 imgui.end_combo()
+            if pls and pls.check_alt_click():
+                pls.toggle_lock('boundary_conditions')
+            if pls:
+                pls.pop_locked_style(bc_lock_colors)
 
             # Initial Conditions (with per-option tooltips)
             initial_options = ["Grid", "Random", "Ring"]
@@ -93,8 +106,10 @@ class PhysicsWindowMixin:
                 "Particles are spread uniformly across the canvas",
                 "Particles start distributed around a circle, organized by cohort"
             ]
+            ic_lock_colors = pls.push_locked_style('initial_conditions') if pls else 0
+            ic_label = pls.get_display_label('initial_conditions', "Initial Conditions") if pls else "Initial Conditions"
             imgui.set_next_item_width(100)
-            if imgui.begin_combo("Initial Conditions", initial_options[self.state.sim.initial_conditions]):
+            if imgui.begin_combo(ic_label, initial_options[self.state.sim.initial_conditions]):
                 for i, option in enumerate(initial_options):
                     is_selected = (self.state.sim.initial_conditions == i)
                     if imgui.selectable(option, is_selected)[0]:
@@ -103,45 +118,73 @@ class PhysicsWindowMixin:
                     if is_selected:
                         imgui.set_item_default_focus()
                 imgui.end_combo()
+            if pls and pls.check_alt_click():
+                pls.toggle_lock('initial_conditions')
+            if pls:
+                pls.pop_locked_style(ic_lock_colors)
 
             # Number of Cohorts
+            nc_lock_colors = pls.push_locked_style('num_cohorts') if pls else 0
+            nc_label = pls.get_display_label('num_cohorts', "Number of Cohorts") if pls else "Number of Cohorts"
             imgui.set_next_item_width(100)
             _, self.state.sim.num_cohorts = imgui.slider_int(
-                "Number of Cohorts",
+                nc_label,
                 self.state.sim.num_cohorts,
                 1, 144
             )
+            if pls and pls.check_alt_click():
+                pls.toggle_lock('num_cohorts')
+            if pls:
+                pls.pop_locked_style(nc_lock_colors)
             self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
 
             imgui.separator()
 
             # Disable Symmetry
+            ds_lock_colors = pls.push_locked_style('DISABLE_SYMMETRY') if pls else 0
+            ds_label = pls.get_display_label('DISABLE_SYMMETRY', "Disable Symmetry") if pls else "Disable Symmetry"
             _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
-                "Disable Symmetry",
+                ds_label,
                 self.state.sim.DISABLE_SYMMETRY
             )
+            if pls and pls.check_alt_click():
+                pls.toggle_lock('DISABLE_SYMMETRY')
+            if pls:
+                pls.pop_locked_style(ds_lock_colors)
             self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior,\nleading to clockwise/counterclockwise bias.\nTurn it on to see why we go through trouble\nof calculating \"mirror world\" behavior in entity_update.glsl")
 
             # Absolute Orientation (combo box with 3 modes)
             combo_items = ["Off", "Y axis", "Radial"]
+            ao_lock_colors = pls.push_locked_style('ABSOLUTE_ORIENTATION') if pls else 0
+            ao_label = pls.get_display_label('ABSOLUTE_ORIENTATION', "Absolute Orientation") if pls else "Absolute Orientation"
             clicked, current = imgui.combo(
-                "Absolute Orientation",
+                ao_label,
                 self.state.sim.ABSOLUTE_ORIENTATION,
                 combo_items
             )
             if clicked:
                 self.state.sim.ABSOLUTE_ORIENTATION = current
+            if pls and pls.check_alt_click():
+                pls.toggle_lock('ABSOLUTE_ORIENTATION')
+            if pls:
+                pls.pop_locked_style(ao_lock_colors)
             self._delayed_tooltip("What direction are particles 'facing'? Which way is 'up'?\nOff: use particle velocity\nY axis: align to y axis\nRadial: align to center of canvas")
 
             # Orientation Mix (only visible if Absolute Orientation != Off)
             if self.state.sim.ABSOLUTE_ORIENTATION != 0:
+                om_lock_colors = pls.push_locked_style('ORIENTATION_MIX') if pls else 0
+                om_label = pls.get_display_label('ORIENTATION_MIX', "Orientation Mix") if pls else "Orientation Mix"
                 imgui.set_next_item_width(100)
                 _, self.state.sim.ORIENTATION_MIX = imgui.slider_float(
-                    "Orientation Mix",
+                    om_label,
                     self.state.sim.ORIENTATION_MIX,
                     0.0, 1.0,
                     "%.2f"
                 )
+                if pls and pls.check_alt_click():
+                    pls.toggle_lock('ORIENTATION_MIX')
+                if pls:
+                    pls.pop_locked_style(om_lock_colors)
                 self._delayed_tooltip("Blend factor for orientation calculations (0.0 = velocity only, 1.0 = full absolute orientation)")
 
             imgui.separator()

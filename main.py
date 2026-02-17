@@ -7,6 +7,7 @@ from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService
 from services.field_handler import FieldHandler
+from services.parameter_lock_service import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
@@ -75,12 +76,17 @@ class App:
         self.user_configs_dir.mkdir(exist_ok=True)
 
         # Create delegated handlers
-        self.field_handler = FieldHandler(self.advanced_drawing_processor, self.sim)
+        self.param_lock_service = ParameterLockService()
+        self.field_handler = FieldHandler(
+            self.advanced_drawing_processor, self.sim,
+            param_lock_service=self.param_lock_service)
+        self.ui.param_lock_service = self.param_lock_service
         self.command_handler = CommandHandler(
             self.sim, self.camera, self.ui, self.rule_manager,
             self.entity_picker, self.video_service, self.config_saver,
             self.multi_load_service, self.user_configs_dir,
-            field_handler=self.field_handler
+            field_handler=self.field_handler,
+            param_lock_service=self.param_lock_service
         )
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
@@ -226,6 +232,12 @@ class App:
         if ui_state.multi_load.multi_load_enabled:
             ui_state.sim.parameter_sweeps_enabled = False
             ui_state.preferences.mouse_mode = "Draw Trail"
+            if self.param_lock_service.enabled:
+                self.param_lock_service.reset()
+                ui_state.preferences.parameter_locks_enabled = False
+
+        # 5.2. Sync parameter lock master toggle
+        self.param_lock_service.enabled = ui_state.preferences.parameter_locks_enabled
 
         # 5.5. Calculate sweep reticle info
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()

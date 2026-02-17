@@ -17,9 +17,10 @@ class FieldHandler:
     are no-ops when adv_draw is None (fields disabled).
     """
 
-    def __init__(self, adv_draw, sim):
+    def __init__(self, adv_draw, sim, param_lock_service=None):
         self.adv_draw = adv_draw
         self.sim = sim
+        self.param_lock_service = param_lock_service
         self.cache = FieldTextureCache(max_size=20)
 
         # File preview cached state
@@ -38,6 +39,41 @@ class FieldHandler:
     def _has_field_tex(self):
         """Whether the GPU field texture exists and is initialized."""
         return self.adv_draw is not None and self.adv_draw.field_texture is not None
+
+    def _write_field_with_locks(self, new_data):
+        """Write field data to GPU, respecting force/strafe field locks.
+
+        If both fields locked, skips write. If one locked, preserves its
+        channels (force=XY 0:2, strafe=ZW 2:4) from existing GPU data.
+        """
+        pls = self.param_lock_service
+        block_force = pls and pls.should_block_force_field()
+        block_strafe = pls and pls.should_block_strafe_field()
+
+        if block_force and block_strafe:
+            return  # Both locked, write nothing
+
+        if not block_force and not block_strafe:
+            self.adv_draw.write_field_data(new_data)
+            return
+
+        # Partial lock: preserve locked channels from existing GPU state
+        existing = self.adv_draw.snapshot_field_data()
+        if existing is None:
+            self.adv_draw.write_field_data(new_data)
+            return
+
+        merged = new_data.copy()
+        if block_force:
+            merged[:, :, 0:2] = existing[:, :, 0:2]
+        else:
+            merged[:, :, 2:4] = existing[:, :, 2:4]
+        self.adv_draw.write_field_data(merged)
+
+    def _should_skip_clear(self):
+        """Whether clear_fields should be skipped due to field locks."""
+        pls = self.param_lock_service
+        return pls and (pls.should_block_force_field() or pls.should_block_strafe_field())
 
     # --- Snapshot / query ---
 
@@ -108,7 +144,7 @@ class FieldHandler:
 
         Reads the companion _fields.png via cache (pre-resized to current
         canvas dimensions). Lazily initializes GPU resources if needed.
-        Clears field texture if no PNG exists.
+        Clears field texture if no PNG exists. Respects field locks.
         """
         canvas_dim = self.sim.get_canvas_dimensions()
         field_data = self.cache.get(json_filepath, canvas_dim, canvas_dim)
@@ -118,9 +154,9 @@ class FieldHandler:
                 if self.adv_draw.field_texture is None:
                     canvas_dim = self.sim.get_canvas_dimensions()
                     self.adv_draw.ensure_initialized(canvas_dim)
-                self.adv_draw.write_field_data(field_data)
+                self._write_field_with_locks(field_data)
         else:
-            if self._has_field_tex:
+            if self._has_field_tex and not self._should_skip_clear():
                 self.adv_draw.clear_fields()
 
         # Apply field strengths from config
@@ -137,16 +173,17 @@ class FieldHandler:
         If the cached field data is None (zero/uninitialized at copy time),
         clears the field texture. If the field texture isn't initialized and
         cached data is None, does nothing (no need to init for all-zeros).
+        Respects field locks.
         """
         if self._last_copied_field_data is not None:
             if self.adv_draw:
                 if self.adv_draw.field_texture is None:
                     canvas_dim = self.sim.get_canvas_dimensions()
                     self.adv_draw.ensure_initialized(canvas_dim)
-                self.adv_draw.write_field_data(self._last_copied_field_data)
+                self._write_field_with_locks(self._last_copied_field_data)
         else:
             # Cached field is None (all zeros) - clear if initialized, skip if not
-            if self._has_field_tex:
+            if self._has_field_tex and not self._should_skip_clear():
                 self.adv_draw.clear_fields()
 
         # Always restore field strengths
@@ -218,7 +255,7 @@ class FieldHandler:
     # --- Clipboard field snapshot ---
 
     def apply_snapshot(self, field_snapshot, config, ui_state):
-        """Apply a field snapshot from a clipboard entry.
+        """Apply a field snapshot from a clipboard entry. Respects field locks.
 
         Args:
             field_snapshot: np.ndarray or None from clipboard tuple.
@@ -230,9 +267,9 @@ class FieldHandler:
                 if self.adv_draw.field_texture is None:
                     canvas_dim = self.sim.get_canvas_dimensions()
                     self.adv_draw.ensure_initialized(canvas_dim)
-                self.adv_draw.write_field_data(field_snapshot)
+                self._write_field_with_locks(field_snapshot)
         else:
-            if self._has_field_tex:
+            if self._has_field_tex and not self._should_skip_clear():
                 self.adv_draw.clear_fields()
 
         if config.force_field_strength is not None:

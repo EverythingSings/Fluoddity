@@ -126,18 +126,26 @@ class AdvancedDrawingWindowMixin:
             FIELD_MAX_EXP = 1.0   # 10^1 = 10.0
             FIELD_EXP_RANGE = FIELD_MAX_EXP - FIELD_MIN_EXP  # 5.0
 
+            pls = self.param_lock_service
+            ffs_lock_colors = pls.push_locked_style('force_field_strength') if pls else 0
+            ffs_label = pls.get_display_label('force_field_strength', "Force Field Strength") if pls else "Force Field Strength"
+
             if prefs.force_field_strength > 0:
                 fslider = (math.log10(prefs.force_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
             else:
                 fslider = 0.0
             fslider = max(0.0, min(1.0, fslider))
             _, new_fpos = imgui.slider_float(
-                "Force Field Strength",
+                ffs_label,
                 fslider,
                 0.0,
                 1.0,
                 f"{prefs.force_field_strength:.4f}",
             )
+            if pls and pls.check_alt_click():
+                pls.toggle_lock('force_field_strength')
+            if pls:
+                pls.pop_locked_style(ffs_lock_colors)
             prefs.force_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_fpos)
             self._delayed_tooltip(
                 "Multiplier for force field effects.\n"
@@ -145,18 +153,25 @@ class AdvancedDrawingWindowMixin:
             )
 
             # === 8. Strafe Field Strength (logarithmic: 0.0001 to 10.0) ===
+            sfs_lock_colors = pls.push_locked_style('strafe_field_strength') if pls else 0
+            sfs_label = pls.get_display_label('strafe_field_strength', "Strafe Field Strength") if pls else "Strafe Field Strength"
+
             if prefs.strafe_field_strength > 0:
                 sslider = (math.log10(prefs.strafe_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
             else:
                 sslider = 0.0
             sslider = max(0.0, min(1.0, sslider))
             _, new_spos = imgui.slider_float(
-                "Strafe Field Strength",
+                sfs_label,
                 sslider,
                 0.0,
                 1.0,
                 f"{prefs.strafe_field_strength:.4f}",
             )
+            if pls and pls.check_alt_click():
+                pls.toggle_lock('strafe_field_strength')
+            if pls:
+                pls.pop_locked_style(sfs_lock_colors)
             prefs.strafe_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_spos)
             self._delayed_tooltip(
                 "Multiplier for strafe field effects.\n"

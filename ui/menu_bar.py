@@ -5,6 +5,24 @@ from imgui_bundle import imgui
 class MenuBarMixin:
     """Mixin for main menu bar. Combined into UI via multiple inheritance."""
 
+    def _apply_config_locked(self, config, watercolor_override=None):
+        """Apply config with parameter lock snapshot/restore."""
+        pls = self.param_lock_service
+        snapshot = pls.snapshot_locked(self.state.sim, self.state.preferences) if pls else {}
+        self.config_saver.apply_config(config, self.state.sim,
+                                       watercolor_override=watercolor_override)
+        if pls:
+            pls.restore_locked(self.state.sim, self.state.preferences, snapshot)
+
+    def _load_from_string_locked(self, config_string, watercolor_override=None):
+        """Load config from string with parameter lock snapshot/restore."""
+        pls = self.param_lock_service
+        snapshot = pls.snapshot_locked(self.state.sim, self.state.preferences) if pls else {}
+        self.config_saver.load_from_string(config_string, self.state.sim,
+                                           watercolor_override=watercolor_override)
+        if pls:
+            pls.restore_locked(self.state.sim, self.state.preferences, snapshot)
+
     def render_main_menu_bar(self):
         """Render the main application menu bar at the top of the window."""
         load_submenu_open = False
@@ -92,16 +110,16 @@ class MenuBarMixin:
                             cache_key = f"{self.currently_previewing_category}/{self.currently_previewing}"
                             if cache_key in self.cached_configs:
                                 config = self.cached_configs[cache_key]
-                                self.config_saver.apply_config(config, self.state.sim,
-                                                              watercolor_override=current_menu_watercolor)
+                                self._apply_config_locked(config,
+                                                         watercolor_override=current_menu_watercolor)
                                 # Re-apply field strengths from config
                                 if config.force_field_strength is not None:
                                     self.state.preferences.force_field_strength = config.force_field_strength
                                     self.state.preferences.strafe_field_strength = config.strafe_field_strength
                         elif self.cached_config:
                             # Restore from cache with watercolor override
-                            self.config_saver.load_from_string(
-                                self.cached_config, self.state.sim,
+                            self._load_from_string_locked(
+                                self.cached_config,
                                 watercolor_override=current_menu_watercolor)
                             # Restore cached field strengths
                             if self._cached_field_strengths is not None:
@@ -129,8 +147,8 @@ class MenuBarMixin:
                             if cache_key in self.cached_configs:
                                 # Apply preview config with watercolor override
                                 config = self.cached_configs[cache_key]
-                                self.config_saver.apply_config(config, self.state.sim,
-                                                              watercolor_override=current_menu_watercolor)
+                                self._apply_config_locked(config,
+                                                         watercolor_override=current_menu_watercolor)
                                 # Apply field strengths from config if present
                                 if config.force_field_strength is not None:
                                     self.state.preferences.force_field_strength = config.force_field_strength
@@ -142,8 +160,8 @@ class MenuBarMixin:
                                 self.currently_previewing_category = hovered_category
                         elif hovered_this_frame is None and self.cached_config:
                             # Revert to cached state with watercolor override
-                            self.config_saver.load_from_string(
-                                self.cached_config, self.state.sim,
+                            self._load_from_string_locked(
+                                self.cached_config,
                                 watercolor_override=current_menu_watercolor)
                             # Restore cached field strengths
                             if self._cached_field_strengths is not None:
@@ -219,6 +237,40 @@ class MenuBarMixin:
 
                 imgui.end_menu()
 
+            # Parameter Locks menu (only visible when enabled)
+            pls = self.param_lock_service
+            if pls and self.state.preferences.parameter_locks_enabled:
+                if imgui.begin_menu("Locks", not self.force_close_main_menus):
+                    any_menu_open_this_frame = True
+                    locks_menu_min = imgui.get_window_pos()
+                    locks_menu_size = imgui.get_window_size()
+                    menu_rectangles.append((locks_menu_min.x, locks_menu_min.y,
+                                           locks_menu_min.x + locks_menu_size.x,
+                                           locks_menu_min.y + locks_menu_size.y))
+
+                    # Lock/Unlock everything (dynamic label)
+                    if pls.any_locked:
+                        if imgui.menu_item("Unlock Everything", "", False)[0]:
+                            pls.unlock_all()
+                    else:
+                        if imgui.menu_item("Lock Everything", "", False)[0]:
+                            pls.lock_all()
+
+                    imgui.separator()
+
+                    _, pls.lock_rule = imgui.checkbox("Lock Rule", pls.lock_rule)
+                    self._delayed_tooltip("Prevent the target rule and mutation seed\nfrom being changed by config loads/pastes.")
+
+                    _, pls.lock_force_field = imgui.checkbox(
+                        "Lock Force Field", pls.lock_force_field)
+                    self._delayed_tooltip("Prevent the force components of the field\ntexture from being changed by loads/pastes.")
+
+                    _, pls.lock_strafe_field = imgui.checkbox(
+                        "Lock Strafe Field", pls.lock_strafe_field)
+                    self._delayed_tooltip("Prevent the strafe components of the field\ntexture from being changed by loads/pastes.")
+
+                    imgui.end_menu()
+
             # Help menu
             if imgui.begin_menu("Help", not self.force_close_main_menus):
                 any_menu_open_this_frame = True
@@ -291,6 +343,29 @@ class MenuBarMixin:
                     self._delayed_tooltip("Load a PNG/JPEG image as a strafe field.\nR=magnitude, G=angle (polar coordinates).")
                     imgui.end_menu()
 
+                imgui.separator()
+
+                # Parameter Locks checkbox (greyed out in multiload mode)
+                multiload_active = self.state.multi_load.multi_load_enabled
+                if multiload_active:
+                    imgui.begin_disabled()
+                changed, new_val = imgui.checkbox(
+                    "Parameter Locks / Override",
+                    self.state.preferences.parameter_locks_enabled
+                )
+                if changed:
+                    self.state.preferences.parameter_locks_enabled = new_val
+                    if self.param_lock_service:
+                        if new_val:
+                            self.param_lock_service.enabled = True
+                        else:
+                            self.param_lock_service.reset()
+                self._delayed_tooltip(
+                    "Alt-Click on a parameter to freeze it and its value\n"
+                    "won't change when loading new configs.")
+                if multiload_active:
+                    imgui.end_disabled()
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles
@@ -322,7 +397,7 @@ class MenuBarMixin:
         if self.load_submenu_was_open and not load_submenu_open:
             # Submenu just closed - restore cached state (no watercolor override)
             if self.cached_config:
-                self.config_saver.load_from_string(self.cached_config, self.state.sim)
+                self._load_from_string_locked(self.cached_config)
             if self.currently_previewing:
                 self._request_clear_preview = True
             # Restore cached field strengths

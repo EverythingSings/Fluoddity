@@ -20,19 +20,20 @@ class SliderWidgetsMixin:
             return None
         return pdef.name
 
-    def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f"):
+    def slider_float_with_range_menu(self, label, param_name, value, default_min, default_max, format="%.3f", display_label=None):
         """
         Create a slider with an adjustable min/max context menu and reset to defaults.
         Right-click the slider to adjust its range or reset value.
         Shows jitter range when jitter > 0 with orange tint.
 
         Args:
-            label: Display label for the slider
+            label: Display label for the slider (also used as range dict key)
             param_name: Parameter name (key in current_physics_defaults.values)
             value: Current value
             default_min: Default minimum value
             default_max: Default maximum value
             format: Display format string
+            display_label: Optional label for rendering (e.g. "[L]Sensor Gain##Sensor Gain")
 
         Returns:
             tuple: (changed, new_value)
@@ -64,8 +65,14 @@ class SliderWidgetsMixin:
         else:
             display_format = format
 
-        # Create the slider
-        changed, new_value = imgui.slider_float(label, value, min_val, max_val, format=display_format)
+        # Create the slider (use display_label for rendering, label for dict keys)
+        slider_label = display_label if display_label else label
+        changed, new_value = imgui.slider_float(slider_label, value, min_val, max_val, format=display_format)
+
+        # Check alt-click for lock toggle
+        pls = self.param_lock_service
+        if pls and pls.check_alt_click():
+            pls.toggle_lock(param_name)
 
         # Pop orange style colors
         if has_jitter:
@@ -384,12 +391,20 @@ class SliderWidgetsMixin:
 
         Handles sweep buttons, range adjust buttons, the slider itself
         (including power-scaled sliders like Hazard Rate), context menu,
-        and tooltip. Reads/writes the value on self.state.sim.
+        tooltip, and parameter lock styling/alt-click. Reads/writes the
+        value on self.state.sim.
 
         Args:
             pdef: A PhysicsParamDef instance from physics_params.py
         """
+        pls = self.param_lock_service
         value = getattr(self.state.sim, pdef.name)
+
+        # Push red lock style if locked
+        lock_colors = pls.push_locked_style(pdef.name) if pls else 0
+
+        # Build display label: "[L]Sensor Gain##Sensor Gain" when locked
+        display_label = pls.get_display_label(pdef.name, pdef.label) if pls else pdef.label
 
         # Sweep buttons + range adjust (only when sweeps enabled)
         if self.state.sim.parameter_sweeps_enabled:
@@ -407,11 +422,14 @@ class SliderWidgetsMixin:
             # Power-scaled slider (e.g. Hazard Rate): fine control at low values
             slider_pos = (value / pdef.default_max) ** (1.0 / pdef.power_exponent)
             _, new_pos = imgui.slider_float(
-                pdef.label, slider_pos, 0.0, 1.0,
+                display_label, slider_pos, 0.0, 1.0,
                 f"{value:.5f}"
             )
             new_value = pdef.default_max * (new_pos ** pdef.power_exponent)
             setattr(self.state.sim, pdef.name, new_value)
+            # Check alt-click for lock toggle
+            if pls and pls.check_alt_click():
+                pls.toggle_lock(pdef.name)
             # Context menu without jitter (power-scaled params hide jitter)
             self.add_slider_context_menu(pdef.label, pdef.default_min, pdef.default_max)
         else:
@@ -422,7 +440,12 @@ class SliderWidgetsMixin:
                 value=value,
                 default_min=pdef.default_min,
                 default_max=pdef.default_max,
+                display_label=display_label,
             )
             setattr(self.state.sim, pdef.name, new_value)
+
+        # Pop lock style
+        if pls:
+            pls.pop_locked_style(lock_colors)
 
         self.render_custom_tooltip(pdef.label, pdef.description)

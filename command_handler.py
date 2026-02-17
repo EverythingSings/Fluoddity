@@ -13,7 +13,7 @@ class CommandHandler:
 
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, multi_load_service, user_configs_dir,
-                 field_handler=None):
+                 field_handler=None, param_lock_service=None):
         self.sim = sim
         self.camera = camera
         self.ui = ui
@@ -24,6 +24,7 @@ class CommandHandler:
         self.multi_load_service = multi_load_service
         self.user_configs_dir = user_configs_dir
         self.field_handler = field_handler
+        self.param_lock_service = param_lock_service
 
         # Preview state
         self.preview_rule_active = False  # File->load preview
@@ -36,6 +37,23 @@ class CommandHandler:
 
         # Deferred entity selection state (waits one frame for rule buffer to be written)
         self._pending_entity_selection = None  # Tuple of (entity_id, entity_pos, entity_cohort) or None
+
+    def _apply_config_with_locks(self, config, ui_state, watercolor_override=None):
+        """Apply config with parameter lock snapshot/restore. Returns rule."""
+        pls = self.param_lock_service
+        snapshot = pls.snapshot_locked(ui_state.sim, ui_state.preferences) if pls else {}
+        rule = self.config_saver.apply_config(config, ui_state.sim, watercolor_override)
+        if pls:
+            pls.restore_locked(ui_state.sim, ui_state.preferences, snapshot)
+        return rule
+
+    def _push_and_apply_rule(self, rule, ui_state):
+        """Push rule to manager and apply to GPU, unless rule lock is active."""
+        pls = self.param_lock_service
+        if pls and pls.should_block_rule_push():
+            return
+        self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
+        self.sim.apply_rule(rule)
 
     @property
     def has_pending_entity_selection(self):
@@ -268,10 +286,10 @@ class CommandHandler:
         if ui_state.request_load_config:
             config_string = ui_state.clipboard_text
             if config_string:
-                rule = self.config_saver.load_from_string(config_string, ui_state.sim)
-                if rule is not None:
-                    self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
-                    self.sim.apply_rule(rule)
+                config = self.config_saver.decode_clipboard(config_string)
+                if config is not None:
+                    rule = self._apply_config_with_locks(config, ui_state)
+                    self._push_and_apply_rule(rule, ui_state)
                     if fh:
                         fh.apply_last_copied(ui_state)
                     print("Config loaded from clipboard")
@@ -361,12 +379,11 @@ class CommandHandler:
             filepath = self.ui._get_config_path(filename, ui_state.load_category)
             config = self.config_saver.load_from_file(filepath)
             if config is not None:
-                rule = self.config_saver.apply_config(
-                    config, ui_state.sim,
+                rule = self._apply_config_with_locks(
+                    config, ui_state,
                     watercolor_override=ui_state.load_watercolor_override
                 )
-                self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
-                self.sim.apply_rule(rule)
+                self._push_and_apply_rule(rule, ui_state)
                 if fh:
                     fh.apply_for_config(config, filepath, ui_state)
                 print(f"Config loaded from {filepath}")
@@ -402,9 +419,11 @@ class CommandHandler:
                     if not self.preview_rule_active and fh:
                         fh.cache_for_preview(ui_state)
 
-                    ui_state.sim.rule_seed = config.rule_seed
-                    self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
-                    self.sim.apply_rule(config.rule)
+                    pls = self.param_lock_service
+                    if not (pls and pls.should_block_rule_push()):
+                        ui_state.sim.rule_seed = config.rule_seed
+                        self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
+                        self.sim.apply_rule(config.rule)
                     self.preview_rule_active = True
 
                     if fh:
@@ -420,8 +439,8 @@ class CommandHandler:
                 self.rule_manager.pop_rule()
                 # Restore the full cached config (not just the rule)
                 if self._clipboard_cached_config is not None:
-                    rule = self.config_saver.apply_config(
-                        self._clipboard_cached_config, ui_state.sim)
+                    rule = self._apply_config_with_locks(
+                        self._clipboard_cached_config, ui_state)
                     self.sim.apply_rule(rule)
                     self._clipboard_cached_config = None
 
@@ -443,7 +462,7 @@ class CommandHandler:
                         fh.cache_for_clipboard_preview(ui_state)
 
                 config, _label, field_snapshot = self.ui.config_clipboard[idx]
-                rule = self.config_saver.apply_config(config, ui_state.sim)
+                rule = self._apply_config_with_locks(config, ui_state)
                 self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
                 self.sim.apply_rule(rule)
                 self.clipboard_preview_active = True
@@ -478,9 +497,8 @@ class CommandHandler:
         idx = ui_state.clipboard_config_index
         if 0 <= idx < len(self.ui.config_clipboard):
             config, label, field_snapshot = self.ui.config_clipboard[idx]
-            rule = self.config_saver.apply_config(config, ui_state.sim)
-            self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
-            self.sim.apply_rule(rule)
+            rule = self._apply_config_with_locks(config, ui_state)
+            self._push_and_apply_rule(rule, ui_state)
 
             if fh:
                 fh.apply_snapshot(field_snapshot, config, ui_state)
@@ -498,8 +516,8 @@ class CommandHandler:
         if self.clipboard_preview_active:
             self.rule_manager.pop_rule()
             if self._clipboard_cached_config is not None:
-                rule = self.config_saver.apply_config(
-                    self._clipboard_cached_config, ui_state.sim)
+                rule = self._apply_config_with_locks(
+                    self._clipboard_cached_config, ui_state)
                 self.sim.apply_rule(rule)
                 self._clipboard_cached_config = None
 

@@ -54,6 +54,7 @@ class UI(
         self.ctx = ctx
         self.view_option_labels = view_option_labels
         self.multi_load_service = multi_load_service
+        self.param_lock_service = None  # Set by App after construction
 
         # Initialize keybinding manager
         self.keybindings = KeybindingManager()

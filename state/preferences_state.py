@@ -71,6 +71,9 @@ class PreferencesState:
     # Simulation determinism
     strong_determinism: bool = False  # Double-buffer canvas for fully deterministic simulation
 
+    # Parameter locks
+    parameter_locks_enabled: bool = False  # Master toggle for parameter lock feature
+
 
 def save_preferences(prefs: PreferencesState, filepath: Path | str = None) -> None:
     """Save preferences to a JSON file."""
