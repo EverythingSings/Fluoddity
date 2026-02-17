@@ -75,6 +75,14 @@ class FieldHandler:
         pls = self.param_lock_service
         return pls and (pls.should_block_force_field() or pls.should_block_strafe_field())
 
+    def _write_field_strengths(self, ui_state, force_val, strafe_val):
+        """Write field strength scalars, respecting individual param locks."""
+        pls = self.param_lock_service
+        if not (pls and pls.is_locked('force_field_strength')):
+            ui_state.preferences.force_field_strength = force_val
+        if not (pls and pls.is_locked('strafe_field_strength')):
+            ui_state.preferences.strafe_field_strength = strafe_val
+
     # --- Snapshot / query ---
 
     def snapshot_with_strengths(self, ui_state):
@@ -159,13 +167,12 @@ class FieldHandler:
             if self._has_field_tex and not self._should_skip_clear():
                 self.adv_draw.clear_fields()
 
-        # Apply field strengths from config
+        # Apply field strengths from config (respects locks)
         if config.force_field_strength is not None:
-            ui_state.preferences.force_field_strength = config.force_field_strength
-            ui_state.preferences.strafe_field_strength = config.strafe_field_strength
+            self._write_field_strengths(
+                ui_state, config.force_field_strength, config.strafe_field_strength)
         elif field_data is None:
-            ui_state.preferences.force_field_strength = 1.0
-            ui_state.preferences.strafe_field_strength = 1.0
+            self._write_field_strengths(ui_state, 1.0, 1.0)
 
     def apply_last_copied(self, ui_state):
         """Apply the field state cached from the most recent Ctrl+C.
@@ -186,10 +193,12 @@ class FieldHandler:
             if self._has_field_tex and not self._should_skip_clear():
                 self.adv_draw.clear_fields()
 
-        # Always restore field strengths
+        # Restore field strengths (respects locks)
         if self._last_copied_field_strengths is not None:
-            ui_state.preferences.force_field_strength = self._last_copied_field_strengths[0]
-            ui_state.preferences.strafe_field_strength = self._last_copied_field_strengths[1]
+            self._write_field_strengths(
+                ui_state,
+                self._last_copied_field_strengths[0],
+                self._last_copied_field_strengths[1])
 
     def clear_fields(self):
         """Clear the GPU field texture to zeros (if initialized)."""
@@ -273,11 +282,10 @@ class FieldHandler:
                 self.adv_draw.clear_fields()
 
         if config.force_field_strength is not None:
-            ui_state.preferences.force_field_strength = config.force_field_strength
-            ui_state.preferences.strafe_field_strength = config.strafe_field_strength
+            self._write_field_strengths(
+                ui_state, config.force_field_strength, config.strafe_field_strength)
         elif field_snapshot is None:
-            ui_state.preferences.force_field_strength = 1.0
-            ui_state.preferences.strafe_field_strength = 1.0
+            self._write_field_strengths(ui_state, 1.0, 1.0)
 
     def load_field_from_image(self, filepath: str, target: str):
         """Load an image file and write its polar-to-cartesian data to a field.

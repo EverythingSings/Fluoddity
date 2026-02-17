@@ -112,10 +112,13 @@ class MenuBarMixin:
                                 config = self.cached_configs[cache_key]
                                 self._apply_config_locked(config,
                                                          watercolor_override=current_menu_watercolor)
-                                # Re-apply field strengths from config
+                                # Re-apply field strengths from config (respect locks)
                                 if config.force_field_strength is not None:
-                                    self.state.preferences.force_field_strength = config.force_field_strength
-                                    self.state.preferences.strafe_field_strength = config.strafe_field_strength
+                                    pls = self.param_lock_service
+                                    if not (pls and pls.is_locked('force_field_strength')):
+                                        self.state.preferences.force_field_strength = config.force_field_strength
+                                    if not (pls and pls.is_locked('strafe_field_strength')):
+                                        self.state.preferences.strafe_field_strength = config.strafe_field_strength
                         elif self.cached_config:
                             # Restore from cache with watercolor override
                             self._load_from_string_locked(
@@ -149,10 +152,13 @@ class MenuBarMixin:
                                 config = self.cached_configs[cache_key]
                                 self._apply_config_locked(config,
                                                          watercolor_override=current_menu_watercolor)
-                                # Apply field strengths from config if present
+                                # Apply field strengths from config if present (respect locks)
                                 if config.force_field_strength is not None:
-                                    self.state.preferences.force_field_strength = config.force_field_strength
-                                    self.state.preferences.strafe_field_strength = config.strafe_field_strength
+                                    pls = self.param_lock_service
+                                    if not (pls and pls.is_locked('force_field_strength')):
+                                        self.state.preferences.force_field_strength = config.force_field_strength
+                                    if not (pls and pls.is_locked('strafe_field_strength')):
+                                        self.state.preferences.strafe_field_strength = config.strafe_field_strength
                                 self._request_preview_config = True
                                 self._preview_filename = hovered_filename
                                 self._preview_category = hovered_category

@@ -28,7 +28,9 @@ class CommandHandler:
 
         # Preview state
         self.preview_rule_active = False  # File->load preview
+        self._preview_rule_was_pushed = False  # Whether we actually pushed a rule (vs blocked by lock)
         self.clipboard_preview_active = False  # Config clipboard preview
+        self._clipboard_rule_was_pushed = False  # Whether clipboard preview actually pushed a rule
         self._clipboard_cached_config = None  # Full config saved before clipboard preview
 
         # Video pending state (waiting for scheduled start frame)
@@ -368,6 +370,7 @@ class CommandHandler:
         if self.preview_rule_active:
             # Preview already applied config, rule, and field texture - just finalize
             self.preview_rule_active = False
+            self._preview_rule_was_pushed = False
             if fh:
                 fh.discard_preview_cache()
             if ui_state.load_watercolor_override is not None:
@@ -398,11 +401,13 @@ class CommandHandler:
         # Clear preview must happen before new preview
         if ui_state.request_clear_preview:
             if self.preview_rule_active:
-                prev_rule, prev_seed = self.rule_manager.pop_rule()
-                if prev_seed is not None:
-                    ui_state.sim.rule_seed = prev_seed
-                self.sim.apply_rule(prev_rule)
+                if self._preview_rule_was_pushed:
+                    prev_rule, prev_seed = self.rule_manager.pop_rule()
+                    if prev_seed is not None:
+                        ui_state.sim.rule_seed = prev_seed
+                    self.sim.apply_rule(prev_rule)
                 self.preview_rule_active = False
+                self._preview_rule_was_pushed = False
 
                 if fh:
                     fh.restore_from_preview(ui_state)
@@ -424,6 +429,7 @@ class CommandHandler:
                         ui_state.sim.rule_seed = config.rule_seed
                         self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
                         self.sim.apply_rule(config.rule)
+                        self._preview_rule_was_pushed = True
                     self.preview_rule_active = True
 
                     if fh:
@@ -436,7 +442,8 @@ class CommandHandler:
         # Clear clipboard preview (must happen before new preview)
         if ui_state.request_clear_clipboard_preview:
             if self.clipboard_preview_active:
-                self.rule_manager.pop_rule()
+                if self._clipboard_rule_was_pushed:
+                    self.rule_manager.pop_rule()
                 # Restore the full cached config (not just the rule)
                 if self._clipboard_cached_config is not None:
                     rule = self._apply_config_with_locks(
@@ -448,6 +455,7 @@ class CommandHandler:
                     fh.restore_from_clipboard_preview(ui_state)
 
                 self.clipboard_preview_active = False
+                self._clipboard_rule_was_pushed = False
 
         # New clipboard preview
         if ui_state.request_preview_clipboard_config:
@@ -463,8 +471,11 @@ class CommandHandler:
 
                 config, _label, field_snapshot = self.ui.config_clipboard[idx]
                 rule = self._apply_config_with_locks(config, ui_state)
-                self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
-                self.sim.apply_rule(rule)
+                pls = self.param_lock_service
+                if not (pls and pls.should_block_rule_push()):
+                    self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
+                    self.sim.apply_rule(rule)
+                    self._clipboard_rule_was_pushed = True
                 self.clipboard_preview_active = True
 
                 if fh:
@@ -488,8 +499,10 @@ class CommandHandler:
 
         # Clear preview first (discard cached config since we're committing)
         if self.clipboard_preview_active:
-            self.rule_manager.pop_rule()
+            if self._clipboard_rule_was_pushed:
+                self.rule_manager.pop_rule()
             self.clipboard_preview_active = False
+            self._clipboard_rule_was_pushed = False
             self._clipboard_cached_config = None
             if fh:
                 fh.discard_clipboard_preview_cache()
@@ -514,7 +527,8 @@ class CommandHandler:
 
         # Clear preview first, restore cached config
         if self.clipboard_preview_active:
-            self.rule_manager.pop_rule()
+            if self._clipboard_rule_was_pushed:
+                self.rule_manager.pop_rule()
             if self._clipboard_cached_config is not None:
                 rule = self._apply_config_with_locks(
                     self._clipboard_cached_config, ui_state)
@@ -525,6 +539,7 @@ class CommandHandler:
                 fh.restore_from_clipboard_preview(ui_state)
 
             self.clipboard_preview_active = False
+            self._clipboard_rule_was_pushed = False
 
         idx = ui_state.clipboard_config_index
         if 0 <= idx < len(self.ui.config_clipboard):

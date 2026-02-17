@@ -228,7 +228,7 @@ class PhysicsWindowMixin:
     def _render_physics_normal_menu_bar(self) -> bool:
         """Render the normal mode menu bar for Physics Settings. Returns whether any menu is open."""
         physics_any_menu_open_this_frame = False
-
+        pls = self.param_lock_service
         if imgui.begin_menu_bar():
             # Track all open menu rectangles separately
             physics_menu_rectangles = []
@@ -251,17 +251,29 @@ class PhysicsWindowMixin:
                                                appearance_settings_menu_min.y + appearance_settings_menu_size.y))
 
                 # Color by cohort checkbox
+                cbc_lock_colors = pls.push_locked_style('color_by_cohort') if pls else 0
+                cbc_label = pls.get_display_label('color_by_cohort', "Color by Cohort") if pls else "Color by Cohort"
                 _, self.state.sim.color_by_cohort = imgui.checkbox(
-                    "Color by Cohort",
+                    cbc_label,
                     self.state.sim.color_by_cohort
                 )
+                if pls and pls.check_alt_click():
+                    pls.toggle_lock('color_by_cohort')
+                if pls:
+                    pls.pop_locked_style(cbc_lock_colors)
                 self._delayed_tooltip("Colors particles based on their cohort assignment\nrather than their behavior.")
 
                 # Hue Sensitivity (only if not color by cohort)
                 if not self.state.sim.color_by_cohort:
+                    hs_lock_colors = pls.push_locked_style('hue_sensitivity') if pls else 0
+                    hs_label = pls.get_display_label('hue_sensitivity', "Hue Sensitivity") if pls else "Hue Sensitivity"
                     _, self.state.sim.hue_sensitivity = imgui.slider_float(
-                        "Hue Sensitivity", self.state.sim.hue_sensitivity, -1.0, 1.0
+                        hs_label, self.state.sim.hue_sensitivity, -1.0, 1.0
                     )
+                    if pls and pls.check_alt_click():
+                        pls.toggle_lock('hue_sensitivity')
+                    if pls:
+                        pls.pop_locked_style(hs_lock_colors)
                     self._delayed_tooltip("Controls color variation based on particle velocity.")
 
                 imgui.separator()
@@ -288,24 +300,42 @@ class PhysicsWindowMixin:
                 imgui.separator()
 
                 # Emboss mode combo box
+                em_lock_colors = pls.push_locked_style('emboss_mode') if pls else 0
+                em_label = pls.get_display_label('emboss_mode', "Emboss") if pls else "Emboss"
                 emboss_options = ["Off", "Canvas (Trails)", "Brush (Particles)"]
                 _, self.state.sim.emboss_mode = imgui.combo(
-                    "Emboss", self.state.sim.emboss_mode, emboss_options
+                    em_label, self.state.sim.emboss_mode, emboss_options
                 )
+                if pls and pls.check_alt_click():
+                    pls.toggle_lock('emboss_mode')
+                if pls:
+                    pls.pop_locked_style(em_lock_colors)
                 self._delayed_tooltip("Calculate some fake 3D lighting\nby treating (otherwise unused) particle\ndensity as a heightmap.")
 
                 # Emboss sliders only visible when mode is not Off
                 if self.state.sim.emboss_mode != 0:
                     # Emboss Intensity slider
+                    ei_lock_colors = pls.push_locked_style('emboss_intensity') if pls else 0
+                    ei_label = pls.get_display_label('emboss_intensity', "Emboss Intensity") if pls else "Emboss Intensity"
                     _, self.state.sim.emboss_intensity = imgui.slider_float(
-                        "Emboss Intensity", self.state.sim.emboss_intensity, 0.0, 1.0
+                        ei_label, self.state.sim.emboss_intensity, 0.0, 1.0
                     )
+                    if pls and pls.check_alt_click():
+                        pls.toggle_lock('emboss_intensity')
+                    if pls:
+                        pls.pop_locked_style(ei_lock_colors)
                     self._delayed_tooltip("Intensity of emboss lighting effect. Negative values invert.")
 
                     # Emboss Smoothness slider
+                    es_lock_colors = pls.push_locked_style('emboss_smoothness') if pls else 0
+                    es_label = pls.get_display_label('emboss_smoothness', "Emboss Smoothness") if pls else "Emboss Smoothness"
                     _, self.state.sim.emboss_smoothness = imgui.slider_float(
-                        "Emboss Smoothness", self.state.sim.emboss_smoothness, 0.001, 1.0
+                        es_label, self.state.sim.emboss_smoothness, 0.001, 1.0
                     )
+                    if pls and pls.check_alt_click():
+                        pls.toggle_lock('emboss_smoothness')
+                    if pls:
+                        pls.pop_locked_style(es_lock_colors)
                     self._delayed_tooltip("Controls the smoothness of emboss sampling.")
 
                 imgui.end_menu()

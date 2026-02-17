@@ -18,6 +18,9 @@ LOCKABLE_SIM_PARAMS = [
     # Additional settings
     'rule_seed', 'boundary_conditions', 'initial_conditions', 'num_cohorts',
     'DISABLE_SYMMETRY', 'ABSOLUTE_ORIENTATION', 'ORIENTATION_MIX',
+    # Appearance
+    'color_by_cohort', 'hue_sensitivity', 'emboss_mode',
+    'emboss_intensity', 'emboss_smoothness',
 ]
 
 # Lockable PreferencesState parameter names
