@@ -1,27 +1,16 @@
-REVERT SHOULDNT CHANGE WATERCOLOR MODE
-WATERCOLOR MODE SHOULD DISABLE BLOOM
-screen record physics slider -> 100x max
-screen record "starting frame -> ending frame display"
-Resize while in tiled camera bug?
 
 cohort isolation view
 -Text entry box with absolute orientation -> Text
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
 
--LOCK parameters so that we can thumb through saves without losing settings.
--LOCK rules?
--Middle click for LOCK?
--Alt click for lock, alt-R to reset all locks.
-
 Look over all tooltips
-Save field textures?
 Add new features to help menus
 -advanced drawing features
 -multiload
 -right click earaser
 -jitter
--LOCK?
+-LOCK
 -config clipboard
 -
 
