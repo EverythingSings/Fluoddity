@@ -299,7 +299,7 @@ class HelpWindowsMixin:
                 'Capture Physics Frequency',
                 self.state.preferences.motion_blur_samples,
                 v_min=1,
-                v_max=12,
+                v_max=100,
                 format=f"x%d ({current_hz}hz)"
             )
             self._delayed_tooltip("Physics steps per frame for video/screenshots.\nHigher values = faster physics with smoother motion blur.\nAlso determines screenshot exposure (# of samples to blend together).")
