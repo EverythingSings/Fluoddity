@@ -58,10 +58,10 @@ Reflect the world across the X axis and nothing should change: the dynamics are 
 Enforcing these symmetries drastically reduces the prevalence of boring and degenerate Rules.
 
 ### Future Exploration
-- Trail diffusion step replaced with arbitrary continuous cellular automata. advection along flow lines could be interesting
+- Trail diffusion step replaced with arbitrary continuous cellular automata. wave equation or advection along flow lines could be interesting
 - More than just two sensors.
 - Disentangle "local orientation" from "particle velocity". Strafe mechanic hints at this being worthwhile.
-- Particle internal state/ memory. Current particle behavior is memoryless.
+- Particle internal state/ memory. Current particle behavior is memoryless aside from velocity persistence.
 - Trails need not correspond to particle velocity. "Trail vector" could be just another output of the Rule function. Trail dimensionality could be increased.
 - A more universal framework for describing these kinds of systems. One could generalize all the way to continuous cellular automata + continuous turmites.
   
