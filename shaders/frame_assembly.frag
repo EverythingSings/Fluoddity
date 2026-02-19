@@ -38,9 +38,10 @@ uniform float EMBOSS_SMOOTHNESS;    // Emboss sampling epsilon
 
 // Tiling mode parameters
 uniform bool tiling_mode_enabled;   // Whether tiling mode is active
-uniform vec2 view_min;              // World-space minimum of view rectangle
-uniform vec2 view_max;              // World-space maximum of view rectangle
-uniform vec2 tiling_scale;          // Letterbox-corrected aspect: (max(aspect,1), max(1/aspect,1))
+uniform vec2 view_min;              // Entity-space minimum of view rectangle
+uniform vec2 view_max;              // Entity-space maximum of view rectangle
+uniform vec2 tiling_scale;          // Converts frame_assembly world_pos to entity space
+uniform vec2 canvas_resolution;     // Canvas pixel dimensions (width, height)
 
 // Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
 // Must match the value in cam_brush.vert. Smaller = more margin for edge blending.
@@ -145,7 +146,9 @@ vec3 draw_overlay(vec2 uv_coord) {
 
     // Ring parameters - scale the radius to screen space
     // TRAIL_DRAW_RADIUS is in canvas space (0-1), need to convert to screen space
-    float radius = 2*TRAIL_DRAW_RADIUS / camera_zoom;
+    float aspect_shrink = sqrt(min(canvas_resolution.x,canvas_resolution.y)/max(canvas_resolution.x,canvas_resolution.y));
+    aspect_shrink *= canvas_resolution.x>canvas_resolution.y?4./3.:1;//I have no idea why this is necessary but it works to make the reticle match the actual draw size very closely but not perfectly. @Claude why do we need this?
+    float radius = (aspect_shrink)*2*TRAIL_DRAW_RADIUS / camera_zoom;
     float line_thickness = 0.003;
 
     // Draw a thin ring at the draw radius
@@ -171,9 +174,12 @@ vec2 tiled_sample_uv_emboss(vec2 screen_uv) {
     ndc *= camera_zoom;
     // Apply camera position offset (world space)
     vec2 world = ndc + camera_position * vec2(1.0, -1.0);
-    // Apply letterbox-corrected aspect scaling
+    // Convert to entity space
     world *= tiling_scale;
-    return fract((world + 1.0) / 2.0);
+    // Wrap to [0, 1] using per-axis cell size (area-preserving entity bounds)
+    float ca = canvas_resolution.x / canvas_resolution.y;
+    vec2 cell_size = vec2(2.0 * sqrt(ca), 2.0 / sqrt(ca));
+    return fract((world + cell_size * 0.5) / cell_size);
 }
 
 vec3 emboss(vec2 uv){
@@ -197,17 +203,21 @@ vec3 emboss(vec2 uv){
 // Tiling mode: sample color with edge blending for seamless tiling.
 // Handles particles whose sprites hang over the edge of the canonical tile.
 vec3 sample_tiled_color(vec2 screen_uv) {
-    // Convert screen UV to world position using letterbox-corrected aspect
+    // Convert screen UV to entity space using tiling_scale
     vec2 ndc = screen_uv * 2.0 - 1.0;
     vec2 world_pos = ndc * camera_zoom + camera_position * vec2(1, -1);
     world_pos *= tiling_scale;
 
+    // Per-axis cell size (area-preserving entity bounds)
+    float ca = canvas_resolution.x / canvas_resolution.y;
+    vec2 cell_size = vec2(2.0 * sqrt(ca), 2.0 / sqrt(ca));
+
     // Extract canonical position (which particle lives here?)
-    vec2 p = mod(world_pos + 1.0, 2.0) - 1.0;
+    vec2 p = mod(world_pos + cell_size * 0.5, cell_size) - cell_size * 0.5;
 
     // Compute the SAME n_min the vertex shader used
-    vec2 n_min = ceil((view_min - p) * 0.5);
-    vec2 n_max = floor((view_max - p) * 0.5);
+    vec2 n_min = ceil((view_min - p) / cell_size);
+    vec2 n_max = floor((view_max - p) / cell_size);
 
     // Check if this particle was rendered (with epsilon for floating point precision)
     const float epsilon = 0.0001;
@@ -217,7 +227,7 @@ vec3 sample_tiled_color(vec2 screen_uv) {
     }
 
     // This particle was rendered - find where
-    vec2 rendered_world_pos = p + n_min * 2.0;
+    vec2 rendered_world_pos = p + n_min * cell_size;
 
     // Convert back to screen UV (reverse of the world_pos calculation above)
     rendered_world_pos /= tiling_scale;
@@ -226,19 +236,18 @@ vec3 sample_tiled_color(vec2 screen_uv) {
     vec2 sample_uv = rendered_ndc * 0.5 + 0.5;
 
     // Tile size in sample_uv space (how far to offset for opposite edge)
-    vec2 tile_size_uv = TILING_MARGIN / (tiling_scale * camera_zoom);
+    vec2 tile_size_uv = cell_size * TILING_MARGIN / (tiling_scale * camera_zoom);
 
     // Sample primary location
     vec3 color = texture(input_frame, sample_uv).rgb;
 
     // ===== SCREENSPACE SEAM DETECTION =====
     // The screenspace seam is where n_min changes (discontinuity in the p-to-sample_uv mapping).
-    // This occurs at p_seam = mod(view_min + 1, 2) - 1, NOT at p = ±1 (worldspace seam).
-    vec2 p_seam = mod(view_min + 1.0, 2.0) - 1.0;
+    vec2 p_seam = mod(view_min + cell_size * 0.5, cell_size) - cell_size * 0.5;
 
-    // Distance from p to the seam (in p-space, wrapped to [-1, 1])
+    // Distance from p to the seam (in p-space, wrapped to cell_size)
     vec2 dist_to_seam = p - p_seam;
-    dist_to_seam = mod(dist_to_seam + 1.0, 2.0) - 1.0;  // Wrap to [-1, 1]
+    dist_to_seam = mod(dist_to_seam + cell_size * 0.5, cell_size) - cell_size * 0.5;
 
     // Margin threshold: how close to the seam triggers edge blending
     float margin_threshold = 1.0 - TILING_MARGIN;

@@ -312,19 +312,21 @@ void pR(inout vec2 p, float a) {
 }
 
 
-//convert p to texture coords and retrieve canvas
+//convert p (entity space) to texture coords and retrieve canvas
 vec4 get_can(vec2 p){
     vec2 res=textureSize(canvas,0);
-    vec2 aspect=vec2(1,res.x/res.y);
-    vec2 uv = p/2*aspect+.5;
+    float ca = res.x / res.y;
+    vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
+    vec2 uv = p / (2.0 * half_extent) + 0.5;
     if(get_particle_boundary_conditions() == 2) uv = fract(uv);
     return texture(canvas, uv);
 }
 vec4 get_field(vec2 p){
     if(!advanced_drawing_resources_initialized)return vec4(0);
     vec2 res=textureSize(field_texture,0);
-    vec2 aspect=vec2(1,res.x/res.y);
-    vec2 uv = p/2*aspect+.5;
+    float ca = res.x / res.y;
+    vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
+    vec2 uv = p / (2.0 * half_extent) + 0.5;
     if(get_particle_boundary_conditions() == 2) uv = fract(uv);
     return texture(field_texture, uv);
 }
@@ -542,14 +544,16 @@ void main() {
     e.pos += .01*strafe_field_strength*draw_sample.zw;
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
+    float ca = canvas_resolution.x / canvas_resolution.y;
+    float x_edge = sqrt(ca);
+    float y_edge = 1.0 / sqrt(ca);
     int boundary_mode = get_particle_boundary_conditions();
     if(boundary_mode==0){
         //reflect particles off canvas boundaries
-        if (e.pos.x < -1.0 || e.pos.x > 1.0){
+        if (e.pos.x < -x_edge || e.pos.x > x_edge){
             e.vel.x=-e.vel.x;
-            e.pos.x=edgeflect(e.pos.x);
+            e.pos.x=edgeflect(e.pos.x/x_edge)*x_edge;
         }
-        float y_edge = canvas_resolution.y/canvas_resolution.x;
         if (e.pos.y < -y_edge || e.pos.y > y_edge){
             e.vel.y=-e.vel.y;
             e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
@@ -557,14 +561,15 @@ void main() {
     }
     else if(boundary_mode==1){
         //reset to initial conditions
-        if(e.pos.x<-1.||e.pos.x>1.||e.pos.y<-1||e.pos.y>1.){
+        if(e.pos.x<-x_edge||e.pos.x>x_edge||e.pos.y<-y_edge||e.pos.y>y_edge){
             reset(index);
             return;//reset expects to be the last thing we do. It handles entity buffer storage
         }
     }
     else if(boundary_mode==2){
-        //wrap from from -1 to 1
-        e.pos = 2*(fract(e.pos/2-.5)-.5);
+        //wrap: X wraps [-x_edge,x_edge], Y wraps [-y_edge, y_edge]
+        e.pos.x = x_edge * 2.0 * (fract(e.pos.x / (x_edge * 2.0) - 0.5) - 0.5);
+        e.pos.y = y_edge * 2.0 * (fract(e.pos.y / (y_edge * 2.0) - 0.5) - 0.5);
     }
 
     //Commit new entity state to buffers

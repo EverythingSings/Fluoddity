@@ -154,14 +154,14 @@ class FieldHandler:
         canvas dimensions). Lazily initializes GPU resources if needed.
         Clears field texture if no PNG exists. Respects field locks.
         """
-        canvas_dim = self.sim.get_canvas_dimensions()
-        field_data = self.cache.get(json_filepath, canvas_dim, canvas_dim)
+        canvas_dim_x,canvas_dim_y = self.sim.get_canvas_dimensions()
+        field_data = self.cache.get(json_filepath, canvas_dim_y, canvas_dim_x)
 
         if field_data is not None:
             if self.adv_draw:
                 if self.adv_draw.field_texture is None:
-                    canvas_dim = self.sim.get_canvas_dimensions()
-                    self.adv_draw.ensure_initialized(canvas_dim)
+                    canvas_dim_x,canvas_dim_y = self.sim.get_canvas_dimensions()
+                    self.adv_draw.ensure_initialized(canvas_dim_x,canvas_dim_y)
                 self._write_field_with_locks(field_data)
         else:
             if self._has_field_tex and not self._should_skip_clear():
@@ -185,8 +185,8 @@ class FieldHandler:
         if self._last_copied_field_data is not None:
             if self.adv_draw:
                 if self.adv_draw.field_texture is None:
-                    canvas_dim = self.sim.get_canvas_dimensions()
-                    self.adv_draw.ensure_initialized(canvas_dim)
+                    canvas_dim_x,canvas_dim_y = self.sim.get_canvas_dimensions()
+                    self.adv_draw.ensure_initialized(canvas_dim_x,canvas_dim_y)
                 self._write_field_with_locks(self._last_copied_field_data)
         else:
             # Cached field is None (all zeros) - clear if initialized, skip if not
@@ -274,8 +274,8 @@ class FieldHandler:
         if field_snapshot is not None:
             if self.adv_draw:
                 if self.adv_draw.field_texture is None:
-                    canvas_dim = self.sim.get_canvas_dimensions()
-                    self.adv_draw.ensure_initialized(canvas_dim)
+                    canvas_dim_x,canvas_dim_y = self.sim.get_canvas_dimensions()
+                    self.adv_draw.ensure_initialized(canvas_dim_x,canvas_dim_y)
                 self._write_field_with_locks(field_snapshot)
         else:
             if self._has_field_tex and not self._should_skip_clear():
@@ -297,8 +297,8 @@ class FieldHandler:
         from pathlib import Path
         from utilities.field_texture_io import load_image_as_polar_field
 
-        canvas_dim = self.sim.get_canvas_dimensions()
-        cartesian = load_image_as_polar_field(Path(filepath), canvas_dim, canvas_dim)
+        canvas_dim_x,canvas_dim_y = self.sim.get_canvas_dimensions()
+        cartesian = load_image_as_polar_field(Path(filepath), canvas_dim_y, canvas_dim_x)
         if cartesian is None:
             print(f"Failed to load field image: {filepath}")
             return
@@ -308,11 +308,11 @@ class FieldHandler:
             return
 
         if self.adv_draw.field_texture is None:
-            self.adv_draw.ensure_initialized(canvas_dim)
+            self.adv_draw.ensure_initialized(canvas_dim_x,canvas_dim_y)
 
         existing = self.adv_draw.snapshot_field_data()
         if existing is None:
-            existing = np.zeros((canvas_dim, canvas_dim, 4), dtype=np.float32)
+            existing = np.zeros((canvas_dim_y, canvas_dim_x, 4), dtype=np.float32)
 
         if target == "force":
             existing[:, :, 0] = cartesian[:, :, 0]

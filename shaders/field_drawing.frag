@@ -28,10 +28,19 @@ uniform bool strafe_field_active;
 uniform bool fill_mode;
 uniform int fill_direction_type;  // 0=fixed, 1=radial_in, 2=radial_out
 
+// Canvas dimensions for aspect correction
+uniform vec2 canvas_resolution;
+
 // Gaussian kernel (same as canvas.frag)
 float draw_kernel(float distance, float size) {
     float sigma = size;
     return exp(-distance * distance / (2.0 * sigma * sigma));
+}
+
+// Aspect-correct UV delta so length() is isotropic in entity space
+vec2 aspect_correct_uv(vec2 uv_delta) {
+    float ca = canvas_resolution.x / canvas_resolution.y;
+    return uv_delta * vec2(sqrt(ca), 1.0/sqrt(ca));
 }
 
 // Calculate draw vector based on brush mode
@@ -46,13 +55,15 @@ vec2 calculate_draw_vector(int mode, vec2 mouse_vel, float heading,
     } else if (mode == 3) {
         // In - Attract (toward mouse)
         vec2 to_mouse = mouse_p - pixel_pos;
-        float len = length(to_mouse);
-        return len > 0.0 ? .01*to_mouse / len : vec2(0.0);
+        vec2 corrected = aspect_correct_uv(to_mouse);
+        float len = length(corrected);
+        return len > 0.0 ? .01*corrected / len : vec2(0.0);
     } else if (mode == 4) {
         // Out - Repel (away from mouse)
         vec2 from_mouse = pixel_pos - mouse_p;
-        float len = length(from_mouse);
-        return len > 0.0 ? .01*from_mouse / len : vec2(0.0);
+        vec2 corrected = aspect_correct_uv(from_mouse);
+        float len = length(corrected);
+        return len > 0.0 ? .01*corrected / len : vec2(0.0);
     }
     return vec2(0.0);
 }
@@ -66,7 +77,7 @@ void tiling_distance(vec2 frag_pos, vec2 mouse_p, vec2 prev_mouse_p, bool tiling
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 vec2 wrapped_mouse = mouse_p + vec2(dx, dy);
-                float d = length(frag_pos - wrapped_mouse);
+                float d = length(aspect_correct_uv(frag_pos - wrapped_mouse));
                 min_distance = min(min_distance, d);
                 vec2 vel = wrapped_mouse - prev_mouse_p;
                 min_velocity = length(vel) < length(min_velocity) ? vel : min_velocity;
@@ -75,7 +86,7 @@ void tiling_distance(vec2 frag_pos, vec2 mouse_p, vec2 prev_mouse_p, bool tiling
         dist = min_distance;
         best_velocity = min_velocity;
     } else {
-        dist = length(frag_pos - mouse_p);
+        dist = length(aspect_correct_uv(frag_pos - mouse_p));
         best_velocity = mouse_p - prev_mouse_p;
     }
 }
@@ -112,13 +123,15 @@ void main() {
         } else if (fill_direction_type == 1) {
             // Radial In (toward center 0.5, 0.5)
             vec2 to_center = vec2(0.5) - texcoord;
-            float len = length(to_center);
-            fill_vector = len > 0.0 ? to_center / len : vec2(0.0);
+            vec2 corrected = aspect_correct_uv(to_center);
+            float len = length(corrected);
+            fill_vector = len > 0.0 ? corrected / len : vec2(0.0);
         } else {
             // Radial Out (away from center)
             vec2 from_center = texcoord - vec2(0.5);
-            float len = length(from_center);
-            fill_vector = len > 0.0 ? from_center / len : vec2(0.0);
+            vec2 corrected = aspect_correct_uv(from_center);
+            float len = length(corrected);
+            fill_vector = len > 0.0 ? corrected / len : vec2(0.0);
         }
 
         // No persistence factor for fill (instantaneous)

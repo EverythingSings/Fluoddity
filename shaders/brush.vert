@@ -42,8 +42,9 @@ void main() {
     vec2 particle_uv=uv_coords[vertex_id];
     vec2 vertex_pos = entity_pos + offsets[vertex_id];
     
-    // Entity space to clip space: (0,0) = center, (1,0) = right edge
-    gl_Position = vec4(vertex_pos, 0.0, 1.0)*vec4(1,canvas_resolution.x/canvas_resolution.y,1,1);
+    // Entity space to clip space: entity bounds [-x_edge,x_edge]x[-y_edge,y_edge] -> [-1,1]^2
+    float ca = canvas_resolution.x / canvas_resolution.y;
+    gl_Position = vec4(vertex_pos, 0.0, 1.0) * vec4(1.0/sqrt(ca), sqrt(ca), 1, 1);
 
     uv = particle_uv;
     pos_vel=vec4(entity_pos,entity_vel);

@@ -28,6 +28,9 @@ uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 // Tiling mode
 uniform bool tiling_mode;
 
+// Canvas dimensions for aspect correction
+uniform vec2 canvas_resolution;
+
 // SYNCHRONIZED: This struct must match entity_update.glsl
 // Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag
 struct PhysicsSetting {
@@ -121,6 +124,12 @@ vec4 getBlur(vec2 pos, sampler2D sam,float diffusion_constant) {
     return (getCan(pos, sam) * K + nc + sc + wc + ec) / (4. + K);
 }
 
+// Aspect-correct UV delta so length() is isotropic in entity space
+vec2 aspect_correct_uv(vec2 uv_delta) {
+    float ca = canvas_resolution.x / canvas_resolution.y;
+    return uv_delta * vec2(sqrt(ca), 1.0/sqrt(ca));
+}
+
 // Calculate draw vector based on brush mode
 vec2 calculate_draw_vector(int mode, vec2 mouse_vel, float heading,
                            vec2 pixel_pos, vec2 mouse_p) {
@@ -133,13 +142,15 @@ vec2 calculate_draw_vector(int mode, vec2 mouse_vel, float heading,
     } else if (mode == 3) {
         // In - Attract (toward mouse)
         vec2 to_mouse = mouse_p - pixel_pos;
-        float len = length(to_mouse);
-        return len > 0.0 ? .01*to_mouse / len : vec2(0.0);
+        vec2 corrected = aspect_correct_uv(to_mouse);
+        float len = length(corrected);
+        return len > 0.0 ? .01*corrected / len : vec2(0.0);
     } else if (mode == 4) {
         // Out - Repel (away from mouse)
         vec2 from_mouse = pixel_pos - mouse_p;
-        float len = length(from_mouse);
-        return len > 0.0 ? .01*from_mouse / len : vec2(0.0);
+        vec2 corrected = aspect_correct_uv(from_mouse);
+        float len = length(corrected);
+        return len > 0.0 ? .01*corrected / len : vec2(0.0);
     }
     return vec2(0.0);
 }
@@ -161,7 +172,10 @@ void main() {
 
     vec4 brush_color = texture(brush_tex, texcoord);
     vec4 can_color;
-    float TRAIL_DIFFUSION = calculate_setting(TRAIL_DIFFUSION_SETTING,texcoord*2.-1,0);
+    // Map texcoord to entity space for parameter sweeps
+    float _ca = canvas_resolution.x / canvas_resolution.y;
+    vec2 entity_space_pos = (texcoord * 2.0 - 1.0) * vec2(sqrt(_ca), 1.0/sqrt(_ca));
+    float TRAIL_DIFFUSION = calculate_setting(TRAIL_DIFFUSION_SETTING,entity_space_pos,0);
     TRAIL_DIFFUSION = clamp(TRAIL_DIFFUSION,0.001,1.0);//keeps jitter from exceeding the valid domain
     if(TRAIL_DIFFUSION>0){
         TRAIL_DIFFUSION= TRAIL_DIFFUSION*TRAIL_DIFFUSION;//better scaling for slider
@@ -172,9 +186,8 @@ void main() {
         can_color = texture(can_tex,texcoord);
     }
 
-    // Convert texcoord from [0,1] to [-1,1] for position-based sweeps
-    vec2 world_pos = texcoord * 2.0 - 1.0;
-    float trail_persistence = calculate_setting(TRAIL_PERSISTENCE_SETTING, world_pos, 0.0);
+    // Use entity space position for position-based sweeps
+    float trail_persistence = calculate_setting(TRAIL_PERSISTENCE_SETTING, entity_space_pos, 0.0);
     trail_persistence = clamp(trail_persistence,0.0,0.999);
     can_out = can_color * trail_persistence + (1 - trail_persistence) * brush_color;
 
@@ -193,7 +206,7 @@ void main() {
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
                     vec2 wrapped_mouse = mouse + vec2(dx, dy);
-                    float dist = length(texcoord - wrapped_mouse);
+                    float dist = length(aspect_correct_uv(texcoord - wrapped_mouse));
                     min_distance = min(min_distance, dist);
                     vec2 vel = (wrapped_mouse-previous_mouse);
                     min_draw_vector = length(vel)<length(min_draw_vector)?vel:min_draw_vector;
@@ -203,7 +216,7 @@ void main() {
             raw_mouse_vel = min_draw_vector;
         } else {
             // Normal mode: direct distance calculation
-            distance_to_mouse = length(texcoord - mouse);
+            distance_to_mouse = length(aspect_correct_uv(texcoord - mouse));
         }
 
         // Apply brush mode to get final draw vector
@@ -226,12 +239,12 @@ void main() {
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
                     vec2 wrapped = mouse + vec2(dx, dy);
-                    min_dist = min(min_dist, length(texcoord - wrapped));
+                    min_dist = min(min_dist, length(aspect_correct_uv(texcoord - wrapped)));
                 }
             }
             erase_distance = min_dist;
         } else {
-            erase_distance = length(texcoord - mouse);
+            erase_distance = length(aspect_correct_uv(texcoord - mouse));
         }
         if (erase_distance < draw_size*2) {//Match the reticle size from frame_assembly.frag
             can_out = vec4(0.0, 0.0, 0.0, 1.0);
@@ -249,12 +262,14 @@ void main() {
             fill_vector = vec2(sin(neg_heading), cos(neg_heading));
         } else if (fill_direction_type == 1) {
             vec2 to_center = vec2(0.5) - texcoord;
-            float len = length(to_center);
-            fill_vector = len > 0.0 ? to_center / len : vec2(0.0);
+            vec2 corrected = aspect_correct_uv(to_center);
+            float len = length(corrected);
+            fill_vector = len > 0.0 ? corrected / len : vec2(0.0);
         } else {
             vec2 from_center = texcoord - vec2(0.5);
-            float len = length(from_center);
-            fill_vector = len > 0.0 ? from_center / len : vec2(0.0);
+            vec2 corrected = aspect_correct_uv(from_center);
+            float len = length(corrected);
+            fill_vector = len > 0.0 ? corrected / len : vec2(0.0);
         }
         fill_vector *= draw_power / 5.0;
         can_out.xy += .25*fill_vector;

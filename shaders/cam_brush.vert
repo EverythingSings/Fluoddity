@@ -47,23 +47,24 @@ void main() {
     vec2 entity_vel = entities[instance_id].vel;
     float size = entities[instance_id].size;
 
+    // Entity-to-NDC transform: entity bounds [-x_edge,x_edge]x[-y_edge,y_edge] -> [-1,1]^2
+    float ca = canvas_resolution.x / canvas_resolution.y;
+    vec2 entity_to_ndc = vec2(1.0/sqrt(ca), sqrt(ca));
+
     // Tiling mode: find which periodic cell to render this particle in
     bool should_cull = false;
     if (tiling_mode_enabled) {
-        // Canonical position p is already in [-1, 1] (entity_pos)
         vec2 p = entity_pos;
-
-        // Find the range of valid cell offsets
-        // n_min = ceil((view_min - p) / 2.0)
-        // n_max = floor((view_max - p) / 2.0)
-        vec2 n_min = ceil((view_min - p) * 0.5);
-        vec2 n_max = floor((view_max - p) * 0.5);
+        // Cell period: X tiles every 2*x_edge, Y tiles every 2*y_edge
+        vec2 cell_size = vec2(2.0 * sqrt(ca), 2.0 / sqrt(ca));
+        vec2 n_min = ceil((view_min - p) / cell_size);
+        vec2 n_max = floor((view_max - p) / cell_size);
 
         // Check if ANY valid cell exists (with epsilon for floating point precision)
         const float epsilon = 0.0001;
         if (n_min.x <= n_max.x + epsilon && n_min.y <= n_max.y + epsilon) {
             // Visible! Render at the smallest valid cell offset
-            entity_pos = p + n_min * 2.0;
+            entity_pos = p + n_min * cell_size;
         } else {
             // Not visible in any cell - cull
             should_cull = true;
@@ -71,12 +72,12 @@ void main() {
     }
 
     // Calculate particle center in viewport coordinates for culling
-    vec2 canvas_ndc_center = entity_pos * vec2(1, canvas_resolution.x/canvas_resolution.y);
-    
+    vec2 canvas_ndc_center = entity_pos * entity_to_ndc;
+
     // Apply camera transformation to center
-    float tex_aspect = canvas_resolution.x / canvas_resolution.y;
+    float tex_aspect = ca;
     float window_aspect = window_size.x / window_size.y;
-    
+
     vec2 scale;
     if (tex_aspect > window_aspect) {
         scale.x = 1.0;
@@ -86,12 +87,12 @@ void main() {
         scale.y = 1.0;
     }
     scale /= cam_zoom;
-    
+
     vec2 center_pos = canvas_ndc_center * scale;
     center_pos -= cam_pos * vec2(1.0, -1.0) / cam_zoom;
-    
+
     // Calculate particle size in viewport coordinates
-    vec2 particle_size_in_viewport = size * vec2(1, canvas_resolution.x/canvas_resolution.y) * scale;
+    vec2 particle_size_in_viewport = size * entity_to_ndc * scale;
     float max_size = max(particle_size_in_viewport.x, particle_size_in_viewport.y);
     
     // Check if particle bounding box overlaps viewport
@@ -135,7 +136,7 @@ void main() {
     vec2 vertex_pos = entity_pos + offset;
     
     // Apply combined transformation: entity space -> canvas space -> viewport space
-    vec2 canvas_ndc = vertex_pos * vec2(1, canvas_resolution.x/canvas_resolution.y);
+    vec2 canvas_ndc = vertex_pos * entity_to_ndc;
 
 
 

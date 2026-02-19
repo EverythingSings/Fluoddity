@@ -131,13 +131,13 @@ class AdvancedDrawingProcessor:
         from utilities.field_texture_io import write_field_to_gpu
         write_field_to_gpu(self._resources["field_tex"], data)
 
-    def ensure_initialized(self, canvas_dim: int) -> None:
+    def ensure_initialized(self, canvas_dim_x: int,canvas_dim_y:int) -> None:
         """Lazily initialize GPU resources if not yet created.
 
         Called by the config system when loading a config that has field data
         but the advanced drawing system hasn't been used yet this session.
         """
-        self._ensure_resources(canvas_dim, canvas_dim)
+        self._ensure_resources(canvas_dim_x, canvas_dim_y)
 
     def cleanup(self):
         """Release all GPU resources."""
@@ -184,6 +184,8 @@ class AdvancedDrawingProcessor:
         field_tex.repeat_y = True
         field_fbo = ctx.framebuffer(color_attachments=[field_tex])
         field_fbo.clear()  # Start with zeros
+
+        tryset(program, "canvas_resolution", (w, h))
 
         self._resources = dict(
             program=program, vao=vao,

@@ -38,13 +38,13 @@ class Sim:
 
     def get_canvas_dimensions(self) -> int:
         """Calculate canvas dimensions based on world size."""
-        return int(1024 * math.sqrt(self.world_size))
+        return (int(1024*5 * math.sqrt(self.world_size)), int(1024/5 * math.sqrt(self.world_size)))
 
     def setup_simulation_state(self):
         # Update entity_count in case world_size changed
         self.entity_count = self.get_entity_count()
-        canvas_dim = self.get_canvas_dimensions()
-        canvas_shape = (canvas_dim, canvas_dim)
+        canvas_dim_x,canvas_dim_y = self.get_canvas_dimensions()
+        canvas_shape = (canvas_dim_x, canvas_dim_y)
 
         # Allocate state buffers
         self.entities = self.ctx.buffer(reserve=self.entity_count * SIZE_OF_ENTITY_STRUCT)
@@ -102,8 +102,8 @@ class Sim:
         # Note: view_options[0] will be updated dynamically to point to current read buffer
         self.view_options = [self.can_textures[self.can_read_index], self.brush_tex]
     def setup_shaders(self):
-        canvas_dim = self.get_canvas_dimensions()
-        canvas_shape = (canvas_dim, canvas_dim)
+        canvas_dim_x,canvas_dim_y = self.get_canvas_dimensions()
+        canvas_shape = (canvas_dim_x, canvas_dim_y)
 
         # 1. Entity update compute shader
         self.entity_update_source = read_shader('shaders/entity_update.glsl')
@@ -151,9 +151,9 @@ class Sim:
             print(e)
 
         self.canvas_vao = self.ctx.vertex_array(self.canvas_update_program, [])
+        tryset(self.canvas_update_program, 'canvas_resolution', canvas_shape)
 
 
-    
     def entity_update(self, ctx: moderngl.Context, multi_load_service=None,
                       is_preview_active=False, field_texture_bound=False,
                       force_field_strength: float = 1.0,

@@ -107,20 +107,7 @@ class Camera:
             # Tiling mode uniforms
             tryset(self.cam_brush_program, 'tiling_mode_enabled', tiling_mode)
             if tiling_mode:
-                # Compute view_min and view_max in entity-position space
-                screen_aspect = width / max(height, 1)
-                view_min_ndc = np.array([-1.0, -1.0])
-                view_max_ndc = np.array([1.0, 1.0])
-
-                view_min = view_min_ndc * self.zoom + self.position * np.array([1.0, -1.0])
-                view_max = view_max_ndc * self.zoom + self.position * np.array([1.0, -1.0])
-
-                # Letterbox-corrected: max(aspect,1) for X, max(1/aspect,1) for Y
-                view_min[0] *= max(screen_aspect, 1.0)
-                view_max[0] *= max(screen_aspect, 1.0)
-                view_min[1] *= max(1.0 / screen_aspect, 1.0)
-                view_max[1] *= max(1.0 / screen_aspect, 1.0)
-
+                view_min, view_max = self.compute_tiling_view_bounds()
                 tryset(self.cam_brush_program, 'view_min', tuple(view_min))
                 tryset(self.cam_brush_program, 'view_max', tuple(view_max))
 
@@ -144,6 +131,60 @@ class Camera:
         self.zoom = state.zoom
         self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
+
+    def compute_tiling_view_bounds(self):
+        """Compute entity-space view bounds for tiling mode.
+
+        Inverts the cam_brush vertex shader transform to find the rectangle
+        of entity positions visible on screen. Accounts for both canvas and
+        window aspect ratios with area-preserving entity space bounds.
+        """
+        import math
+        width, height = glfw.get_framebuffer_size(self.window)
+        window_aspect = width / max(height, 1)
+        tex_w, tex_h = self.sim.view_tex.size
+        tex_aspect = tex_w / max(tex_h, 1)
+        x_edge = math.sqrt(tex_aspect)
+        y_edge = 1.0 / math.sqrt(tex_aspect)
+
+        if tex_aspect > window_aspect:
+            scale_x = 1.0 / self.zoom
+            scale_y = window_aspect / (tex_aspect * self.zoom)
+        else:
+            scale_x = tex_aspect / (window_aspect * self.zoom)
+            scale_y = 1.0 / self.zoom
+
+        cx, cy = self.position[0], self.position[1]
+        view_min = np.array([
+            (-1.0 + cx / self.zoom) * x_edge / scale_x,
+            (-1.0 - cy / self.zoom) * y_edge / scale_y,
+        ])
+        view_max = np.array([
+            (1.0 + cx / self.zoom) * x_edge / scale_x,
+            (1.0 - cy / self.zoom) * y_edge / scale_y,
+        ])
+        return view_min, view_max
+
+    def compute_tiling_scale(self):
+        """Compute tiling_scale that converts frame_assembly world_pos to entity space.
+
+        tiling_scale = (x_edge, y_edge) / (scale * zoom) where scale is the
+        letterbox scaling factor from the vertex shader.
+        """
+        import math
+        tex_w, tex_h = self.sim.view_tex.size
+        tex_aspect = tex_w / max(tex_h, 1)
+        width, height = glfw.get_framebuffer_size(self.window)
+        window_aspect = max(width,1) / max(height, 1)
+        x_edge = math.sqrt(tex_aspect)
+        y_edge = 1.0 / math.sqrt(tex_aspect)
+
+        if tex_aspect > window_aspect:
+            # scale * zoom = (1, window_aspect / tex_aspect)
+            return (x_edge, y_edge * tex_aspect / window_aspect)
+        else:
+            # scale * zoom = (tex_aspect / window_aspect, 1)
+            return (x_edge * window_aspect / tex_aspect, y_edge)
 
     def apply_bloom(self, texture, threshold, intensity, radius,
                     tonemap_softness=3.0):
@@ -174,15 +215,7 @@ class Camera:
         view_min = (0.0, 0.0)
         view_max = (0.0, 0.0)
         if tiling_mode:
-            view_min_ndc = np.array([-1.0, -1.0])
-            view_max_ndc = np.array([1.0, 1.0])
-            view_min = view_min_ndc * self.zoom + self.position * np.array([1.0, -1.0])
-            view_max = view_max_ndc * self.zoom + self.position * np.array([1.0, -1.0])
-            # Letterbox-corrected: max(aspect,1) for X, max(1/aspect,1) for Y
-            view_min[0] *= max(screen_aspect, 1.0)
-            view_max[0] *= max(screen_aspect, 1.0)
-            view_min[1] *= max(1.0 / screen_aspect, 1.0)
-            view_max[1] *= max(1.0 / screen_aspect, 1.0)
+            view_min, view_max = self.compute_tiling_view_bounds()
 
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
@@ -219,7 +252,8 @@ class Camera:
                 tiling_mode=tiling_mode,
                 view_min=tuple(view_min),
                 view_max=tuple(view_max),
-                tiling_scale=(max(screen_aspect, 1.0), max(1.0 / screen_aspect, 1.0)),
+                tiling_scale=self.compute_tiling_scale(),
+                canvas_resolution=self.sim.get_canvas_dimensions(),
                 tonemap_softness=tonemap_softness
             )
             # assemble_frame returns the texture immediately when total_samples=1

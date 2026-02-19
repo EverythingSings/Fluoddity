@@ -158,7 +158,7 @@ class CommandHandler:
         self.ui._last_applied_world_size = ui_state.preferences.world_size
         print(f"World size changed to {self.sim.world_size} "
               f"(entity_count: {self.sim.entity_count}, "
-              f"canvas: {self.sim.get_canvas_dimensions()}x{self.sim.get_canvas_dimensions()})")
+              f"canvas: {self.sim.get_canvas_dimensions()[0]}x{self.sim.get_canvas_dimensions()[1]})")
 
     def _handle_toggle_recording(self, ui_state):
         """Handle video recording toggle with delayed start support."""
