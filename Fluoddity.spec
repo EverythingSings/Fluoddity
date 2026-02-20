@@ -95,7 +95,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['cv2', 'opencv'],  # imgui_bundle has optional cv2 support we don't use
     noarchive=False,
     optimize=0,
 )
