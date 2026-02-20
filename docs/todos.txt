@@ -1,14 +1,10 @@
 Full text -> force field pipeline (sdf font?)
-Performance window example updates
 
 cohort isolation view
 -Text entry box with absolute orientation -> Text
 -Threshold particles to be invisible.
 -position transform in cam_brush.vert like circle inversion or something
 
-Look over all tooltips
--import from clipboard tooltip
--multiload sliders tooltips
 Add new features to help menus
 -advanced drawing features
 -multiload
@@ -16,7 +12,6 @@ Add new features to help menus
 -jitter
 -LOCK
 -config clipboard
--
 
 Particles (cohorts) are various sizes. Total area conserved between size groups.
  so 100 times as many at 1/10th the size.

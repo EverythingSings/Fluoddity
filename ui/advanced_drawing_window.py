@@ -70,14 +70,14 @@ class AdvancedDrawingWindowMixin:
                 target = 1
             self._delayed_tooltip(
                 "Draw onto the force field texture.\n"
-                "Particles will be pushed in the drawn direction."
+                "Acts like any other force: some rules may 'swim upstream'."
             )
 
             if imgui.radio_button("Strafe Field", target == 2):
                 target = 2
             self._delayed_tooltip(
                 "Draw onto the strafe field texture.\n"
-                "Particles will strafe laterally based on drawn direction."
+                "All particles will be dragged in the direction of the field."
             )
 
             # Apply mutually exclusive selection back to prefs
@@ -90,7 +90,7 @@ class AdvancedDrawingWindowMixin:
                 imgui.open_popup("fill_popup")
             self._delayed_tooltip(
                 "Apply the brush to the entire canvas/field for one frame.\n"
-                "Uses full kernel coverage (weight=1.0 everywhere)."
+                "Like the fill bucket in a paint program. Strength proportional to Draw power."
             )
             if imgui.begin_popup("fill_popup"):
                 if imgui.selectable("Fixed Direction", False)[0]:

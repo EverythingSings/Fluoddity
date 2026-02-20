@@ -289,14 +289,14 @@ class MenuBarMixin:
                                        help_menu_min.x + help_menu_size.x,
                                        help_menu_min.y + help_menu_size.y))
 
+                if imgui.menu_item("Guide", "", self.state.preferences.show_tutorial_window)[0]:
+                    self.state.preferences.show_tutorial_window = not self.state.preferences.show_tutorial_window
                 if imgui.menu_item("Controls", "", self.state.preferences.show_controls_window)[0]:
                     self.state.preferences.show_controls_window = not self.state.preferences.show_controls_window
-                if imgui.menu_item("Parameter Sweeps", "", self.state.preferences.show_parameter_sweeps_window)[0]:
-                    self.state.preferences.show_parameter_sweeps_window = not self.state.preferences.show_parameter_sweeps_window
-                if imgui.menu_item("Tutorial", "", self.state.preferences.show_tutorial_window)[0]:
-                    self.state.preferences.show_tutorial_window = not self.state.preferences.show_tutorial_window
                 if imgui.menu_item("Performance", "", self.state.preferences.show_performance_window)[0]:
                     self.state.preferences.show_performance_window = not self.state.preferences.show_performance_window
+                if imgui.menu_item("Parameter Sweeps", "", self.state.preferences.show_parameter_sweeps_window)[0]:
+                    self.state.preferences.show_parameter_sweeps_window = not self.state.preferences.show_parameter_sweeps_window
                 imgui.end_menu()
 
             # Extras menu
@@ -309,36 +309,17 @@ class MenuBarMixin:
                                        extras_menu_min.x + extras_menu_size.x,
                                        extras_menu_min.y + extras_menu_size.y))
 
-                # Multi Load toggle
-                _, self.state.multi_load.multi_load_enabled = imgui.checkbox(
-                    "Multi Load - EXPERIMENTAL",
-                    self.state.multi_load.multi_load_enabled
+                # Config Clipboard window
+                _, self.show_history_window = imgui.checkbox(
+                    "Config Clipboard",
+                    self.show_history_window
                 )
-                self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
-
-                # Strong Determinism toggle
-                _, self.state.preferences.strong_determinism = imgui.checkbox(
-                    "Strong Determinism",
-                    self.state.preferences.strong_determinism
-                )
-                self._delayed_tooltip("Enables double buffering for the canvas. When checked,\nevents will unfold exactly the same way after every\nsimulation reset. Comes with a small ~3% performance penalty.")
+                self._delayed_tooltip("Set restorable checkpoints with Ctrl-C")
 
                 # Screen Recording Controls
-                if imgui.menu_item("Screen Recording Controls", "", self.show_video_recording_window)[0]:
-                    self.show_video_recording_window = not self.show_video_recording_window
-
-                # Config Clipboard window
-                if imgui.menu_item("Config Clipboard - EXPERIMENTAL", "", self.show_history_window)[0]:
-                    self.show_history_window = not self.show_history_window
-
-                # Advanced Drawing toggle
-                _, self.state.preferences.advanced_drawing_enabled = imgui.checkbox(
-                    "Advanced Drawing - EXPERIMENTAL",
-                    self.state.preferences.advanced_drawing_enabled
-                )
-                self._delayed_tooltip(
-                    "Open the Drawing Controls window for advanced\n"
-                    "brush modes, force fields, and strafe fields."
+                _, self.show_video_recording_window = imgui.checkbox(
+                    "Screen Recording Controls",
+                    self.show_video_recording_window
                 )
 
                 # Load Field submenu
@@ -351,14 +332,36 @@ class MenuBarMixin:
                     self._delayed_tooltip("Load a PNG/JPEG image as a strafe field.\nR=magnitude, G=angle (polar coordinates).")
                     imgui.end_menu()
 
-                imgui.separator()
+                # Strong Determinism toggle
+                _, self.state.preferences.strong_determinism = imgui.checkbox(
+                    "Strong Determinism",
+                    self.state.preferences.strong_determinism
+                )
+                self._delayed_tooltip("Enables double buffering for the canvas. When checked,\nevents will unfold exactly the same way after every\nsimulation reset. Comes with a small ~3% performance penalty.")
+
+                # Advanced Drawing toggle
+                _, self.state.preferences.advanced_drawing_enabled = imgui.checkbox(
+                    "Advanced Drawing - EXPERIMENTAL",
+                    self.state.preferences.advanced_drawing_enabled
+                )
+                self._delayed_tooltip(
+                    "Open the Drawing Controls window for advanced\n"
+                    "brush modes, force fields, and strafe fields."
+                )
+
+                # Multi Load toggle
+                _, self.state.multi_load.multi_load_enabled = imgui.checkbox(
+                    "Multi Load - EXPERIMENTAL",
+                    self.state.multi_load.multi_load_enabled
+                )
+                self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
 
                 # Parameter Locks checkbox (greyed out in multiload mode)
                 multiload_active = self.state.multi_load.multi_load_enabled
                 if multiload_active:
                     imgui.begin_disabled()
                 changed, new_val = imgui.checkbox(
-                    "Parameter Locks / Override",
+                    "Parameter Locks - EXPERIMENTAL",
                     self.state.preferences.parameter_locks_enabled
                 )
                 if changed:

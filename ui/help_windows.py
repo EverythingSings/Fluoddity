@@ -9,10 +9,27 @@ class HelpWindowsMixin:
         """Render the Controls help window (closeable)."""
         expanded, self.state.preferences.show_controls_window = imgui.begin("Controls", True)
 
-        if expanded:
-            imgui.text("Keyboard Controls\nEdit 'keyboard_controls.json' in documents/Fluoddity")
+        if expanded:            
+            imgui.text("Mouse Controls")
             imgui.separator()
 
+            imgui.text("Select Particle mode:")
+            imgui.indent(20)
+            imgui.bullet_text("Left click - select particle and adopt its rule (with mutations)")
+            imgui.bullet_text("Right click - undo")
+            imgui.bullet_text("You can undo particle selection and randomize actions.")
+            imgui.unindent(20)
+
+            imgui.text("Draw Trail mode:")
+            imgui.indent(20)
+            imgui.bullet_text("Click and drag - Draw trails on the canvas")
+            imgui.bullet_text("Right click and drag - Erase trails on the canvas")
+            imgui.unindent(20)
+
+            imgui.spacing()
+            imgui.text("Keyboard Controls")
+            imgui.separator()
+            imgui.text("Edit 'keyboard_controls.json' in documents/Fluoddity")
             # Camera movement keys
             w = self.keybindings.get_key_display_name("camera_forward")
             a = self.keybindings.get_key_display_name("camera_left")
@@ -38,28 +55,13 @@ class HelpWindowsMixin:
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_help')} - Show tutorial")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_mouse_mode')} - Toggle mouse mode: Selection/Trail Drawing")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_rules')} - Randomize particle behavior + new mutation seed")
-
-            imgui.spacing()
-            imgui.text("Mouse Controls")
-            imgui.separator()
-
-            imgui.text("Select Particle mode:")
-            imgui.indent(20)
-            imgui.bullet_text("Left click - Push active rule (select particle)")
-            imgui.bullet_text("Right click - Pop active rule (undo)")
-            imgui.bullet_text("You can undo particle selection and randomize actions.")
-            imgui.unindent(20)
-
-            imgui.text("Draw Trail mode:")
-            imgui.indent(20)
-            imgui.bullet_text("Click and drag - Draw trails on the canvas")
-            imgui.unindent(20)
-
+            
             imgui.spacing()
             imgui.text("Slider Tips")
             imgui.separator()
             imgui.bullet_text("Right-click slider - Context menu to adjust range\n (context menu only for Basics/Forces/Advanced)")
             imgui.bullet_text("Ctrl+click slider - Enter custom value directly")
+
 
         imgui.end()
 
@@ -142,6 +144,7 @@ class HelpWindowsMixin:
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_mouse_mode')} to toggle between drawing and selecting.")
                 imgui.separator_text("Trail Drawing Mode - White reticle visible")
                 imgui.bullet_text("Click and drag to draw trails")
+                imgui.bullet_text("Right Click and drag to erase trails")
                 imgui.separator_text("Particle Selection Mode - no reticle")
                 imgui.bullet_text("Click a particle to select it and other\nparticles will copy its behavior (with mutations)")
                 imgui.bullet_text("Right click to go back and undo particle selection")
@@ -162,10 +165,10 @@ class HelpWindowsMixin:
                 copy_key = self.keybindings.get_key_display_name('copy_config_with_ctrl')
                 paste_key = self.keybindings.get_key_display_name('paste_config_with_ctrl')
                 imgui.text_wrapped(
-                    "Create something you like? Save it as a new preset with File->Save. "
+                    "Create something you like? Save it as a new preset with File->Save.\nIt will be saved to Documents/Fluoddity/physics_configs. "
                     "The active rule, current mutations, and everything on the physics panel will be restored when you load the save (Physics Sliders, Additional Settings, Appearance, and Notes) "
-                    f"You can also press Ctrl-{copy_key} to copy a 'save string' to your clipboard, and Ctrl-{paste_key} to load a save string from the clipboard. "
-                    "Save strings are just text copied your clipboard (typically a couple thousand characters), so they can be easily shared or stashed."
+                    f"\nYou can also press Ctrl-{copy_key} to copy a 'save string' to your clipboard, and Ctrl-{paste_key} to load a save string from the clipboard. "
+                    "\nSave strings are just text copied your clipboard (typically a couple thousand characters), so they can be easily shared or stashed."
                 )
 
             imgui.spacing()
@@ -210,19 +213,19 @@ class HelpWindowsMixin:
                 "The options for World size, Physics update Frequency, and motion blur "
                 "can significantly affect performance. World size and update frequency "
                 "trade against each other so if you double one, halve the other for similar performance."
-                "Motion blur gets more expensive with large worldsizes."
+                "Motion blur gets more expensive with large worldsizes and high frequencies."
             )
 
             imgui.spacing()
             imgui.text("Example Setups")
             imgui.separator()
 
-            imgui.bullet_text("x20 physics frequency with worldsize 0.4, motion blur every 5 frames")
-            imgui.bullet_text("x5 physics frequency with worldsize 1.0, motion blur every frame")
+            imgui.bullet_text("x20 physics frequency with worldsize 0.5, motion blur every 5 frames")
+            imgui.bullet_text("x9 physics frequency with worldsize 1.0, motion blur every 3 frames")
 
             imgui.spacing()
             imgui.text_wrapped(
-                "These run well on my 5060."
+                "These run well on my 5060 ."
             )
 
         imgui.end()

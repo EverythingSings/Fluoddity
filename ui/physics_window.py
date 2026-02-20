@@ -582,8 +582,10 @@ class PhysicsWindowMixin:
 
         _, self.state.multi_load.simultaneous_configs = imgui.slider_float(
             "Simultaneous Configs", self.state.multi_load.simultaneous_configs, 0.0, float(max(1, config_count-.001)))
+        self._delayed_tooltip("Sets the size of the sliding window that blends the configs.\nAt 0 there will be no blending, just one config at a time.\nAt max value, all loaded configs will be active at once.")
         _, self.state.multi_load.progression_pace = imgui.slider_float(
             "Progression Pace", self.state.multi_load.progression_pace, 0.0, 1.0)
+        self._delayed_tooltip("Defines the pace at which we animate current\nprogress through the loaded configs.")
 
         # Sync current progress from service (for auto-advancement display)
         if self.multi_load_service:
@@ -599,10 +601,12 @@ class PhysicsWindowMixin:
         # Always sync state from service for next frame
         if self.multi_load_service:
             self.state.multi_load.current_progress = self.multi_load_service.current_progress
+        self._delayed_tooltip("Determines where in the config lineup we are.")
 
         imgui.separator()
         if imgui.button("Import from Config Clipboard"):
             self._request_import_clipboard_to_multiload = True
+        self._delayed_tooltip("Replace the loaded configs with the contents\nof the config clipboard (see Extras).")
         imgui.separator()
         imgui.text(f"Loaded Configurations ({config_count}/64)")
         imgui.separator()
