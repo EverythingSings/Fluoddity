@@ -62,7 +62,7 @@ class PreferencesWindowMixin:
 
             # Canvas Aspect Ratio dropdown
             current_ratio = self.state.preferences.canvas_aspect_ratio
-            if imgui.begin_combo("Canvas Aspect", current_ratio):
+            if imgui.begin_combo("World Shape", current_ratio):
                 for label, ratio_str, is_sep in _ASPECT_RATIO_OPTIONS:
                     if is_sep:
                         imgui.separator()
@@ -76,7 +76,7 @@ class PreferencesWindowMixin:
                         if selected:
                             imgui.set_item_default_focus()
                 imgui.end_combo()
-            self._delayed_tooltip("EXPENSIVE - Changes the canvas shape.\nTotal pixel area is preserved across ratios.")
+            self._delayed_tooltip("Changes the canvas aspect ratio.")
 
             imgui.separator()
 

@@ -48,7 +48,7 @@ class FieldLoaderWindowMixin:
 
         if expanded:
             imgui.text_disabled("Select a PNG/JPEG from ~/Documents/Fluoddity")
-            imgui.text_disabled("R=magnitude [0,1], G=angle [0,2pi]")
+            imgui.text_disabled("Vector field should be in polar form\nin the red and green channels:\nR=magnitude [0,1], G=angle [0,2pi]")
             imgui.separator()
 
             if len(self._field_loader_files) == 0:
