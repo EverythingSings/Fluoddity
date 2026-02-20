@@ -9,18 +9,18 @@ class PreferencesState:
     """User preferences that persist between program sessions."""
 
     # Camera/rendering preferences
-    speedmult: int = 6
+    speedmult: int = 5
     motion_blur: bool = True
     blur_quality: int = 2  # Motion blur render cadence (1 = every frame, 2 = every 2 frames, etc.)
     world_size: float = 0.40  # World size multiplier (affects entity count and canvas dimensions)
     canvas_aspect_ratio: str = "1:1"  # Canvas aspect ratio (e.g. "1:1", "16:9", "3:4")
     rule_seed: float = 0.0
-    brightness: float = 5.0  # Global brightness multiplier
-    tonemap_softness: float = 3.0  # Asinh tonemap stretch (higher = more highlight compression)
+    brightness: float = 3.0  # Global brightness multiplier
+    tonemap_softness: float = 2.5  # Asinh tonemap stretch (higher = more highlight compression)
     exposure: float = 0.0  # Frame blending for motion blur effect (0=disabled, 1=long exposure)
-    bloom_enabled: bool = False  # Whether bloom post-processing is active
-    bloom_threshold: float = 0.8  # Brightness threshold for bloom extraction
-    bloom_intensity: float = 0.5  # Bloom contribution strength
+    bloom_enabled: bool = True  # Whether bloom post-processing is active
+    bloom_threshold: float = 0.11  # Brightness threshold for bloom extraction
+    bloom_intensity: float = 0.23  # Bloom contribution strength
     bloom_radius: float = 1.0  # Bloom blur spread
 
     # UI preferences
@@ -31,9 +31,9 @@ class PreferencesState:
     show_performance_window: bool = False  # Help performance window
     physics_tooltips_enabled: bool = True
     debug_arrows: bool = False  # Visual debug overlay for velocity field
-    arrow_sensitivity: float = 9.0  # Velocity scale for debug arrows (pow(2, x))
+    arrow_sensitivity: float = 15.0  # Velocity scale for debug arrows (pow(2, x))
     mouse_mode: str = "Select Particle"  # "Select Particle" or "Draw Trail"
-    draw_size: float = 0.1  # Gaussian kernel width for trail drawing
+    draw_size: float = 0.031  # Gaussian kernel width for trail drawing
     draw_power: float = 1.0  # Velocity strength when drawing trails
     menu_close_threshold: float = 80.0  # Distance in pixels before menus auto-close
 
@@ -63,7 +63,7 @@ class PreferencesState:
     # Recording preferences
     max_frames: int = 1800  # 150 * 12
     motion_blur_samples: int = 12
-    supersample_k: int = 2
+    supersample_k: int = 1
     filename_prefix: str = ""
     recording_motion_blur: bool = True  # Motion blur setting used during video recording
     recording_blur_quality: int = 1  # Blur quality setting used during video recording
