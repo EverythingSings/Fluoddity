@@ -1,6 +1,20 @@
 """Preferences window: world size, physics frequency, mouse mode, view, appearance."""
 from imgui_bundle import imgui
 
+# Aspect ratio options: (label, ratio_string, is_separator)
+_ASPECT_RATIO_OPTIONS = [
+    ("1:1",  "1:1",  False),
+    ("4:3",  "4:3",  False),
+    ("16:9", "16:9", False),
+    ("2:1",  "2:1",  False),
+    ("3:1",  "3:1",  False),
+    ("---",  None,   True),   # Separator (not selectable)
+    ("3:4",  "3:4",  False),
+    ("9:16", "9:16", False),
+    ("1:2",  "1:2",  False),
+    ("1:3",  "1:3",  False),
+]
+
 
 class PreferencesWindowMixin:
     """Mixin for preferences window. Combined into UI via multiple inheritance."""
@@ -45,6 +59,24 @@ class PreferencesWindowMixin:
                     self._request_world_size_change = True
 
             self._delayed_tooltip("EXPENSIVE - Controls the size of the simulation world.\nAffects both entity count and canvas resolution to keep density ~fixed")
+
+            # Canvas Aspect Ratio dropdown
+            current_ratio = self.state.preferences.canvas_aspect_ratio
+            if imgui.begin_combo("Canvas Aspect", current_ratio):
+                for label, ratio_str, is_sep in _ASPECT_RATIO_OPTIONS:
+                    if is_sep:
+                        imgui.separator()
+                    else:
+                        selected = (ratio_str == current_ratio)
+                        clicked, _ = imgui.selectable(label, selected)
+                        if clicked and ratio_str != current_ratio:
+                            self.state.preferences.canvas_aspect_ratio = ratio_str
+                            self._request_world_size_change = True
+                            self._request_reload = True
+                        if selected:
+                            imgui.set_item_default_focus()
+                imgui.end_combo()
+            self._delayed_tooltip("EXPENSIVE - Changes the canvas shape.\nTotal pixel area is preserved across ratios.")
 
             imgui.separator()
 

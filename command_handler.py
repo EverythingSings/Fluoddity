@@ -147,14 +147,19 @@ class CommandHandler:
         return None
 
     def _handle_world_size_change(self, ui_state):
-        """Handle world size change request."""
+        """Handle world size change request (also handles aspect ratio changes)."""
         self.sim.world_size = ui_state.preferences.world_size
+        self.sim.canvas_aspect_ratio = ui_state.preferences.canvas_aspect_ratio
         self.sim.setup_simulation_state()
         self.sim.setup_shaders()
         self.entity_picker.update_buffer(self.sim.get_entity_buffer())
         if self.rule_manager.has_rules():
             self.sim.apply_rule(self.rule_manager.get_current_rule())
         self.sim.reset()
+        # Reinitialize field texture at new canvas dimensions (if it exists)
+        if self.field_handler and self.field_handler._has_field_tex:
+            canvas_dim_x, canvas_dim_y = self.sim.get_canvas_dimensions()
+            self.field_handler.adv_draw.ensure_initialized(canvas_dim_x, canvas_dim_y)
         self.ui._last_applied_world_size = ui_state.preferences.world_size
         print(f"World size changed to {self.sim.world_size} "
               f"(entity_count: {self.sim.entity_count}, "

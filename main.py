@@ -50,7 +50,7 @@ class App:
         loaded_prefs = load_preferences()
 
         # Create components (no cross-references between UI and sim/camera)
-        self.sim = Sim(self.ctx, world_size=loaded_prefs.world_size)
+        self.sim = Sim(self.ctx, world_size=loaded_prefs.world_size, canvas_aspect_ratio=loaded_prefs.canvas_aspect_ratio)
         self.camera = Camera(self.ctx, self.sim, self.window)
         self.ui = UI(self.window, self.ctx, self.sim.view_option_labels)
 

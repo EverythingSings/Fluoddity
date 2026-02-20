@@ -10,9 +10,10 @@ SIZE_OF_ENTITY_STRUCT = 4*12  # 4 bytes per 32bit value. 12 values (pos:2, vel:2
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
 
 class Sim:
-    def __init__(self, ctx: moderngl.Context, world_size: float = 1.0):
+    def __init__(self, ctx: moderngl.Context, world_size: float = 1.0, canvas_aspect_ratio: str = "1:1"):
         self.ctx = ctx
         self.world_size = world_size
+        self.canvas_aspect_ratio = canvas_aspect_ratio
         self.entity_count = self.get_entity_count()
         self.time = 0.0
         self.start_time_stamp = time.time()
@@ -36,9 +37,16 @@ class Sim:
         """Calculate entity count based on world size."""
         return int(600000 * self.world_size)
 
-    def get_canvas_dimensions(self) -> int:
-        """Calculate canvas dimensions based on world size."""
-        return (int(1024*5 * math.sqrt(self.world_size)), int(1024/5 * math.sqrt(self.world_size)))
+    def get_canvas_dimensions(self) -> tuple[int, int]:
+        """Calculate canvas dimensions based on world size and aspect ratio."""
+        # Parse aspect ratio string "W:H" into a scale factor
+        # factor = sqrt(W/H) so that width*height = 1024^2 * world_size (area preserved)
+        try:
+            w, h = self.canvas_aspect_ratio.split(":")
+            factor = math.sqrt(int(w) / int(h))
+        except (ValueError, ZeroDivisionError):
+            factor = 1.0
+        return (int(1024 * factor * math.sqrt(self.world_size)), int(1024 / factor * math.sqrt(self.world_size)))
 
     def setup_simulation_state(self):
         # Update entity_count in case world_size changed
