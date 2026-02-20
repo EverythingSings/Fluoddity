@@ -1,3 +1,5 @@
+Full text -> force field pipeline (sdf font?)
+Performance window example updates
 
 cohort isolation view
 -Text entry box with absolute orientation -> Text
@@ -5,6 +7,8 @@ cohort isolation view
 -position transform in cam_brush.vert like circle inversion or something
 
 Look over all tooltips
+-import from clipboard tooltip
+-multiload sliders tooltips
 Add new features to help menus
 -advanced drawing features
 -multiload

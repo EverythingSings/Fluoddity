@@ -144,7 +144,7 @@ class PhysicsWindowMixin:
                 self.state.sim.num_cohorts = new_nc
             if pls:
                 pls.pop_locked_style(nc_lock_colors)
-            self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
+            self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior:\neach cohort has a distinct mutation.")
 
             imgui.separator()
 

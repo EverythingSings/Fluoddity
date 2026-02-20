@@ -46,7 +46,7 @@ PHYSICS_PARAMS: list[PhysicsParamDef] = [
     # --- Basics group ---
     PhysicsParamDef(
         name='SENSOR_GAIN', label='Sensor Gain', group='basics',
-        default_min=0.0, default_max=5.0,
+        default_min=0.0, default_max=10.0,
         description="Determines how strongly particles respond to sensor input. Higher values make particles more reactive to the trails they sense on the Canvas.",
     ),
     PhysicsParamDef(
@@ -57,12 +57,12 @@ PHYSICS_PARAMS: list[PhysicsParamDef] = [
     ),
     PhysicsParamDef(
         name='SENSOR_DISTANCE', label='Sensor Distance', group='basics',
-        default_min=0.0, default_max=4.0,
+        default_min=0.0, default_max=3.0,
         description="Determines distance between a particle's center and where it reads the trail information from Canvas. Longer distances tend to create larger scale patterns.",
     ),
     PhysicsParamDef(
         name='MUTATION_SCALE', label='Mutation Scale', group='basics',
-        default_min=-0.5, default_max=0.5,
+        default_min=0.0, default_max=1.0,
         hide_jitter=True,
         description="Controls the size of the random mutations applied to a rule when a new particle is clicked. At 0, every particle will behave exactly like the selected particle.",
     ),
