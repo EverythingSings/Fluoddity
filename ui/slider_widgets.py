@@ -69,10 +69,10 @@ class SliderWidgetsMixin:
         slider_label = display_label if display_label else label
         changed, new_value = imgui.slider_float(slider_label, value, min_val, max_val, format=display_format)
 
-        # Check alt-click for lock toggle
+        # Check alt-click for lock toggle (intercept suppresses the value change)
         pls = self.param_lock_service
-        if pls and pls.check_alt_click():
-            pls.toggle_lock(param_name)
+        if pls and pls.handle_alt_click(param_name):
+            changed, new_value = False, value
 
         # Pop orange style colors
         if has_jitter:
@@ -425,11 +425,10 @@ class SliderWidgetsMixin:
                 display_label, slider_pos, 0.0, 1.0,
                 f"{value:.5f}"
             )
-            new_value = pdef.default_max * (new_pos ** pdef.power_exponent)
-            setattr(self.state.sim, pdef.name, new_value)
-            # Check alt-click for lock toggle
-            if pls and pls.check_alt_click():
-                pls.toggle_lock(pdef.name)
+            # Check alt-click for lock toggle (intercept suppresses the value change)
+            if not (pls and pls.handle_alt_click(pdef.name)):
+                new_value = pdef.default_max * (new_pos ** pdef.power_exponent)
+                setattr(self.state.sim, pdef.name, new_value)
             # Context menu without jitter (power-scaled params hide jitter)
             self.add_slider_context_menu(pdef.label, pdef.default_min, pdef.default_max)
         else:

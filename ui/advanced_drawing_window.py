@@ -142,11 +142,12 @@ class AdvancedDrawingWindowMixin:
                 1.0,
                 f"{prefs.force_field_strength:.4f}",
             )
-            if pls and pls.check_alt_click():
-                pls.toggle_lock('force_field_strength')
+            if pls and pls.handle_alt_click('force_field_strength'):
+                pass  # alt-click intercepted; discard value change
+            else:
+                prefs.force_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_fpos)
             if pls:
                 pls.pop_locked_style(ffs_lock_colors)
-            prefs.force_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_fpos)
             self._delayed_tooltip(
                 "Multiplier for force field effects.\n"
                 "Logarithmic scale: 0.0001 to 10.0, default 1.0."
@@ -168,11 +169,12 @@ class AdvancedDrawingWindowMixin:
                 1.0,
                 f"{prefs.strafe_field_strength:.4f}",
             )
-            if pls and pls.check_alt_click():
-                pls.toggle_lock('strafe_field_strength')
+            if pls and pls.handle_alt_click('strafe_field_strength'):
+                pass  # alt-click intercepted; discard value change
+            else:
+                prefs.strafe_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_spos)
             if pls:
                 pls.pop_locked_style(sfs_lock_colors)
-            prefs.strafe_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_spos)
             self._delayed_tooltip(
                 "Multiplier for strafe field effects.\n"
                 "Logarithmic scale: 0.0001 to 10.0, default 1.0."

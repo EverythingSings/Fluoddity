@@ -132,6 +132,32 @@ class ParameterLockService:
                 and imgui.is_item_clicked(imgui.MouseButton_.left)
                 and imgui.get_io().key_alt)
 
+    def handle_alt_click(self, param_name: str) -> bool:
+        """Check for Alt+click on the last widget, toggle lock, return True if intercepted.
+
+        When True is returned, the caller should discard any value change from
+        the widget so the alt-click only toggles the lock without affecting the
+        control's value.  Call this immediately after the widget.
+        """
+        if self.check_alt_click():
+            self.toggle_lock(param_name)
+            return True
+        return False
+
+    def begin_combo_alt_click(self, param_name: str) -> bool:
+        """Handle alt-click on a begin_combo widget that just opened.
+
+        Call immediately after begin_combo() returns True.  If the combo was
+        opened via Alt+click, this closes it immediately and toggles the lock.
+        Returns True if the alt-click was intercepted (caller should skip
+        rendering combo contents and NOT call end_combo).
+        """
+        if self.check_alt_click():
+            self.toggle_lock(param_name)
+            imgui.end_combo()  # close the combo we just opened
+            return True
+        return False
+
     def get_display_label(self, param_name: str, base_label: str) -> str:
         """Return label with [L] prefix and ## ID trick if locked."""
         if self.is_locked(param_name):

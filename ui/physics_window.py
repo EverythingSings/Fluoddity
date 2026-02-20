@@ -38,8 +38,8 @@ class PhysicsWindowMixin:
             imgui.text_colored(imgui.ImVec4(1.0, 0.3, 0.3, 1.0), f"[L]Mutation Seed: #{seed_hex}")
         else:
             imgui.text_colored(imgui.ImVec4(0.5, 0.8, 1.0, 1.0), f"Mutation Seed: #{seed_hex}")
-        if pls and pls.check_alt_click():
-            pls.toggle_lock('rule_seed')
+        if pls:
+            pls.handle_alt_click('rule_seed')
         imgui.separator()
 
         # === Basics Group (Trail sensors and rule mutation) ===
@@ -86,16 +86,19 @@ class PhysicsWindowMixin:
             bc_label = pls.get_display_label('boundary_conditions', "Boundary Conditions") if pls else "Boundary Conditions"
             imgui.set_next_item_width(100)
             if imgui.begin_combo(bc_label, boundary_options[self.state.sim.boundary_conditions]):
-                for i, option in enumerate(boundary_options):
-                    is_selected = (self.state.sim.boundary_conditions == i)
-                    if imgui.selectable(option, is_selected)[0]:
-                        self.state.sim.boundary_conditions = i
-                    self._delayed_tooltip(boundary_tooltips[i])
-                    if is_selected:
-                        imgui.set_item_default_focus()
-                imgui.end_combo()
-            if pls and pls.check_alt_click():
-                pls.toggle_lock('boundary_conditions')
+                if pls and pls.begin_combo_alt_click('boundary_conditions'):
+                    pass  # alt-click intercepted; combo closed
+                else:
+                    for i, option in enumerate(boundary_options):
+                        is_selected = (self.state.sim.boundary_conditions == i)
+                        if imgui.selectable(option, is_selected)[0]:
+                            self.state.sim.boundary_conditions = i
+                        self._delayed_tooltip(boundary_tooltips[i])
+                        if is_selected:
+                            imgui.set_item_default_focus()
+                    imgui.end_combo()
+            elif pls:
+                pls.handle_alt_click('boundary_conditions')
             if pls:
                 pls.pop_locked_style(bc_lock_colors)
 
@@ -110,16 +113,19 @@ class PhysicsWindowMixin:
             ic_label = pls.get_display_label('initial_conditions', "Initial Conditions") if pls else "Initial Conditions"
             imgui.set_next_item_width(100)
             if imgui.begin_combo(ic_label, initial_options[self.state.sim.initial_conditions]):
-                for i, option in enumerate(initial_options):
-                    is_selected = (self.state.sim.initial_conditions == i)
-                    if imgui.selectable(option, is_selected)[0]:
-                        self.state.sim.initial_conditions = i
-                    self._delayed_tooltip(initial_tooltips[i])
-                    if is_selected:
-                        imgui.set_item_default_focus()
-                imgui.end_combo()
-            if pls and pls.check_alt_click():
-                pls.toggle_lock('initial_conditions')
+                if pls and pls.begin_combo_alt_click('initial_conditions'):
+                    pass  # alt-click intercepted; combo closed
+                else:
+                    for i, option in enumerate(initial_options):
+                        is_selected = (self.state.sim.initial_conditions == i)
+                        if imgui.selectable(option, is_selected)[0]:
+                            self.state.sim.initial_conditions = i
+                        self._delayed_tooltip(initial_tooltips[i])
+                        if is_selected:
+                            imgui.set_item_default_focus()
+                    imgui.end_combo()
+            elif pls:
+                pls.handle_alt_click('initial_conditions')
             if pls:
                 pls.pop_locked_style(ic_lock_colors)
 
@@ -127,13 +133,15 @@ class PhysicsWindowMixin:
             nc_lock_colors = pls.push_locked_style('num_cohorts') if pls else 0
             nc_label = pls.get_display_label('num_cohorts', "Number of Cohorts") if pls else "Number of Cohorts"
             imgui.set_next_item_width(100)
-            _, self.state.sim.num_cohorts = imgui.slider_int(
+            changed_nc, new_nc = imgui.slider_int(
                 nc_label,
                 self.state.sim.num_cohorts,
                 1, 144
             )
-            if pls and pls.check_alt_click():
-                pls.toggle_lock('num_cohorts')
+            if pls and pls.handle_alt_click('num_cohorts'):
+                pass  # alt-click intercepted; discard value change
+            elif changed_nc:
+                self.state.sim.num_cohorts = new_nc
             if pls:
                 pls.pop_locked_style(nc_lock_colors)
             self._delayed_tooltip("Each particle is assigned to a cohort. Each cohort shares behavior\nand there can be mutations between different cohorts.")
@@ -143,12 +151,14 @@ class PhysicsWindowMixin:
             # Disable Symmetry
             ds_lock_colors = pls.push_locked_style('DISABLE_SYMMETRY') if pls else 0
             ds_label = pls.get_display_label('DISABLE_SYMMETRY', "Disable Symmetry") if pls else "Disable Symmetry"
-            _, self.state.sim.DISABLE_SYMMETRY = imgui.checkbox(
+            changed_ds, new_ds = imgui.checkbox(
                 ds_label,
                 self.state.sim.DISABLE_SYMMETRY
             )
-            if pls and pls.check_alt_click():
-                pls.toggle_lock('DISABLE_SYMMETRY')
+            if pls and pls.handle_alt_click('DISABLE_SYMMETRY'):
+                pass  # alt-click intercepted; discard value change
+            elif changed_ds:
+                self.state.sim.DISABLE_SYMMETRY = new_ds
             if pls:
                 pls.pop_locked_style(ds_lock_colors)
             self._delayed_tooltip("Allow particles to display \"right / left handed\" behavior,\nleading to clockwise/counterclockwise bias.\nTurn it on to see why we go through trouble\nof calculating \"mirror world\" behavior in entity_update.glsl")
@@ -157,15 +167,15 @@ class PhysicsWindowMixin:
             combo_items = ["Off", "Y axis", "Radial"]
             ao_lock_colors = pls.push_locked_style('ABSOLUTE_ORIENTATION') if pls else 0
             ao_label = pls.get_display_label('ABSOLUTE_ORIENTATION', "Absolute Orientation") if pls else "Absolute Orientation"
-            clicked, current = imgui.combo(
+            clicked_ao, new_ao = imgui.combo(
                 ao_label,
                 self.state.sim.ABSOLUTE_ORIENTATION,
                 combo_items
             )
-            if clicked:
-                self.state.sim.ABSOLUTE_ORIENTATION = current
-            if pls and pls.check_alt_click():
-                pls.toggle_lock('ABSOLUTE_ORIENTATION')
+            if pls and pls.handle_alt_click('ABSOLUTE_ORIENTATION'):
+                pass  # alt-click intercepted; discard value change
+            elif clicked_ao:
+                self.state.sim.ABSOLUTE_ORIENTATION = new_ao
             if pls:
                 pls.pop_locked_style(ao_lock_colors)
             self._delayed_tooltip("What direction are particles 'facing'? Which way is 'up'?\nOff: use particle velocity\nY axis: align to y axis\nRadial: align to center of canvas")
@@ -175,14 +185,16 @@ class PhysicsWindowMixin:
                 om_lock_colors = pls.push_locked_style('ORIENTATION_MIX') if pls else 0
                 om_label = pls.get_display_label('ORIENTATION_MIX', "Orientation Mix") if pls else "Orientation Mix"
                 imgui.set_next_item_width(100)
-                _, self.state.sim.ORIENTATION_MIX = imgui.slider_float(
+                changed_om, new_om = imgui.slider_float(
                     om_label,
                     self.state.sim.ORIENTATION_MIX,
                     0.0, 1.0,
                     "%.2f"
                 )
-                if pls and pls.check_alt_click():
-                    pls.toggle_lock('ORIENTATION_MIX')
+                if pls and pls.handle_alt_click('ORIENTATION_MIX'):
+                    pass  # alt-click intercepted; discard value change
+                elif changed_om:
+                    self.state.sim.ORIENTATION_MIX = new_om
                 if pls:
                     pls.pop_locked_style(om_lock_colors)
                 self._delayed_tooltip("Blend factor for orientation calculations (0.0 = velocity only, 1.0 = full absolute orientation)")
@@ -253,12 +265,14 @@ class PhysicsWindowMixin:
                 # Color by cohort checkbox
                 cbc_lock_colors = pls.push_locked_style('color_by_cohort') if pls else 0
                 cbc_label = pls.get_display_label('color_by_cohort', "Color by Cohort") if pls else "Color by Cohort"
-                _, self.state.sim.color_by_cohort = imgui.checkbox(
+                changed_cbc, new_cbc = imgui.checkbox(
                     cbc_label,
                     self.state.sim.color_by_cohort
                 )
-                if pls and pls.check_alt_click():
-                    pls.toggle_lock('color_by_cohort')
+                if pls and pls.handle_alt_click('color_by_cohort'):
+                    pass  # alt-click intercepted; discard value change
+                elif changed_cbc:
+                    self.state.sim.color_by_cohort = new_cbc
                 if pls:
                     pls.pop_locked_style(cbc_lock_colors)
                 self._delayed_tooltip("Colors particles based on their cohort assignment\nrather than their behavior.")
@@ -267,11 +281,13 @@ class PhysicsWindowMixin:
                 if not self.state.sim.color_by_cohort:
                     hs_lock_colors = pls.push_locked_style('hue_sensitivity') if pls else 0
                     hs_label = pls.get_display_label('hue_sensitivity', "Hue Sensitivity") if pls else "Hue Sensitivity"
-                    _, self.state.sim.hue_sensitivity = imgui.slider_float(
+                    changed_hs, new_hs = imgui.slider_float(
                         hs_label, self.state.sim.hue_sensitivity, -1.0, 1.0
                     )
-                    if pls and pls.check_alt_click():
-                        pls.toggle_lock('hue_sensitivity')
+                    if pls and pls.handle_alt_click('hue_sensitivity'):
+                        pass  # alt-click intercepted; discard value change
+                    elif changed_hs:
+                        self.state.sim.hue_sensitivity = new_hs
                     if pls:
                         pls.pop_locked_style(hs_lock_colors)
                     self._delayed_tooltip("Controls color variation based on particle velocity.")
@@ -303,11 +319,13 @@ class PhysicsWindowMixin:
                 em_lock_colors = pls.push_locked_style('emboss_mode') if pls else 0
                 em_label = pls.get_display_label('emboss_mode', "Emboss") if pls else "Emboss"
                 emboss_options = ["Off", "Canvas (Trails)", "Brush (Particles)"]
-                _, self.state.sim.emboss_mode = imgui.combo(
+                changed_em, new_em = imgui.combo(
                     em_label, self.state.sim.emboss_mode, emboss_options
                 )
-                if pls and pls.check_alt_click():
-                    pls.toggle_lock('emboss_mode')
+                if pls and pls.handle_alt_click('emboss_mode'):
+                    pass  # alt-click intercepted; discard value change
+                elif changed_em:
+                    self.state.sim.emboss_mode = new_em
                 if pls:
                     pls.pop_locked_style(em_lock_colors)
                 self._delayed_tooltip("Calculate some fake 3D lighting\nby treating (otherwise unused) particle\ndensity as a heightmap.")
@@ -317,11 +335,13 @@ class PhysicsWindowMixin:
                     # Emboss Intensity slider
                     ei_lock_colors = pls.push_locked_style('emboss_intensity') if pls else 0
                     ei_label = pls.get_display_label('emboss_intensity', "Emboss Intensity") if pls else "Emboss Intensity"
-                    _, self.state.sim.emboss_intensity = imgui.slider_float(
+                    changed_ei, new_ei = imgui.slider_float(
                         ei_label, self.state.sim.emboss_intensity, 0.0, 1.0
                     )
-                    if pls and pls.check_alt_click():
-                        pls.toggle_lock('emboss_intensity')
+                    if pls and pls.handle_alt_click('emboss_intensity'):
+                        pass  # alt-click intercepted; discard value change
+                    elif changed_ei:
+                        self.state.sim.emboss_intensity = new_ei
                     if pls:
                         pls.pop_locked_style(ei_lock_colors)
                     self._delayed_tooltip("Intensity of emboss lighting effect. Negative values invert.")
@@ -329,11 +349,13 @@ class PhysicsWindowMixin:
                     # Emboss Smoothness slider
                     es_lock_colors = pls.push_locked_style('emboss_smoothness') if pls else 0
                     es_label = pls.get_display_label('emboss_smoothness', "Emboss Smoothness") if pls else "Emboss Smoothness"
-                    _, self.state.sim.emboss_smoothness = imgui.slider_float(
+                    changed_es, new_es = imgui.slider_float(
                         es_label, self.state.sim.emboss_smoothness, 0.001, 1.0
                     )
-                    if pls and pls.check_alt_click():
-                        pls.toggle_lock('emboss_smoothness')
+                    if pls and pls.handle_alt_click('emboss_smoothness'):
+                        pass  # alt-click intercepted; discard value change
+                    elif changed_es:
+                        self.state.sim.emboss_smoothness = new_es
                     if pls:
                         pls.pop_locked_style(es_lock_colors)
                     self._delayed_tooltip("Controls the smoothness of emboss sampling.")

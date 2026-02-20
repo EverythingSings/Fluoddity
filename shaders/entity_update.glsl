@@ -360,10 +360,9 @@ void reset(uint index){
         float spot_rows=ceil(aspect*sqrt(spots));
         vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
         //pR(pos,floor(cohort_val)*3.1415*2*spots);
+        //this aspect transform is good enough, but not perfect
         pos+=1.8*((gridcell)/spot_rows)*vec2(aspect);
         pos+= 1.8*(1/2.*(1./vec2(spot_rows,spots/spot_rows)-1))*vec2(aspect,1/aspect);
-        //pos.x*=aspect;
-        //pos.y/=aspect;
     }
     else if(reset_mode == 1) {
         //RANDOM: scatter cohorts randomly across the canvas, homogenous start
