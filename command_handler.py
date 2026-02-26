@@ -107,6 +107,8 @@ class CommandHandler:
             if self.rule_manager.has_rules():
                 self.sim.apply_rule(self.rule_manager.get_current_rule())
             self.camera.reload()
+            if self.field_handler and self.field_handler.adv_draw:
+                self.field_handler.adv_draw.reload()
 
         # Simple reset (R key)
         if ui_state.request_reset:

@@ -13,6 +13,7 @@ from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
 from camera_input import process_camera_input
+from controller_input import ControllerCam, process_controller_input, find_joystick
 from utilities.advanced_drawing import AdvancedDrawingProcessor
 
 
@@ -88,10 +89,15 @@ class App:
             field_handler=self.field_handler,
             param_lock_service=self.param_lock_service
         )
+        # Xbox controller (FPS camera for shader-driven field)
+        self.controller_cam = ControllerCam()
+        self.joystick_state = {'joystick_id': find_joystick(), 'prev_buttons': []}
+
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
             self.command_handler, self.window,
-            advanced_drawing_processor=self.advanced_drawing_processor
+            advanced_drawing_processor=self.advanced_drawing_processor,
+            controller_cam=self.controller_cam
         )
 
         # Frame timing
@@ -166,6 +172,7 @@ class App:
         self.last_update_time = current_time
         process_camera_input(ui_state, self.window, self.ui.keybindings,
                              self.sim.view_tex, dt)
+        process_controller_input(self.controller_cam, self.joystick_state, dt)
 
         # 3.2. Check if pending video should start
         cmd = self.command_handler

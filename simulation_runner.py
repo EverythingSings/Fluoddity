@@ -11,13 +11,14 @@ class SimulationRunner:
     """
 
     def __init__(self, sim, camera, video_service, command_handler, window,
-                 advanced_drawing_processor=None):
+                 advanced_drawing_processor=None, controller_cam=None):
         self.sim = sim
         self.camera = camera
         self.video_service = video_service
         self.command_handler = command_handler
         self.window = window
         self.advanced_drawing_processor = advanced_drawing_processor
+        self.controller_cam = controller_cam
 
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
@@ -53,9 +54,29 @@ class SimulationRunner:
         # Advanced Drawing: force/strafe field update (once per render frame, not per physics frame)
         if self.advanced_drawing_processor is not None:
             adv_prefs = ui_state.preferences
-            if adv_prefs.advanced_drawing_enabled and (
+
+            if adv_prefs.advanced_drawing_enabled and adv_prefs.shader_driven_field:
+                # Shader-driven field: run override shader every render frame
+                cam = self.controller_cam
+                self.advanced_drawing_processor.process_override(
+                    canvas_width=self.sim.can.size[0],
+                    canvas_height=self.sim.can.size[1],
+                    shader_name=adv_prefs.field_override_shader,
+                    frame_count=self.sim.frame_count,
+                    mouse_pos=mouse_tex_coords,
+                    prev_mouse_pos=self.prev_mouse_tex_coords,
+                    draw_size=adv_prefs.draw_size,
+                    draw_power=adv_prefs.draw_power,
+                    brush_mode=adv_prefs.brush_mode,
+                    fixed_direction_heading=adv_prefs.fixed_direction_heading,
+                    tiling_mode=tiling_mode,
+                    camera_pos=tuple(cam.pos) if cam else (0.0, 0.0, 0.0),
+                    camera_dir=tuple(cam.dir) if cam else (0.0, 0.0, 1.0),
+                )
+            elif adv_prefs.advanced_drawing_enabled and (
                 adv_prefs.advanced_draw_force_field or adv_prefs.advanced_draw_strafe_field
             ):
+                # Normal drawing mode: draw/erase to field texture
                 field_draw_active = (draw_mode and ui_state.mouse_left_held
                                      and draw_power_value > 0.0)
                 # Erase scope: only erase fields that are checked as draw targets

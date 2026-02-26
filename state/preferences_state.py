@@ -47,6 +47,8 @@ class PreferencesState:
     force_field_strength: float = 1.0  # Multiplier for force field effect (log scale 0.0001-10.0)
     strafe_field_strength: float = 1.0  # Multiplier for strafe field effect (log scale 0.0001-10.0)
     draw_target_overlay_opacity: float = 0.0  # Opacity of draw target field overlay in frame assembly (0-1)
+    shader_driven_field: bool = False  # Use a frag shader to override the field texture
+    field_override_shader: str = "march.frag"  # Currently selected field override shader filename
 
     # Physics slider group collapsed states (True = expanded/open, False = collapsed)
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)
