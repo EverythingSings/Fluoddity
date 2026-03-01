@@ -9,7 +9,7 @@ uniform vec3 camera_dir;
 #define HIT_DISTANCE 1e-3
 #define MAX_DISTANCE 100
 
-#define FOCAL_LENGTH 2.
+#define FOCAL_LENGTH 1.
 
 #define PI 3.1415926
 in vec2 texcoord;
@@ -30,53 +30,75 @@ struct MR
 void pR(inout vec2 p, float a) {
     p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
 }
+float pMod1(inout float p, float size) {
+    float halfsize = size*0.5;
+    float c = floor((p + halfsize)/size);
+    p = mod(p + halfsize, size) - halfsize;
+    return c;
+}
 // Repeat in two dimensions
 vec2 pMod2(inout vec2 p, vec2 size) {
     vec2 c = floor((p + size*0.5)/size);
     p = mod(p + size*0.5,size) - size*0.5;
     return c;
 }
+// Repeat in three dimensions
+vec3 pMod3(inout vec3 p, vec3 size) {
+    vec3 c = floor((p + size*0.5)/size);
+    p = mod(p + size*0.5, size) - size*0.5;
+    return c;
+}
+float sdLink( vec3 p, float le, float r1, float r2 )
+{
+  vec3 q = vec3( p.x, max(abs(p.y)-le,0.0), p.z );
+  return length(vec2(length(q.xy)-r1,q.z)) - r2;
+}
+
 float sdBox( vec3 p, vec3 b )
 {
   vec3 q = abs(p) - b;
   return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
 }
-MR map(vec3 p){pR(p.xz,frame_count/10500.);
-    vec3 op = p;
-    float dts = MAX_DISTANCE;
-    /*
-pMod2(p.xz,vec2(3.));
-float phase = -frame_count/5000.+length(op/10.);
-float amt = (sin(phase));
-if(amt>0){
-dts= length(p+vec3(0,4,0))-.51*1*amt*2;
-p=op;
-dts = min(dts,p.y+4);
+
+float chain(vec3 p){
+pR(p.xz,p.y/1.8+frame_count/600./12.*3.1415+.32);
+float ex=.25;
+float r1 = .5;
+float r2 = .25;
+vec3 p2 = p;
+pMod1(p.y,2.2*(ex+r1+r2));
+float dts = sdLink(p,ex,r1,r2);
+pR(p2.xz,PI/2);
+p2.y+=1.1*(ex+r1+r2);
+pMod1(p2.y,2.2*(ex+r1+r2));
+dts = min(dts,sdLink(p2,ex,r1,r2));
+return dts;
 }
-
-else{
-    dts = length(p+vec3(0,4,0))+.51*amt*2;
-    p=op;
-    dts = max(-dts,p.y+4);
+float sdCyl( vec3 p, float ra, float rb, float h )
+{
+  vec2 d = vec2( length(p.xz)-ra+rb, abs(p.y) - h + rb );
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0)) - rb;
 }
-*/
-//dts = p.y+sin(length(p+.7*dot(sin(1.5*p),cos(1.5*p))));
-p = op;
-pR(p.xz,frame_count/3500.);
-p-= vec3(0,0,0);
+MR map(vec3 p){p.z+=frame_count/1600.;//pR(p.xz,frame_count/10500.);
+//pR(p.xz,log(length(p.xz)));
+float ang = atan(p.z,p.x);
+float dts= MAX_DISTANCE;
+pMod1(p.z,12);
+dts = min(dts,chain(p.yxz-vec3(-1,0,0)));
+//p.y+=length(p.xz)/4*sin(3*ang);
+//float dts = p.y/2.;
+//dts = max(dts, length(p)-1.5);
 
+float channel = 8-length(p.xy-vec2(0,4));
+channel = max(channel,-sdCyl(p.yzx-vec3(4,0,0),9.5,.2,2));
+dts = min(dts,max(p.y,channel));
 
-pR(p.yx,0.61547957);
-pR(p.yz,PI/4.);
-float box = sdBox(p,vec3(1.5));
+//dts = sdCyl(p.yzx,.5,.1,1);
 
-p=op;
-//dts = min(dts,p.y+4);
-dts =  max(-box+5,dts);
-dts = min(dts,box);
 vec4 mat = vec4(1);
 return MR(dts,mat);
 }
+
 vec3 safenorm(vec3 p){
     float lp = length(p);
     return lp>.00001? normalize(p):vec3(0);
@@ -140,5 +162,7 @@ void main(void)
 
     //vec2 field0 = vec2(dot(right,cam_ray.norm*vec3(1,1,1)),dot(up,cam_ray.norm*vec3(1,1,1)));//vec3(cam_ray.extent/10);
     if(isnan(field0.x+field0.y)||!(length(field0)<2.)){field0=vec2(0);}
-    fragColor = vec4(field0,-field0);
+    fragColor = vec4(-field0,-field0);
+    //fragColor = vec4(cam_ray.extent)/20;
+    //fragColor.xyz = N;
 }

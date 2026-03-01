@@ -348,8 +348,9 @@ void reset(uint index){
 
     vec4 color=vec4(0,0,1,.045);
     //set pos and vel to random values on a small disk
-    vec2 pos=.019*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
-    vec2 vel=0.01*.005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
+    float cohort_scale = 0.019;//Size of each disk
+    vec2 pos=cohort_scale*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
+    vec2 vel=.00005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
 
     //RESET_MODE: 0=Grid, 1=Random, 2=Ring
     int reset_mode = get_particle_reset_mode();
@@ -366,7 +367,7 @@ void reset(uint index){
     }
     else if(reset_mode == 1) {
         //RANDOM: scatter cohorts randomly across the canvas, homogenous start
-        pos+= vec2(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0))) * 2.0 - 1.0;
+        pos= vec2(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0))) * 2.0 - 1.0;
         pos.x*=aspect;
         pos.y/=aspect;
     }
