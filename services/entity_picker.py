@@ -25,7 +25,7 @@ class EntityPicker:
         """
         self.entity_buffer = entity_buffer
 
-    def find_nearest_entity(self, tex_coords: tuple[float, float]) -> tuple[int, tuple[float, float], float]:
+    def find_nearest_entity(self, tex_coords: tuple[float, float], canvas_aspect_ratio: float) -> tuple[int, tuple[float, float], float]:
         """Find the entity closest to given texture coordinates.
 
         Args:
@@ -42,7 +42,8 @@ class EntityPicker:
         # Extract positions (every Nth float starting at 0 and 1)
         xs = ent_cache[0::self.entity_stride].copy()
         ys = ent_cache[1::self.entity_stride].copy()
-
+        xs *= (canvas_aspect_ratio)**.5
+        ys *= (1./canvas_aspect_ratio)**.5
         # Convert from [-1,1] to [0,1] texture space
         xs_tex = xs / 2.0 + 0.5
         ys_tex = ys / 2.0 + 0.5

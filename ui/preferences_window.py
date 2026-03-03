@@ -183,7 +183,7 @@ class PreferencesWindowMixin:
             view_items = self.view_option_labels + ['Camera (Particles rendered as dots)', 'Camera [Tiled]']
             adp = getattr(self, 'advanced_drawing_processor', None)
             if adp is not None and adp.field_texture is not None:
-                view_items = view_items + ['Force Field', 'Strafe Field']
+                view_items = view_items + ['DEBUG - Force Field', 'DEBUG - Strafe Field']
 
             changed, self.state.sim.current_view_option = imgui.combo(
                 label="Current View",

@@ -1,5 +1,8 @@
+CRITICAL - Emboss and particle selection are not aspect adjusted correctly. Emboss map still forms a square in screen space regardless of aspect, and entity picker is routinely selecting the wrong entity when aspect isn't 1:1
+CRITICAL - default name for videos should be current file name instead of "animation". The tooltip should reflect this change.
+
 Full text -> force field pipeline (sdf font?)
-CRITICAL- Emboss and particle selection are not aspect adjusted
+
 cohort isolation view
 -Text entry box with absolute orientation -> Text
 -Threshold particles to be invisible.

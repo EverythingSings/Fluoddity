@@ -68,13 +68,13 @@ vec2 screen_to_canvas_uv(vec2 screen_uv) {
     // Add camera position to get world space position
     vec2 world_pos = ndc*camera_zoom + camera_position*vec2(1,-1);
     // Apply aspect ratio correction
-    world_pos.x*=screen_aspect;
+    world_pos.y*=(canvas_resolution.x/canvas_resolution.y)/screen_aspect;
     // World space to canvas texture coords: divide by 2 and add 0.5
     return (world_pos/2.+.5);
 }
 
 // Convert canvas texture coordinates to screen UV coordinates
-// Inverse of screen_to_canvas_uv
+// Inverse of screen_to_canvas_uv (BUT NOT REALLY: canvas aspect ratio handled differently for reticle vs emboss/overlay)
 vec2 canvas_uv_to_screen(vec2 canvas_uv) {
     // Canvas texture coords to world space: multiply by 2 and subtract 1
     vec2 world_pos = canvas_uv * 2.0 - 1.0;
@@ -136,10 +136,15 @@ vec3 draw_overlay(vec2 uv_coord) {
     if (TRAIL_DRAW_RADIUS <= 0.0) {
         return vec3(0.0);
     }
-
+    //uv_coord.x-=.5;
+    uv_coord.x/=canvas_resolution.x/canvas_resolution.y;
+    //uv_coord.x+=.5;
     // Calculate delta in screen space with aspect correction
     // Use mouse_screen_coords for the ring center
-    vec2 delta = uv_coord - vec2(0,1)-mouse_screen_coords*vec2(1,-1);
+    vec2 mouse_pos = mouse_screen_coords;
+    //mouse_pos.x/=canvas_resolution.x/canvas_resolution.y;
+    vec2 delta = uv_coord - (vec2(0,1)+mouse_pos*vec2(canvas_resolution.y/canvas_resolution.x,-1));
+    delta.x*= canvas_resolution.x/canvas_resolution.y;
     delta.x *= screen_aspect;
 
     float dist = length(delta);
@@ -357,9 +362,11 @@ void main() {
         
 
         //conditionally draw field overlay
-        //CURRENTLY TURNED OFF. MAYBE INCLUDE LATER
         if(advanced_drawing_resources_initialized&& draw_target_overlay_opacity>0.0 && (view_mode==2||view_mode==3)){
             vec2 field_uv = screen_to_canvas_uv(uv);
+            field_uv-=.5;
+            field_uv*=max(1,screen_aspect);//canvas_resolution.y/canvas_resolution.x;
+            field_uv+=.5;
             vec4 field = vec4(0);
             if(tiling_mode_enabled||clamp(field_uv,vec2(0),vec2(1))==field_uv){
                 field = texture(field_texture,field_uv);
