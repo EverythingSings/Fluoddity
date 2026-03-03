@@ -1,7 +1,11 @@
-CRITICAL - Emboss and particle selection are not aspect adjusted correctly. Emboss map still forms a square in screen space regardless of aspect, and entity picker is routinely selecting the wrong entity when aspect isn't 1:1
+Brush and Canvas mode visuals still have aspect ratio issue with the drawing reticle
+Field overlay aspect ratio isn't perfect. Some combinations of narrow/wide window + narrow/wide canvas mess it up.
+ Canvas_resolution and screen aspect maybe the same thing in frame_assembly.frag? 
 CRITICAL - default name for videos should be current file name instead of "animation". The tooltip should reflect this change.
 
 Full text -> force field pipeline (sdf font?)
+
+particle follow cam. Cohort follow cam?
 
 cohort isolation view
 -Text entry box with absolute orientation -> Text

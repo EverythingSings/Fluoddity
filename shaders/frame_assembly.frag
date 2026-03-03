@@ -79,7 +79,8 @@ vec2 canvas_uv_to_screen(vec2 canvas_uv) {
     // Canvas texture coords to world space: multiply by 2 and subtract 1
     vec2 world_pos = canvas_uv * 2.0 - 1.0;
     // Remove aspect ratio correction
-    world_pos.x /= screen_aspect;
+    //world_pos.x /= screen_aspect;
+    world_pos.y /= (canvas_resolution.x/canvas_resolution.y)/screen_aspect;
     // Subtract camera position to get NDC (with flipped y)
     vec2 ndc = (world_pos - camera_position*vec2(1,-1)) / camera_zoom;
     // NDC to screen UV coordinates (0 to 1)
@@ -363,10 +364,15 @@ void main() {
 
         //conditionally draw field overlay
         if(advanced_drawing_resources_initialized&& draw_target_overlay_opacity>0.0 && (view_mode==2||view_mode==3)){
-            vec2 field_uv = screen_to_canvas_uv(uv);
+            vec2 field_uv = uv;
+            field_uv=screen_to_canvas_uv(uv);
+            if(canvas_resolution.y/canvas_resolution.x>=1.){
             field_uv-=.5;
             field_uv*=max(1,screen_aspect);//canvas_resolution.y/canvas_resolution.x;
+            if(screen_aspect>1){field_uv *=canvas_resolution.y/canvas_resolution.x;}
+            //field_uv/=1./screen_aspect*canvas_resolution.x/canvas_resolution.y;
             field_uv+=.5;
+            }
             vec4 field = vec4(0);
             if(tiling_mode_enabled||clamp(field_uv,vec2(0),vec2(1))==field_uv){
                 field = texture(field_texture,field_uv);
