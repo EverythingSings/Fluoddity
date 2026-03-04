@@ -92,7 +92,7 @@ The core insight: **all these systems answer the same question** — "What is th
 - **Pipeline**: `can_out = blur(old_canvas) * persistence + (1 - persistence) * brush`
 - **Diffusion**: 5-tap cross kernel with configurable constant
 - **Double buffering**: Optional (strong_determinism), ping-pong between two textures
-- **Drawing**: Also handles brush painting, erasure, fill — overloaded responsibility
+- **Drawing**: Also handles Trail-based brush painting, erasure, fill — overloaded responsibility
 
 ### 10. Brush System (Per-Frame Particle Rendering)
 - **Files**: `shaders/brush.vert`, `shaders/brush.frag`, `sim.py:223-235`
