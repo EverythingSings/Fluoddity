@@ -2,7 +2,7 @@
 Minimal shader harness: GLFW + ModernGL + optional ImGui.
 
 Controls:
-    Left-drag   Look around
+    Left-drag    Look around
     WASD         Move horizontally
     Space        Move up
     Left Shift   Move down
@@ -16,6 +16,27 @@ from pathlib import Path
 import numpy as np
 import glfw
 import moderngl
+
+def rot_mat(x, y, z):
+    cx, sx = np.cos(x), np.sin(x)
+    cy, sy = np.cos(y), np.sin(y)
+    cz, sz = np.cos(z), np.sin(z)
+
+    Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+    Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+
+    return Rz @ Ry @ Rx
+
+# ---------------------------------------------------------------------------
+# Similarity transform constants (Base ↔ Micro relationship)
+# ---------------------------------------------------------------------------
+
+SIM_OFFSET      = np.array([2.0, 0.0, 2.0])     # Micro copy center in Base space
+SIM_SCALE       = 0.125                            # Micro scale factor
+SIM_ROTATION    = rot_mat(1,1,0)#np.eye(3, dtype=np.float64)     # Micro rotation (identity = no rotation)
+REGION_HALF_EXT = np.array([5.0, 5.0, 5.0])      # Fundamental region AABB half-size
+TRANSITION_DIST = 1.0                             # Transition shell thickness
 
 # ---------------------------------------------------------------------------
 # Vector helpers
@@ -33,6 +54,28 @@ def _rodrigues(v, axis, angle):
     return v * c + np.cross(a, v) * s + a * np.dot(a, v) * (1.0 - c)
 
 # ---------------------------------------------------------------------------
+# SDF helpers (Python mirrors of GLSL functions for CPU-side teleport checks)
+# ---------------------------------------------------------------------------
+
+def sd_box(p, half_extents):
+    """Signed box distance. Negative = inside."""
+    q = np.abs(p) - half_extents
+    return float(np.linalg.norm(np.maximum(q, 0.0)) + min(max(q[0], max(q[1], q[2])), 0.0))
+
+
+def sd_micro_box(p, offset, scale, rotation, region_half_ext):
+    """Signed distance to the Micro OBB in Base space. Negative = inside."""
+    q = rotation @ (p - offset)
+    half_ext = region_half_ext * scale
+    d = np.abs(q) - half_ext
+    return float(np.linalg.norm(np.maximum(d, 0.0)) + min(max(d[0], max(d[1], d[2])), 0.0))
+
+
+def smoothstep(edge0, edge1, x):
+    t = max(0.0, min(1.0, (x - edge0) / (edge1 - edge0)))
+    return t * t * (3.0 - 2.0 * t)
+
+# ---------------------------------------------------------------------------
 # Camera – stores orientation as explicit vectors so that arbitrary rotation
 # matrices (e.g. cell-transition teleports) can be applied directly.
 # ---------------------------------------------------------------------------
@@ -41,7 +84,7 @@ WORLD_UP = np.array([0.0, 1.0, 0.0])
 
 
 class Camera:
-    def __init__(self, pos=(0, 2, 8), fwd=(0, 0, -1), up=(0, 1, 0)):
+    def __init__(self, pos=(0, 2, 0), fwd=(0, 0, -1), up=(0, 1, 0)):
         self.pos = np.array(pos, dtype=np.float64)
         self.fwd = _norm(np.array(fwd, dtype=np.float64))
         self.up  = _norm(np.array(up,  dtype=np.float64))
@@ -74,8 +117,8 @@ class Camera:
         self.up  = _norm(self.up)
 
     # -- keyboard movement ------------------------------------------------------
-    def move(self, window, dt):
-        s = self.speed * dt
+    def move(self, window, dt, world_scale=1.0):
+        s = self.speed * world_scale * dt
         f, r = self.fwd, self.right
         pressed = lambda k: glfw.get_key(window, k) == glfw.PRESS
         if pressed(glfw.KEY_W):          self.pos += f * s
@@ -84,6 +127,22 @@ class Camera:
         if pressed(glfw.KEY_A):          self.pos -= r * s
         if pressed(glfw.KEY_SPACE):      self.pos[1] += s
         if pressed(glfw.KEY_LEFT_SHIFT): self.pos[1] -= s
+
+    # -- teleportation ---------------------------------------------------------
+    def teleport_inward(self, offset, scale, rotation):
+        """Camera entered Micro box → remap to Base coordinates."""
+        self.pos = rotation @ (self.pos - offset) / scale
+        self.fwd = rotation @ self.fwd
+        self.up  = rotation @ self.up
+        self._ortho()
+
+    def teleport_outward(self, offset, scale, rotation):
+        """Camera exited fundamental region → remap toward Micro in Base."""
+        rot_inv = rotation.T  # transpose = inverse for orthogonal matrices
+        self.pos = scale * (rot_inv @ self.pos) + offset
+        self.fwd = rot_inv @ self.fwd
+        self.up  = rot_inv @ self.up
+        self._ortho()
 
 # ---------------------------------------------------------------------------
 # Embedded vertex shader (fullscreen quad)
@@ -124,12 +183,19 @@ def _try_reload(ctx, frag_path, old_prog, vbo):
         return None, None, False
 
 # ---------------------------------------------------------------------------
-# Uniform setter (tolerates optimised-away uniforms)
+# Uniform helpers
 # ---------------------------------------------------------------------------
 
 def _u(prog, name, value):
+    """Set a uniform, tolerating optimised-away names."""
     if name in prog:
         prog[name].value = value
+
+
+def _u_mat3(prog, name, mat):
+    """Upload a 3×3 matrix uniform (column-major)."""
+    if name in prog:
+        prog[name].write(mat.astype("f4").T.tobytes())
 
 # ---------------------------------------------------------------------------
 # Main
@@ -164,8 +230,11 @@ def main():
     vbo = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], dtype="f4"))
     vao = ctx.vertex_array(prog, [(vbo, "2f", "in_position")])
 
-    # ---- Camera --------------------------------------------------------------
-    cam = Camera(pos=[0.0, 2.0, 8.0])
+    # ---- Camera (start inside the fundamental region) ------------------------
+    cam = Camera(pos=[0.0, 2.0, 0.0])
+
+    # ---- Recursive SDF state -------------------------------------------------
+    world_scale = 1.0
 
     # ---- Input state ---------------------------------------------------------
     dragging = False
@@ -238,10 +307,30 @@ def main():
             )
             last_mx, last_my = mx, my
 
-        # Keyboard movement
-        cam.move(window, dt)
+        # ---- Per-frame update (spec §6) --------------------------------------
 
-        # Viewport
+        # 1. Move camera (speed scaled by previous frame's worldScale)
+        cam.move(window, dt, world_scale)
+
+        # 2. Teleport checks
+        micro_dist  = sd_micro_box(cam.pos, SIM_OFFSET, SIM_SCALE,
+                                   SIM_ROTATION, REGION_HALF_EXT)
+        region_dist = sd_box(cam.pos, REGION_HALF_EXT)
+
+        if micro_dist < 0.0:
+            # Entered Micro → remap to Base
+            cam.teleport_inward(SIM_OFFSET, SIM_SCALE, SIM_ROTATION)
+        elif region_dist > 0.0:
+            # Exited fundamental region → remap toward Micro
+            cam.teleport_outward(SIM_OFFSET, SIM_SCALE, SIM_ROTATION)
+
+        # 3. Recompute transition parameter from (potentially teleported) camera
+        micro_dist = sd_micro_box(cam.pos, SIM_OFFSET, SIM_SCALE,
+                                  SIM_ROTATION, REGION_HALF_EXT)
+        t = smoothstep(TRANSITION_DIST, 0.0, micro_dist)
+        world_scale = 1.0 + (SIM_SCALE - 1.0) * t  # lerp(1.0, SIM_SCALE, t)
+
+        # ---- Render ----------------------------------------------------------
         w, h = glfw.get_framebuffer_size(window)
         if w == 0 or h == 0:
             continue
@@ -249,12 +338,18 @@ def main():
         ctx.clear()
 
         # Upload uniforms
-        _u(prog, "resolution",  (float(w), float(h)))
-        _u(prog, "time",        now - t0)
-        _u(prog, "frame_count", frame_count)
-        _u(prog, "u_cam",       tuple(cam.pos.astype("f4")))
-        _u(prog, "u_view_dir",  tuple(cam.fwd.astype("f4")))
-        _u(prog, "u_up_dir",    tuple(cam.up.astype("f4")))
+        _u(prog, "resolution",           (float(w), float(h)))
+        _u(prog, "time",                 now - t0)
+        _u(prog, "frame_count",          frame_count)
+        _u(prog, "u_cam",               tuple(cam.pos.astype("f4")))
+        _u(prog, "u_view_dir",          tuple(cam.fwd.astype("f4")))
+        _u(prog, "u_up_dir",            tuple(cam.up.astype("f4")))
+        _u(prog, "u_offset",            tuple(SIM_OFFSET.astype("f4")))
+        _u(prog, "u_scale",             float(SIM_SCALE))
+        _u_mat3(prog, "u_rotation",     SIM_ROTATION)
+        _u(prog, "u_region_half_extents", tuple(REGION_HALF_EXT.astype("f4")))
+        _u(prog, "u_worldScale",        float(world_scale))
+        _u(prog, "u_transition_distance", float(TRANSITION_DIST))
 
         # Draw
         vao.render(moderngl.TRIANGLE_STRIP)
@@ -273,6 +368,7 @@ def main():
             imgui_mod.text(f"Pos:  ({p[0]:.2f}, {p[1]:.2f}, {p[2]:.2f})")
             f = cam.fwd
             imgui_mod.text(f"Fwd:  ({f[0]:.2f}, {f[1]:.2f}, {f[2]:.2f})")
+            imgui_mod.text(f"Scale: {world_scale:.4f}")
             imgui_mod.separator()
             imgui_mod.text_colored(
                 (0.5, 0.5, 0.5, 1.0),
