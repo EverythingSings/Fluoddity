@@ -30,7 +30,7 @@ uniform mat3  u_world_orientation;
 #define MAX_DISTANCE 300.0
 #define FOCAL_LENGTH 2.2
 
-#define SUN_DIR (vec3(sin(time*0), 1.5, cos(time*0)))
+#define SUN_DIR (vec3(sin(-1), 1.5, cos(-1)))
 #define SUN_COL 3.0*vec3(0.9, 0.8, 0.7)
 #define FOG_COL vec3(.12)
 #define FOG_AMT .01
@@ -453,6 +453,7 @@ MR sdf(vec3 p) {
     if(tow<1.2){tow = min(tower_facade(p).dts,tower(p));}
     MR result =  MR(sz*tow,vec4(1));
     result = mapMin(result, MR(sdBoxFrame(op,u_region_half_extents ,.1),vec4(0)));//result;
+    result = mapMin(result, MR(sdBoxFrame(op,u_region_half_extents+u_transition_distance/u_scale,.51),vec4(2)));
     return result; 
 }
 
@@ -575,7 +576,7 @@ void main(void)
     vec3 light = SUN_COL * albedo * max(0, dot(cam_ray.norm, light_vector));
 
     light *= occlude_march(cam_ray, light_vector);
-    light += occlude_march(cam_ray, sky_dir)*(SKY_COL * albedo * max(0, dot(cam_ray.norm, sky_dir)));
+    //light += occlude_march(cam_ray, sky_dir)*(SKY_COL * albedo * max(0, dot(cam_ray.norm, sky_dir)));
     vec3 col = light;
     col = mix(FOG_COL, col, exp(-cam_ray.extent * FOG_AMT / u_worldScale));
 

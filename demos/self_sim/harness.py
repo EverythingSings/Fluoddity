@@ -29,14 +29,14 @@ def rot_mat(x, y, z):
     return Rz @ Ry @ Rx
 
 # ---------------------------------------------------------------------------
-# Similarity transform constants (Base ↔ Micro relationship)
+# Similarity transform defaults (Base ↔ Micro relationship)
 # ---------------------------------------------------------------------------
 
-SIM_OFFSET      = np.array([1.0, 0.0, 0.0])     # Micro copy center in Base space
-SIM_SCALE       = 0.06                            # Micro scale factor
-SIM_ROTATION    = rot_mat(0,.21,0)#np.eye(3, dtype=np.float64)     # Micro rotation (identity = no rotation)
-REGION_HALF_EXT = np.array([5.0, 5.0, 5.0])      # Fundamental region AABB half-size
-TRANSITION_DIST = 1.0                             # Transition shell thickness
+DEFAULT_SIM_OFFSET      = [-.4, 1.08, 0.0]
+DEFAULT_SIM_SCALE       = 0.019
+DEFAULT_SIM_EULER       = [0.0, 0.0, 0.0]       # (x, y, z) radians
+DEFAULT_REGION_HALF_EXT = [5.0, 5.0, 5.0]
+DEFAULT_TRANSITION_DIST = 1.0
 
 # ---------------------------------------------------------------------------
 # Vector helpers
@@ -230,36 +230,16 @@ def main():
     # ---- Camera (start inside the fundamental region) ------------------------
     cam = Camera(pos=[0.0, 2.0, 0.0])
 
+    # ---- Mutable similarity-transform state (driven by ImGui) ----------------
+    sim_offset      = np.array(DEFAULT_SIM_OFFSET, dtype=np.float64)
+    sim_scale       = DEFAULT_SIM_SCALE
+    sim_euler       = list(DEFAULT_SIM_EULER)           # [x, y, z] radians
+    region_half_ext = np.array(DEFAULT_REGION_HALF_EXT, dtype=np.float64)
+    transition_dist = DEFAULT_TRANSITION_DIST
+
     # ---- Recursive SDF state -------------------------------------------------
     world_scale = 1.0
     world_orientation = np.eye(3, dtype=np.float64)  # accumulated rotation across teleports
-
-    # ---- Input state ---------------------------------------------------------
-    dragging = False
-    last_mx = last_my = 0.0
-    want_reload = False
-
-    def _on_mouse_button(win, button, action, _mods):
-        nonlocal dragging, last_mx, last_my
-        if button == glfw.MOUSE_BUTTON_LEFT:
-            if action == glfw.PRESS:
-                dragging = True
-                last_mx, last_my = glfw.get_cursor_pos(win)
-                glfw.set_input_mode(win, glfw.CURSOR, glfw.CURSOR_DISABLED)
-            else:
-                dragging = False
-                glfw.set_input_mode(win, glfw.CURSOR, glfw.CURSOR_NORMAL)
-
-    def _on_key(win, key, _scancode, action, _mods):
-        nonlocal want_reload
-        if action == glfw.PRESS:
-            if key == glfw.KEY_ESCAPE:
-                glfw.set_window_should_close(win, True)
-            elif key == glfw.KEY_V:
-                want_reload = True
-
-    glfw.set_mouse_button_callback(window, _on_mouse_button)
-    glfw.set_key_callback(window, _on_key)
 
     # ---- Optional ImGui overlay ----------------------------------------------
     imgui_ok = False
@@ -270,11 +250,55 @@ def main():
         from imgui_bundle.python_backends.glfw_backend import GlfwRenderer
 
         _imgui.create_context()
-        imgui_renderer = GlfwRenderer(window, attach_callbacks=False)
+        # Let ImGui install its GLFW callbacks so it receives input
+        imgui_renderer = GlfwRenderer(window)
         imgui_mod = _imgui
         imgui_ok = True
     except Exception as exc:
         print(f"[info] ImGui unavailable ({exc}) – running without overlay")
+
+    # ---- Input state ---------------------------------------------------------
+    dragging = False
+    last_mx = last_my = 0.0
+    want_reload = False
+
+    # Save ImGui's callbacks so we can chain through them
+    _prev_mouse_button_cb = glfw.set_mouse_button_callback(window, None)
+    _prev_key_cb = glfw.set_key_callback(window, None)
+
+    def _on_mouse_button(win, button, action, mods):
+        # Let ImGui process first
+        if _prev_mouse_button_cb:
+            _prev_mouse_button_cb(win, button, action, mods)
+        # Only handle camera drag when ImGui doesn't want the mouse
+        nonlocal dragging, last_mx, last_my
+        if imgui_ok and imgui_mod.get_io().want_capture_mouse:
+            return
+        if button == glfw.MOUSE_BUTTON_LEFT:
+            if action == glfw.PRESS:
+                dragging = True
+                last_mx, last_my = glfw.get_cursor_pos(win)
+                glfw.set_input_mode(win, glfw.CURSOR, glfw.CURSOR_DISABLED)
+            else:
+                dragging = False
+                glfw.set_input_mode(win, glfw.CURSOR, glfw.CURSOR_NORMAL)
+
+    def _on_key(win, key, scancode, action, mods):
+        # Let ImGui process first
+        if _prev_key_cb:
+            _prev_key_cb(win, key, scancode, action, mods)
+        # Only handle app keys when ImGui doesn't want the keyboard
+        nonlocal want_reload
+        if imgui_ok and imgui_mod.get_io().want_capture_keyboard:
+            return
+        if action == glfw.PRESS:
+            if key == glfw.KEY_ESCAPE:
+                glfw.set_window_should_close(win, True)
+            elif key == glfw.KEY_V:
+                want_reload = True
+
+    glfw.set_mouse_button_callback(window, _on_mouse_button)
+    glfw.set_key_callback(window, _on_key)
 
     # ---- Timing --------------------------------------------------------------
     frame_count = 0
@@ -307,31 +331,34 @@ def main():
 
         # ---- Per-frame update (spec §6) --------------------------------------
 
+        # Recompute rotation matrix from euler angles each frame
+        sim_rotation = rot_mat(*sim_euler)
+
         # 1. Move camera (speed scaled by previous frame's worldScale)
         cam.move(window, dt, world_scale)
 
         # 2. Teleport checks
-        micro_dist  = sd_micro_box(cam.pos, SIM_OFFSET, SIM_SCALE,
-                                   SIM_ROTATION, REGION_HALF_EXT)
-        region_dist = sd_box(cam.pos, REGION_HALF_EXT)
+        micro_dist  = sd_micro_box(cam.pos, sim_offset, sim_scale,
+                                   sim_rotation, region_half_ext)
+        region_dist = sd_box(cam.pos, region_half_ext)
 
         if micro_dist < 0.0:
             # Entered Micro → remap to Base
-            cam.teleport_inward(SIM_OFFSET, SIM_SCALE, SIM_ROTATION)
+            cam.teleport_inward(sim_offset, sim_scale, sim_rotation)
             # Inward teleport applies rotation to camera, so world dirs
             # need the inverse rotation to stay consistent
             #THIS WAS BACKWARDS it needs forward orientation here.
-            world_orientation = SIM_ROTATION @ world_orientation
+            world_orientation = sim_rotation @ world_orientation
         elif region_dist > 0.0:
             # Exited fundamental region → remap toward Micro
-            cam.teleport_outward(SIM_OFFSET, SIM_SCALE, SIM_ROTATION)
-            world_orientation = SIM_ROTATION.T @ world_orientation
+            cam.teleport_outward(sim_offset, sim_scale, sim_rotation)
+            world_orientation = sim_rotation.T @ world_orientation
 
         # 3. Recompute transition parameter from (potentially teleported) camera
-        micro_dist = sd_micro_box(cam.pos, SIM_OFFSET, SIM_SCALE,
-                                  SIM_ROTATION, REGION_HALF_EXT)
-        t = smoothstep(TRANSITION_DIST, 0.0, micro_dist)
-        world_scale = 1.0 + (SIM_SCALE - 1.0) * t  # lerp(1.0, SIM_SCALE, t)
+        micro_dist = sd_micro_box(cam.pos, sim_offset, sim_scale,
+                                  sim_rotation, region_half_ext)
+        t = smoothstep(transition_dist, 0.0, micro_dist)
+        world_scale = 1.0 + (sim_scale - 1.0) * t  # lerp(1.0, sim_scale, t)
 
         # ---- Render ----------------------------------------------------------
         w, h = glfw.get_framebuffer_size(window)
@@ -347,12 +374,12 @@ def main():
         _u(prog, "u_cam",               tuple(cam.pos.astype("f4")))
         _u(prog, "u_view_dir",          tuple(cam.fwd.astype("f4")))
         _u(prog, "u_up_dir",            tuple(cam.up.astype("f4")))
-        _u(prog, "u_offset",            tuple(SIM_OFFSET.astype("f4")))
-        _u(prog, "u_scale",             float(SIM_SCALE))
-        _u_mat3(prog, "u_rotation",     SIM_ROTATION)
-        _u(prog, "u_region_half_extents", tuple(REGION_HALF_EXT.astype("f4")))
+        _u(prog, "u_offset",            tuple(sim_offset.astype("f4")))
+        _u(prog, "u_scale",             float(sim_scale))
+        _u_mat3(prog, "u_rotation",     sim_rotation)
+        _u(prog, "u_region_half_extents", tuple(region_half_ext.astype("f4")))
         _u(prog, "u_worldScale",        float(world_scale))
-        _u(prog, "u_transition_distance", float(TRANSITION_DIST))
+        _u(prog, "u_transition_distance", float(transition_dist))
         _u_mat3(prog, "u_world_orientation", world_orientation)
 
         # Draw
@@ -373,6 +400,31 @@ def main():
             f = cam.fwd
             imgui_mod.text(f"Fwd:  ({f[0]:.2f}, {f[1]:.2f}, {f[2]:.2f})")
             imgui_mod.text(f"Scale: {world_scale:.4f}")
+            imgui_mod.separator()
+
+            # -- Similarity transform controls --
+            imgui_mod.text("Similarity Transform")
+
+            ch, v = imgui_mod.drag_float3("Offset", list(sim_offset), 0.01)
+            if ch:
+                sim_offset[:] = v
+
+            ch, v = imgui_mod.drag_float("Scale##sim", sim_scale, 0.001, 0.001, 1.0)
+            if ch:
+                sim_scale = v
+
+            ch, v = imgui_mod.drag_float3("Rotation (rad)", list(sim_euler), 0.01)
+            if ch:
+                sim_euler[:] = v
+
+            ch, v = imgui_mod.drag_float3("Region Half-Ext", list(region_half_ext), 0.1)
+            if ch:
+                region_half_ext[:] = v
+
+            ch, v = imgui_mod.drag_float("Transition Dist", transition_dist, 0.01, 0.0, 10.0)
+            if ch:
+                transition_dist = v
+
             imgui_mod.separator()
             imgui_mod.text_colored(
                 (0.5, 0.5, 0.5, 1.0),
