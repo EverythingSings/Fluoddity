@@ -356,6 +356,13 @@ class MenuBarMixin:
                 )
                 self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
 
+                # Generics window toggle
+                _, self.state.preferences.show_generics_window = imgui.checkbox(
+                    "Generics",
+                    self.state.preferences.show_generics_window
+                )
+                self._delayed_tooltip("8 scratch sliders sent as uniforms to\nentity_update and field_override shaders.\nUseful for live-coding shader experiments.")
+
                 # Parameter Locks checkbox (greyed out in multiload mode)
                 multiload_active = self.state.multi_load.multi_load_enabled
                 if multiload_active:

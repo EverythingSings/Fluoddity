@@ -59,6 +59,7 @@ uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
 uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
 uniform bool WRITE_RULES; // Set true for one frame when rule buffer readback is needed
+uniform vec4 generic03;
 
 // Multi-load control uniforms (small, stay as uniforms)
 uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
@@ -336,14 +337,14 @@ vec2 safenorm(vec2 p){
 }
 
 float get_cohort(uint index) {
-    return float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
+    return entities[index].cohort; //float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
 }
 
 //Return all entities to their initialization state
 void reset(uint index){
 
     float size=index<ACTIVE_COUNT?.0015/SQRT_WORLD_SIZE: 0;
-    float cohort_val = get_cohort(index);
+    float cohort_val = float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);//get_cohort(index);
     float aspect = sqrt(canvas_resolution.x/canvas_resolution.y);
 
     vec4 color=vec4(0,0,1,.045);
@@ -355,6 +356,7 @@ void reset(uint index){
     //RESET_MODE: 0=Grid, 1=Random, 2=Ring
     int reset_mode = get_particle_reset_mode();
     int cohorts = get_particle_cohorts();
+    vec4 current_field;
     if(reset_mode == 0) {
         //GRID: position different cohorts at different places in a grid
         float spots=float(cohorts);
@@ -367,9 +369,15 @@ void reset(uint index){
     }
     else if(reset_mode == 1) {
         //RANDOM: scatter cohorts randomly across the canvas, homogenous start
-        pos= vec2(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0))) * 2.0 - 1.0;
-        pos.x*=aspect;
-        pos.y/=aspect;
+        for (int i = 0; i < 32; i++) {
+            pos= vec2(hash(vec2(cohort_val, i/5.)+fract(frame_count/1013.+.415)), hash(vec2(cohort_val, -i/5.)-fract(frame_count/1911.))) * 2.0 - 1.0;
+            pos.x*=aspect;
+            pos.y/=aspect;
+            current_field = get_field(pos);
+            float K = current_field.z;
+            if(hash(pos+i/4.+cohort_val/6.)< K/(2*(.0001+generic03.x+1.)))break;
+        }
+
     }
     else if(reset_mode == 2) {
         //RING: arrange cohorts in a ring pattern
@@ -379,9 +387,9 @@ void reset(uint index){
         //pos += 0.02 * vec2(hash(vec2(cohort_val)), hash(vec2(cohort_val + 1.0))); // Small jitter
     }
 
-    
+    cohort_val = current_field.w;
     //store to persistent entity buffer
-    entities[index]=Entity(pos,vel,size,cohort_val/float(cohorts),float[2](0,0),color);
+    entities[index]=Entity(pos,vel,size,cohort_val,float[2](0,0),color);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
@@ -548,7 +556,7 @@ void main() {
     //ADVANCED DRAWING force / strafe
     vec4 draw_sample =get_field(e.pos);
     e.vel += .01*force_field_strength*draw_sample.xy;
-    e.pos += .01*strafe_field_strength*draw_sample.zw;
+    e.pos += .01*strafe_field_strength*draw_sample.xy;//FOR SHADER DRIVEN ONLY
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
     float ca = canvas_resolution.x / canvas_resolution.y;

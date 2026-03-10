@@ -96,7 +96,8 @@ class AdvancedDrawingProcessor:
                          brush_mode, fixed_direction_heading,
                          tiling_mode,
                          camera_pos=(0.0, 0.0, 0.0),
-                         camera_dir=(0.0, 0.0, 1.0)):
+                         camera_dir=(0.0, 0.0, 1.0),
+                         generics=None):
         """Run the selected override shader to generate the field texture.
 
         Called once per render frame (not per physics step). Replaces the
@@ -128,6 +129,11 @@ class AdvancedDrawingProcessor:
         tryset(ovr["program"], "fill_mode", False)
         tryset(ovr["program"], "camera_pos", camera_pos)
         tryset(ovr["program"], "camera_dir", camera_dir)
+
+        # Generic scratch uniforms for live-coding
+        if generics is not None:
+            tryset(ovr["program"], "generic03", generics[0:4])
+            tryset(ovr["program"], "generic47", generics[4:8])
 
         # Render with no blending (fully replace field contents)
         self.ctx.disable(moderngl.BLEND)

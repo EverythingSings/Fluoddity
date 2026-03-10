@@ -77,6 +77,17 @@ class PreferencesState:
     # Parameter locks
     parameter_locks_enabled: bool = False  # Master toggle for parameter lock feature
 
+    # Generics (live-coding scratch uniforms)
+    show_generics_window: bool = False
+    generic0: float = 0.0
+    generic1: float = 0.0
+    generic2: float = 0.0
+    generic3: float = 0.0
+    generic4: float = 0.0
+    generic5: float = 0.0
+    generic6: float = 0.0
+    generic7: float = 0.0
+
 
 def save_preferences(prefs: PreferencesState, filepath: Path | str = None) -> None:
     """Save preferences to a JSON file."""

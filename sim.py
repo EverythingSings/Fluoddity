@@ -165,7 +165,8 @@ class Sim:
     def entity_update(self, ctx: moderngl.Context, multi_load_service=None,
                       is_preview_active=False, field_texture_bound=False,
                       force_field_strength: float = 1.0,
-                      strafe_field_strength: float = 1.0):
+                      strafe_field_strength: float = 1.0,
+                      generics: tuple = None):
         '''
         Run a single physics update on all particles
         '''
@@ -214,7 +215,10 @@ class Sim:
         tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
         tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._state.color_by_cohort)
 
-
+        # Generic scratch uniforms for live-coding
+        if generics is not None:
+            tryset(self.entity_update_program, 'generic03', generics[0:4])
+            tryset(self.entity_update_program, 'generic47', generics[4:8])
 
         num_workgroups = (self.entity_count + 63) // 64
         ctx.memory_barrier()
@@ -335,7 +339,8 @@ class Sim:
                canvas_draw_active: bool = True,
                field_texture=None,
                force_field_strength: float = 1.0,
-               strafe_field_strength: float = 1.0):
+               strafe_field_strength: float = 1.0,
+               generics: tuple = None):
         # Bind the current read buffer for sampling (will write to the other one)
         self.can_textures[self.can_read_index].use(location=1)
         self.brush_tex.use(location=3)
@@ -352,7 +357,8 @@ class Sim:
         self.entity_update(ctx, multi_load_service, is_preview_active,
                            field_texture_bound=field_texture is not None,
                            force_field_strength=force_field_strength,
-                           strafe_field_strength=strafe_field_strength)
+                           strafe_field_strength=strafe_field_strength,
+                           generics=generics)
 
         ctx.disable(moderngl.BLEND)
         self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power,

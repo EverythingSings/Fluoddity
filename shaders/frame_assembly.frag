@@ -377,9 +377,10 @@ void main() {
             if(tiling_mode_enabled||clamp(field_uv,vec2(0),vec2(1))==field_uv){
                 field = texture(field_texture,field_uv);
             }
-            vec3 force_col = 8*hsv2rgb(vec3(atan(field.y,field.x)/2./3.1415,.75,length(field.xy)));
-            vec3 strafe_col = 8*hsv2rgb(vec3(atan(field.w,field.z)/2./3.1415,.75,length(field.zw)));
-            fragColor.xyz +=draw_target_overlay_opacity*(force_col+strafe_col);
+            //vec3 force_col = 8*hsv2rgb(vec3(atan(field.y,field.x)/2./3.1415,.75,length(field.xy)));
+            //vec3 strafe_col = 8*hsv2rgb(vec3(atan(field.w,field.z)/2./3.1415,.75,length(field.zw)));
+            //fragColor.xyz +=draw_target_overlay_opacity*(force_col+strafe_col);
+            fragColor.xyz += draw_target_overlay_opacity*(9*vec3(field.x));
         }
     }
 }
