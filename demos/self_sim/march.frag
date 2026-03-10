@@ -101,11 +101,12 @@ float sdMicroBox(vec3 p) {
 // Canonical SDF — user-defined scene geometry within the fundamental region.
 // Replace this stub with your own scene.
 // ---------------------------------------------------------------------------
+//STUB VERSION: GETS REPLACED BY SCENE.GLSL
 MR sdf(vec3 p) {
     return MR(length(p)-1,vec4(0));
-//STUB: GETS REPLACED BY SCENE.GLSL
-}
 
+}
+//STUB VERSION: GETS REPLACED BY SCENE.GLSL
 // ---------------------------------------------------------------------------
 // Three-cell map: evaluates sdf() at Base, Micro, and Macro scales.
 // No recursion — the illusion of infinite depth comes from camera teleportation.

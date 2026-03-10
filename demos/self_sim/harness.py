@@ -159,21 +159,33 @@ void main() {
 # Shader loader + hot-reload helper
 # ---------------------------------------------------------------------------
 
-def _load_program(ctx, frag_path):
-    """Compile a new program from the vertex source and *frag_path* on disk."""
-    return ctx.program(
-        vertex_shader=_VERT,
-        fragment_shader=frag_path.read_text(),
-    )
+_STUB_MARKER = "//STUB VERSION: GETS REPLACED BY SCENE.GLSL"
 
 
-def _try_reload(ctx, frag_path, old_prog, vbo):
+def _load_program(ctx, frag_path, scene_path=None):
+    """Compile a new program from the vertex source and *frag_path* on disk.
+
+    If *scene_path* is given, the block between the two STUB markers in the
+    fragment source is replaced with the contents of that file.
+    """
+    frag_src = frag_path.read_text()
+    if scene_path is not None:
+        first = frag_src.index(_STUB_MARKER)
+        second = frag_src.index(_STUB_MARKER, first + len(_STUB_MARKER))
+        end = second + len(_STUB_MARKER)
+        scene_src = scene_path.read_text()
+        frag_src = frag_src[:first] + scene_src + frag_src[end:]
+    return ctx.program(vertex_shader=_VERT, fragment_shader=frag_src)
+
+
+def _try_reload(ctx, frag_path, old_prog, vbo, scene_path=None):
     """Attempt hot-reload.  Returns (prog, vao, ok)."""
     try:
-        prog = _load_program(ctx, frag_path)
+        prog = _load_program(ctx, frag_path, scene_path)
         vao  = ctx.vertex_array(prog, [(vbo, "2f", "in_position")])
         old_prog.release()
-        print("[reload] shader reloaded OK")
+        label = "full scene" if scene_path else "stub"
+        print(f"[reload] shader reloaded OK ({label})")
         return prog, vao, True
     except Exception as exc:
         print(f"[reload] FAILED – {exc}")
@@ -220,7 +232,9 @@ def main():
     ctx = moderngl.create_context()
 
     # ---- Shader program ------------------------------------------------------
-    frag_path = Path(__file__).parent / "march.frag"
+    frag_path  = Path(__file__).parent / "march.frag"
+    scene_path = Path(__file__).parent / "scene.glsl"
+    full_scene = False
     prog = _load_program(ctx, frag_path)
 
     # ---- Fullscreen quad (triangle-strip) ------------------------------------
@@ -315,7 +329,8 @@ def main():
         # Hot-reload
         if want_reload:
             want_reload = False
-            new_prog, new_vao, ok = _try_reload(ctx, frag_path, prog, vbo)
+            sp = scene_path if full_scene else None
+            new_prog, new_vao, ok = _try_reload(ctx, frag_path, prog, vbo, sp)
             if ok:
                 vao.release()
                 prog, vao = new_prog, new_vao
@@ -424,6 +439,13 @@ def main():
             ch, v = imgui_mod.drag_float("Transition Dist", transition_dist, 0.01, 0.01, 10.0)
             if ch:
                 transition_dist = v
+
+            imgui_mod.separator()
+
+            ch, v = imgui_mod.checkbox("Full Scene", full_scene)
+            if ch:
+                full_scene = v
+                want_reload = True
 
             imgui_mod.separator()
             imgui_mod.text_colored(
