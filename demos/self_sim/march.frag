@@ -21,6 +21,10 @@ uniform vec3  u_region_half_extents; // AABB half-size of the fundamental region
 uniform float u_worldScale;          // Current world scale (1.0 when far from micro)
 uniform float u_transition_distance; // Shell thickness for transition zone
 
+// Accumulated orientation: maps Base-local directions back to the original
+// world frame.  Keeps sun, sky, etc. consistent across cell transitions.
+uniform mat3  u_world_orientation;
+
 #define MAX_STEPS 2000
 #define HIT_DISTANCE 1e-4
 #define MAX_DISTANCE 300.0
@@ -217,11 +221,12 @@ void main(void)
     //sun
     vec3 albedo = hsv2rgb(vec3(fract(hit.mat.x/8.),.5,.2));
 
-    vec3 light_vector = normalize(SUN_DIR);
+    vec3 light_vector = u_world_orientation * normalize(SUN_DIR);
+    vec3 sky_dir      = u_world_orientation * normalize(SKY_DIR);
     vec3 light = SUN_COL * albedo * max(0, dot(cam_ray.norm, light_vector));
 
     light *= occlude_march(cam_ray, light_vector);
-    light += occlude_march(cam_ray, SKY_DIR)*(SKY_COL * albedo * max(0, dot(cam_ray.norm, SKY_DIR)));
+    light += occlude_march(cam_ray, sky_dir)*(SKY_COL * albedo * max(0, dot(cam_ray.norm, sky_dir)));
     vec3 col = light;
     col = mix(FOG_COL, col, exp(-cam_ray.extent * FOG_AMT / u_worldScale));
 

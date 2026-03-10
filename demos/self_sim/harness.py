@@ -232,6 +232,7 @@ def main():
 
     # ---- Recursive SDF state -------------------------------------------------
     world_scale = 1.0
+    world_orientation = np.eye(3, dtype=np.float64)  # accumulated rotation across teleports
 
     # ---- Input state ---------------------------------------------------------
     dragging = False
@@ -317,9 +318,14 @@ def main():
         if micro_dist < 0.0:
             # Entered Micro → remap to Base
             cam.teleport_inward(SIM_OFFSET, SIM_SCALE, SIM_ROTATION)
+            # Inward teleport applies rotation to camera, so world dirs
+            # need the inverse rotation to stay consistent
+            #THIS WAS BACKWARDS it needs forward orientation here.
+            world_orientation = SIM_ROTATION @ world_orientation
         elif region_dist > 0.0:
             # Exited fundamental region → remap toward Micro
             cam.teleport_outward(SIM_OFFSET, SIM_SCALE, SIM_ROTATION)
+            world_orientation = SIM_ROTATION.T @ world_orientation
 
         # 3. Recompute transition parameter from (potentially teleported) camera
         micro_dist = sd_micro_box(cam.pos, SIM_OFFSET, SIM_SCALE,
@@ -347,6 +353,7 @@ def main():
         _u(prog, "u_region_half_extents", tuple(REGION_HALF_EXT.astype("f4")))
         _u(prog, "u_worldScale",        float(world_scale))
         _u(prog, "u_transition_distance", float(TRANSITION_DIST))
+        _u_mat3(prog, "u_world_orientation", world_orientation)
 
         # Draw
         vao.render(moderngl.TRIANGLE_STRIP)
