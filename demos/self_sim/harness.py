@@ -421,7 +421,7 @@ def main():
             if ch:
                 region_half_ext[:] = v
 
-            ch, v = imgui_mod.drag_float("Transition Dist", transition_dist, 0.01, 0.0, 10.0)
+            ch, v = imgui_mod.drag_float("Transition Dist", transition_dist, 0.01, 0.01, 10.0)
             if ch:
                 transition_dist = v
 
