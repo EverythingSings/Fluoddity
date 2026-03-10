@@ -32,9 +32,9 @@ def rot_mat(x, y, z):
 # Similarity transform constants (Base ↔ Micro relationship)
 # ---------------------------------------------------------------------------
 
-SIM_OFFSET      = np.array([2.0, 0.0, 2.0])     # Micro copy center in Base space
-SIM_SCALE       = 0.125                            # Micro scale factor
-SIM_ROTATION    = rot_mat(1,1,0)#np.eye(3, dtype=np.float64)     # Micro rotation (identity = no rotation)
+SIM_OFFSET      = np.array([1.0, 0.0, 0.0])     # Micro copy center in Base space
+SIM_SCALE       = 0.06                            # Micro scale factor
+SIM_ROTATION    = rot_mat(0,.21,0)#np.eye(3, dtype=np.float64)     # Micro rotation (identity = no rotation)
 REGION_HALF_EXT = np.array([5.0, 5.0, 5.0])      # Fundamental region AABB half-size
 TRANSITION_DIST = 1.0                             # Transition shell thickness
 
@@ -208,7 +208,7 @@ def main():
     glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
     glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, True)
 
-    window = glfw.create_window(1280, 720, "Recursive SDF", None, None)
+    window = glfw.create_window(700, 700, "Recursive SDF", None, None)
     if not window:
         glfw.terminate()
         sys.exit("Failed to create GLFW window")
