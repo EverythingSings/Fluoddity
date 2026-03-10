@@ -21,15 +21,15 @@ uniform vec3  u_region_half_extents; // AABB half-size of the fundamental region
 uniform float u_worldScale;          // Current world scale (1.0 when far from micro)
 uniform float u_transition_distance; // Shell thickness for transition zone
 
-#define MAX_STEPS 1000
+#define MAX_STEPS 2000
 #define HIT_DISTANCE 1e-4
-#define MAX_DISTANCE 100.0
+#define MAX_DISTANCE 300.0
 #define FOCAL_LENGTH 2.2
 
-#define SUN_DIR normalize(vec3(sin(time*0), 1.5, cos(time*0)))
+#define SUN_DIR (vec3(sin(time*0), 1.5, cos(time*0)))
 #define SUN_COL 3.0*vec3(0.9, 0.8, 0.7)
 #define FOG_COL vec3(.12)
-#define FOG_AMT .1
+#define FOG_AMT .01
 
 #define PI 3.14159
 
@@ -106,24 +106,50 @@ MR sdf(vec3 p) {
 // ---------------------------------------------------------------------------
 // Three-cell map: evaluates sdf() at Base, Micro, and Macro scales.
 // No recursion — the illusion of infinite depth comes from camera teleportation.
+//
+// Extra cells: #define EXTRA_MICRO_CELLS N and/or EXTRA_MACRO_CELLS N
+// to render N additional cells beyond the default one at each end.
+// Default 0 (off).  Compiler eliminates the loop when N == 0.
 // ---------------------------------------------------------------------------
+#define EXTRA_MICRO_CELLS 1
+
+
 MR map(vec3 p) {
     // Base: evaluate at current coordinates
     MR d = sdf(p);
 
-    // Micro: transform into the scaled-down copy's local frame
-    vec3 pMicro = u_rotation * (p - u_offset) / u_scale;
+    // --- Micro chain ---------------------------------------------------------
+    vec3  pMicro = u_rotation * (p - u_offset) / u_scale;
+    float microCorr = u_scale;
     MR mMicro = sdf(pMicro);
-    mMicro.dts *= u_scale;  // correct distance from micro-frame to base-frame
+    mMicro.dts *= microCorr;
     d = mapMin(d, mMicro);
 
-    // Macro: transform as if Base is the Micro copy of a larger parent
-    // inverse(u_rotation) = transpose(u_rotation) for orthogonal matrices
-    vec3 pMacro = u_scale * (transpose(u_rotation) * p) + u_offset;
+    #ifdef EXTRA_MICRO_CELLS
+        for (int i = 0; i < EXTRA_MICRO_CELLS; i++) {
+            pMicro    = u_rotation * (pMicro - u_offset) / u_scale;
+            microCorr *= u_scale;
+            mMicro     = sdf(pMicro);
+            mMicro.dts *= microCorr;
+            d = mapMin(d, mMicro);
+        }
+    #endif
+    // --- Macro chain ---------------------------------------------------------
+    mat3  rot_inv  = transpose(u_rotation);
+    vec3  pMacro   = u_scale * (rot_inv * p) + u_offset;
+    float macroCorr = u_scale;
     MR mMacro = sdf(pMacro);
-    mMacro.dts /= u_scale;  // correct distance from macro-frame to base-frame
+    mMacro.dts /= macroCorr;
     d = mapMin(d, mMacro);
-
+    #ifdef EXTRA_MACRO_CELLS
+        for (int i = 0; i < EXTRA_MACRO_CELLS; i++) {
+            pMacro    = u_scale * (rot_inv * pMacro) + u_offset;
+            macroCorr *= u_scale;
+            mMacro     = sdf(pMacro);
+            mMacro.dts /= macroCorr;
+            d = mapMin(d, mMacro);
+        }
+    #endif
     return d;
 }
 
@@ -190,9 +216,11 @@ void main(void)
     MR hit = march(cam_ray);
     //sun
     vec3 albedo = hsv2rgb(vec3(fract(hit.mat.x/8.),.5,.2));
-    vec3 light = SUN_COL * albedo * max(0, dot(cam_ray.norm, SUN_DIR));
 
-    light *= occlude_march(cam_ray, SUN_DIR);
+    vec3 light_vector = normalize(SUN_DIR);
+    vec3 light = SUN_COL * albedo * max(0, dot(cam_ray.norm, light_vector));
+
+    light *= occlude_march(cam_ray, light_vector);
     light += occlude_march(cam_ray, SKY_DIR)*(SKY_COL * albedo * max(0, dot(cam_ray.norm, SKY_DIR)));
     vec3 col = light;
     col = mix(FOG_COL, col, exp(-cam_ray.extent * FOG_AMT / u_worldScale));

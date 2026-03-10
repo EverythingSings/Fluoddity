@@ -80,9 +80,6 @@ def smoothstep(edge0, edge1, x):
 # matrices (e.g. cell-transition teleports) can be applied directly.
 # ---------------------------------------------------------------------------
 
-WORLD_UP = np.array([0.0, 1.0, 0.0])
-
-
 class Camera:
     def __init__(self, pos=(0, 2, 0), fwd=(0, 0, -1), up=(0, 1, 0)):
         self.pos = np.array(pos, dtype=np.float64)
@@ -98,14 +95,14 @@ class Camera:
 
     # -- mouse look -------------------------------------------------------------
     def rotate(self, yaw, pitch):
-        """Apply yaw (around world-Y) and pitch (around camera-right)."""
+        """Apply yaw (around camera-up) and pitch (around camera-right)."""
         if abs(yaw) > 1e-9:
-            self.fwd = _rodrigues(self.fwd, WORLD_UP, yaw)
-            self.up  = _rodrigues(self.up,  WORLD_UP, yaw)
+            self.fwd = _rodrigues(self.fwd, self.up, yaw)
+            # self.up is the rotation axis, so it's invariant under yaw
         if abs(pitch) > 1e-9:
             r = self.right
             new_fwd = _rodrigues(self.fwd, r, pitch)
-            if abs(np.dot(new_fwd, WORLD_UP)) < 0.99:   # clamp to avoid flip
+            if abs(np.dot(new_fwd, self.up)) < 0.99:   # clamp to avoid flip
                 self.fwd = new_fwd
                 self.up  = _rodrigues(self.up, r, pitch)
         self._ortho()
@@ -119,14 +116,14 @@ class Camera:
     # -- keyboard movement ------------------------------------------------------
     def move(self, window, dt, world_scale=1.0):
         s = self.speed * world_scale * dt
-        f, r = self.fwd, self.right
+        f, r, u = self.fwd, self.right, self.up
         pressed = lambda k: glfw.get_key(window, k) == glfw.PRESS
         if pressed(glfw.KEY_W):          self.pos += f * s
         if pressed(glfw.KEY_S):          self.pos -= f * s
         if pressed(glfw.KEY_D):          self.pos += r * s
         if pressed(glfw.KEY_A):          self.pos -= r * s
-        if pressed(glfw.KEY_SPACE):      self.pos[1] += s
-        if pressed(glfw.KEY_LEFT_SHIFT): self.pos[1] -= s
+        if pressed(glfw.KEY_SPACE):      self.pos += u * s
+        if pressed(glfw.KEY_LEFT_SHIFT): self.pos -= u * s
 
     # -- teleportation ---------------------------------------------------------
     def teleport_inward(self, offset, scale, rotation):
