@@ -352,28 +352,40 @@ def main():
         # 1. Move camera (speed scaled by previous frame's worldScale)
         cam.move(window, dt, world_scale)
 
-        # 2. Teleport checks
-        micro_dist  = sd_micro_box(cam.pos, sim_offset, sim_scale,
-                                   sim_rotation, region_half_ext)
-        region_dist = sd_box(cam.pos, region_half_ext)
+        # 2. Compute fixed point and spherical radii.
+        #    The fixed point of f(p) = offset + scale * R^T * p is:
+        #        p_fix = (I - scale * R^T)^-1 @ offset
+        #    Teleport boundaries and transition are both spheres centered
+        #    on the fixed point, so there is zero mismatch.
+        rot_inv = sim_rotation.T
+        fixed_pt = np.linalg.solve(
+            np.eye(3) - sim_scale * rot_inv, sim_offset)
+        d = float(np.linalg.norm(cam.pos - fixed_pt))
 
-        if micro_dist < 0.0:
-            # Entered Micro → remap to Base
+        # r_outer = distance from fixed point to nearest region face
+        # r_inner = r_outer * sim_scale  (the micro cell sphere)
+        r_outer = float(np.min(region_half_ext - np.abs(fixed_pt)))
+        r_inner = r_outer * sim_scale
+
+        # 3. Teleport checks (spherical)
+        if d < r_inner:
+            # Entered Micro sphere → remap to Base
             cam.teleport_inward(sim_offset, sim_scale, sim_rotation)
-            # Inward teleport applies rotation to camera, so world dirs
-            # need the inverse rotation to stay consistent
-            #THIS WAS BACKWARDS it needs forward orientation here.
             world_orientation = sim_rotation @ world_orientation
-        elif region_dist > 0.0:
-            # Exited fundamental region → remap toward Micro
+            # Recompute d after teleport (camera is now near r_outer)
+            d = float(np.linalg.norm(cam.pos - fixed_pt))
+        elif d > r_outer:
+            # Exited outer sphere → remap toward Micro
             cam.teleport_outward(sim_offset, sim_scale, sim_rotation)
             world_orientation = sim_rotation.T @ world_orientation
+            # Recompute d after teleport (camera is now near r_inner)
+            d = float(np.linalg.norm(cam.pos - fixed_pt))
 
-        # 3. Recompute transition parameter from (potentially teleported) camera
-        micro_dist = sd_micro_box(cam.pos, sim_offset, sim_scale,
-                                  sim_rotation, region_half_ext)
-        t = smoothstep(transition_dist, 0.0, micro_dist)
-        world_scale = 1.0 + (sim_scale - 1.0) * t  # lerp(1.0, sim_scale, t)
+        # 4. Transition: log-ratio gives constant multiplicative scaling rate
+        d_clamped = max(r_inner, min(r_outer, d))
+        log_ratio = math.log(r_outer / r_inner)  # always positive
+        t = math.log(r_outer / d_clamped) / log_ratio  # 0 at outer, 1 at inner
+        world_scale = sim_scale ** t
 
         # ---- Render ----------------------------------------------------------
         w, h = glfw.get_framebuffer_size(window)
@@ -395,6 +407,8 @@ def main():
         _u(prog, "u_region_half_extents", tuple(region_half_ext.astype("f4")))
         _u(prog, "u_worldScale",        float(world_scale))
         _u(prog, "u_transition_distance", float(transition_dist))
+        _u(prog, "u_fixed_point",       tuple(fixed_pt.astype("f4")))
+        _u(prog, "u_cell_radius",       float(r_outer))
         _u_mat3(prog, "u_world_orientation", world_orientation)
 
         # Draw

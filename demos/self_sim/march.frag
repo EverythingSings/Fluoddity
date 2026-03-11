@@ -33,7 +33,7 @@ uniform mat3  u_world_orientation;
 #define SUN_DIR (vec3(sin(-1), 1.5, cos(-1)))
 #define SUN_COL 3.0*vec3(0.9, 0.8, 0.7)
 #define FOG_COL vec3(.12)
-#define FOG_AMT .01
+#define FOG_AMT .1
 
 #define PI 3.14159
 
@@ -115,8 +115,8 @@ MR sdf(vec3 p) {
 // to render N additional cells beyond the default one at each end.
 // Default 0 (off).  Compiler eliminates the loop when N == 0.
 // ---------------------------------------------------------------------------
-//#define EXTRA_MICRO_CELLS 1
-#define CELL_OVERLAY 1
+//#define EXTRA_MICRO_CELLS 2
+//#define CELL_OVERLAY 1
 
 MR map(vec3 p) {
     // Base: evaluate at current coordinates
@@ -196,7 +196,7 @@ MR march(inout Ray r){
 }
 
 float occlude_march(Ray r, vec3 light_dir){
-    float bump = HIT_DISTANCE * 10.0 * u_worldScale;
+    float bump = HIT_DISTANCE * 5.0 * u_worldScale;
     Ray shadow_ray = Ray(r.ori + r.dir * r.extent, light_dir, 0.0, vec3(0));
     for (int i = 0; i < 10; i++)
     {

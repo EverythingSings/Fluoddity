@@ -347,7 +347,7 @@ MR sdf(vec3 p) {
     //result = mapMin(result, shap);
     float sz = .1;
     p/=sz;
-    float tow = sdBox(p,vec3(7,14,5));
+    float tow = sdBox(p,vec3(9,14,9));
     if(tow<1.2){tow = min(tower_facade(p).dts,tower(p));}
     MR result =  MR(sz*tow,vec4(1));
     return result; 
