@@ -57,6 +57,30 @@ def _rodrigues(v, axis, angle):
     c, s = math.cos(angle), math.sin(angle)
     return v * c + np.cross(a, v) * s + a * np.dot(a, v) * (1.0 - c)
 
+
+def _axis_angle(R):
+    """Extract (axis, angle) from a 3×3 rotation matrix."""
+    angle = math.acos(max(-1.0, min(1.0, (np.trace(R) - 1.0) / 2.0)))
+    if abs(angle) < 1e-12:
+        return np.array([0.0, 1.0, 0.0]), 0.0
+    axis = np.array([R[2, 1] - R[1, 2],
+                     R[0, 2] - R[2, 0],
+                     R[1, 0] - R[0, 1]])
+    return _norm(axis), angle
+
+
+def _rot_from_axis_angle(axis, angle):
+    """Build a 3×3 rotation matrix from axis-angle."""
+    a = _norm(axis)
+    c, s = math.cos(angle), math.sin(angle)
+    t = 1.0 - c
+    x, y, z = a
+    return np.array([
+        [t*x*x + c,   t*x*y - s*z, t*x*z + s*y],
+        [t*x*y + s*z, t*y*y + c,   t*y*z - s*x],
+        [t*x*z - s*y, t*y*z + s*x, t*z*z + c  ],
+    ])
+
 # ---------------------------------------------------------------------------
 # Camera – stores orientation as explicit vectors so that arbitrary rotation
 # matrices (e.g. cell-transition teleports) can be applied directly.
@@ -102,7 +126,6 @@ class Camera:
         if pressed(glfw.KEY_A):          self.pos -= r * s
         if pressed(glfw.KEY_SPACE):      self.pos += u * s
         if pressed(glfw.KEY_LEFT_SHIFT): self.pos -= u * s
-        self.pos *= .99
 
     def teleport_inward(self, scale, rotation):
         """Camera crossed inner sphere → zoom into nested cell."""
@@ -226,6 +249,11 @@ def main():
     sim_scale   = DEFAULT_SCALE
     sim_euler   = list(DEFAULT_EULER)
     cell_radius = DEFAULT_CELL_RADIUS
+    zoom_rate   = 1.0               # per-frame multiplier on |pos| (1.0 = off)
+
+    # Spiral phase: counts fractional cell-levels traversed by continuous zoom.
+    # Wraps via teleport at 0 and 1.  Accumulated analytically — zero drift.
+    spiral_phase = 0.0
 
     # ---- Recursive SDF state -------------------------------------------------
     world_scale = 1.0
@@ -323,6 +351,39 @@ def main():
         # 1. Move camera (speed scaled by world_scale from previous frame)
         cam.move(window, dt, world_scale)
 
+        # 1b. Continuous zoom along a logarithmic spiral.
+        #     We track spiral_phase (fractional cell-levels traversed) and
+        #     reconstruct the camera position analytically each frame, so
+        #     there is zero accumulated drift.
+        if zoom_rate != 1.0:
+            # Advance phase: how much of a cell-level does one zoom_rate step cover?
+            #   zoom_rate^N = sim_scale  =>  N = log(sim_scale)/log(zoom_rate)
+            #   phase_per_frame = 1/N = log(zoom_rate)/log(sim_scale)
+            phase_step = math.log(zoom_rate) / log_scale
+            spiral_phase += phase_step
+
+            # Decompose current position into (radius, direction)
+            d = float(np.linalg.norm(cam.pos))
+            if d > 1e-12:
+                cam_dir = cam.pos / d
+
+                # New radius: analytically from phase step
+                r_new = d * zoom_rate
+
+                # Rotation: the teleport applies R to the camera, making the
+                # scene appear to rotate by R^T.  To track the scene we must
+                # pre-rotate the camera by R^T over one full cell level.
+                axis, total_angle = _axis_angle(sim_rotation.T)
+                if abs(total_angle) > 1e-12:
+                    R_step = _rot_from_axis_angle(axis, total_angle * phase_step)
+                    cam_dir = R_step @ cam_dir
+                    cam.fwd = R_step @ cam.fwd
+                    cam.up  = R_step @ cam.up
+                    cam._ortho()
+
+                # Reconstruct position (drift-free: radius is exact, direction is unit)
+                cam.pos = r_new * _norm(cam_dir)
+
         # 2. Teleport checks — spherical cells centered on the origin
         d = float(np.linalg.norm(cam.pos))
         r_inner = cell_radius * sim_scale
@@ -330,10 +391,12 @@ def main():
         if d < r_inner:
             cam.teleport_inward(sim_scale, sim_rotation)
             world_orientation = sim_rotation @ world_orientation
+            spiral_phase -= 1.0
             d = float(np.linalg.norm(cam.pos))
         elif d > cell_radius:
             cam.teleport_outward(sim_scale, sim_rotation)
             world_orientation = sim_rotation.T @ world_orientation
+            spiral_phase += 1.0
             d = float(np.linalg.norm(cam.pos))
 
         # 3. world_scale: logarithmic interpolation from cell_radius (=1.0)
@@ -399,6 +462,10 @@ def main():
             ch, v = imgui_mod.drag_float("Cell Radius", cell_radius, 0.1, 0.5, 50.0)
             if ch:
                 cell_radius = v
+
+            ch, v = imgui_mod.slider_float("Zoom Rate", zoom_rate, 0.95, 1.05)
+            if ch:
+                zoom_rate = v
 
             imgui_mod.separator()
 
