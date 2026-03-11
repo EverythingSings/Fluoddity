@@ -1,6 +1,11 @@
 """
 Minimal shader harness: GLFW + ModernGL + optional ImGui.
 
+Self-similar SDF explorer.  The scene is defined around the origin;
+a contraction map (scale + rotation) tiles it into nested spherical
+cells.  Camera teleportation at cell boundaries creates the illusion
+of infinite recursion.
+
 Controls:
     Left-drag    Look around
     WASD         Move horizontally
@@ -17,6 +22,7 @@ import numpy as np
 import glfw
 import moderngl
 
+
 def rot_mat(x, y, z):
     cx, sx = np.cos(x), np.sin(x)
     cy, sy = np.cos(y), np.sin(y)
@@ -29,14 +35,12 @@ def rot_mat(x, y, z):
     return Rz @ Ry @ Rx
 
 # ---------------------------------------------------------------------------
-# Similarity transform defaults (Base ↔ Micro relationship)
+# Contraction-map defaults (fixed point at origin)
 # ---------------------------------------------------------------------------
 
-DEFAULT_SIM_OFFSET      = [-.4, 1.08, 0.0]
-DEFAULT_SIM_SCALE       = 0.019
-DEFAULT_SIM_EULER       = [0.0, 0.0, 0.0]       # (x, y, z) radians
-DEFAULT_REGION_HALF_EXT = [5.0, 5.0, 5.0]
-DEFAULT_TRANSITION_DIST = 1.0
+DEFAULT_SCALE       = 0.019
+DEFAULT_EULER       = [0.0, 0.0, 0.0]   # (x, y, z) radians
+DEFAULT_CELL_RADIUS = 5.0
 
 # ---------------------------------------------------------------------------
 # Vector helpers
@@ -54,28 +58,6 @@ def _rodrigues(v, axis, angle):
     return v * c + np.cross(a, v) * s + a * np.dot(a, v) * (1.0 - c)
 
 # ---------------------------------------------------------------------------
-# SDF helpers (Python mirrors of GLSL functions for CPU-side teleport checks)
-# ---------------------------------------------------------------------------
-
-def sd_box(p, half_extents):
-    """Signed box distance. Negative = inside."""
-    q = np.abs(p) - half_extents
-    return float(np.linalg.norm(np.maximum(q, 0.0)) + min(max(q[0], max(q[1], q[2])), 0.0))
-
-
-def sd_micro_box(p, offset, scale, rotation, region_half_ext):
-    """Signed distance to the Micro OBB in Base space. Negative = inside."""
-    q = rotation @ (p - offset)
-    half_ext = region_half_ext * scale
-    d = np.abs(q) - half_ext
-    return float(np.linalg.norm(np.maximum(d, 0.0)) + min(max(d[0], max(d[1], d[2])), 0.0))
-
-
-def smoothstep(edge0, edge1, x):
-    t = max(0.0, min(1.0, (x - edge0) / (edge1 - edge0)))
-    return t * t * (3.0 - 2.0 * t)
-
-# ---------------------------------------------------------------------------
 # Camera – stores orientation as explicit vectors so that arbitrary rotation
 # matrices (e.g. cell-transition teleports) can be applied directly.
 # ---------------------------------------------------------------------------
@@ -88,21 +70,18 @@ class Camera:
         self.speed       = 5.0
         self.sensitivity = 0.003
 
-    # -- derived basis vector ---------------------------------------------------
     @property
     def right(self):
         return _norm(np.cross(self.fwd, self.up))
 
-    # -- mouse look -------------------------------------------------------------
     def rotate(self, yaw, pitch):
         """Apply yaw (around camera-up) and pitch (around camera-right)."""
         if abs(yaw) > 1e-9:
             self.fwd = _rodrigues(self.fwd, self.up, yaw)
-            # self.up is the rotation axis, so it's invariant under yaw
         if abs(pitch) > 1e-9:
             r = self.right
             new_fwd = _rodrigues(self.fwd, r, pitch)
-            if abs(np.dot(new_fwd, self.up)) < 0.99:   # clamp to avoid flip
+            if abs(np.dot(new_fwd, self.up)) < 0.99:
                 self.fwd = new_fwd
                 self.up  = _rodrigues(self.up, r, pitch)
         self._ortho()
@@ -113,7 +92,6 @@ class Camera:
         self.up  = self.up - np.dot(self.up, self.fwd) * self.fwd
         self.up  = _norm(self.up)
 
-    # -- keyboard movement ------------------------------------------------------
     def move(self, window, dt, world_scale=1.0):
         s = self.speed * world_scale * dt
         f, r, u = self.fwd, self.right, self.up
@@ -124,19 +102,19 @@ class Camera:
         if pressed(glfw.KEY_A):          self.pos -= r * s
         if pressed(glfw.KEY_SPACE):      self.pos += u * s
         if pressed(glfw.KEY_LEFT_SHIFT): self.pos -= u * s
+        self.pos *= .99
 
-    # -- teleportation ---------------------------------------------------------
-    def teleport_inward(self, offset, scale, rotation):
-        """Camera entered Micro box → remap to Base coordinates."""
-        self.pos = rotation @ (self.pos - offset) / scale
+    def teleport_inward(self, scale, rotation):
+        """Camera crossed inner sphere → zoom into nested cell."""
+        self.pos = rotation @ self.pos / scale
         self.fwd = rotation @ self.fwd
         self.up  = rotation @ self.up
         self._ortho()
 
-    def teleport_outward(self, offset, scale, rotation):
-        """Camera exited fundamental region → remap toward Micro in Base."""
-        rot_inv = rotation.T  # transpose = inverse for orthogonal matrices
-        self.pos = scale * (rot_inv @ self.pos) + offset
+    def teleport_outward(self, scale, rotation):
+        """Camera crossed outer sphere → zoom out to parent cell."""
+        rot_inv = rotation.T
+        self.pos = scale * (rot_inv @ self.pos)
         self.fwd = rot_inv @ self.fwd
         self.up  = rot_inv @ self.up
         self._ortho()
@@ -241,19 +219,17 @@ def main():
     vbo = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], dtype="f4"))
     vao = ctx.vertex_array(prog, [(vbo, "2f", "in_position")])
 
-    # ---- Camera (start inside the fundamental region) ------------------------
+    # ---- Camera (start inside the fundamental cell) --------------------------
     cam = Camera(pos=[0.0, 2.0, 0.0])
 
-    # ---- Mutable similarity-transform state (driven by ImGui) ----------------
-    sim_offset      = np.array(DEFAULT_SIM_OFFSET, dtype=np.float64)
-    sim_scale       = DEFAULT_SIM_SCALE
-    sim_euler       = list(DEFAULT_SIM_EULER)           # [x, y, z] radians
-    region_half_ext = np.array(DEFAULT_REGION_HALF_EXT, dtype=np.float64)
-    transition_dist = DEFAULT_TRANSITION_DIST
+    # ---- Contraction-map state (driven by ImGui) -----------------------------
+    sim_scale   = DEFAULT_SCALE
+    sim_euler   = list(DEFAULT_EULER)
+    cell_radius = DEFAULT_CELL_RADIUS
 
     # ---- Recursive SDF state -------------------------------------------------
     world_scale = 1.0
-    world_orientation = np.eye(3, dtype=np.float64)  # accumulated rotation across teleports
+    world_orientation = np.eye(3, dtype=np.float64)
 
     # ---- Optional ImGui overlay ----------------------------------------------
     imgui_ok = False
@@ -264,7 +240,6 @@ def main():
         from imgui_bundle.python_backends.glfw_backend import GlfwRenderer
 
         _imgui.create_context()
-        # Let ImGui install its GLFW callbacks so it receives input
         imgui_renderer = GlfwRenderer(window)
         imgui_mod = _imgui
         imgui_ok = True
@@ -281,10 +256,8 @@ def main():
     _prev_key_cb = glfw.set_key_callback(window, None)
 
     def _on_mouse_button(win, button, action, mods):
-        # Let ImGui process first
         if _prev_mouse_button_cb:
             _prev_mouse_button_cb(win, button, action, mods)
-        # Only handle camera drag when ImGui doesn't want the mouse
         nonlocal dragging, last_mx, last_my
         if imgui_ok and imgui_mod.get_io().want_capture_mouse:
             return
@@ -298,10 +271,8 @@ def main():
                 glfw.set_input_mode(win, glfw.CURSOR, glfw.CURSOR_NORMAL)
 
     def _on_key(win, key, scancode, action, mods):
-        # Let ImGui process first
         if _prev_key_cb:
             _prev_key_cb(win, key, scancode, action, mods)
-        # Only handle app keys when ImGui doesn't want the keyboard
         nonlocal want_reload
         if imgui_ok and imgui_mod.get_io().want_capture_keyboard:
             return
@@ -317,6 +288,7 @@ def main():
     # ---- Timing --------------------------------------------------------------
     frame_count = 0
     t0 = last_t = time.perf_counter()
+    log_scale = math.log(DEFAULT_SCALE)  # cached, updated when scale changes
 
     # ---- Main loop -----------------------------------------------------------
     while not glfw.window_should_close(window):
@@ -344,47 +316,33 @@ def main():
             )
             last_mx, last_my = mx, my
 
-        # ---- Per-frame update (spec §6) --------------------------------------
+        # ---- Per-frame update ------------------------------------------------
 
-        # Recompute rotation matrix from euler angles each frame
         sim_rotation = rot_mat(*sim_euler)
 
-        # 1. Move camera (speed scaled by previous frame's worldScale)
+        # 1. Move camera (speed scaled by world_scale from previous frame)
         cam.move(window, dt, world_scale)
 
-        # 2. Compute fixed point and spherical radii.
-        #    The fixed point of f(p) = offset + scale * R^T * p is:
-        #        p_fix = (I - scale * R^T)^-1 @ offset
-        #    Teleport boundaries and transition are both spheres centered
-        #    on the fixed point, so there is zero mismatch.
-        rot_inv = sim_rotation.T
-        fixed_pt = np.linalg.solve(
-            np.eye(3) - sim_scale * rot_inv, sim_offset)
-        d = float(np.linalg.norm(cam.pos - fixed_pt))
+        # 2. Teleport checks — spherical cells centered on the origin
+        d = float(np.linalg.norm(cam.pos))
+        r_inner = cell_radius * sim_scale
 
-        # r_outer = distance from fixed point to nearest region face
-        # r_inner = r_outer * sim_scale  (the micro cell sphere)
-        r_outer = float(np.min(region_half_ext - np.abs(fixed_pt)))
-        r_inner = r_outer * sim_scale
-
-        # 3. Teleport checks (spherical)
         if d < r_inner:
-            # Entered Micro sphere → remap to Base
-            cam.teleport_inward(sim_offset, sim_scale, sim_rotation)
+            cam.teleport_inward(sim_scale, sim_rotation)
             world_orientation = sim_rotation @ world_orientation
-            # Recompute d after teleport (camera is now near r_outer)
-            d = float(np.linalg.norm(cam.pos - fixed_pt))
-        elif d > r_outer:
-            # Exited outer sphere → remap toward Micro
-            cam.teleport_outward(sim_offset, sim_scale, sim_rotation)
+            d = float(np.linalg.norm(cam.pos))
+        elif d > cell_radius:
+            cam.teleport_outward(sim_scale, sim_rotation)
             world_orientation = sim_rotation.T @ world_orientation
-            # Recompute d after teleport (camera is now near r_inner)
-            d = float(np.linalg.norm(cam.pos - fixed_pt))
+            d = float(np.linalg.norm(cam.pos))
 
-        # 4. Transition: log-ratio gives constant multiplicative scaling rate
-        d_clamped = max(r_inner, min(r_outer, d))
-        log_ratio = math.log(r_outer / r_inner)  # always positive
-        t = math.log(r_outer / d_clamped) / log_ratio  # 0 at outer, 1 at inner
+        # 3. world_scale: logarithmic interpolation from cell_radius (=1.0)
+        #    down to r_inner (=sim_scale).
+        #    t = log(cell_radius / d) / log(cell_radius / r_inner)
+        #      = log(cell_radius / d) / log(1 / sim_scale)
+        #      = log(cell_radius / d) / -log(sim_scale)
+        d_clamped = max(r_inner, min(cell_radius, d))
+        t = math.log(cell_radius / d_clamped) / -log_scale
         world_scale = sim_scale ** t
 
         # ---- Render ----------------------------------------------------------
@@ -395,26 +353,21 @@ def main():
         ctx.clear()
 
         # Upload uniforms
-        _u(prog, "resolution",           (float(w), float(h)))
-        _u(prog, "time",                 now - t0)
-        _u(prog, "frame_count",          frame_count)
-        _u(prog, "u_cam",               tuple(cam.pos.astype("f4")))
-        _u(prog, "u_view_dir",          tuple(cam.fwd.astype("f4")))
-        _u(prog, "u_up_dir",            tuple(cam.up.astype("f4")))
-        _u(prog, "u_offset",            tuple(sim_offset.astype("f4")))
-        _u(prog, "u_scale",             float(sim_scale))
-        _u_mat3(prog, "u_rotation",     sim_rotation)
-        _u(prog, "u_region_half_extents", tuple(region_half_ext.astype("f4")))
-        _u(prog, "u_worldScale",        float(world_scale))
-        _u(prog, "u_transition_distance", float(transition_dist))
-        _u(prog, "u_fixed_point",       tuple(fixed_pt.astype("f4")))
-        _u(prog, "u_cell_radius",       float(r_outer))
+        _u(prog, "resolution",         (float(w), float(h)))
+        _u(prog, "time",               now - t0)
+        _u(prog, "frame_count",        frame_count)
+        _u(prog, "u_cam",              tuple(cam.pos.astype("f4")))
+        _u(prog, "u_view_dir",         tuple(cam.fwd.astype("f4")))
+        _u(prog, "u_up_dir",           tuple(cam.up.astype("f4")))
+        _u(prog, "u_scale",            float(sim_scale))
+        _u_mat3(prog, "u_rotation",    sim_rotation)
+        _u(prog, "u_cell_radius",      float(cell_radius))
+        _u(prog, "u_worldScale",       float(world_scale))
         _u_mat3(prog, "u_world_orientation", world_orientation)
 
-        # Draw
         vao.render(moderngl.TRIANGLE_STRIP)
 
-        # ImGui overlay
+        # ---- ImGui overlay ---------------------------------------------------
         if imgui_ok:
             imgui_renderer.process_inputs()
             imgui_mod.new_frame()
@@ -428,31 +381,24 @@ def main():
             imgui_mod.text(f"Pos:  ({p[0]:.2f}, {p[1]:.2f}, {p[2]:.2f})")
             f = cam.fwd
             imgui_mod.text(f"Fwd:  ({f[0]:.2f}, {f[1]:.2f}, {f[2]:.2f})")
-            imgui_mod.text(f"Scale: {world_scale:.4f}")
+            imgui_mod.text(f"Scale: {world_scale:.6f}")
             imgui_mod.separator()
 
-            # -- Similarity transform controls --
-            imgui_mod.text("Similarity Transform")
+            # -- Contraction map controls --
+            imgui_mod.text("Contraction Map")
 
-            ch, v = imgui_mod.drag_float3("Offset", list(sim_offset), 0.01)
-            if ch:
-                sim_offset[:] = v
-
-            ch, v = imgui_mod.drag_float("Scale##sim", sim_scale, 0.001, 0.001, 1.0)
+            ch, v = imgui_mod.drag_float("Scale", sim_scale, 0.001, 0.001, 1.0)
             if ch:
                 sim_scale = v
+                log_scale = math.log(sim_scale)
 
             ch, v = imgui_mod.drag_float3("Rotation (rad)", list(sim_euler), 0.01)
             if ch:
                 sim_euler[:] = v
 
-            ch, v = imgui_mod.drag_float3("Region Half-Ext", list(region_half_ext), 0.1)
+            ch, v = imgui_mod.drag_float("Cell Radius", cell_radius, 0.1, 0.5, 50.0)
             if ch:
-                region_half_ext[:] = v
-
-            ch, v = imgui_mod.drag_float("Transition Dist", transition_dist, 0.01, 0.01, 10.0)
-            if ch:
-                transition_dist = v
+                cell_radius = v
 
             imgui_mod.separator()
 

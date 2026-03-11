@@ -9,17 +9,13 @@ uniform vec3 u_cam;
 uniform vec3 u_view_dir;
 uniform vec3 u_up_dir;
 
-// Similarity transform (Base ↔ Micro relationship)
-uniform vec3  u_offset;              // Micro copy center in Base space
-uniform float u_scale;               // Micro scale factor (0 < s < 1)
-uniform mat3  u_rotation;            // Micro rotation relative to Base
-
-// Fundamental region
-uniform vec3  u_region_half_extents; // AABB half-size of the fundamental region
+// Contraction map (fixed point at origin)
+uniform float u_scale;               // Contraction ratio (0 < s < 1)
+uniform mat3  u_rotation;            // Rotation per recursion level
+uniform float u_cell_radius;         // Radius of the fundamental spherical cell
 
 // Transition / scale
-uniform float u_worldScale;          // Current world scale (1.0 when far from micro)
-uniform float u_transition_distance; // Shell thickness for transition zone
+uniform float u_worldScale;          // Current world scale (1.0 at cell edge, u_scale at inner edge)
 
 // Accumulated orientation: maps Base-local directions back to the original
 // world frame.  Keeps sun, sky, etc. consistent across cell transitions.
@@ -33,7 +29,7 @@ uniform mat3  u_world_orientation;
 #define SUN_DIR (vec3(sin(-1), 1.5, cos(-1)))
 #define SUN_COL 3.0*vec3(0.9, 0.8, 0.7)
 #define FOG_COL vec3(.12)
-#define FOG_AMT .1
+#define FOG_AMT .01
 
 #define PI 3.14159
 
@@ -85,31 +81,20 @@ float sdBoxFrame( vec3 p, vec3 b, float e )
 
 
 // ---------------------------------------------------------------------------
-// Signed distance to the Micro copy's bounding box, in Base (unscaled) space.
-// Negative = inside the Micro box.
-// ---------------------------------------------------------------------------
-float sdMicroBox(vec3 p) {
-    vec3 q = u_rotation * (p - u_offset);
-    vec3 halfExt = u_region_half_extents * u_scale;
-    vec3 d = abs(q) - halfExt;
-    return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
-}
-
-
-
-// ---------------------------------------------------------------------------
 // Canonical SDF — user-defined scene geometry within the fundamental region.
 // Replace this stub with your own scene.
 // ---------------------------------------------------------------------------
 //STUB VERSION: GETS REPLACED BY SCENE.GLSL
 MR sdf(vec3 p) {
-    return MR(length(p)-1,vec4(0));
+    return MR(sdBoxFrame(p,vec3(1),.1),vec4(0));
 
 }
 //STUB VERSION: GETS REPLACED BY SCENE.GLSL
 // ---------------------------------------------------------------------------
 // Three-cell map: evaluates sdf() at Base, Micro, and Macro scales.
 // No recursion — the illusion of infinite depth comes from camera teleportation.
+//
+// The contraction map is simply: p → R * p / scale  (fixed point at origin).
 //
 // Extra cells: #define EXTRA_MICRO_CELLS N and/or EXTRA_MACRO_CELLS N
 // to render N additional cells beyond the default one at each end.
@@ -122,45 +107,43 @@ MR map(vec3 p) {
     // Base: evaluate at current coordinates
     MR d = sdf(p);
 
-    // --- Micro chain ---------------------------------------------------------
-    vec3  pMicro = u_rotation * (p - u_offset) / u_scale;
+    // --- Micro chain (zoom in) -----------------------------------------------
+    vec3  pMicro = u_rotation * p / u_scale;
     float microCorr = u_scale;
     MR mMicro = sdf(pMicro);
     #ifdef CELL_OVERLAY
-        mMicro = mapMin(mMicro, MR(sdBoxFrame(pMicro,u_region_half_extents ,.1),vec4(0)));//result;
-        mMicro = mapMin(mMicro, MR(sdBoxFrame(pMicro,u_region_half_extents+u_transition_distance/u_scale,.51),vec4(2)));
+        mMicro = mapMin(mMicro, MR(length(pMicro) - u_cell_radius, vec4(0)));
     #endif
     mMicro.dts *= microCorr;
     d = mapMin(d, mMicro);
 
     #ifdef EXTRA_MICRO_CELLS
         for (int i = 0; i < EXTRA_MICRO_CELLS; i++) {
-            pMicro    = u_rotation * (pMicro - u_offset) / u_scale;
+            pMicro    = u_rotation * pMicro / u_scale;
             microCorr *= u_scale;
             mMicro     = sdf(pMicro);
             mMicro.dts *= microCorr;
             d = mapMin(d, mMicro);
         }
     #endif
-    // --- Macro chain ---------------------------------------------------------
+    // --- Macro chain (zoom out) ----------------------------------------------
     mat3  rot_inv  = transpose(u_rotation);
-    vec3  pMacro   = u_scale * (rot_inv * p) + u_offset;
+    vec3  pMacro   = u_scale * (rot_inv * p);
     float macroCorr = u_scale;
     MR mMacro = sdf(pMacro);
     mMacro.dts /= macroCorr;
     d = mapMin(d, mMacro);
     #ifdef EXTRA_MACRO_CELLS
         for (int i = 0; i < EXTRA_MACRO_CELLS; i++) {
-            pMacro    = u_scale * (rot_inv * pMacro) + u_offset;
+            pMacro    = u_scale * (rot_inv * pMacro);
             macroCorr *= u_scale;
             mMacro     = sdf(pMacro);
             mMacro.dts /= macroCorr;
             d = mapMin(d, mMacro);
         }
     #endif
-        #ifdef CELL_OVERLAY
-        d = mapMin(d, MR(sdBoxFrame(p,u_region_half_extents ,.1),vec4(0)));//result;
-        d = mapMin(d, MR(sdBoxFrame(p,u_region_half_extents+u_transition_distance/u_scale,.51),vec4(2)));
+    #ifdef CELL_OVERLAY
+        d = mapMin(d, MR(length(p) - u_cell_radius, vec4(0)));
     #endif
     return d;
 }
