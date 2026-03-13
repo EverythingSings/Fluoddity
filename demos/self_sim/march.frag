@@ -21,12 +21,13 @@ uniform float u_worldScale;          // Current world scale (1.0 at cell edge, u
 // world frame.  Keeps sun, sky, etc. consistent across cell transitions.
 uniform mat3  u_world_orientation;
 
+uniform vec3 sim_offset;
 #define MAX_STEPS 2000
-#define HIT_DISTANCE 4e-4
+#define HIT_DISTANCE 2e-3
 #define MAX_DISTANCE 300.0
 #define FOCAL_LENGTH 2.2
 
-#define SUN_DIR (vec3(sin(-1), 1.5, cos(-1)))
+#define SUN_DIR (vec3(0,0,1))
 #define SUN_COL 3.0*vec3(0.9, 0.8, 0.7)
 #define FOG_COL vec3(.12)
 #define FOG_AMT .01
@@ -100,7 +101,7 @@ MR sdf(vec3 p) {
 // to render N additional cells beyond the default one at each end.
 // Default 0 (off).  Compiler eliminates the loop when N == 0.
 // ---------------------------------------------------------------------------
-//#define EXTRA_MICRO_CELLS 2
+#define EXTRA_MICRO_CELLS 1
 //#define CELL_OVERLAY 1
 
 MR map(vec3 p) {

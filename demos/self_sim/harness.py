@@ -38,8 +38,8 @@ def rot_mat(x, y, z):
 # Contraction-map defaults (fixed point at origin)
 # ---------------------------------------------------------------------------
 
-DEFAULT_SCALE       = 0.019
-DEFAULT_EULER       = [0.0, 0.0, 0.0]   # (x, y, z) radians
+DEFAULT_SCALE       = 0.075
+DEFAULT_EULER       = [0.0, 0.0, 3.06]   # (x, y, z) radians
 DEFAULT_CELL_RADIUS = 5.0
 
 # ---------------------------------------------------------------------------
@@ -249,6 +249,7 @@ def main():
     sim_scale   = DEFAULT_SCALE
     sim_euler   = list(DEFAULT_EULER)
     cell_radius = DEFAULT_CELL_RADIUS
+    sim_offset  = [0.0, 0.0, 0.0]   # manual offset for recurrence origin
     zoom_rate   = 1.0               # per-frame multiplier on |pos| (1.0 = off)
 
     # Spiral phase: counts fractional cell-levels traversed by continuous zoom.
@@ -427,6 +428,7 @@ def main():
         _u(prog, "u_cell_radius",      float(cell_radius))
         _u(prog, "u_worldScale",       float(world_scale))
         _u_mat3(prog, "u_world_orientation", world_orientation)
+        _u(prog, "sim_offset",         tuple(sim_offset))
 
         vao.render(moderngl.TRIANGLE_STRIP)
 
@@ -462,6 +464,10 @@ def main():
             ch, v = imgui_mod.drag_float("Cell Radius", cell_radius, 0.1, 0.5, 50.0)
             if ch:
                 cell_radius = v
+
+            ch, v = imgui_mod.drag_float3("Sim Offset", list(sim_offset), 0.01)
+            if ch:
+                sim_offset[:] = v
 
             ch, v = imgui_mod.slider_float("Zoom Rate", zoom_rate, 0.95, 1.05)
             if ch:
