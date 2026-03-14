@@ -1,6 +1,7 @@
 """Simulation runner: physics stepping, frame assembly, and video recording."""
 import glfw
 import numpy as np
+from controller_input import rot_mat
 
 
 class SimulationRunner:
@@ -61,6 +62,8 @@ class SimulationRunner:
                 gen = adv_prefs
                 generics_tuple = (gen.generic0, gen.generic1, gen.generic2, gen.generic3,
                                   gen.generic4, gen.generic5, gen.generic6, gen.generic7)
+                sim_rotation = rot_mat(adv_prefs.sim_euler_x, adv_prefs.sim_euler_y, adv_prefs.sim_euler_z)
+                defines_prefix = "#define NO_RECURSION 1\n" if adv_prefs.disable_recursion else ""
                 self.advanced_drawing_processor.process_override(
                     canvas_width=self.sim.can.size[0],
                     canvas_height=self.sim.can.size[1],
@@ -73,8 +76,16 @@ class SimulationRunner:
                     brush_mode=adv_prefs.brush_mode,
                     fixed_direction_heading=adv_prefs.fixed_direction_heading,
                     tiling_mode=tiling_mode,
-                    camera_pos=tuple(cam.pos) if cam else (0.0, 0.0, 0.0),
-                    camera_dir=tuple(cam.dir) if cam else (0.0, 0.0, 1.0),
+                    camera_pos=tuple(cam.pos.astype("f4")) if cam else (0.0, 0.0, 0.0),
+                    camera_dir=tuple(cam.fwd.astype("f4")) if cam else (0.0, 0.0, -1.0),
+                    camera_up=tuple(cam.up.astype("f4")) if cam else (0.0, 1.0, 0.0),
+                    sim_scale=adv_prefs.sim_scale,
+                    sim_rotation=sim_rotation,
+                    cell_radius=adv_prefs.cell_radius,
+                    world_scale=cam.world_scale if cam else 1.0,
+                    world_orientation=cam.world_orientation if cam else None,
+                    sim_offset=(adv_prefs.sim_offset_x, adv_prefs.sim_offset_y, adv_prefs.sim_offset_z),
+                    defines_prefix=defines_prefix,
                     generics=generics_tuple,
                 )
             elif adv_prefs.advanced_drawing_enabled and (

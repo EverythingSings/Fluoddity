@@ -1,76 +1,144 @@
 """Xbox controller input: FPS-style ControllerCam and joystick polling.
 
-Ported from Tracer/ui.py — same button/axis mappings, deadzone, and update logic.
+Camera uses explicit vectors (pos, fwd, up) for arbitrary orientation,
+supporting teleportation at cell boundaries for recursive SDF navigation.
 """
 import glfw
 import math
 import numpy as np
 
 
+# ---------------------------------------------------------------------------
+# Vector helpers (ported from demos/self_sim/harness.py)
+# ---------------------------------------------------------------------------
+
+def _norm(v):
+    """Normalize a vector, returning unchanged if near-zero length."""
+    n = np.linalg.norm(v)
+    return v / n if n > 1e-12 else v
+
+
+def _rodrigues(v, axis, angle):
+    """Rotate *v* around *axis* by *angle* radians (Rodrigues' formula)."""
+    a = _norm(axis)
+    c, s = math.cos(angle), math.sin(angle)
+    return v * c + np.cross(a, v) * s + a * np.dot(a, v) * (1.0 - c)
+
+
+def _axis_angle(R):
+    """Extract (axis, angle) from a 3x3 rotation matrix."""
+    angle = math.acos(max(-1.0, min(1.0, (np.trace(R) - 1.0) / 2.0)))
+    if abs(angle) < 1e-12:
+        return np.array([0.0, 1.0, 0.0]), 0.0
+    axis = np.array([R[2, 1] - R[1, 2],
+                     R[0, 2] - R[2, 0],
+                     R[1, 0] - R[0, 1]])
+    return _norm(axis), angle
+
+
+def _rot_from_axis_angle(axis, angle):
+    """Build a 3x3 rotation matrix from axis-angle."""
+    a = _norm(axis)
+    c, s = math.cos(angle), math.sin(angle)
+    t = 1.0 - c
+    x, y, z = a
+    return np.array([
+        [t*x*x + c,   t*x*y - s*z, t*x*z + s*y],
+        [t*x*y + s*z, t*y*y + c,   t*y*z - s*x],
+        [t*x*z - s*y, t*y*z + s*x, t*z*z + c  ],
+    ])
+
+
+def rot_mat(x, y, z):
+    """Build a 3x3 rotation matrix from Euler angles (X, Y, Z order)."""
+    cx, sx = np.cos(x), np.sin(x)
+    cy, sy = np.cos(y), np.sin(y)
+    cz, sz = np.cos(z), np.sin(z)
+
+    Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+    Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+
+    return Rz @ Ry @ Rx
+
+
 class ControllerCam:
-    """FPS-style camera with yaw/pitch control"""
+    """FPS-style camera with arbitrary orientation (vector-based).
+
+    Stores orientation as explicit pos/fwd/up vectors so that arbitrary
+    rotation matrices (e.g. cell-transition teleports) can be applied directly.
+    Also tracks runtime recursion state (world_scale, world_orientation, spiral_phase).
+    """
     def __init__(self):
         self.reset()
 
     def reset(self):
         """Reset camera to default position and orientation."""
-        self.pos = np.array([0.0, 0.0, 0.0])
-        self.yaw = 0.0      # Rotation around Y axis (radians)
-        self.pitch = 0.0    # Rotation around X axis (radians), clamped to ±π/2
-        self.fov = 50.
-        self._update_vectors()
+        self.pos = np.array([0.0, 2.0, 0.0], dtype=np.float64)
+        self.fwd = np.array([0.0, 0.0, -1.0], dtype=np.float64)
+        self.up  = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        self.speed = 5.0
+        self.sensitivity = 0.003
+        # Runtime recursion state (not persisted)
+        self.world_scale = 1.0
+        self.world_orientation = np.eye(3, dtype=np.float64)
+        self.spiral_phase = 0.0
 
-    def _update_vectors(self):
-        """Update direction vectors from yaw and pitch angles."""
-        # Direction vector (where camera is looking)
-        self.dir = np.array([
-            math.cos(self.pitch) * math.sin(self.yaw),
-            math.sin(self.pitch),
-            math.cos(self.pitch) * math.cos(self.yaw)
-        ])
+    @property
+    def right(self):
+        """Right vector, computed from fwd and up."""
+        return _norm(np.cross(self.fwd, self.up))
 
-        # Right vector (perpendicular to dir in XZ plane)
-        self.right = np.array([
-            math.cos(self.yaw),
-            0.0,
-            -math.sin(self.yaw)
-        ])
+    @property
+    def dir(self):
+        """Alias for fwd, for backward compatibility."""
+        return self.fwd
 
-        # Up vector (cross product of right and dir)
-        self.up = np.cross(self.right, self.dir)
-        self.up = self.up / np.linalg.norm(self.up)
+    def rotate(self, yaw, pitch):
+        """Apply yaw (around camera-up) and pitch (around camera-right).
 
-    def rotate(self, delta_yaw, delta_pitch):
-        """Rotate camera by given angles, clamping pitch to ±π/2."""
-        self.yaw += delta_yaw
-        self.pitch = np.clip(self.pitch + delta_pitch, -math.pi / 2 + 0.01, math.pi / 2 - 0.01)
-        self._update_vectors()
+        Uses Rodrigues rotation for arbitrary orientation support.
+        Pitch is guarded to prevent fwd from aligning with up.
+        """
+        if abs(yaw) > 1e-9:
+            self.fwd = _rodrigues(self.fwd, self.up, yaw)
+        if abs(pitch) > 1e-9:
+            r = self.right
+            new_fwd = _rodrigues(self.fwd, r, pitch)
+            if abs(np.dot(new_fwd, self.up)) < 0.99:
+                self.fwd = new_fwd
+                self.up  = _rodrigues(self.up, r, pitch)
+        self._ortho()
+
+    def _ortho(self):
+        """Gram-Schmidt re-orthogonalisation to prevent float drift."""
+        self.fwd = _norm(self.fwd)
+        self.up  = self.up - np.dot(self.up, self.fwd) * self.fwd
+        self.up  = _norm(self.up)
 
     def move_xz(self, forward_amount, right_amount):
-        """Move in the XZ plane relative to camera direction."""
-        # Get forward direction projected onto XZ plane
-        forward_xz = np.array([self.dir[0], 0.0, self.dir[2]])
-        forward_len = np.linalg.norm(forward_xz)
-        if forward_len > 0.001:
-            forward_xz = forward_xz / forward_len
-        else:
-            forward_xz = np.array([0.0, 0.0, 1.0])
-
-        # Move in XZ plane
-        self.pos += forward_xz * forward_amount
-        self.pos += self.right * right_amount
+        """Move along camera fwd/right directions, scaled by world_scale."""
+        self.pos += self.fwd * forward_amount * self.world_scale
+        self.pos += self.right * right_amount * self.world_scale
 
     def move_y(self, amount):
-        """Move along the Y axis."""
-        self.pos[1] += amount
+        """Move along camera up axis, scaled by world_scale."""
+        self.pos += self.up * amount * self.world_scale
 
-    def get_position(self):
-        """Get camera position."""
-        return self.pos
+    def teleport_inward(self, scale, rotation):
+        """Camera crossed inner sphere -> zoom into nested cell."""
+        self.pos = rotation @ self.pos / scale
+        self.fwd = rotation @ self.fwd
+        self.up  = rotation @ self.up
+        self._ortho()
 
-    def get_view_vectors(self):
-        """Get camera direction, right, and up vectors."""
-        return self.dir, self.right, self.up
+    def teleport_outward(self, scale, rotation):
+        """Camera crossed outer sphere -> zoom out to parent cell."""
+        rot_inv = rotation.T
+        self.pos = scale * (rot_inv @ self.pos)
+        self.fwd = rot_inv @ self.fwd
+        self.up  = rot_inv @ self.up
+        self._ortho()
 
 
 # Controller constants (Xbox-style)
@@ -171,7 +239,7 @@ def process_controller_input(controller_cam, joystick_state, dt):
     # Right bumper held = fast mode
     speed_mult = FAST_MULTIPLIER if buttons[BUTTON_RB] else 1.0
 
-    # Left stick - XZ movement
+    # Left stick - movement along camera fwd/right
     left_x = apply_deadzone(axes[AXIS_LEFT_X])
     left_y = apply_deadzone(axes[AXIS_LEFT_Y])
 
@@ -186,9 +254,9 @@ def process_controller_input(controller_cam, joystick_state, dt):
 
     if right_x != 0 or right_y != 0:
         rotate_speed = ROTATE_SPEED * dt
-        controller_cam.rotate(right_x * rotate_speed, -right_y * rotate_speed)
+        controller_cam.rotate(-right_x * rotate_speed, -right_y * rotate_speed)
 
-    # Triggers - Y movement
+    # Triggers - movement along camera up axis
     lt = axes[AXIS_LT]
     rt = axes[AXIS_RT]
 

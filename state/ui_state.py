@@ -51,6 +51,7 @@ class UIState:
     request_world_size_change: bool = False
     request_camera_reset: bool = False
     request_clear_canvas_and_fields: bool = False
+    request_recursion_recompile: bool = False  # Trigger shader recompile for NO_RECURSION toggle
 
     # Config save/load (Ctrl+C/Ctrl+V)
     request_save_config: bool = False

@@ -27,6 +27,7 @@ from .physics_window import PhysicsWindowMixin
 from .advanced_drawing_window import AdvancedDrawingWindowMixin
 from .field_loader_window import FieldLoaderWindowMixin
 from .generics_window import GenericsWindowMixin
+from .recursion_window import RecursionWindowMixin
 
 
 @dataclass
@@ -48,6 +49,7 @@ class UI(
     AdvancedDrawingWindowMixin,
     FieldLoaderWindowMixin,
     GenericsWindowMixin,
+    RecursionWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -198,6 +200,7 @@ class UI(
         self._request_clear_canvas = False
         self._request_camera_reset = False
         self._request_clear_canvas_and_fields = False
+        self._request_recursion_recompile = False
 
         # Config clipboard flags
         self._request_preview_clipboard_config = False
@@ -455,6 +458,7 @@ class UI(
         self.state.request_clear_canvas = self._request_clear_canvas
         self.state.request_camera_reset = self._request_camera_reset
         self.state.request_clear_canvas_and_fields = self._request_clear_canvas_and_fields
+        self.state.request_recursion_recompile = self._request_recursion_recompile
 
         # Transfer field loader flags
         self.state.request_load_force_field_image = self._request_load_force_field_image
@@ -512,6 +516,7 @@ class UI(
         self._request_clear_canvas = False
         self._request_camera_reset = False
         self._request_clear_canvas_and_fields = False
+        self._request_recursion_recompile = False
         self._request_load_force_field_image = False
         self._request_load_strafe_field_image = False
         self._field_load_image_path = ""
@@ -681,6 +686,11 @@ class UI(
         # Render Generics window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.show_generics_window:
             self.render_generics_window()
+
+        # Render Recursion Settings window if shader_driven_field is enabled
+        if (self.show_sidebar and self.state.preferences.shader_driven_field
+                and self.state.preferences.show_recursion_window):
+            self.render_recursion_window()
 
         # Render field loader window (transient, not gated by sidebar)
         self.render_field_loader_window()

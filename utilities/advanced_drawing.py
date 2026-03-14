@@ -6,7 +6,7 @@ performance impact when advanced drawing is disabled.
 
 import numpy as np
 import moderngl
-from utilities.gl_helpers import read_shader, tryset
+from utilities.gl_helpers import read_shader, tryset, tryset_mat3, shader_prepend
 from utilities.paths import get_user_data_dir, get_app_dir
 
 
@@ -29,6 +29,7 @@ class AdvancedDrawingProcessor:
         # Override shader resources (separate program/VAO for shader-driven field)
         self._override_resources = None
         self._override_shader_name = None  # currently compiled override shader filename
+        self._override_defines_prefix = ""  # #define prefix for NO_RECURSION etc.
 
     # ------------------------------------------------------------------
     # Public API
@@ -97,6 +98,14 @@ class AdvancedDrawingProcessor:
                          tiling_mode,
                          camera_pos=(0.0, 0.0, 0.0),
                          camera_dir=(0.0, 0.0, 1.0),
+                         camera_up=(0.0, 1.0, 0.0),
+                         sim_scale=0.075,
+                         sim_rotation=None,
+                         cell_radius=5.0,
+                         world_scale=1.0,
+                         world_orientation=None,
+                         sim_offset=(0.0, 0.0, 0.0),
+                         defines_prefix="",
                          generics=None):
         """Run the selected override shader to generate the field texture.
 
@@ -104,7 +113,7 @@ class AdvancedDrawingProcessor:
         field texture contents entirely (no blending).
         """
         self._ensure_resources(canvas_width, canvas_height)
-        self._ensure_override_resources(shader_name)
+        self._ensure_override_resources(shader_name, defines_prefix)
         r = self._resources
         ovr = self._override_resources
         if ovr is None:
@@ -129,6 +138,19 @@ class AdvancedDrawingProcessor:
         tryset(ovr["program"], "fill_mode", False)
         tryset(ovr["program"], "camera_pos", camera_pos)
         tryset(ovr["program"], "camera_dir", camera_dir)
+
+        # Recursion uniforms
+        tryset(ovr["program"], "u_cam", camera_pos)
+        tryset(ovr["program"], "u_view_dir", camera_dir)
+        tryset(ovr["program"], "u_up_dir", camera_up)
+        tryset(ovr["program"], "u_scale", float(sim_scale))
+        tryset(ovr["program"], "u_cell_radius", float(cell_radius))
+        tryset(ovr["program"], "u_worldScale", float(world_scale))
+        tryset(ovr["program"], "sim_offset", sim_offset)
+        if sim_rotation is not None:
+            tryset_mat3(ovr["program"], "u_rotation", sim_rotation)
+        if world_orientation is not None:
+            tryset_mat3(ovr["program"], "u_world_orientation", world_orientation)
 
         # Generic scratch uniforms for live-coding
         if generics is not None:
@@ -162,9 +184,10 @@ class AdvancedDrawingProcessor:
         # Recompile override shader if one is active
         if self._override_resources is not None:
             shader_name = self._override_shader_name
+            defines_prefix = self._override_defines_prefix
             self._cleanup_override()
             if shader_name:
-                self._ensure_override_resources(shader_name)
+                self._ensure_override_resources(shader_name, defines_prefix)
 
         print("field shaders reloaded")
 
@@ -320,10 +343,11 @@ class AdvancedDrawingProcessor:
             field_tex=field_tex, field_fbo=field_fbo,
         )
 
-    def _ensure_override_resources(self, shader_name):
-        """Compile the override shader if not already compiled (or if shader changed)."""
+    def _ensure_override_resources(self, shader_name, defines_prefix=""):
+        """Compile the override shader if not already compiled (or if shader/defines changed)."""
         if (self._override_resources is not None
-                and self._override_shader_name == shader_name):
+                and self._override_shader_name == shader_name
+                and self._override_defines_prefix == defines_prefix):
             return
         self._cleanup_override()
 
@@ -335,6 +359,10 @@ class AdvancedDrawingProcessor:
         vert_src = read_shader("shaders/canvas.vert")
         frag_src = shader_path.read_text()
 
+        # Prepend defines (e.g. #define NO_RECURSION 1) after #version line
+        if defines_prefix:
+            frag_src = shader_prepend(frag_src, defines_prefix)
+
         try:
             program = self.ctx.program(
                 vertex_shader=vert_src, fragment_shader=frag_src)
@@ -345,6 +373,7 @@ class AdvancedDrawingProcessor:
         vao = self.ctx.vertex_array(program, [])
         self._override_resources = dict(program=program, vao=vao)
         self._override_shader_name = shader_name
+        self._override_defines_prefix = defines_prefix
 
     def _cleanup_override(self):
         """Release override shader GPU resources."""

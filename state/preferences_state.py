@@ -50,6 +50,19 @@ class PreferencesState:
     shader_driven_field: bool = False  # Use a frag shader to override the field texture
     field_override_shader: str = "march.frag"  # Currently selected field override shader filename
 
+    # Recursion settings (visible when shader_driven_field is enabled)
+    show_recursion_window: bool = True       # Whether Recursion Settings window is visible
+    sim_scale: float = 0.075                 # Contraction ratio (0 < s < 1)
+    sim_euler_x: float = 0.0                 # Rotation X (radians)
+    sim_euler_y: float = 0.0                 # Rotation Y (radians)
+    sim_euler_z: float = 3.06                # Rotation Z (radians)
+    cell_radius: float = 5.0                 # Fundamental spherical cell radius
+    sim_offset_x: float = 0.0               # Recurrence origin offset X
+    sim_offset_y: float = 0.0               # Recurrence origin offset Y
+    sim_offset_z: float = 0.0               # Recurrence origin offset Z
+    zoom_rate: float = 1.0                   # Continuous zoom (1.0 = off)
+    disable_recursion: bool = False          # Compile with #define NO_RECURSION 1
+
     # Physics slider group collapsed states (True = expanded/open, False = collapsed)
     physics_group_basics: bool = True  # Default: open (trail sensors + mutation)
     physics_group_forces: bool = True  # Default: open (global force mult, drag)

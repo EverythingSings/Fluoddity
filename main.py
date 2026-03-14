@@ -1,4 +1,5 @@
 import glfw
+import math
 import moderngl
 import time
 import numpy as np
@@ -13,7 +14,8 @@ from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
 from camera_input import process_camera_input
-from controller_input import ControllerCam, process_controller_input, find_joystick
+from controller_input import (ControllerCam, process_controller_input, find_joystick,
+                               rot_mat, _norm, _axis_angle, _rot_from_axis_angle)
 from utilities.advanced_drawing import AdvancedDrawingProcessor
 
 
@@ -174,6 +176,53 @@ class App:
                              self.sim.view_tex, dt)
         process_controller_input(self.controller_cam, self.joystick_state, dt)
 
+        # 3.1. Recursive SDF teleportation and continuous zoom
+        prefs = ui_state.preferences
+        if prefs.shader_driven_field and prefs.advanced_drawing_enabled:
+            cam = self.controller_cam
+            sim_scale = max(prefs.sim_scale, 1e-9)
+            log_scale = math.log(sim_scale)
+            sim_rotation = rot_mat(prefs.sim_euler_x, prefs.sim_euler_y, prefs.sim_euler_z)
+
+            if not prefs.disable_recursion:
+                # Continuous zoom (logarithmic spiral)
+                if prefs.zoom_rate != 1.0:
+                    phase_step = math.log(prefs.zoom_rate) / log_scale
+                    cam.spiral_phase += phase_step
+                    d = float(np.linalg.norm(cam.pos))
+                    if d > 1e-12:
+                        cam_dir = cam.pos / d
+                        r_new = d * prefs.zoom_rate
+                        axis, total_angle = _axis_angle(sim_rotation.T)
+                        if abs(total_angle) > 1e-12:
+                            R_step = _rot_from_axis_angle(axis, total_angle * phase_step)
+                            cam_dir = R_step @ cam_dir
+                            cam.fwd = R_step @ cam.fwd
+                            cam.up = R_step @ cam.up
+                            cam._ortho()
+                        cam.pos = r_new * _norm(cam_dir)
+
+                # Teleport checks
+                d = float(np.linalg.norm(cam.pos))
+                r_inner = prefs.cell_radius * sim_scale
+                if d < r_inner:
+                    cam.teleport_inward(sim_scale, sim_rotation)
+                    cam.world_orientation = sim_rotation @ cam.world_orientation
+                    cam.spiral_phase -= 1.0
+                    d = float(np.linalg.norm(cam.pos))
+                elif d > prefs.cell_radius:
+                    cam.teleport_outward(sim_scale, sim_rotation)
+                    cam.world_orientation = sim_rotation.T @ cam.world_orientation
+                    cam.spiral_phase += 1.0
+                    d = float(np.linalg.norm(cam.pos))
+
+                # Compute world_scale
+                d_clamped = max(r_inner, min(prefs.cell_radius, d))
+                t = math.log(prefs.cell_radius / d_clamped) / -log_scale
+                cam.world_scale = sim_scale ** t
+            else:
+                cam.world_scale = 1.0
+
         # 3.2. Check if pending video should start
         cmd = self.command_handler
         if cmd.video_pending and self.sim.frame_count >= cmd.video_scheduled_start_frame:
@@ -322,6 +371,11 @@ class App:
             'recording_active': self.video_service.is_active(),
             'video_pending': cmd.video_pending,
             'video_scheduled_start_frame': cmd.video_scheduled_start_frame,
+            'recursion_info': {
+                'pos': tuple(self.controller_cam.pos),
+                'fwd': tuple(self.controller_cam.fwd),
+                'world_scale': self.controller_cam.world_scale,
+            },
         })
         self.ui.render()
 

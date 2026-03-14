@@ -110,6 +110,14 @@ class CommandHandler:
             if self.field_handler and self.field_handler.adv_draw:
                 self.field_handler.adv_draw.reload()
 
+        # Recursion checkbox toggle -> recompile override shader with/without NO_RECURSION
+        if ui_state.request_recursion_recompile:
+            if self.field_handler and self.field_handler.adv_draw:
+                prefix = "#define NO_RECURSION 1\n" if ui_state.preferences.disable_recursion else ""
+                shader_name = ui_state.preferences.field_override_shader
+                self.field_handler.adv_draw._cleanup_override()
+                self.field_handler.adv_draw._ensure_override_resources(shader_name, prefix)
+
         # Simple reset (R key)
         if ui_state.request_reset:
             self.sim.reset()
