@@ -376,13 +376,12 @@ MR sdTail(vec3 p){
     return result;
 }
 MR sdWings(vec3 p){
-    MR result = sdTail(p);
     p.z = abs(p.z);
     p-=vec3(-.8,5.5,1.515);
     pR(p.xz,.42);
-    pR(p.yz,.175);
+    pR(p.yz,.1875);
     p.z=-p.z;
-    result = mapMin(result,sdFeather(p,4.,.46,0));
+    MR result = sdFeather(p,4.,.46,0);
     pR(p.xz,-.251);
     pR(p.yz,-.01);
     p-=vec3(-1.14,-2.9,-.4314);
@@ -444,6 +443,7 @@ MR branch(vec3 p){
     p-=vec3(24,1,0);
     pR(p.xy,.16);
     result.dts = weird+smin(result.dts,sdRoundCone(p.yxz,.8,1.,6),.31);
+    result.dts *=.85;
     p.xy+=vec2(28,-3);
     pR(p.xy,-1.68);
     MR berry = MR(length(p)-8,vec4(11));
@@ -458,16 +458,16 @@ MR branch(vec3 p){
 MR bird(vec3 p){
     p.y-=6;
     vec3 op = p;
-    MR result = MR(999,vec4(1));
+    MR result = MR(999,vec4(2));
     result.dts = length(p)-1.35;
     vec3 ep = p+vec3(.3,-.7,-0.071);
     ep.z=abs(ep.z)-1.1;
-    MR eye = MR(sdTorus(ep.yzx,vec2(.4,.09)),vec4(2));
-    MR pupil = MR(length(ep-vec3(0,0,-.2))-.5,vec4(3));
+    MR eye = MR(sdTorus(ep.yzx,vec2(.4,.09)),vec4(3));
+    MR pupil = MR(length(ep-vec3(0,0,-.2))-.5,vec4(4));
     p+=vec3(-0,2,0)+vec3(-.385,.88,-.3382)*5;//-.623,.823,-.011
     pR(p.xz,1.5);
     pR(p.xy,-2);
-    MR body = MR(sdRoundCone(p,2.95,1.,6.5),vec4(4));
+    MR body = MR(sdRoundCone(p,2.95,1.,6.5),vec4(5));
     result = smapMin(result,body,1.5);
     result= smapMin(result,eye,.15);
     result = mapMin(result,pupil);
@@ -478,7 +478,7 @@ MR bird(vec3 p){
     p=op;
     p.x-=3.1;
     p.y+=.8;
-    result = smapMin(result,MR(sdbeak(p,1.453,.1),vec4(5)),.1);
+    result = smapMin(result,MR(sdbeak(p,1.453,.1),vec4(1)),.1);
     result = mapMin(result,branch(op-vec3(-.385,.88,-.3382)*-5+5*vec3(.623,-.823,.011)));
 
     //result.mat.x=0;
@@ -499,8 +499,8 @@ MR sdf(vec3 p) {
     //MR tow = MR(sdBox(p,vec3(9,14,9)),vec4(1));
     //if(tow.dts<1.2){tow = pyramid(p);}
     //MR result =  MR(sz*tow.dts,tow.mat);
-    float bb = length(p)-32;
-    if(bb>2){return MR(bb*sz,vec4(0));}
+    float bb = length(p)-25;
+    if(bb*sz>2){return MR(bb*sz,vec4(0));}
     MR result = bird(p);
     result.dts*=sz;
     return result; 

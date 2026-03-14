@@ -24,13 +24,18 @@ uniform mat3  u_world_orientation;
 uniform vec3 sim_offset;
 #define MAX_STEPS 2000
 #define HIT_DISTANCE 2e-3
-#define MAX_DISTANCE 300.0
+#define MAX_DISTANCE 100.0
 #define FOCAL_LENGTH 2.2
+#define AO_STEPS 10
+#define AO_DIST (.1*(length(r.ori+r.dir*r.extent))/u_worldScale)
+#define AO_POW .60
+#define SHADOW_STEPS 256
+#define SHADOW_SMOOTH 38.0
 
-#define SUN_DIR (vec3(0,0,1))
+#define SUN_DIR spiral_axis()//(u_world_orientation*vec3(.5,2,-1))
 #define SUN_COL 3.0*vec3(0.9, 0.8, 0.7)
-#define FOG_COL vec3(.12)
-#define FOG_AMT .01
+#define FOG_COL vec3(.0)
+#define FOG_AMT .051
 
 #define PI 3.14159
 
@@ -149,9 +154,23 @@ MR map(vec3 p) {
     return d;
 }
 
+vec3 spiral_axis() {
+    // Extract rotation axis from u_rotation (eigenvector with eigenvalue 1).
+    // For a rotation matrix R, the axis is proportional to the skew-symmetric
+    // part: (R21-R12, R02-R20, R10-R01).
+    vec3 a = vec3(
+        u_rotation[1][2] - u_rotation[2][1],
+        u_rotation[2][0] - u_rotation[0][2],
+        u_rotation[0][1] - u_rotation[1][0]
+    );
+    float len = length(a);
+    if (len < 1e-6) return vec3(0, 1, 0); // Identity rotation fallback
+    return a / len;
+}
+
 vec3 calcNorm(in vec3 p)
 {
-    const float h = 0.0001;
+    float h = 0.0001 * u_worldScale;
     #define ZERO (min(frame_count,0))
     vec3 n = vec3(0.0);
     for(int i = ZERO; i < 4; i++)
@@ -160,6 +179,19 @@ vec3 calcNorm(in vec3 p)
         n += e*map(p+e*h).dts;
     }
     return normalize(n);
+}
+
+float calcAO(Ray r) {
+    float aoDist = AO_DIST * u_worldScale;
+    float occ = 0.0;
+    float itC = 0.0;
+    vec3 pos = r.ori + r.dir * r.extent;
+    for (int i = 1; i < AO_STEPS; i++) {
+        itC++;
+        float term = itC * aoDist - map(pos + r.norm * aoDist * itC).dts;
+        occ += 1.0 / pow(2.0, itC) * term;
+    }
+    return 1.0 - clamp(AO_POW * occ / aoDist, 0.0, 1.0);
 }
 
 MR march(inout Ray r){
@@ -179,16 +211,20 @@ MR march(inout Ray r){
     return result;
 }
 
-float occlude_march(Ray r, vec3 light_dir){
-    float bump = HIT_DISTANCE * 5.0 * u_worldScale;
-    Ray shadow_ray = Ray(r.ori + r.dir * r.extent, light_dir, 0.0, vec3(0));
-    for (int i = 0; i < 10; i++)
-    {
-        shadow_ray.ori += r.norm * bump * pow(2.0, float(i));
-        if (map(shadow_ray.ori).dts > HIT_DISTANCE * 2.0 * u_worldScale) break;
+float occlude_march(Ray r, vec3 light_dir) {
+    float hitEps = HIT_DISTANCE * u_worldScale;
+    float maxDist = MAX_DISTANCE * u_worldScale;
+    vec3 pos = r.ori + r.dir * r.extent + r.norm * hitEps * 10.0;
+    float rayExtent = 0.0;
+    float umbra = 1.0;
+    for (int i = 0; i < SHADOW_STEPS; i++) {
+        float d = map(pos + light_dir * rayExtent).dts;
+        rayExtent += d;
+        if (d < hitEps) return 0.0;
+        umbra = min(umbra, SHADOW_SMOOTH * d / rayExtent);
+        if (rayExtent >= maxDist) break;
     }
-    MR shadow_hit = march(shadow_ray);
-    return shadow_hit.dts <= HIT_DISTANCE * u_worldScale ? 0.0 : 1.0;
+    return umbra;
 }
 
 Ray getCam(vec2 uv){
@@ -202,23 +238,28 @@ Ray getCam(vec2 uv){
     return Ray(u_cam, dir, 0.0, vec3(0));
 }
 
-#define SKY_COL 3*vec3(.04,.15,.3)
-#define SKY_DIR normalize(vec3(-.2,1,0))
+#define SKY_COL 5*vec3(.04,.15,.3)
 out vec4 fragColor;
 void main(void)
 {
     vec2 uv = -1.0 + 2.0 * v_texcoord;
     Ray cam_ray = getCam(uv);
     MR hit = march(cam_ray);
-    //sun
-    vec3 albedo = hsv2rgb(vec3(fract(hit.mat.x/8.),.5,.2));
+    vec3 light;
+    if(hit.dts<HIT_DISTANCE){
+    vec3 albedo = hsv2rgb(vec3(fract(hit.mat.x/12.),.75,.2));
+    vec3 light_vector =  normalize(SUN_DIR);
 
-    vec3 light_vector = u_world_orientation * normalize(SUN_DIR);
-    vec3 sky_dir      = u_world_orientation * normalize(SKY_DIR);
-    vec3 light = SUN_COL * albedo * max(0, dot(cam_ray.norm, light_vector));
-
+    // Direct sun with soft shadows
+    light = SUN_COL * albedo * max(0.0, dot(cam_ray.norm, light_vector));
     light *= occlude_march(cam_ray, light_vector);
-    //light += occlude_march(cam_ray, sky_dir)*(SKY_COL * albedo * max(0, dot(cam_ray.norm, sky_dir)));
+ 
+    
+    // Ambient fill modulated by AO
+    float ao = calcAO(cam_ray);
+    light += SKY_COL * albedo * ao;
+}
+    else{light=SUN_COL*max(0,dot(cam_ray.dir,SUN_DIR));}
     vec3 col = light;
     col = mix(FOG_COL, col, exp(-cam_ray.extent * FOG_AMT / u_worldScale));
 
