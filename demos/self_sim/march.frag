@@ -170,7 +170,7 @@ vec3 spiral_axis() {
 
 vec3 calcNorm(in vec3 p)
 {
-    float h = 0.0001 * u_worldScale;
+    const float h = 0.001 ;
     #define ZERO (min(frame_count,0))
     vec3 n = vec3(0.0);
     for(int i = ZERO; i < 4; i++)

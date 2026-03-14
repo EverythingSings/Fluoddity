@@ -449,7 +449,7 @@ MR branch(vec3 p){
     MR berry = MR(length(p)-8,vec4(11));
     p.y-=1.95;
     
-    berry.dts =smin(smax(berry.dts,-length(p)+6.9,.4),sdTorus(p,vec2(3.9)),.4);
+    berry.dts =.9*smin(smax(berry.dts,-length(p)+6.9,.4),sdTorus(p,vec2(3.9)),.4);
     result= mapMin(result,berry);
     return result;
 }
