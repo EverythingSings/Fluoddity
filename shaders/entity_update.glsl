@@ -337,7 +337,7 @@ vec2 safenorm(vec2 p){
 }
 
 float get_cohort(uint index) {
-    return entities[index].cohort; //float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
+    return generic03.w>0? entities[index].cohort : float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
 }
 
 //Return all entities to their initialization state
@@ -364,8 +364,8 @@ void reset(uint index){
         vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
         //pR(pos,floor(cohort_val)*3.1415*2*spots);
         //this aspect transform is good enough, but not perfect
-        pos+=1.8*((gridcell)/spot_rows)*vec2(aspect);
-        pos+= 1.8*(1/2.*(1./vec2(spot_rows,spots/spot_rows)-1))*vec2(aspect,1/aspect);
+        pos+=2*((gridcell)/spot_rows)*vec2(aspect);
+        pos+= 2*(1/2.*(1./vec2(spot_rows,spots/spot_rows)-1))*vec2(aspect,1/aspect);
     }
     else if(reset_mode == 1) {
         //RANDOM: scatter cohorts randomly across the canvas, homogenous start
@@ -556,7 +556,7 @@ void main() {
     //ADVANCED DRAWING force / strafe
     vec4 draw_sample =get_field(e.pos);
     e.vel += .01*force_field_strength*draw_sample.xy;
-    e.pos += .01*strafe_field_strength*draw_sample.xy;//FOR SHADER DRIVEN ONLY
+    e.pos += -.01*strafe_field_strength*draw_sample.xy;//FOR SHADER DRIVEN ONLY
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
     float ca = canvas_resolution.x / canvas_resolution.y;
