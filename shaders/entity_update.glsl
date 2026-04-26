@@ -106,7 +106,7 @@ layout(std430, binding = 3) buffer MultiLoadConfigBuffer {
 layout(std430, binding = 4) buffer MultiLoadRuleBuffer {
     Rule target_rules[64];
 };
-
+vec4 draw_sample;
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
 #define ACTIVE_COUNT (600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
@@ -369,7 +369,7 @@ void reset(uint index){
     }
     else if(reset_mode == 1) {
         //RANDOM: scatter cohorts randomly across the canvas, homogenous start
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < 64; i++) {
             pos= vec2(hash(vec2(cohort_val, i/5.)+fract(frame_count/1013.+.415)), hash(vec2(cohort_val, -i/5.)-fract(frame_count/1911.))) * 2.0 - 1.0;
             pos.x*=aspect;
             pos.y/=aspect;
@@ -489,7 +489,7 @@ void main() {
     if(WRITE_RULES) {
         rules[index] = current_rule;
     }
-    
+    draw_sample =get_field(e.pos);
     //frame_count == 0 signals a simulation reset
     if (frame_count==0||calculate_setting(get_particle_hazard_rate(),e.pos,cohort)>hash(vec2(float(index)/float(ACTIVE_COUNT),frame_count))){reset(index);return;}
 
@@ -544,7 +544,7 @@ void main() {
     e.color.y = .8;
 
     if(get_particle_color_by_cohort()) {e.color.x = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
-    e.color.z=1;//brightness 1.
+    e.color.z=(generic03.z*15+1)*exp(-30*generic03.y*length(col_params.y*.3-generic03.x*3));//brightness 1.
     e.color.w=0.045; //low alpha
 
     //Accelerate: Apply drag and add force to e.vel,
@@ -554,9 +554,9 @@ void main() {
     e.pos += strafe*calculate_setting(get_particle_strafe_power(),e.pos,cohort);
 
     //ADVANCED DRAWING force / strafe
-    vec4 draw_sample =get_field(e.pos);
-    e.vel += .01*force_field_strength*draw_sample.xy;
-    e.pos += -.01*strafe_field_strength*draw_sample.xy;//FOR SHADER DRIVEN ONLY
+    
+    e.vel += -.01*force_field_strength*draw_sample.xy;
+    //e.pos += .01*strafe_field_strength*draw_sample.xy;//FOR SHADER DRIVEN ONLY
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
     float ca = canvas_resolution.x / canvas_resolution.y;

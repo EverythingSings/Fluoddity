@@ -24,18 +24,18 @@ uniform mat3  u_world_orientation;
 uniform vec3 sim_offset;
 #define MAX_STEPS 2000
 #define HIT_DISTANCE 2e-3
-#define MAX_DISTANCE 100.0
+#define MAX_DISTANCE 1000.0
 #define FOCAL_LENGTH 2.2
 #define AO_STEPS 10
 #define AO_DIST (.1*(length(r.ori+r.dir*r.extent))/u_worldScale)
 #define AO_POW .60
 #define SHADOW_STEPS 256
-#define SHADOW_SMOOTH 38.0
+#define SHADOW_SMOOTH 38000.0
 
 #define SUN_DIR spiral_axis()//(u_world_orientation*vec3(.5,2,-1))
 #define SUN_COL 3.0*vec3(0.9, 0.8, 0.7)
 #define FOG_COL vec3(.0)
-#define FOG_AMT .051
+#define FOG_AMT 0.0051
 
 #define PI 3.14159
 
@@ -107,6 +107,7 @@ MR sdf(vec3 p) {
 // Default 0 (off).  Compiler eliminates the loop when N == 0.
 // ---------------------------------------------------------------------------
 #define EXTRA_MICRO_CELLS 1
+//#define EXTRA_MACRO_CELLS 3
 //#define CELL_OVERLAY 1
 
 MR map(vec3 p) {
@@ -151,6 +152,8 @@ MR map(vec3 p) {
     #ifdef CELL_OVERLAY
         d = mapMin(d, MR(length(p) - u_cell_radius, vec4(0)));
     #endif
+    //d.dts = max(d.dts, p.y);
+    //d.dts = d.dts;
     return d;
 }
 
@@ -170,7 +173,7 @@ vec3 spiral_axis() {
 
 vec3 calcNorm(in vec3 p)
 {
-    const float h = 0.001 ;
+    const float h = 0.0001 ;
     #define ZERO (min(frame_count,0))
     vec3 n = vec3(0.0);
     for(int i = ZERO; i < 4; i++)
@@ -211,13 +214,13 @@ MR march(inout Ray r){
     return result;
 }
 
-float occlude_march(Ray r, vec3 light_dir) {
+float occlude_march(Ray r, vec3 light_dir,float max_extent) {
     float hitEps = HIT_DISTANCE * u_worldScale;
     float maxDist = MAX_DISTANCE * u_worldScale;
     vec3 pos = r.ori + r.dir * r.extent + r.norm * hitEps * 10.0;
     float rayExtent = 0.0;
     float umbra = 1.0;
-    for (int i = 0; i < SHADOW_STEPS; i++) {
+    for (int i = 0; i < SHADOW_STEPS && rayExtent<max_extent; i++) {
         float d = map(pos + light_dir * rayExtent).dts;
         rayExtent += d;
         if (d < hitEps) return 0.0;
@@ -248,11 +251,14 @@ void main(void)
     vec3 light;
     if(hit.dts<HIT_DISTANCE){
     vec3 albedo = hsv2rgb(vec3(fract(hit.mat.x/12.),.75,.2));
-    vec3 light_vector =  normalize(SUN_DIR);
+    //vec3 light_offset = u_worldScale*u_up_dir*-1.1+cam_ray.ori-(cam_ray.ori+cam_ray.dir*cam_ray.extent);
+    //vec3 light_vector =  normalize(light_offset);//
+    vec3 light_vector = normalize(SUN_DIR);
 
     // Direct sun with soft shadows
     light = SUN_COL * albedo * max(0.0, dot(cam_ray.norm, light_vector));
-    light *= occlude_march(cam_ray, light_vector);
+    //light *= 10./dot(light_offset/u_worldScale,light_offset/u_worldScale)*occlude_march(cam_ray, light_vector,length(light_offset));
+    light *= occlude_march(cam_ray, light_vector,MAX_DISTANCE);
  
     
     // Ambient fill modulated by AO
@@ -265,4 +271,5 @@ void main(void)
 
     col = pow(col, vec3(1.0 / 2.2));
     fragColor = vec4(col, 1.0);
+    //fragColor = vec4(cam_ray.norm,1);
 }

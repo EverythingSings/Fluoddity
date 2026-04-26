@@ -32,7 +32,7 @@ uniform vec3 camera_dir;
 
 #define MAX_STEPS 2000
 #define HIT_DISTANCE 2e-3
-#define MAX_DISTANCE 100.0
+#define MAX_DISTANCE 300.0
 #define FOCAL_LENGTH 2.2
 #define AO_STEPS 10
 #define AO_DIST (.1*(length(r.ori+r.dir*r.extent))/u_worldScale)
@@ -80,28 +80,6 @@ vec3 hsv2rgb(vec3 c)
 void pR(inout vec2 p, float a) {
     p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
 }
-
-float sdBox(vec3 p, vec3 b)
-{
-    vec3 q = abs(p) - b;
-    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
-}
-
-float sdBoxFrame( vec3 p, vec3 b, float e )
-{
-       p = abs(p  )-b;
-  vec3 q = abs(p+e)-e;
-  return min(min(
-      length(max(vec3(p.x,q.y,q.z),0.0))+min(max(p.x,max(q.y,q.z)),0.0),
-      length(max(vec3(q.x,p.y,q.z),0.0))+min(max(q.x,max(p.y,q.z)),0.0)),
-      length(max(vec3(q.x,q.y,p.z),0.0))+min(max(q.x,max(q.y,p.z)),0.0));
-}
-
-
-
-
-
-
 float pMod1(inout float p, float size) {
     float halfsize = size*0.5;
     float c = floor((p + halfsize)/size);
@@ -197,7 +175,11 @@ float pModPolar(inout vec2 p, float repetitions,float softness) {
     if (abs(c) >= (repetitions/2)) c = abs(c);
     return c;
 }
-
+float sdBox( vec3 p, vec3 b )
+{
+  vec3 q = abs(p) - b;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
 float sdTorus( vec3 p, vec2 t )
 {
   vec2 q = vec2(length(p.xz)-t.x,p.y);
@@ -208,45 +190,28 @@ float sdSegment(vec2 p, vec2 a, vec2 b) {
     float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
     return length(pa - ba * h);
 }
-float sdRoundCone( vec3 p, float r1, float r2, float h )
+float sdRoundCone( vec3 p, vec3 a, vec3 b, float r1, float r2 )
 {
-  float b = (r1-r2)/h;
-  float a = sqrt(1.0-b*b);
-
-  vec2 q = vec2( length(p.xz), p.y );
-  float k = dot(q,vec2(-b,a));
-  if( k<0.0 ) return length(q) - r1;
-  if( k>a*h ) return length(q-vec2(0.0,h)) - r2;
-  return dot(q, vec2(a,b) ) - r1;
-}
-
-float sdSpiral(vec2 p,float scal,int steps){
-    float result = 999;
-    for(int i=0;i<steps;i++){
-    float l= pow(scal,float(i));
-    result = min(result,sdSegment(p,vec2(0),vec2(l,0.)));
-    p.x-=l;
-    p=vec2(-p.y,p.x);
-    }
-    return result;
-}
-float sdPyramid( vec3 p, float h )
-{
-  float m2 = h*h + 0.25;
+  vec3  ba = b - a;
+  float l2 = dot(ba,ba);
+  float rr = r1 - r2;
+  float a2 = l2 - rr*rr;
+  float il2 = 1.0/l2;
     
-  p.xz = abs(p.xz);
-  p.xz = (p.z>p.x) ? p.zx : p.xz;
-  p.xz -= 0.5;
+  vec3 pa = p - a;
+  float y = dot(pa,ba);
+  float z = y - l2;
+  float x2 = dot( pa*l2 - ba*y, pa*l2 - ba*y );
+  float y2 = y*y*l2;
+  float z2 = z*z*l2;
 
-  vec3 q = vec3( p.z, h*p.y - 0.5*p.x, h*p.x + 0.5*p.y);
-  float s = max(-q.x,0.0);
-  float t = clamp( (q.y-0.5*p.z)/(m2+0.25), 0.0, 1.0 );
-  float a = m2*(q.x+s)*(q.x+s) + q.y*q.y;
-  float b = m2*(q.x+0.5*t)*(q.x+0.5*t) + (q.y-m2*t)*(q.y-m2*t);
-    
-  float d2 = min(q.y,-q.x*m2-q.y*0.5) > 0.0 ? 0.0 : min(a,b);
-  return sqrt( (d2+q.z*q.z)/m2 ) * sign(max(q.z,-p.y));
+  // single square root!
+  float k = sign(rr)*rr*rr*x2;
+  if( sign(z)*a2*z2>k ) return  sqrt(x2 + z2)        *il2 - r2;
+  if( sign(y)*a2*y2<k ) return  sqrt(x2 + y2)        *il2 - r1;
+                        return (sqrt(x2*a2*il2)+y*rr)*il2 - r1;
 }
+
 // quadratic polynomial
 float smin( float a, float b, float k )
 {
@@ -319,36 +284,6 @@ MR smapMin(MR a, MR b, float k){
 }
 
 
-MR pyramid(vec3 p){
-    vec3 op = p;
-    MR result = MR(999,BASE_MAT);
-    vec3 sz = vec3(3,3,100);
-    float steps = 20;
-    vec2 attack = vec2(.350,0.0);
-    p-=vec3(0,3,0);
-    pModPolar(p.xz,4,0);
-    vec3 mp = p;
-    p.x-=sz.x;
-    p.x*=-1;
-    result.dts = sdStairs(p,sz,steps, 6./steps*sz.xy/3.*attack);
-    p=mp;
-    
-    p.x-=sz.x;
-    pR(p.xy,atan(sz.x,sz.y));
-    p.z=mod(p.z+1,2.)-1;//abs(p.z);
-    //p.z-=sz.z;
-    MR rail = MR(sdBox(p,vec3(.15,sqrt(dot(sz.xy,sz.xy)),.15)),TRIM_MAT);
-    result.dts = fOpEngrave(result.dts,rail.dts,0.2);
-    result = mapMin(result,rail);
-    return result;
-}
-float sdCone( vec3 p, vec2 c )
-{
-    // c is the sin/cos of the angle
-    vec2 q = vec2( length(p.xz), -p.y );
-    float d = length(q-c*max(dot(q,c), 0.0));
-    return d * ((q.x*c.y-q.y*c.x<0.0)?-1.0:1.0);
-}
 float sdCone( vec3 p, vec2 c, float h )
 {
   // c is the sin/cos of the angle, h is height
@@ -364,7 +299,13 @@ float sdCone( vec3 p, vec2 c, float h )
   float s = max( k*(w.x*q.y-w.y*q.x),k*(w.y-q.y)  );
   return sqrt(d)*sign(s);
 }
-float sdVesica( in vec3 p, in vec3 a, in vec3 b, in float w )
+float sdCyl( vec3 p, float r, float h )
+{
+  vec2 d = abs(vec2(length(p.xz),p.y)) - vec2(r,h);
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+}
+
+float sdVesicaSegment( in vec3 p, in vec3 a, in vec3 b, in float w )
 {
     vec3  c = (a+b)*0.5;
     float l = length(b-a);
@@ -378,232 +319,212 @@ float sdVesica( in vec3 p, in vec3 a, in vec3 b, in float w )
  
     return length(q-h.xy) - h.z;
 }
-float moon2(vec2 p, float d, float ra, float rb )
+float sdParabola( in vec2 pos, in float wi, in float he )
 {
-    p.y = abs(p.y);
-    float a = (ra*ra - rb*rb + d*d)/(2.0*d);
-    float b = sqrt(max(ra*ra-a*a,0.0));
-    if( d*(p.x*b-p.y*a) > d*d*max(b-p.y,0.0) )
-          return length(p-vec2(a,b));
-    return max( (length(p          )-ra),
-               -(length(p-vec2(d,0))-rb));
+    pos.x = abs(pos.x);
+    float ik = wi*wi/he;
+    float p = ik*(he-pos.y-0.5*ik)/3.0;
+    float q = pos.x*ik*ik/4.0;
+    float h = q*q - p*p*p;
+    float x;
+    if( h>0.0 )
+    {
+        float r = pow(q+sqrt(h),1.0/3.0);
+        x = r + p/r;
+    }
+    else
+    {
+        float r = sqrt(p);
+        x = 2.0*r*cos(acos(q/(p*r))/3.0);
+    }
+    x = min(x,wi);
+    return length(pos-vec2(x,he-x*x/ik)) * 
+           sign(ik*(pos.y-he)+pos.x*pos.x);
 }
-float sdMoon( in vec3 p,vec3 dab ,float h )
-{
-    float d = moon2(p.xy,dab.x,dab.y,dab.z);
-    vec2 w = vec2( d, abs(p.z) - h );
-    return min(max(w.x,w.y),0.0) + length(max(w,0.0));
+MR sdbeak(vec3 p){
+    p*=1.1;
+    p.z*=1.25;
+    pR(p.xy,-.107);
+    //p.xy+=vec2(3.2,-.3);
+    //pR(p.xy,2.-p.x);
+   // p.xy-=vec2(2.7,-1.);
+    p.xy+=vec2(0.035-.031,.6+min(.5,.4*pow(max(0,-2.495-p.x),1.59)));
+    MR result = MR(sdVesicaSegment(p,vec3(2,.61,0),vec3(-2.8,.3,0),.56)-.041,vec4(2));//MR(sdCone(-p.zxy-vec3(0,2.5,-.30),vec2(sin(.32),cos(.32)),2.)-.04,vec4(2));
+    float cutout = -(sdVesicaSegment(p-vec3(0,-.1,0),vec3(2,.61,0),vec3(-2.8,.3,0),.56)-.061);
+    cutout=smin(cutout,-p.x-0.7,.2);
+    result.dts = max(result.dts,cutout);
+    
+    p.xy-=vec2(0.35,-.015+min(.5,.4*pow(max(0,-2.495-p.x),1.59)));
+    result.dts = min(result.dts, sdVesicaSegment(p-vec3(-0.2,-.1,0),vec3(2,.61,0),vec3(-2.8,.3,0),.5)-.031);
+    //result.dts = max(result.dts,-p.y+.29);
+    
+    result.dts = max(result.dts,p.x);
+    
+    //result.dts = min(result.dts,length(p)-.3);
+    //p.x-=
+    //result.dts = min(result.dts,(length(p)-1));
+    result.dts/=1.25*1.1;
+    return result;
 }
 
-float sdUnevenCapsule( vec2 p, float r1, float r2, float h )
-{
-    p.x = abs(p.x);
-    float b = (r1-r2)/h;
-    float a = sqrt(1.0-b*b);
-    float k = dot(p,vec2(-b,a));
-    if( k < 0.0 ) return length(p) - r1;
-    if( k > a*h ) return length(p-vec2(0.0,h)) - r2;
-    return dot(p, vec2(a,b) ) - r1;
-}
-float sdScale( in vec3 p, in vec3 rrh, in float h )
-{
-    float d = sdUnevenCapsule(p.xy,rrh.x,rrh.y,rrh.z);
-    vec2 w = vec2( d, abs(p.z) - h );
-    return min(max(w.x,w.y),0.0) + length(max(w,0.0));
-}
-MR sdFeather(vec3 p,float sz, float base_h,float nick_seed){
-    base_h*=5;
-    float thickness = .02*base_h/7.;
-    vec2 rads = vec2(.6,.4);
-    p/=sz;
-    float bb = sdBox(p,vec3(rads.x/2.*1.57,base_h/1.9,thickness*2));
-    //if(bb>.52){return MR(bb,vec4(7));}
-    
-    
-    p.y-=base_h/2;
-    vec3 op = p;
-    p.y+=base_h;
-    pR(p.xz,min(1,abs(p.x)/rads.x*p.x/rads.x)/5);
-    p.y-=base_h;
-    
-    
-    MR result = MR(sdCone(p,vec2(sin(.015),cos(.015)),base_h)-thickness,vec4(5));
-    
-    p.y+=rads.x-thickness*2;
-    p.x=abs(p.x);
-    result.dts = min(result.dts,sdScale(-p-vec3(.15*(rads.x+rads.y),0,0),vec3(rads,base_h*.9-rads.y-rads.x),0)-thickness);
-    //#define NICKS 1
-    #ifdef NICKS
-            float seed = (nick_seed);
-                float place = base_h*.85*(hash(vec2(seed,1.8)));
-                op.x*=hash(vec2(-nick_seed/15.+1.245))>0.5?-1:1;
-                if(op.x>0){
-                p.y+=(place);
-                pR(p.xy,.6);
-                result.dts = max(result.dts, min(min(length(p.xy-vec2(0,1.6))-01.6,-op.y-place),p.y));
-                }
-    #endif
-    result.dts*=sz/1.2;
+MR wings(vec3 p){
+    p/=1.3;
+    p.z=abs(p.z);
+    p.xyz+=vec3(1.2,0.2-.142,.5-.63);
+    pR(p.xy,.756);
+    pR(p.zx,-.89);
+    MR result = MR(sdVesicaSegment(p,vec3(0),vec3(0,-7.3,0),1.)-.32
+    ,vec4(4)
+    );
+    result.dts =1.3*( -smin(-result.dts, (sdVesicaSegment(p,vec3(-.6, 4., -0.),vec3(-2.6, -12, -0. ),1.5)-1),.05));
+
     return result;
 }
-float sdbeak(vec3 p,float size,float openness){
-    p/=size;
-    float skinny = 1.4;
-    p.z*=skinny;
-    float base_len = 7.9;
-    //p-=vec3(-2,1,0);
-    vec3 op = p;
-    p.x+=base_len/2.;
-    pR(p.xy,min(.3,-p.x*.6/base_len*.5));
-    p.x+=base_len/2;
-    pR(p.xy,.7/(.8+.6*base_len/6.*abs(p.x)));
-    p.x-=base_len;
-    float result = .9*sdVesica(p,vec3(0),vec3(-base_len,0,0),1.0);
-    result = smax(abs(result)-.05,-.051-sdZigzag(p.xy,.5*vec2(1.,.1),.5*vec2(0,-0.1)),.01);
-    pR(p.xy,openness);
-    float bottom = sdVesica(p,vec3(0),vec3(-base_len,0,0),.9);
-    bottom = max(abs(bottom)-.05,p.y);
-    
-    //bottom = max(bottom,-sdCone(-p.yxz,vec2(sin(.35),cos(.35))));
-    result = min(result, bottom);
-    p=op;
-    result = smax(result,length(p-vec3(-6,0,0))-4.9,.2);
-    return result/skinny*size;
-}
-MR sdTail(vec3 p){
-    p.x+=1;
-    p.y-=11.5;
-    MR result = sdFeather(p.zyx,4,.6,.7);
-    //result = smax(result,(length(p)-base_len*1),.1);
+MR shoulders(vec3 p){
+    MR result = MR(999,vec4(2));
+    p=vec3(p.x-.5,p.y+2.3,abs(p.z)-.0);
+    result.dts = length(p)-1.65;
     return result;
 }
-MR sdWings(vec3 p){
+MR tail(vec3 p){
+    vec3 op = p;
+    vec3 h = vec3(0,0,0.8);
     p.z = abs(p.z);
-    p-=vec3(-.8,5.5,1.515);
-    pR(p.xz,.42);
-    pR(p.yz,.1875);
-    p.z=-p.z;
-    MR result = sdFeather(p,4.,.46,0);
-    pR(p.xz,-.251);
-    pR(p.yz,-.01);
-    p-=vec3(-1.14,-2.9,-.4314);
-    pR(p.xy,-.2);
-    result = mapMin(result,sdFeather(p,2.5,.68,0));
-    result.dts*=.85;
+    //pR(p.yz,min(p.z*.05,.05));
+    pR(p.yz,-.1);
+    pR(p.xz,.35);
+    p.z+=2;
+    vec3 q = p - clamp( p, -h, h );
+    
+    MR result = MR(sdRoundCone(q,vec3(2.5,-4,0),vec3(5,-9,0),.6,.1)//sdVesicaSegment(p,vec3(2,-2,1.5),vec3(6,-8,3),1)
+    ,vec4(4));
+    result.dts = smin(result.dts,sdVesicaSegment(op,vec3(4.15,-7.,0),vec3(-.5,-3.,0),.8),.15);
     return result;
 }
 MR legs(vec3 p){
     p.z = abs(p.z);
-    p=p.yxz;
-
-    p-=vec3(3.,1,.86);
-        pR(p.yz,.48);
+    MR result = MR(sdRoundCone(p,vec3(2.5,-5,.8),vec3(0.35,-6,1.2),.27,.2),vec4(4));
     
-    pR(p.xy,-.82);
-    MR result = MR(sdRoundCone(p,1.5,1.,2.),vec4(6));
-    p.y-=2.;
-    pR(p.xy,1.4);
-    result = smapMin(result, MR(sdRoundCone(p,.4,.2,3.4),vec4(7)),.1);
+    p-=vec3(-.0,-6.6,1.25);
+    vec3 op = p;
+    pR(p.xy,-.7);
+    p.x=abs(p.x);
+    p.z=abs(p.z);
+    pR(p.yz,1.025);
+    pR(p.xy,.419);
+    p*=2.68;
     
-    p.y-=3.5;
-    pR(p.xy,-.2);
-    pR(p.yz,-.2);
-    p.xz=-abs(p.xz);
-    pR(p.xy,.85);
-    pR(p.yz,-.425);
-    result = smapMin(result, MR(sdRoundCone(p,.39,.2,2.),vec4(8)),.1);
-    p-=vec3(0.4,2.,0.2);
-    pR(p.xy,-.69);
-    pR(p.yz,.24);
-    result = smapMin(result,MR(sdMoon(p,vec3(.91,.76,1.),.01)-.031,vec4(9)),0.1);//result.dts = smin(result.dts, sdRoundCone(p,.18,.08,1.5),.031);
+    float feet = sdTorus(p,vec2(1,.3));
+    feet = -smin(-feet,(length(op+vec3(0,1.55,0))-1.46),.061)/2.68;
+    result.dts = smin(result.dts,feet,.186);
     return result;
 }
-float simple_noise(vec3 p){
-pR(p.yz,p.x/6);
-float n = sin(p.y*5)/20+sin(p.z*2.5)/20;
-pR(p.xy,1.6);
-pR(p.yz,.8);
-p+=1;
-n+=sin(p.y*4)/15+sin(p.z*2.4)/15;
-return n;
-}
-MR branch2(vec3 p){
-    p+=vec3(4,13,1.);
-    float weird = simple_noise(p);
-    MR result = MR(sdRoundCone(p.yxz,1,1.8,15),vec4(12));
-    p-=vec3(12,1,0);
-    pR(p.xy,.6);
-    result.dts = .8*(weird+smin(result.dts,sdRoundCone(p.yxz,.8,1.,4),.1));
+MR sdLine(vec3 p){
+    MR result = MR(999,vec4(3));
+    result.dts = abs(sdParabola(vec2(0,-1.54)-p.zy,45,5));
+    result.dts = fOpPipe(result.dts,p.x,.16);//max(result.dts,p.x);
     return result;
 }
-MR branch(vec3 p){
-    p+=vec3(16,9.,-.8);
-    float weird = .75*simple_noise(p*vec3(.61,1,1));
-    pR(p.xz,-.1);
-    pR(p.xy,p.x/100-.4);
-    MR result = MR(sdRoundCone(p.yxz,.6,1.8,30),vec4(10));
-    p-=vec3(24,1,0);
-    pR(p.xy,.16);
-    result.dts = weird+smin(result.dts,sdRoundCone(p.yxz,.8,1.,6),.31);
-    result.dts *=.85;
-    p.xy+=vec2(28,-3);
-    pR(p.xy,-1.68);
-    MR berry = MR(length(p)-8,vec4(11));
-    p.y-=1.95;
-    
-    berry.dts =.9*smin(smax(berry.dts,-length(p)+6.9,.4),sdTorus(p,vec2(3.9)),.4);
-    result= mapMin(result,berry);
-    return result;
-}
-
 
 MR bird(vec3 p){
-    p.y-=6;
+    const vec2 offs = vec2(0.12,8);
+    p.yz-=offs;
     vec3 op = p;
-    MR result = MR(999,vec4(2));
-    result.dts = length(p)-1.35;
-    vec3 ep = p+vec3(.3,-.7,-0.071);
-    ep.z=abs(ep.z)-1.1;
-    MR eye = MR(sdTorus(ep.yzx,vec2(.4,.09)),vec4(3));
-    MR pupil = MR(length(ep-vec3(0,0,-.2))-.5,vec4(4));
-    p+=vec3(-0,2,0)+vec3(-.385,.88,-.3382)*5;//-.623,.823,-.011
-    pR(p.xz,1.5);
-    pR(p.xy,-2);
-    MR body = MR(sdRoundCone(p,2.95,1.,6.5),vec4(5));
-    result = smapMin(result,body,1.5);
-    result= smapMin(result,eye,.15);
-    result = mapMin(result,pupil);
-    result = smapMin(result, sdTail(p), .1);
-    result = smapMin(result, legs(p),.1);
-    p.z = mix(abs(p.z),body.dts,.5);
-    result = smapMin(result, sdWings(p),.1);
+    p.z*=1.1;
+    MR result = MR(length(p+vec3(.12,.25,0))-1.,vec4(1));
+    MR beak = sdbeak(p);
+    beak.dts/=1.1;
+    
+    p.xy+=vec2(1.,.0);
+    pR(p.xy,.7);
+    float body = length(p+vec3(.5,5.25,0))-1.4;
+    p.xy+=vec2(.51,3.2);
+    body = smin(body,length(p)-1.65,.51);
+    result = smapMin(result,MR(body,vec4(2)),.48);
+    result.dts/=1.1;
+    //result = mapMin(result, sdLine(op+vec3(0,offs)));
+    result = smapMin(result,tail(op),.1);
+    result = smapMin(result,legs(op),.1);
+    result = smapMin(result,wings(op),.0221);
+    result = smapMin(result,shoulders(op),.1);
+    //eyes
     p=op;
-    p.x-=3.1;
-    p.y+=.8;
-    result = smapMin(result,MR(sdbeak(p,1.453,.1),vec4(1)),.1);
-    result = mapMin(result,branch(op-vec3(-.385,.88,-.3382)*-5+5*vec3(.623,-.823,.011)));
-
-    //result.mat.x=0;
+    p.xyz=vec3(p.x+.69,p.y-.1,abs(p.z)-.71);
+    result.dts = -smin(-result.dts,(length(p)-.21),.1);
+    result = mapMin(result,MR(length(p+vec3(-0.4,0.08,.46))-.465,vec4(5)));
+    result = smapMin(result,beak,.025);
     return result;
 }
+MR bulbCheap(vec3 p){
+ MR result = MR(999,vec4(6));
+    
+    vec3 rp = p;
+    pR(rp.xy,.25);
+    result.dts = sdRoundCone(p,vec3(0),vec3(0,3,0),1,1.65);
+    p.y+=.8;
+    float base = sdCyl(p,1.3,1);
+    result = mapMin(result, MR(base,vec4(7)));
+    p.y+=2.;
+    result.dts = smin(result.dts,sdCyl(p,.7,1)-.1,.35);
+    result.dts = fOpTongue(result.dts,abs(p.y-1)-1.25,.051,.1);
+    return result;
+}
+MR bulb(vec3 p){
+    MR result = MR(999,vec4(6));
+    
+    vec3 rp = p;
+    pR(rp.xy,.25);
+    float broke = sdZigzag(rp.yz-1.6,vec2(.3,-.5),vec2(.2,.2));
+    result.dts = max(broke,abs(sdRoundCone(p,vec3(0),vec3(0,3,0),1,1.65))-.02);
+    p.y+=.8;
+    float base = sdCyl(p,1.3,1);
+    base = max(base,-sdRoundCone(p,vec3(0),vec3(0,3,0),1,1.65));
+    result = mapMin(result, MR(base,vec4(7)));
+    p.y+=2.;
+    result.dts = smin(result.dts,sdCyl(p,.7,1)-.1,.35);
+    result.dts = fOpTongue(result.dts,abs(p.y-1)-1.25,.051,.1);
+    p.y-=3;
+    p.z=abs(p.z)-.37;
+    pR(p.yz,.2);
+    float filament = sdCyl(p,.031,3)-.02;
+    result = mapMin(result,MR(filament,vec4(3)));
 
+    return result;
+}
+MR scene(vec3 p){
+MR result = bird(p);
+result = mapMin(result,sdLine(p));
+float sz = .02;
+MR bul = bulb((p)*sz+vec3(0,3.153,0));
+bul.dts/=sz;
+p.y+=9;
+float hangScale = .75;
+p.y-=p.z*p.z/390;
+float cell  = pModInterval1(p.z,20,-2,2);
+MR hangers = bulbCheap(-p/hangScale);
+if(cell == -1){hangers.dts+=2;}
+hangers.dts*=hangScale;
+result = mapMin(result,hangers);
+result = mapMin(result,bul);
+return result;
+}
 ////////////////////////////////////////////////////////////////////////////SCENE------------------------SCENE//////////////////////
 ////////////////////////////////////////////////////////////////////////////SCENE------------------------SCENE//////////////////////
 MR sdf(vec3 p) {
-    p-=vec3(0.17,-5.52,0)+vec3(.830,2.38,.05)*2+sim_offset*2.;
+    p-=+sim_offset;
     vec3 op = p;
     //float ground = p.y + 20.1;
     //MR result = MR(ground, vec4(0));
     //MR shap = MR(sdBoxFrame(p, vec3(.5),.3), vec4(1));
     //result = mapMin(result, shap);
-    float sz = .21;
+    float sz = .021;
     p/=sz;
     //MR tow = MR(sdBox(p,vec3(9,14,9)),vec4(1));
     //if(tow.dts<1.2){tow = pyramid(p);}
     //MR result =  MR(sz*tow.dts,tow.mat);
-    float bb = length(p)-25;
-    if(bb*sz>2){return MR(bb*sz,vec4(0));}
-    MR result = bird(p);
+    //float bb = length(p-vec3(0,-100,0))-300;
+    //if(bb*sz>2){return MR(bb*sz,vec4(0));}
+    MR result = scene(p);
     result.dts*=sz;
     return result; 
 }
@@ -707,7 +628,7 @@ vec3 spiral_axis() {
 
 vec3 calcNorm(in vec3 p)
 {
-    const float h = 0.001;
+    const float h = 0.0001;
     #define ZERO (min(frame_count,0))
     vec3 n = vec3(0.0);
     for(int i = ZERO; i < 4; i++)
