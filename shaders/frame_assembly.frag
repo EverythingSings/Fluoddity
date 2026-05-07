@@ -1,5 +1,6 @@
 #version 330 core
 uniform sampler2D input_frame;
+uniform sampler2D input_frame_y;    // Y channel for canvas debug view (R32F)
 uniform sampler2D accumulation_buffer;
 uniform sampler2D emboss_tex;       // Texture for emboss (canvas or brush, based on mode)
 uniform sampler2D field_texture;                    // Force/Strafe field (.xy=force, .zw=strafe)
@@ -9,7 +10,7 @@ uniform bool strafe_field_checked;  // Whether Strafe Field checkbox is active
 uniform float draw_target_overlay_opacity; // Opacity of field color overlay (0-1)
 uniform bool is_first_frame;
 uniform bool final_sample;
-uniform int view_mode;  // 0=can, 1=brush_tex, 2=cam_brush
+uniform int view_mode;  // 0=canvas_debug, 1=canvas_debug (was brush), 2=cam_brush
 uniform bool PARAMETER_SWEEP_MODE;  // Whether parameter sweeps are active
 uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 range)
 uniform bool sweep_reticle_visible; // Whether to show the reticle
@@ -304,6 +305,11 @@ void main() {
     vec3 current_color;
     if (tiling_mode_enabled) {
         current_color = sample_tiled_color(uv);
+    } else if (view_mode == 0 || view_mode == 1) {
+        // Canvas debug view: reconstruct 2-channel velocity from separate R32F textures
+        float cx = texture(input_frame, uv).r;
+        float cy = texture(input_frame_y, uv).r;
+        current_color = vec3(cx, cy, 0.0);
     } else if (view_mode == 5) {
         // Strafe field view: use .zw channels as the vector field (displayed via .xy)
         vec4 field_sample = texture(input_frame, uv);

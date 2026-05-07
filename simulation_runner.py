@@ -64,9 +64,10 @@ class SimulationRunner:
                                   gen.generic4, gen.generic5, gen.generic6, gen.generic7)
                 sim_rotation = rot_mat(adv_prefs.sim_euler_x, adv_prefs.sim_euler_y, adv_prefs.sim_euler_z)
                 defines_prefix = "#define NO_RECURSION 1\n" if adv_prefs.disable_recursion else ""
+                canvas_dims = self.sim.get_canvas_dimensions()
                 self.advanced_drawing_processor.process_override(
-                    canvas_width=self.sim.can.size[0],
-                    canvas_height=self.sim.can.size[1],
+                    canvas_width=canvas_dims[0],
+                    canvas_height=canvas_dims[1],
                     shader_name=adv_prefs.field_override_shader,
                     frame_count=self.sim.frame_count,
                     mouse_pos=mouse_tex_coords,
@@ -98,9 +99,10 @@ class SimulationRunner:
                 field_erase = (erase_mode and (
                     adv_prefs.advanced_draw_force_field or adv_prefs.advanced_draw_strafe_field
                 ))
+                canvas_dims = self.sim.get_canvas_dimensions()
                 self.advanced_drawing_processor.process(
-                    canvas_width=self.sim.can.size[0],
-                    canvas_height=self.sim.can.size[1],
+                    canvas_width=canvas_dims[0],
+                    canvas_height=canvas_dims[1],
                     draw_mode=field_draw_active,
                     mouse_pos=mouse_tex_coords,
                     prev_mouse_pos=self.prev_mouse_tex_coords,
@@ -126,13 +128,9 @@ class SimulationRunner:
         if ui_state.request_clear_canvas:
             self.sim.clear_canvas()
 
-        # Handle clear canvas + brush + fields request
+        # Handle clear canvas + fields request
         if ui_state.request_clear_canvas_and_fields:
             self.sim.clear_canvas()
-            old_fbo = self.sim.ctx.fbo
-            self.sim.brush.use()
-            self.sim.ctx.clear(0, 0, 0, 0)
-            old_fbo.use()
             self.advanced_drawing_processor.clear_fields()
 
         # Build shared frame assembly kwargs (used by both paths)
@@ -177,7 +175,7 @@ class SimulationRunner:
 
         if draw_mode:
             mouse_tex_coords = self.camera.screen_to_tex(
-                ui_state.mouse_pos, self.sim.can.size
+                ui_state.mouse_pos, self.sim.get_canvas_dimensions()
             )
             if tiling_mode:
                 mouse_tex_coords = (
@@ -193,9 +191,9 @@ class SimulationRunner:
         """Get emboss texture and effective intensity from ui_state."""
         emboss_mode = ui_state.sim.emboss_mode
         if emboss_mode == 1:
-            emboss_tex = self.sim.can
+            emboss_tex = self.camera.cam_brush_target
         elif emboss_mode == 2:
-            emboss_tex = self.sim.brush_tex
+            emboss_tex = None  # Brush mode deprecated (brush pipeline removed)
         else:
             emboss_tex = None
         effective_emboss_intensity = 0.0 if emboss_mode == 0 else ui_state.sim.emboss_intensity
@@ -259,6 +257,7 @@ class SimulationRunner:
             force_field_checked=adv_prefs.advanced_draw_force_field if advanced_active else False,
             strafe_field_checked=adv_prefs.advanced_draw_strafe_field if advanced_active else False,
             draw_target_overlay_opacity=adv_prefs.draw_target_overlay_opacity if advanced_active else 0.0,
+            canvas_y_texture=self.sim.can_y_textures[self.sim.can_read_index],
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,

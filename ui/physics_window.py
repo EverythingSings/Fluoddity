@@ -318,7 +318,7 @@ class PhysicsWindowMixin:
                 # Emboss mode combo box
                 em_lock_colors = pls.push_locked_style('emboss_mode') if pls else 0
                 em_label = pls.get_display_label('emboss_mode', "Emboss") if pls else "Emboss"
-                emboss_options = ["Off", "Canvas (Trails)", "Brush (Particles)"]
+                emboss_options = ["Off", "Canvas (Trails)"]
                 changed_em, new_em = imgui.combo(
                     em_label, self.state.sim.emboss_mode, emboss_options
                 )
@@ -534,7 +534,7 @@ class PhysicsWindowMixin:
                 if self.state.sim.watercolor_mode:
                     imgui.set_next_item_width(100)
                     _, self.state.sim.ink_weight = imgui.slider_float("Ink Weight", self.state.sim.ink_weight, 0.0, 4.0)
-                emboss_options = ["Off", "Canvas (Trails)", "Brush (Particles)"]
+                emboss_options = ["Off", "Canvas (Trails)"]
                 imgui.set_next_item_width(150)
                 if imgui.begin_combo("Emboss Mode", emboss_options[self.state.sim.emboss_mode]):
                     for i, option in enumerate(emboss_options):

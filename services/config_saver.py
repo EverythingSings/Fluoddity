@@ -86,7 +86,7 @@ class PhysicsConfig:
     hue_sensitivity: float = 0.5
     color_by_cohort: bool = True
     watercolor_mode: bool = False
-    emboss_mode: int = 0  # 0=Off, 1=Canvas, 2=Brush
+    emboss_mode: int = 0  # 0=Off, 1=Canvas
     emboss_intensity: float = 0.5
     emboss_smoothness: float = 0.1
 
@@ -218,7 +218,7 @@ class PhysicsConfig:
             hue_sensitivity=appearance.get('hue_sensitivity', 0.5),
             color_by_cohort=appearance.get('color_by_cohort', True),
             watercolor_mode=appearance.get('watercolor_mode', False),
-            emboss_mode=appearance.get('emboss_mode', 0),
+            emboss_mode=min(appearance.get('emboss_mode', 0), 1),  # Clamp legacy brush mode (2) to Off
             emboss_intensity=appearance.get('emboss_intensity', 0.5),
             emboss_smoothness=appearance.get('emboss_smoothness', 0.1),
             rule=rule,
@@ -348,7 +348,7 @@ class ConfigSaver:
         sim_state.hue_sensitivity = config.hue_sensitivity
         sim_state.color_by_cohort = config.color_by_cohort
         sim_state.watercolor_mode = watercolor_override if watercolor_override is not None else config.watercolor_mode
-        sim_state.emboss_mode = config.emboss_mode
+        sim_state.emboss_mode = min(config.emboss_mode, 1)  # Clamp legacy brush mode (2) to Off
         sim_state.emboss_intensity = config.emboss_intensity
         sim_state.emboss_smoothness = config.emboss_smoothness
 

@@ -103,6 +103,7 @@ class Camera:
             self.cam_brush_program['canvas_resolution'].value = self.sim.view_tex.size
             self.cam_brush_program['window_size'].value = (width, height)
             tryset(self.cam_brush_program, 'WATERCOLOR_MODE', self.watercolor_mode)
+            tryset(self.cam_brush_program, 'WORLD_SIZE', self.sim.world_size)
 
             # Tiling mode uniforms
             tryset(self.cam_brush_program, 'tiling_mode_enabled', tiling_mode)
@@ -254,7 +255,8 @@ class Camera:
                 view_max=tuple(view_max),
                 tiling_scale=self.compute_tiling_scale(),
                 canvas_resolution=self.sim.get_canvas_dimensions(),
-                tonemap_softness=tonemap_softness
+                tonemap_softness=tonemap_softness,
+                canvas_y_texture=self.sim.can_y_textures[self.sim.can_read_index],
             )
             # assemble_frame returns the texture immediately when total_samples=1
             if bloom_enabled and not watercolor_mode and TEX_TO_VIEW is not None:

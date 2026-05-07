@@ -350,8 +350,8 @@ class App:
                 arrow_resolution = field_tex.size
                 use_zw = adv_prefs.advanced_draw_strafe_field
             else:
-                arrow_texture = self.sim.can
-                arrow_resolution = self.sim.can.size
+                arrow_texture = self.sim.can_x_textures[self.sim.can_read_index]
+                arrow_resolution = self.sim.get_canvas_dimensions()
                 use_zw = False
             self.arrow_debug_service.render(
                 canvas_texture=arrow_texture,
@@ -384,9 +384,9 @@ class App:
         """Render the camera view to screen."""
         emboss_mode = ui_state.sim.emboss_mode
         if emboss_mode == 1:
-            emboss_tex = self.sim.can
+            emboss_tex = self.camera.cam_brush_target
         elif emboss_mode == 2:
-            emboss_tex = self.sim.brush_tex
+            emboss_tex = None  # Brush mode deprecated (brush pipeline removed)
         else:
             emboss_tex = None
 

@@ -259,7 +259,10 @@ class CommandHandler:
         world_pos = (tex_coords[0] * 2 - 1, tex_coords[1] * 2 - 1)
 
         if self.sim.has_active_cohort_sweep():
-            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords, canvas_aspect_ratio)
+            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(
+                tex_coords, canvas_aspect_ratio,
+                num_cohorts=self.sim._state.num_cohorts,
+                active_count=self.sim.entity_count)
             self.sim.update_sliders_from_particle(world_pos, entity_cohort)
         else:
             self.sim.update_sliders_from_position(world_pos)
@@ -274,7 +277,10 @@ class CommandHandler:
                 np.fmod(tex_coords[0] + 10.0, 1.0),
                 np.fmod(tex_coords[1] + 10.0, 1.0)
             )
-        entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(tex_coords,canvas_aspect_ratio)
+        entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(
+            tex_coords, canvas_aspect_ratio,
+            num_cohorts=self.sim._state.num_cohorts,
+            active_count=self.sim.entity_count)
 
         if entity_id >= 0 and entity_id < self.sim.entity_count:
             print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort} - requesting rule buffer update")

@@ -1,15 +1,13 @@
 #version 450
+
 layout(local_size_x = 64) in;
 
-//SAME STRUCT USED IN BRUSH.VERT AND CAM_BRUSH.VERT
+//SAME STRUCT USED IN CAM_BRUSH.VERT
 struct Entity {
     vec2 pos;
-    vec2 vel;
-    float size;
-    float cohort;      // Normalized cohort value (0-1) for parameter sweep calculations
-    float padding[2];  // Align to 16-byte boundary for vec4
-    vec4 color;
-};  // Total: 48 bytes (12 floats)
+    float dir;   // heading direction in radians
+    float hue;   // HSV hue value
+};  // Total: 16 bytes (4 floats)
 struct Rule {
     FourierCenter centers[10];
 };
@@ -33,7 +31,8 @@ struct PhysicsSetting {
 uniform float WORLD_SIZE;
 uniform int frame_count;
 uniform Rule target_rule;
-uniform sampler2D canvas; //trails canvas
+uniform sampler2D canvas; //trails canvas X channel (R32F)
+uniform sampler2D canvas_y; //trails canvas Y channel (R32F)
 uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
 uniform float force_field_strength; // Multiplier for force field effects
@@ -49,6 +48,11 @@ uniform PhysicsSetting LATERAL_FORCE_SETTING;
 uniform PhysicsSetting SENSOR_GAIN_SETTING;
 uniform PhysicsSetting MUTATION_SCALE_SETTING;
 uniform PhysicsSetting HAZARD_RATE_SETTING;
+uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
+
+// Atomic splat image targets (R32F canvas textures)
+layout(r32f, binding = 0) uniform image2D can_img_x;
+layout(r32f, binding = 1) uniform image2D can_img_y;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
@@ -111,6 +115,8 @@ vec4 draw_sample;
 #define PI 3.1415926
 #define ACTIVE_COUNT (600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
 #define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
+#define ENTITY_SPEED 0.01
+#define ENTITY_VEL(e) (ENTITY_SPEED * vec2(sin((e).dir), cos((e).dir)))
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
     if (MULTILOAD_COUNT == 0) return -1; // Not in multi-load mode
@@ -313,14 +319,14 @@ void pR(inout vec2 p, float a) {
 }
 
 
-//convert p (entity space) to texture coords and retrieve canvas
-vec4 get_can(vec2 p){
+//convert p (entity space) to texture coords and retrieve canvas (2-channel: X and Y velocity)
+vec2 get_can(vec2 p){
     vec2 res=textureSize(canvas,0);
     float ca = res.x / res.y;
     vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
     vec2 uv = p / (2.0 * half_extent) + 0.5;
     if(get_particle_boundary_conditions() == 2) uv = fract(uv);
-    return texture(canvas, uv);
+    return vec2(texture(canvas, uv).r, texture(canvas_y, uv).r);
 }
 vec4 get_field(vec2 p){
     if(!advanced_drawing_resources_initialized)return vec4(0);
@@ -337,21 +343,19 @@ vec2 safenorm(vec2 p){
 }
 
 float get_cohort(uint index) {
-    return generic03.w>0? entities[index].cohort : float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
+    return float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
 }
 
 //Return all entities to their initialization state
 void reset(uint index){
 
-    float size=index<ACTIVE_COUNT?.0015/SQRT_WORLD_SIZE: 0;
-    float cohort_val = float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);//get_cohort(index);
+    float cohort_val = float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
     float aspect = sqrt(canvas_resolution.x/canvas_resolution.y);
 
-    vec4 color=vec4(0,0,1,.045);
-    //set pos and vel to random values on a small disk
+    //set pos to random values on a small disk, random heading
     float cohort_scale = 0.019;//Size of each disk
     vec2 pos=cohort_scale*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
-    vec2 vel=.00005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
+    float dir = hash(vec2(cohort_val, index)) * 2.0 * PI;
 
     //RESET_MODE: 0=Grid, 1=Random, 2=Ring
     int reset_mode = get_particle_reset_mode();
@@ -384,12 +388,10 @@ void reset(uint index){
         float angle = cohort_val / float(cohorts) * 2.0 * PI;
         float radius = 0.5;
         pos += vec2(cos(angle), sin(angle)) * radius;
-        //pos += 0.02 * vec2(hash(vec2(cohort_val)), hash(vec2(cohort_val + 1.0))); // Small jitter
     }
 
-    cohort_val = current_field.w;
     //store to persistent entity buffer
-    entities[index]=Entity(pos,vel,size,cohort_val,float[2](0,0),color);
+    entities[index]=Entity(pos, dir, 0.0);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
@@ -472,7 +474,7 @@ void main() {
 
     // Inactive entities get zeroed out. Position offscreen so they don't accidentally get clicked on
     if (index >= ACTIVE_COUNT) {
-        entities[index] = Entity(vec2(10000), vec2(0), 0.0, 0.0, float[2](0,0), vec4(0));
+        entities[index] = Entity(vec2(10000), 0.0, 0.0);
         return;
     }
     Entity e=entities[index];
@@ -498,14 +500,9 @@ void main() {
     //Calculate position offsets for the two sensors.
     float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
     
-    //variable sample distance?
-    //sample_dist *= (get_can(e.pos).z*10);
-    //GOOD 1./dot(normalize(e.vel),normalize(get_can(e.pos).xy));
-    //length(e.vel)/.05;//length(get_can(e.pos).xy)/.01;
-    
     int ORIENTATION_MODE =get_particle_absolute_orientation();
     float mix_amt = min(1,ORIENTATION_MODE)*ORIENTATION_MIX;
-    vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
+    vec2 orientation = vec2(sin(e.dir), cos(e.dir));//unit vector from heading
     if(ORIENTATION_MODE==1){orientation = mix(orientation,vec2(0,1),mix_amt);}
     else if(ORIENTATION_MODE==2){orientation = mix(orientation,-normalize(e.pos),mix_amt);}
     vec2 left_sensor_offset = orientation*sample_dist;
@@ -513,11 +510,11 @@ void main() {
     pR(left_sensor_offset,calculate_setting(get_particle_sensor_angle(),e.pos,cohort)*PI);//rotate them opposite directions
     pR(right_sensor_offset,-calculate_setting(get_particle_sensor_angle(),e.pos,cohort)*PI);
 
-    //read the trails from canvas
-    vec4 ltap = get_can(e.pos+left_sensor_offset);
-    vec4 rtap = get_can(e.pos+right_sensor_offset);
+    //read the trails from canvas (2-channel: X and Y velocity)
+    vec2 ltap = get_can(e.pos+left_sensor_offset);
+    vec2 rtap = get_can(e.pos+right_sensor_offset);
 
-    
+
     //rescale sensor values
     float sensor_scaling = SQRT_WORLD_SIZE*38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
     ltap *= sensor_scaling;
@@ -527,35 +524,29 @@ void main() {
     vec2 strafe =vec2(0);
     vec2 force = vec2(0);
     vec2 col_params = vec2(0);
-    calculate_entity_behavior(ltap.xy,rtap.xy,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
+    calculate_entity_behavior(ltap,rtap,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
 
     //rescale output forces
     force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
     strafe *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
 
 
-    //e.color is interpreted as vec4(hue,saturation,brightness,alpha)
-    //We just set brightness to 1 and modulate hue and saturation
-    e.color.x = get_particle_hue_sensitivity()*col_params.x;//hue can be anything
-    //Hardcoding saturation for now. 
-    //low saturation arises naturally due to a mix of hues from different particles. 
-    //Use col_params.y for something else?
-    //e.color.y = sin(col_params.y)/2.+.5;//saturation must be 0..1
-    e.color.y = .8;
+    //Set hue from noise function output
+    e.hue = get_particle_hue_sensitivity()*col_params.x;//hue can be anything
+    if(get_particle_color_by_cohort()) {e.hue = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
 
-    if(get_particle_color_by_cohort()) {e.color.x = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
-    e.color.z=(generic03.z*15+1)*exp(-30*generic03.y*length(col_params.y*.3-generic03.x*3));//brightness 1.
-    e.color.w=0.045; //low alpha
-
-    //Accelerate: Apply drag and add force to e.vel,
-    e.vel = e.vel*calculate_setting(get_particle_drag(),e.pos,cohort) + force;
-    //Move: add e.vel and strafe to e.pos
-    e.pos += e.vel;
+    //Accelerate: Compute velocity from heading, apply drag and force, extract new heading
+    vec2 vel = ENTITY_VEL(e);
+    vel = vel*calculate_setting(get_particle_drag(),e.pos,cohort) + force;
+    e.dir = atan(vel.x, vel.y);
+    //Move: add vel and strafe to e.pos
+    e.pos += vel;
     e.pos += strafe*calculate_setting(get_particle_strafe_power(),e.pos,cohort);
 
     //ADVANCED DRAWING force / strafe
-    
-    e.vel += -.01*force_field_strength*draw_sample.xy;
+    vel = ENTITY_VEL(e);
+    vel += -.01*force_field_strength*draw_sample.xy;
+    e.dir = atan(vel.x, vel.y);
     //e.pos += .01*strafe_field_strength*draw_sample.xy;//FOR SHADER DRIVEN ONLY
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
@@ -566,11 +557,11 @@ void main() {
     if(boundary_mode==0){
         //reflect particles off canvas boundaries
         if (e.pos.x < -x_edge || e.pos.x > x_edge){
-            e.vel.x=-e.vel.x;
+            vec2 v = ENTITY_VEL(e); v.x = -v.x; e.dir = atan(v.x, v.y);
             e.pos.x=edgeflect(e.pos.x/x_edge)*x_edge;
         }
         if (e.pos.y < -y_edge || e.pos.y > y_edge){
-            e.vel.y=-e.vel.y;
+            vec2 v = ENTITY_VEL(e); v.y = -v.y; e.dir = atan(v.x, v.y);
             e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
         }
     }
@@ -587,8 +578,24 @@ void main() {
         e.pos.y = y_edge * 2.0 * (fract(e.pos.y / (y_edge * 2.0) - 0.5) - 0.5);
     }
 
+    //Atomic splat to canvas: scale by (1-p)/p so canvas_update's *p gives net (1-p)*splat
+    float trail_p = calculate_setting(TRAIL_PERSISTENCE_SETTING, e.pos, cohort);
+    trail_p = clamp(trail_p, 0.001, 0.999);
+    float splat_scale = (1.0 - trail_p) / trail_p;
+
+    vec2 img_res = vec2(imageSize(can_img_x));
+    vec2 half_ext = vec2(sqrt(ca), 1.0 / sqrt(ca));
+    vec2 uv_pos = e.pos / (2.0 * half_ext) + 0.5;
+    ivec2 pixel = ivec2(uv_pos * img_res);
+
+    if (pixel.x >= 0 && pixel.x < int(img_res.x) &&
+        pixel.y >= 0 && pixel.y < int(img_res.y)) {
+        vec2 splat_vel = ENTITY_VEL(e);
+        imageAtomicAdd(can_img_x, pixel, splat_scale * splat_vel.x);
+        imageAtomicAdd(can_img_y, pixel, splat_scale * splat_vel.y);
+    }
+
     //Commit new entity state to buffers
     entities[index]=e;
-
 
 }

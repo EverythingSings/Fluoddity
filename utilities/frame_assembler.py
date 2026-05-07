@@ -78,7 +78,8 @@ class FrameAssembler:
                        brush_mode=0, fixed_direction_heading=0.0,
                        field_texture=None, advanced_drawing_resources_initialized=False,
                        force_field_checked=False, strafe_field_checked=False,
-                       draw_target_overlay_opacity=0.0):
+                       draw_target_overlay_opacity=0.0,
+                       canvas_y_texture=None):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -86,7 +87,7 @@ class FrameAssembler:
             input_texture: moderngl.Texture to accumulate (PRE-gamma)
             total_samples: Number of frames in accumulation cycle
             current_sample_index: 0-indexed sample number (0 to total_samples-1)
-            view_mode: Current view mode (0=can, 1=brush_tex, 2=cam_brush)
+            view_mode: Current view mode (0=canvas_debug, 1=canvas_debug (was brush), 2=cam_brush)
             sweep_mode: Whether parameter sweeps are active
             sweep_reticle_pos: (x, y) screen UV position of sweep reticle
             sweep_reticle_visible: Whether to show the reticle
@@ -136,11 +137,14 @@ class FrameAssembler:
             emboss_tex.use(location=2)  # emboss_tex
         if field_texture is not None:
             field_texture.use(location=3)  # field_texture
+        if canvas_y_texture is not None:
+            canvas_y_texture.use(location=4)  # input_frame_y (canvas Y channel for debug view)
 
         # Set uniforms
         self.resources['shader']['input_frame'] = 0
         self.resources['shader']['accumulation_buffer'] = 1
         tryset(self.resources['shader'], 'emboss_tex', 2)
+        tryset(self.resources['shader'], 'input_frame_y', 4)
         self.resources['shader']['is_first_frame'] = is_first_frame
         self.resources['shader']['final_sample'] = final_sample
         tryset(self.resources['shader'], 'view_mode', view_mode)

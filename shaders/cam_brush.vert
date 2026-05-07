@@ -4,6 +4,7 @@ uniform vec2 canvas_resolution;
 uniform vec2 cam_pos;
 uniform float cam_zoom;
 uniform vec2 window_size;
+uniform float WORLD_SIZE;
 
 // Tiling mode uniforms
 uniform bool tiling_mode_enabled;
@@ -14,18 +15,18 @@ uniform vec2 view_max;  // World-space maximum of view rectangle
 // Must match the value in frame_assembly.frag. Smaller = more margin for edge blending.
 const float TILING_MARGIN = 0.993;
 
-//SYNC WITH ENTITY_UPDATE.GLSL AND BRUSH.VERT
+//SYNC WITH ENTITY_UPDATE.GLSL
 struct Entity {
     vec2 pos;
-    vec2 vel;
-    float size;
-    float cohort;      // Normalized cohort value (0-1) for parameter sweep calculations
-    float padding[2];  // Align to 16-byte boundary for vec4
-    vec4 color;
-};  // Total: 48 bytes (12 floats)
+    float dir;   // heading direction in radians
+    float hue;   // HSV hue value
+};  // Total: 16 bytes (4 floats)
 layout(std430, binding = 0) buffer EntityBuffer {
     Entity entities[];
 };
+
+#define ENTITY_SIZE (.0015 / sqrt(WORLD_SIZE))
+#define ENTITY_SPEED 0.01
 
 out vec2 uv;
 out vec4 pos_vel;
@@ -44,8 +45,9 @@ void main() {
     int vertex_id = gl_VertexID;
     // Read entity data
     vec2 entity_pos = entities[instance_id].pos;
-    vec2 entity_vel = entities[instance_id].vel;
-    float size = entities[instance_id].size;
+    float entity_dir = entities[instance_id].dir;
+    vec2 entity_vel = ENTITY_SPEED * vec2(sin(entity_dir), cos(entity_dir));
+    float size = ENTITY_SIZE;
 
     // Entity-to-NDC transform: entity bounds [-x_edge,x_edge]x[-y_edge,y_edge] -> [-1,1]^2
     float ca = canvas_resolution.x / canvas_resolution.y;
@@ -147,5 +149,5 @@ void main() {
     // Pass through vertex data
     uv = uv_coords[vertex_id];
     pos_vel = vec4(entity_pos, entity_vel);
-    view_col = entities[instance_id].color;
+    view_col = vec4(entities[instance_id].hue, 0.8, 1.0, 0.045);
 }

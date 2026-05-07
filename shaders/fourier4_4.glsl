@@ -1,3 +1,4 @@
+#extension GL_NV_shader_atomic_float : require
 // Fourier Feature Network: 4D input -> 4D output
 struct FourierCenter {
     vec4 frequency;  // 4D frequency vector
