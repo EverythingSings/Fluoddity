@@ -17,6 +17,7 @@ from camera_input import process_camera_input
 from controller_input import (ControllerCam, process_controller_input, find_joystick,
                                rot_mat, _norm, _axis_angle, _rot_from_axis_angle)
 from utilities.advanced_drawing import AdvancedDrawingProcessor
+from plotting_manager import PlottingManager
 
 
 class App:
@@ -95,11 +96,17 @@ class App:
         self.controller_cam = ControllerCam()
         self.joystick_state = {'joystick_id': find_joystick(), 'prev_buttons': []}
 
+        # Plotting manager (histogram reporting system)
+        self.plotting_manager = PlottingManager(self.ctx)
+        self.ui.plotting_manager = self.plotting_manager
+        self.command_handler.plotting_manager = self.plotting_manager
+
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
             self.command_handler, self.window,
             advanced_drawing_processor=self.advanced_drawing_processor,
-            controller_cam=self.controller_cam
+            controller_cam=self.controller_cam,
+            plotting_manager=self.plotting_manager
         )
 
         # Frame timing
@@ -162,6 +169,9 @@ class App:
         # 1. Get current UI state
         ui_state = self.ui.get_state()
         tiling_mode = (ui_state.sim.current_view_option == 3)
+
+        # Sync plotting manager enabled state
+        self.plotting_manager.enabled = ui_state.preferences.show_plotting_window
 
         # 2. Process one-shot commands
         result = self.command_handler.process_commands(ui_state, tiling_mode)
@@ -456,6 +466,7 @@ class App:
         ui_state = self.ui.get_state()
         save_preferences(ui_state.preferences)
 
+        self.plotting_manager.cleanup()
         self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()
         self.ui.cleanup()

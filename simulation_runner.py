@@ -12,7 +12,8 @@ class SimulationRunner:
     """
 
     def __init__(self, sim, camera, video_service, command_handler, window,
-                 advanced_drawing_processor=None, controller_cam=None):
+                 advanced_drawing_processor=None, controller_cam=None,
+                 plotting_manager=None):
         self.sim = sim
         self.camera = camera
         self.video_service = video_service
@@ -20,6 +21,7 @@ class SimulationRunner:
         self.window = window
         self.advanced_drawing_processor = advanced_drawing_processor
         self.controller_cam = controller_cam
+        self.plotting_manager = plotting_manager
 
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
@@ -352,6 +354,10 @@ class SimulationRunner:
                                mouse_tex_coords, draw_power_value,
                                tiling_mode, assemble_kwargs, erase_mode=False):
         """Motion blur path: temporal accumulation with multiple render calls."""
+        # Set histogram uniforms before physics loop
+        if self.plotting_manager is not None:
+            self.plotting_manager.pre_physics_frame(self.sim.entity_update_program)
+
         motion_blur_render_cadence = ui_state.preferences.blur_quality
         total_render_samples = (speedmult + motion_blur_render_cadence - 1) // motion_blur_render_cadence
         render_sample_index = 0
@@ -361,6 +367,8 @@ class SimulationRunner:
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
                 tiling_mode, step, erase_mode=erase_mode
             )
+            if self.plotting_manager is not None:
+                self.plotting_manager.notify_physics_step()
 
             # Only render on frames matching the blur quality cadence
             if step % motion_blur_render_cadence != 0:
@@ -378,15 +386,25 @@ class SimulationRunner:
 
             self._process_assembled_frame(assembled_tex, ui_state)
 
+        # Render histograms and clear buffer after all steps and assembly
+        if self.plotting_manager is not None:
+            self.plotting_manager.post_assembly_frame()
+
     def _run_without_motion_blur(self, ui_state, speedmult, draw_mode,
                                   mouse_tex_coords, draw_power_value,
                                   tiling_mode, assemble_kwargs, erase_mode=False):
         """Non-motion-blur path: multiple physics steps, single render call."""
+        # Set histogram uniforms before physics loop
+        if self.plotting_manager is not None:
+            self.plotting_manager.pre_physics_frame(self.sim.entity_update_program)
+
         for step in range(speedmult):
             self._run_physics_step(
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
                 tiling_mode, step, erase_mode=erase_mode
             )
+            if self.plotting_manager is not None:
+                self.plotting_manager.notify_physics_step()
 
         raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 
@@ -398,3 +416,7 @@ class SimulationRunner:
         )
 
         self._process_assembled_frame(assembled_tex, ui_state)
+
+        # Render histograms and clear buffer after all steps and assembly
+        if self.plotting_manager is not None:
+            self.plotting_manager.post_assembly_frame()

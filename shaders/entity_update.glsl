@@ -110,6 +110,26 @@ layout(std430, binding = 3) buffer MultiLoadConfigBuffer {
 layout(std430, binding = 4) buffer MultiLoadRuleBuffer {
     Rule target_rules[64];
 };
+
+// Histogram reporting SSBO
+layout(std430, binding = 5) buffer ReportsBuffer {
+    uvec4 reports[];
+};
+uniform vec4 hist_min;
+uniform vec4 hist_max;
+uniform uint bucket_count;
+uniform uvec4 plot_mode;
+
+void report(float val, uint plot_num) {
+    uint ch = plot_num % 4u;
+    if (plot_mode[ch] == 0u) return;
+    float lo = hist_min[ch];
+    float hi = hist_max[ch];
+    float t = clamp((val - lo) / (hi - lo), 0.0, 1.0);
+    uint bucket_idx = min(uint(t * float(bucket_count)), bucket_count - 1u);
+    atomicAdd(reports[bucket_idx][ch], 1u);
+}
+
 vec4 draw_sample;
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
@@ -440,7 +460,7 @@ vec4 black_box(vec2 L,vec2 R,Rule rule){
 //--force: A "push" vector that will be added to entity.vel
 //--strafe: A "hop" vector that will be added to entity.pos and have no effect on velocity
 //--color: vec2 to be used as parameters in a coloring function
-void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, vec2 pos, float cohort, out vec2 force, out vec2 strafe, out vec2 color){
+void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, vec2 pos, float cohort, out vec2 trail, out float rotate, out vec2 strafe, out vec2 color){
 
     //build a local coordinate frame where "axis" is forward.
     vec2 forward=safenorm(axis);
@@ -457,13 +477,19 @@ void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, vec2 pos, f
     if(DISABLE_SYMMETRY){mirrorterm = vec4(0);}//disable symmetry by zeroing the mirror term
 
     //Combine base and mirror terms
-    force = baseterm.xy+y_reflect(mirrorterm.xy);
+    //force = baseterm.xy+y_reflect(mirrorterm.xy);
     strafe = baseterm.zw + y_reflect(mirrorterm.zw);
-
+    float trail_heading = (baseterm.x-mirrorterm.x)*.1;
+    rotate = baseterm.y-mirrorterm.y;
+    trail = vec2(cos(trail_heading),sin(trail_heading));
+    //trail gets its length from unmodified strafe magnitude
+    
+    trail *= length(strafe);//abs(rotate);
     //Convert force and strafe back to world coordinates
-    force=forward*force.x*calculate_setting(get_particle_axial_force(),pos,cohort)+left*force.y*calculate_setting(get_particle_lateral_force(),pos,cohort);
+    //force=forward*force.x*calculate_setting(get_particle_axial_force(),pos,cohort)+left*force.y*calculate_setting(get_particle_lateral_force(),pos,cohort);
     strafe = forward*strafe.x*calculate_setting(get_particle_axial_force(),pos,cohort) + left * strafe.y * calculate_setting(get_particle_lateral_force(),pos,cohort);
-
+    trail = forward*trail.x*calculate_setting(get_particle_axial_force(),pos,cohort)+left*trail.y*calculate_setting(get_particle_lateral_force(),pos,cohort);
+    
     color = baseterm.xy+(mirrorterm.xy); //Just an arbitrary function of blackbox output. Reuses force terms.
     return;
 }
@@ -522,31 +548,29 @@ void main() {
 
     //compute entity action
     vec2 strafe =vec2(0);
-    vec2 force = vec2(0);
+    vec2 trail_out = vec2(0);
+    float rotate = 0;
     vec2 col_params = vec2(0);
-    calculate_entity_behavior(ltap,rtap,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
-
+    calculate_entity_behavior(ltap,rtap,orientation,current_rule,e.pos,cohort,trail_out,rotate,strafe,col_params);
+    if(index%50==0){report(length(ltap-rtap),0);}
     //rescale output forces
-    force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
+    //force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
+    rotate *= 100*calculate_setting(get_particle_drag(),e.pos,cohort)/2.;
     strafe *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
+    trail_out *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
 
 
     //Set hue from noise function output
     e.hue = get_particle_hue_sensitivity()*col_params.x;//hue can be anything
     if(get_particle_color_by_cohort()) {e.hue = hash(vec2(floor(cohort)));} //just assign a random hue to each cohort
 
-    //Accelerate: Compute velocity from heading, apply drag and force, extract new heading
-    vec2 vel = ENTITY_VEL(e);
-    vel = vel*calculate_setting(get_particle_drag(),e.pos,cohort) + force;
-    e.dir = atan(vel.x, vel.y);
-    //Move: add vel and strafe to e.pos
-    e.pos += vel;
+    //move
     e.pos += strafe*calculate_setting(get_particle_strafe_power(),e.pos,cohort);
-
+    e.dir += rotate;
     //ADVANCED DRAWING force / strafe
-    vel = ENTITY_VEL(e);
-    vel += -.01*force_field_strength*draw_sample.xy;
-    e.dir = atan(vel.x, vel.y);
+    //vel = ENTITY_VEL(e);
+    //vel += -.01*force_field_strength*draw_sample.xy;
+    //e.dir = atan(vel.x, vel.y);
     //e.pos += .01*strafe_field_strength*draw_sample.xy;//FOR SHADER DRIVEN ONLY
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
@@ -590,9 +614,8 @@ void main() {
 
     if (pixel.x >= 0 && pixel.x < int(img_res.x) &&
         pixel.y >= 0 && pixel.y < int(img_res.y)) {
-        vec2 splat_vel = ENTITY_VEL(e);
-        imageAtomicAdd(can_img_x, pixel, splat_scale * splat_vel.x);
-        imageAtomicAdd(can_img_y, pixel, splat_scale * splat_vel.y);
+        imageAtomicAdd(can_img_x, pixel, splat_scale * trail_out.x);
+        imageAtomicAdd(can_img_y, pixel, splat_scale * trail_out.y);
     }
 
     //Commit new entity state to buffers

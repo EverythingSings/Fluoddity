@@ -90,6 +90,9 @@ class PreferencesState:
     # Parameter locks
     parameter_locks_enabled: bool = False  # Master toggle for parameter lock feature
 
+    # Plotting (GPU histogram reports)
+    show_plotting_window: bool = False
+
     # Generics (live-coding scratch uniforms)
     show_generics_window: bool = False
     generic0: float = 0.0

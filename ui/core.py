@@ -28,6 +28,7 @@ from .advanced_drawing_window import AdvancedDrawingWindowMixin
 from .field_loader_window import FieldLoaderWindowMixin
 from .generics_window import GenericsWindowMixin
 from .recursion_window import RecursionWindowMixin
+from .plotting import PlottingWindowMixin
 
 
 @dataclass
@@ -50,6 +51,7 @@ class UI(
     FieldLoaderWindowMixin,
     GenericsWindowMixin,
     RecursionWindowMixin,
+    PlottingWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -59,6 +61,7 @@ class UI(
         self.view_option_labels = view_option_labels
         self.multi_load_service = multi_load_service
         self.param_lock_service = None  # Set by App after construction
+        self.plotting_manager = None  # Set by App after construction
 
         # Initialize keybinding manager
         self.keybindings = KeybindingManager()
@@ -686,6 +689,10 @@ class UI(
         # Render Generics window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.show_generics_window:
             self.render_generics_window()
+
+        # Render Plotting window if enabled (hidden when windows toggled off)
+        if self.show_sidebar and self.state.preferences.show_plotting_window:
+            self.render_plotting_window()
 
         # Render Recursion Settings window if shader_driven_field is enabled
         if (self.show_sidebar and self.state.preferences.shader_driven_field

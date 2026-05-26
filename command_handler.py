@@ -109,6 +109,8 @@ class CommandHandler:
             self.camera.reload()
             if self.field_handler and self.field_handler.adv_draw:
                 self.field_handler.adv_draw.reload()
+            if hasattr(self, 'plotting_manager') and self.plotting_manager is not None:
+                self.plotting_manager.reload_shader()
 
         # Recursion checkbox toggle -> recompile override shader with/without NO_RECURSION
         if ui_state.request_recursion_recompile:
