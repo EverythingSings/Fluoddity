@@ -25,10 +25,12 @@ void main() {
     if (length(uv - .5) > .5 || view_col.w == 0) { discard; }
     vec2 vel = pos_vel.zw;
 
-    // Pre-scale by (1-p)/p so that after canvas decay (multiply by p),
-    // the net contribution is (1-p) * original_brush_value
+    // The old pipeline used SRC_ALPHA blending with alpha = kernel_func,
+    // which effectively squared the kernel (once in output, once via alpha blend).
+    // With ONE,ONE blending we must square it explicitly to match.
+    // Scale by (1-p) to match old blend: canvas = blur(canvas)*p + (1-p)*brush
     float p = clamp(trail_persistence, 0.001, 0.999);
-    float prescale = (1.0 - p) / p;
+    float prescale = (1.0 - p);
 
-    brush_out = vel * prescale * kernel_func;
+    brush_out = vel * prescale * kernel_func * kernel_func;
 }
