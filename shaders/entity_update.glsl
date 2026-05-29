@@ -539,7 +539,7 @@ void main() {
     vec2 force = vec2(0);
     vec2 col_params = vec2(0);
     calculate_entity_behavior(ltap,rtap,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
-    if(index%50==0){report(length(ltap-rtap),0);}
+    if(index%500==0){report(length(ltap-rtap),0);}
 
     //rescale output forces
     force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
