@@ -26,6 +26,8 @@ class CommandHandler:
         self.field_handler = field_handler
         self.param_lock_service = param_lock_service
 
+        self.plotting_manager = None  # Set by App after construction
+
         # Preview state
         self.preview_rule_active = False  # File->load preview
         self._preview_rule_was_pushed = False  # Whether we actually pushed a rule (vs blocked by lock)
@@ -109,6 +111,8 @@ class CommandHandler:
             self.camera.reload()
             if self.field_handler and self.field_handler.adv_draw:
                 self.field_handler.adv_draw.reload()
+            if self.plotting_manager is not None:
+                self.plotting_manager.reload_shader()
 
         # Simple reset (R key)
         if ui_state.request_reset:

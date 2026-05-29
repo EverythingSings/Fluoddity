@@ -11,7 +11,8 @@ class SimulationRunner:
     """
 
     def __init__(self, sim, camera, video_service, command_handler, window,
-                 advanced_drawing_processor=None, controller_cam=None):
+                 advanced_drawing_processor=None, controller_cam=None,
+                 plotting_manager=None):
         self.sim = sim
         self.camera = camera
         self.video_service = video_service
@@ -19,6 +20,7 @@ class SimulationRunner:
         self.window = window
         self.advanced_drawing_processor = advanced_drawing_processor
         self.controller_cam = controller_cam
+        self.plotting_manager = plotting_manager
 
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
@@ -58,6 +60,10 @@ class SimulationRunner:
             if adv_prefs.advanced_drawing_enabled and adv_prefs.shader_driven_field:
                 # Shader-driven field: run override shader every render frame
                 cam = self.controller_cam
+                generics_tuple = (adv_prefs.generic0, adv_prefs.generic1,
+                                  adv_prefs.generic2, adv_prefs.generic3,
+                                  adv_prefs.generic4, adv_prefs.generic5,
+                                  adv_prefs.generic6, adv_prefs.generic7)
                 self.advanced_drawing_processor.process_override(
                     canvas_width=self.sim.can.size[0],
                     canvas_height=self.sim.can.size[1],
@@ -72,6 +78,7 @@ class SimulationRunner:
                     tiling_mode=tiling_mode,
                     camera_pos=tuple(cam.pos) if cam else (0.0, 0.0, 0.0),
                     camera_dir=tuple(cam.dir) if cam else (0.0, 0.0, 1.0),
+                    generics=generics_tuple,
                 )
             elif adv_prefs.advanced_drawing_enabled and (
                 adv_prefs.advanced_draw_force_field or adv_prefs.advanced_draw_strafe_field
@@ -256,6 +263,11 @@ class SimulationRunner:
         # Only send draw_power if canvas is actually a draw target
         effective_draw_power = draw_power_value if canvas_draw_active else 0.0
 
+        # Build generics tuple from preferences
+        p = adv_prefs
+        generics = (p.generic0, p.generic1, p.generic2, p.generic3,
+                     p.generic4, p.generic5, p.generic6, p.generic7)
+
         self.sim.update(
             self.camera.ctx,
             draw_mode=draw_mode,
@@ -276,9 +288,10 @@ class SimulationRunner:
             fill_mode=canvas_fill,
             fill_direction_type=ui_state.fill_direction_type,
             canvas_draw_active=canvas_draw_active,
-            field_texture = self.advanced_drawing_processor.field_texture,
+            field_texture=self.advanced_drawing_processor.field_texture,
             force_field_strength=adv_prefs.force_field_strength,
             strafe_field_strength=adv_prefs.strafe_field_strength,
+            generics=generics,
         )
 
         # Check for deferred entity selection only on first physics step
@@ -311,6 +324,9 @@ class SimulationRunner:
                                mouse_tex_coords, draw_power_value,
                                tiling_mode, assemble_kwargs, erase_mode=False):
         """Motion blur path: temporal accumulation with multiple render calls."""
+        if self.plotting_manager is not None:
+            self.plotting_manager.pre_physics_frame(self.sim.entity_update_program)
+
         motion_blur_render_cadence = ui_state.preferences.blur_quality
         total_render_samples = (speedmult + motion_blur_render_cadence - 1) // motion_blur_render_cadence
         render_sample_index = 0
@@ -320,6 +336,8 @@ class SimulationRunner:
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
                 tiling_mode, step, erase_mode=erase_mode
             )
+            if self.plotting_manager is not None:
+                self.plotting_manager.notify_physics_step()
 
             # Only render on frames matching the blur quality cadence
             if step % motion_blur_render_cadence != 0:
@@ -337,15 +355,23 @@ class SimulationRunner:
 
             self._process_assembled_frame(assembled_tex, ui_state)
 
+        if self.plotting_manager is not None:
+            self.plotting_manager.post_assembly_frame()
+
     def _run_without_motion_blur(self, ui_state, speedmult, draw_mode,
                                   mouse_tex_coords, draw_power_value,
                                   tiling_mode, assemble_kwargs, erase_mode=False):
         """Non-motion-blur path: multiple physics steps, single render call."""
+        if self.plotting_manager is not None:
+            self.plotting_manager.pre_physics_frame(self.sim.entity_update_program)
+
         for step in range(speedmult):
             self._run_physics_step(
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
                 tiling_mode, step, erase_mode=erase_mode
             )
+            if self.plotting_manager is not None:
+                self.plotting_manager.notify_physics_step()
 
         raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 
@@ -357,3 +383,6 @@ class SimulationRunner:
         )
 
         self._process_assembled_frame(assembled_tex, ui_state)
+
+        if self.plotting_manager is not None:
+            self.plotting_manager.post_assembly_frame()

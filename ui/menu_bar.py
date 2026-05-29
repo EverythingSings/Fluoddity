@@ -377,6 +377,22 @@ class MenuBarMixin:
                 if multiload_active:
                     imgui.end_disabled()
 
+                imgui.separator()
+
+                # Generics window toggle
+                _, self.state.preferences.show_generics_window = imgui.checkbox(
+                    "Generics",
+                    self.state.preferences.show_generics_window
+                )
+                self._delayed_tooltip("8 scratch sliders sent as uniforms to\nentity_update and field_override shaders.\nUseful for live-coding shader experiments.")
+
+                # Plotting window toggle
+                _, self.state.preferences.show_plotting_window = imgui.checkbox(
+                    "Plotting",
+                    self.state.preferences.show_plotting_window
+                )
+                self._delayed_tooltip("GPU histogram visualization from report()\ncalls in entity_update.glsl.")
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

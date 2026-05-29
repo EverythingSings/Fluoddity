@@ -26,6 +26,8 @@ from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
 from .advanced_drawing_window import AdvancedDrawingWindowMixin
 from .field_loader_window import FieldLoaderWindowMixin
+from .generics_window import GenericsWindowMixin
+from .plotting import PlottingWindowMixin
 
 
 @dataclass
@@ -46,6 +48,8 @@ class UI(
     SliderWidgetsMixin,
     AdvancedDrawingWindowMixin,
     FieldLoaderWindowMixin,
+    GenericsWindowMixin,
+    PlottingWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -55,6 +59,7 @@ class UI(
         self.view_option_labels = view_option_labels
         self.multi_load_service = multi_load_service
         self.param_lock_service = None  # Set by App after construction
+        self.plotting_manager = None  # Set by App after construction
 
         # Initialize keybinding manager
         self.keybindings = KeybindingManager()
@@ -675,6 +680,14 @@ class UI(
         # Render Advanced Drawing window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.advanced_drawing_enabled:
             self.render_advanced_drawing_window()
+
+        # Render Generics window if enabled (hidden when windows toggled off)
+        if self.show_sidebar and self.state.preferences.show_generics_window:
+            self.render_generics_window()
+
+        # Render Plotting window if enabled (not gated by sidebar — standalone data view)
+        if self.state.preferences.show_plotting_window:
+            self.render_plotting_window()
 
         # Render field loader window (transient, not gated by sidebar)
         self.render_field_loader_window()

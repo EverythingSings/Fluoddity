@@ -15,6 +15,7 @@ from simulation_runner import SimulationRunner
 from camera_input import process_camera_input
 from controller_input import ControllerCam, process_controller_input, find_joystick
 from utilities.advanced_drawing import AdvancedDrawingProcessor
+from plotting_manager import PlottingManager
 
 
 class App:
@@ -68,8 +69,10 @@ class App:
         self.arrow_debug_service = ArrowDebugService(self.ctx)
         self.multi_load_service = MultiLoadService()
         self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
+        self.plotting_manager = PlottingManager(self.ctx)
         self.ui.multi_load_service = self.multi_load_service
         self.ui.advanced_drawing_processor = self.advanced_drawing_processor
+        self.ui.plotting_manager = self.plotting_manager
 
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()
@@ -93,11 +96,14 @@ class App:
         self.controller_cam = ControllerCam()
         self.joystick_state = {'joystick_id': find_joystick(), 'prev_buttons': []}
 
+        self.command_handler.plotting_manager = self.plotting_manager
+
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
             self.command_handler, self.window,
             advanced_drawing_processor=self.advanced_drawing_processor,
-            controller_cam=self.controller_cam
+            controller_cam=self.controller_cam,
+            plotting_manager=self.plotting_manager
         )
 
         # Frame timing
@@ -160,6 +166,7 @@ class App:
         # 1. Get current UI state
         ui_state = self.ui.get_state()
         tiling_mode = (ui_state.sim.current_view_option == 2)
+        self.plotting_manager.enabled = ui_state.preferences.show_plotting_window
 
         # 2. Process one-shot commands
         result = self.command_handler.process_commands(ui_state, tiling_mode)

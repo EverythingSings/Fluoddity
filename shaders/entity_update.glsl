@@ -58,6 +58,8 @@ uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
 uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
 uniform bool WRITE_RULES; // Set true for one frame when rule buffer readback is needed
+uniform vec4 generic03;
+uniform vec4 generic47;
 
 // Multi-load control uniforms (small, stay as uniforms)
 uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
@@ -104,6 +106,25 @@ layout(std430, binding = 3) buffer MultiLoadConfigBuffer {
 layout(std430, binding = 4) buffer MultiLoadRuleBuffer {
     Rule target_rules[64];
 };
+
+// Histogram reporting SSBO
+layout(std430, binding = 5) buffer ReportsBuffer {
+    uvec4 reports[];
+};
+uniform vec4 hist_min;
+uniform vec4 hist_max;
+uniform uint bucket_count;
+uniform uvec4 plot_mode;
+
+void report(float val, uint plot_num) {
+    uint ch = plot_num % 4u;
+    if (plot_mode[ch] == 0u) return;
+    float lo = hist_min[ch];
+    float hi = hist_max[ch];
+    float t = clamp((val - lo) / (hi - lo), 0.0, 1.0);
+    uint bucket_idx = min(uint(t * float(bucket_count)), bucket_count - 1u);
+    atomicAdd(reports[bucket_idx][ch], 1u);
+}
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
@@ -518,6 +539,7 @@ void main() {
     vec2 force = vec2(0);
     vec2 col_params = vec2(0);
     calculate_entity_behavior(ltap,rtap,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
+    if(index%50==0){report(length(ltap-rtap),0);}
 
     //rescale output forces
     force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
