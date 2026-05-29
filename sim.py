@@ -10,10 +10,12 @@ SIZE_OF_ENTITY_STRUCT = 4*8  # 4 bytes per 32bit value. 8 values (pos:2, vel:2, 
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
 
 class Sim:
-    def __init__(self, ctx: moderngl.Context, world_size: float = 1.0, canvas_aspect_ratio: str = "1:1"):
+    def __init__(self, ctx: moderngl.Context, world_size: float = 1.0, canvas_aspect_ratio: str = "1:1",
+                 canvas_3d_depth: int = 1):
         self.ctx = ctx
         self.world_size = world_size
         self.canvas_aspect_ratio = canvas_aspect_ratio
+        self.canvas_3d_depth = canvas_3d_depth
         self.entity_count = self.get_entity_count()
         self.time = 0.0
         self.start_time_stamp = time.time()
@@ -99,10 +101,35 @@ class Sim:
         ]
         self.can_read_index = 0  # Index of texture pair to read from (write to the other)
 
+        # 3D canvas textures: 3 velocity components (X, Y, Z), double-buffered
+        # Each is R32F for imageAtomicAdd compatibility
+        canvas_3d_shape = (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth)
+        self.can_x_3d = [
+            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
+            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
+        ]
+        self.can_y_3d = [
+            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
+            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
+        ]
+        self.can_z_3d = [
+            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
+            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
+        ]
+        for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
+            tex.repeat_x = True
+            tex.repeat_y = True
+            tex.repeat_z = True
+
+        # Clear 3D textures
+        zero_data = bytes(canvas_dim_x * canvas_dim_y * self.canvas_3d_depth * 4)
+        for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
+            tex.write(zero_data)
+
         # For camera to use (will be updated each frame to point to the most recently written buffer)
         self.view_tex = self.can_x_textures[self.can_read_index]
 
-        # Clear both canvas buffers initially
+        # Clear both 2D canvas buffers initially
         for fb in self.can_framebuffers:
             fb.use()
             self.ctx.clear()
@@ -125,8 +152,10 @@ class Sim:
             print(e)
 
         tryset(self.entity_update_program, 'canvas_resolution', canvas_shape)
-        tryset(self.entity_update_program, 'canvas', 1)
-        tryset(self.entity_update_program, 'canvas_y', 6)
+        tryset(self.entity_update_program, 'canvas_3d_x', 1)
+        tryset(self.entity_update_program, 'canvas_3d_y', 6)
+        tryset(self.entity_update_program, 'canvas_3d_z', 7)
+        tryset(self.entity_update_program, 'canvas_3d_size', (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth))
         tryset(self.entity_update_program, 'field_texture', 5)
 
         # 2. Canvas update shaders (fullscreen quad)
@@ -145,6 +174,14 @@ class Sim:
         self.canvas_vao = self.ctx.vertex_array(self.canvas_update_program, [])
         tryset(self.canvas_update_program, 'canvas_resolution', canvas_shape)
 
+        # 3. Canvas update 3D compute shader
+        try:
+            self.canvas_update_3d_source = read_shader('shaders/canvas_update_3d.glsl')
+            self.canvas_update_3d_program = self.ctx.compute_shader(self.canvas_update_3d_source)
+        except Exception as e:
+            print('Canvas Update 3D Compilation Failed:')
+            print(e)
+
 
     def entity_update(self, ctx: moderngl.Context, multi_load_service=None,
                       is_preview_active=False, field_texture_bound=False,
@@ -155,8 +192,11 @@ class Sim:
         Run a single physics update on all particles
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
-        tryset(self.entity_update_program, 'canvas', 1)
-        tryset(self.entity_update_program, 'canvas_y', 6)
+        tryset(self.entity_update_program, 'canvas_3d_x', 1)
+        tryset(self.entity_update_program, 'canvas_3d_y', 6)
+        tryset(self.entity_update_program, 'canvas_3d_z', 7)
+        canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
+        tryset(self.entity_update_program, 'canvas_3d_size', (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth))
         tryset(self.entity_update_program, 'WORLD_SIZE', self.world_size)
 
         # Advanced drawing field texture
@@ -196,6 +236,10 @@ class Sim:
         tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
         self._assign_physics_setting('HAZARD_RATE_SETTING', self._state.HAZARD_RATE, 'Hazard Rate', 'HAZARD_RATE', 0.0, 0.05)
         self._assign_physics_setting('TRAIL_PERSISTENCE_SETTING', self._state.TRAIL_PERSISTENCE, 'Trail Persistence', 'TRAIL_PERSISTENCE', 0.0, 1.0)
+
+        # 3D physics uniforms
+        tryset(self.entity_update_program, 'PLANE_SAMPLES', self._state.PLANE_SAMPLES)
+        tryset(self.entity_update_program, 'TESTING_MODE', self._state.TESTING_MODE)
 
         # Appearance settings from sim state (now part of physics config)
         tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
@@ -303,6 +347,81 @@ class Sim:
             self.can_framebuffers[self.can_read_index].use()
             self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
+    def can_update_3d(self, multi_load_service=None, is_preview_active=False):
+        """Apply 3D canvas decay + diffusion via compute shader.
+
+        Handles double-buffering: reads from can_read_index, writes to 1-can_read_index.
+        """
+        prog = self.canvas_update_3d_program
+        canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
+        canvas_3d_size = (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth)
+
+        tryset(prog, 'canvas_3d_size', canvas_3d_size)
+        tryset(prog, 'TESTING_MODE', self._state.TESTING_MODE)
+        tryset(prog, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
+        tryset(prog, 'frame_count', self.frame_count)
+
+        # Multi-load mode: calculate weighted average trail settings
+        if multi_load_service and multi_load_service.is_active() and not is_preview_active:
+            trail_persistence, trail_diffusion = self._calculate_weighted_trail_settings(multi_load_service)
+        else:
+            trail_persistence = self._state.TRAIL_PERSISTENCE
+            trail_diffusion = self._state.TRAIL_DIFFUSION
+
+        # TRAIL_PERSISTENCE PhysicsSetting
+        min_val, max_val = self._get_slider_range('Trail Persistence', 0.0, 1.0)
+        tryset(prog, 'TRAIL_PERSISTENCE_SETTING.slider_value', trail_persistence)
+        tryset(prog, 'TRAIL_PERSISTENCE_SETTING.min_value', min_val)
+        tryset(prog, 'TRAIL_PERSISTENCE_SETTING.max_value', max_val)
+        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
+            tryset(prog, 'TRAIL_PERSISTENCE_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+            tryset(prog, 'TRAIL_PERSISTENCE_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_PERSISTENCE', 0.0))
+        else:
+            tryset(prog, 'TRAIL_PERSISTENCE_SETTING.x_sweep', 0.0)
+            tryset(prog, 'TRAIL_PERSISTENCE_SETTING.y_sweep', 0.0)
+        tryset(prog, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', 0.0)  # No cohort in canvas
+        tryset(prog, 'TRAIL_PERSISTENCE_SETTING.jitter', self._state.jitters.get('TRAIL_PERSISTENCE', 0.0))
+
+        # TRAIL_DIFFUSION PhysicsSetting
+        min_val, max_val = self._get_slider_range('Trail Diffusion', 0.0, 1.0)
+        tryset(prog, 'TRAIL_DIFFUSION_SETTING.slider_value', trail_diffusion)
+        tryset(prog, 'TRAIL_DIFFUSION_SETTING.min_value', min_val)
+        tryset(prog, 'TRAIL_DIFFUSION_SETTING.max_value', max_val)
+        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
+            tryset(prog, 'TRAIL_DIFFUSION_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_DIFFUSION', 0.0))
+            tryset(prog, 'TRAIL_DIFFUSION_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_DIFFUSION', 0.0))
+        else:
+            tryset(prog, 'TRAIL_DIFFUSION_SETTING.x_sweep', 0.0)
+            tryset(prog, 'TRAIL_DIFFUSION_SETTING.y_sweep', 0.0)
+        tryset(prog, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', 0.0)
+        tryset(prog, 'TRAIL_DIFFUSION_SETTING.jitter', self._state.jitters.get('TRAIL_DIFFUSION', 0.0))
+
+        # Bind read textures as samplers
+        write_index = 1 - self.can_read_index
+        self.can_x_3d[self.can_read_index].use(location=1)
+        self.can_y_3d[self.can_read_index].use(location=6)
+        self.can_z_3d[self.can_read_index].use(location=7)
+        tryset(prog, 'can_tex_x', 1)
+        tryset(prog, 'can_tex_y', 6)
+        tryset(prog, 'can_tex_z', 7)
+
+        # Bind write textures as images
+        self.can_x_3d[write_index].bind_to_image(0, read=False, write=True)
+        self.can_y_3d[write_index].bind_to_image(1, read=False, write=True)
+        self.can_z_3d[write_index].bind_to_image(2, read=False, write=True)
+
+        # Dispatch compute shader
+        gx = (canvas_dim_x + 3) // 4
+        gy = (canvas_dim_y + 3) // 4
+        gz = (self.canvas_3d_depth + 3) // 4
+        prog.run(gx, gy, gz)
+
+        # Swap buffers
+        self.can_read_index = write_index
+        self.view_options[0] = self.can_x_textures[self.can_read_index]
+        if self._state.current_view_option == 0:
+            self.view_tex = self.can_x_textures[self.can_read_index]
+
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
                multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
@@ -314,13 +433,15 @@ class Sim:
                force_field_strength: float = 1.0,
                strafe_field_strength: float = 1.0,
                generics: tuple = None):
-        # Bind canvas X/Y textures for entity_update sampling (sensors)
-        self.can_x_textures[self.can_read_index].use(location=1)
-        self.can_y_textures[self.can_read_index].use(location=6)
+        # Bind 3D canvas textures for entity_update sampling (sensors)
+        self.can_x_3d[self.can_read_index].use(location=1)
+        self.can_y_3d[self.can_read_index].use(location=6)
+        self.can_z_3d[self.can_read_index].use(location=7)
 
-        # Bind canvas X/Y as images for atomic splatting
-        self.can_x_textures[self.can_read_index].bind_to_image(0, read=False, write=True)
-        self.can_y_textures[self.can_read_index].bind_to_image(1, read=False, write=True)
+        # Bind 3D canvas textures as images for atomic splatting
+        self.can_x_3d[self.can_read_index].bind_to_image(0, read=False, write=True)
+        self.can_y_3d[self.can_read_index].bind_to_image(1, read=False, write=True)
+        self.can_z_3d[self.can_read_index].bind_to_image(2, read=False, write=True)
 
         # Bind advanced drawing field texture if available
         if field_texture is not None:
@@ -340,17 +461,21 @@ class Sim:
         ctx.memory_barrier()
         ctx.disable(moderngl.BLEND)
 
-        # 3. Canvas decay + diffusion
-        self.can_update(draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power,
-                        multi_load_service, is_preview_active, tiling_mode, strong_determinism,
-                        brush_mode, fixed_direction_heading, erase_mode, fill_mode,
-                        fill_direction_type, canvas_draw_active)
+        # 3. Canvas decay + diffusion (3D compute shader path)
+        self.can_update_3d(multi_load_service, is_preview_active)
 
         self.frame_count += 1
 
         # Increment multi-load progress if active
         if multi_load_service and multi_load_service.is_active():
             multi_load_service.increment_progress()
+
+    def _clear_3d_textures(self):
+        """Clear all 3D canvas textures to zero."""
+        canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
+        zero_data = bytes(canvas_dim_x * canvas_dim_y * self.canvas_3d_depth * 4)
+        for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
+            tex.write(zero_data)
 
     def clear_canvas(self):
         """Clear only the trail/canvas textures (not particles or frame count)."""
@@ -359,6 +484,7 @@ class Sim:
             fb.use()
             self.ctx.clear(0, 0, 0, 0)
         old_fbo.use()
+        self._clear_3d_textures()
 
     def reset(self):
         old_fbo = self.ctx.fbo
@@ -368,6 +494,7 @@ class Sim:
             self.ctx.clear(0, 0, 0, 0)
         self.frame_count = 0
         old_fbo.use()
+        self._clear_3d_textures()
 
     def reload(self):
         print('reloading shaders')

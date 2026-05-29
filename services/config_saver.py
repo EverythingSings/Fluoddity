@@ -97,6 +97,11 @@ class PhysicsConfig:
     force_field_strength: float | None = None
     strafe_field_strength: float | None = None
 
+    # 3D simulation settings
+    plane_samples: int = 1
+    testing_mode: bool = False
+    canvas_3d_depth: int = 1
+
     def to_dict(self) -> dict:
         """Convert config to JSON-serializable dict."""
         d = {
@@ -140,6 +145,11 @@ class PhysicsConfig:
             },
             'rule': self.rule.flatten().tolist(),
             'notes': self.notes,
+            'sim_3d': {
+                'plane_samples': self.plane_samples,
+                'testing_mode': self.testing_mode,
+                'canvas_3d_depth': self.canvas_3d_depth,
+            },
         }
         if self.force_field_strength is not None:
             d['field_strengths'] = {
@@ -182,6 +192,8 @@ class PhysicsConfig:
         slider_ranges = _default_slider_ranges()
         slider_ranges.update(data.get('slider_ranges', {}))
 
+        sim_3d = data.get('sim_3d', {})
+
         return cls(
             axial_force=physics.get('axial_force', 0.371),
             lateral_force=physics.get('lateral_force', -0.707),
@@ -216,6 +228,9 @@ class PhysicsConfig:
             notes=notes,
             force_field_strength=force_field_strength,
             strafe_field_strength=strafe_field_strength,
+            plane_samples=sim_3d.get('plane_samples', 1),
+            testing_mode=sim_3d.get('testing_mode', False),
+            canvas_3d_depth=sim_3d.get('canvas_3d_depth', 1),
         )
 
     def to_json(self, indent: int = 2) -> str:
@@ -276,6 +291,9 @@ class ConfigSaver:
             notes=sim_state.notes,
             force_field_strength=field_strengths[0] if field_strengths else None,
             strafe_field_strength=field_strengths[1] if field_strengths else None,
+            plane_samples=sim_state.PLANE_SAMPLES,
+            testing_mode=sim_state.TESTING_MODE,
+            canvas_3d_depth=sim_state.canvas_3d_depth,
         )
 
     def apply_config(self, config: PhysicsConfig, sim_state: SimState,
@@ -339,6 +357,11 @@ class ConfigSaver:
 
         # User notes
         sim_state.notes = config.notes
+
+        # 3D simulation settings
+        sim_state.PLANE_SAMPLES = config.plane_samples
+        sim_state.TESTING_MODE = config.testing_mode
+        sim_state.canvas_3d_depth = config.canvas_3d_depth
 
         return config.rule.copy()
 

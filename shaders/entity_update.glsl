@@ -1,14 +1,19 @@
 #version 450
 layout(local_size_x = 64) in;
 
-//SAME STRUCT USED IN CAM_BRUSH.VERT
+//SAME STRUCT USED IN CAM_BRUSH.VERT AND POINTS_3D.VERT
 struct Entity {
-    vec2 pos;
-    vec2 vel;
+    float px, py, pz;    // position (3D)
+    float vx, vy, vz;    // velocity (3D)
     float hue;
     float size;
-    float padding[2];  // Align to 16-byte boundary
 };  // Total: 32 bytes (8 floats)
+
+// Entity accessors — keep physics code readable despite explicit-float layout
+vec3 get_pos(Entity e) { return vec3(e.px, e.py, e.pz); }
+vec3 get_vel(Entity e) { return vec3(e.vx, e.vy, e.vz); }
+void set_pos(inout Entity e, vec3 p) { e.px = p.x; e.py = p.y; e.pz = p.z; }
+void set_vel(inout Entity e, vec3 v) { e.vx = v.x; e.vy = v.y; e.vz = v.z; }
 struct Rule {
     FourierCenter centers[10];
 };
@@ -32,9 +37,11 @@ struct PhysicsSetting {
 uniform float WORLD_SIZE;
 uniform int frame_count;
 uniform Rule target_rule;
-uniform sampler2D canvas; //trails canvas X channel (R32F)
-uniform sampler2D canvas_y; //trails canvas Y channel (R32F)
+uniform sampler3D canvas_3d_x; //trails canvas X channel (R32F, 3D)
+uniform sampler3D canvas_3d_y; //trails canvas Y channel (R32F, 3D)
+uniform sampler3D canvas_3d_z; //trails canvas Z channel (R32F, 3D)
 uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
+uniform ivec3 canvas_3d_size;  // (W, H, D) for non-cube support
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
 uniform float force_field_strength; // Multiplier for force field effects
 uniform float strafe_field_strength; // Multiplier for strafe field effects
@@ -50,11 +57,14 @@ uniform PhysicsSetting SENSOR_GAIN_SETTING;
 uniform PhysicsSetting MUTATION_SCALE_SETTING;
 uniform PhysicsSetting HAZARD_RATE_SETTING;
 uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
-layout(r32f, binding = 0) uniform image2D can_img_x;
-layout(r32f, binding = 1) uniform image2D can_img_y;
+layout(r32f, binding = 0) uniform image3D can_img_x;
+layout(r32f, binding = 1) uniform image3D can_img_y;
+layout(r32f, binding = 2) uniform image3D can_img_z;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
+uniform int PLANE_SAMPLES;   // Number of random plane samples per entity per frame (default 1)
+uniform bool TESTING_MODE;   // Lock z=0, XY plane only — must reproduce 2D behavior exactly
 uniform int ABSOLUTE_ORIENTATION; // 0=Off, 1=Y axis, 2=Radial
 uniform float ORIENTATION_MIX; // Blend factor for orientation calculations
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
@@ -336,14 +346,33 @@ void pR(inout vec2 p, float a) {
 }
 
 
-//convert p (entity space) to texture coords and retrieve canvas (2x R32F: velocity X and Y)
+//convert p (entity space, 2D) to texture coords and retrieve canvas from z=0.5 (3D textures)
 vec2 get_can(vec2 p){
-    vec2 res=textureSize(canvas,0);
-    float ca = res.x / res.y;
+    float ca = float(canvas_3d_size.x) / float(canvas_3d_size.y);
     vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
-    vec2 uv = p / (2.0 * half_extent) + 0.5;
-    if(get_particle_boundary_conditions() == 2) uv = fract(uv);
-    return vec2(texture(canvas, uv).r, texture(canvas_y, uv).r);
+    vec2 uv_xy = p / (2.0 * half_extent) + 0.5;
+    if(get_particle_boundary_conditions() == 2) uv_xy = fract(uv_xy);
+    // Sample at z=0.5 (center of the single z-slice when depth=1)
+    float uv_z = 0.5;
+    vec3 uvw = vec3(uv_xy, uv_z);
+    return vec2(texture(canvas_3d_x, uvw).r, texture(canvas_3d_y, uvw).r);
+}
+
+//convert p (entity space, 3D) to texture coords and retrieve 3-component canvas
+vec3 get_can_3d(vec3 p){
+    float ca = float(canvas_3d_size.x) / float(canvas_3d_size.y);
+    vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
+    vec2 uv_xy = p.xy / (2.0 * half_extent) + 0.5;
+    // Z maps from [-1,1] to [0,1] (or [-z_edge,z_edge] once we have proper 3D bounds)
+    float uv_z = p.z * 0.5 + 0.5;
+    if(get_particle_boundary_conditions() == 2) {
+        uv_xy = fract(uv_xy);
+        uv_z = fract(uv_z);
+    }
+    // When canvas_3d_size.z == 1, uv_z is clamped to center of single slice
+    if(canvas_3d_size.z <= 1) uv_z = 0.5;
+    vec3 uvw = vec3(uv_xy, uv_z);
+    return vec3(texture(canvas_3d_x, uvw).r, texture(canvas_3d_y, uvw).r, texture(canvas_3d_z, uvw).r);
 }
 vec4 get_field(vec2 p){
     if(!advanced_drawing_resources_initialized)return vec4(0);
@@ -358,6 +387,23 @@ vec4 get_field(vec2 p){
 vec2 safenorm(vec2 p){
     return length(p)==0?vec2(0):normalize(p);
 }
+vec3 safenorm3(vec3 p){
+    return length(p)==0?vec3(0):normalize(p);
+}
+
+// Build an orthonormal basis (u, v) on the plane perpendicular to dir,
+// rotated by angle theta around dir. u and v span the tangent plane.
+void build_tangent_plane(vec3 dir, float theta, out vec3 u, out vec3 v) {
+    // Find a vector not parallel to dir
+    vec3 arbitrary = abs(dir.x) < 0.9 ? vec3(1,0,0) : vec3(0,1,0);
+    // Gram-Schmidt to get first tangent vector
+    vec3 t1 = normalize(arbitrary - dot(arbitrary, dir) * dir);
+    vec3 t2 = cross(dir, t1);
+    // Rotate by theta around dir
+    u = cos(theta) * t1 + sin(theta) * t2;
+    v = cross(dir, u);
+}
+
 
 float get_cohort(uint index) {
     return float(get_particle_cohorts()) * float(index) / float(ACTIVE_COUNT);
@@ -404,7 +450,7 @@ void reset(uint index){
 
     
     //store to persistent entity buffer
-    entities[index]=Entity(pos,vel, 0.0, size, float[2](0,0));
+    entities[index]=Entity(pos.x, pos.y, 0.0, vel.x, vel.y, 0.0, 0.0, size);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
@@ -480,14 +526,101 @@ void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, vec2 pos, f
     color = baseterm.xy+(mirrorterm.xy); //Just an arbitrary function of blackbox output. Reuses force terms.
     return;
 }
+// Run one sample of the 2D physics projected onto a random tangent plane.
+// Returns force and strafe in 3D world coordinates.
+void sample_plane_physics(
+    inout vec3 force_accum, inout vec3 strafe_accum, inout vec2 col_accum,
+    vec3 pos, vec3 vel, Rule current_rule, float cohort,
+    int sample_index, vec2 epos2
+) {
+    vec3 vel_dir = length(vel) > 1e-10 ? normalize(vel) : vec3(0,0,1);
 
+    vec3 u, v; // Tangent plane basis vectors
+
+    if (TESTING_MODE) {
+        // Always use XY plane: u = (1,0,0), v = (0,1,0)
+        u = vec3(1,0,0);
+        v = vec3(0,1,0);
+    } else {
+        // Random angle for this sample
+        float theta = hash(vec2(
+            float(frame_count) + float(gl_GlobalInvocationID.x) / float(ACTIVE_COUNT),
+            float(sample_index)
+        )) * 2.0 * PI;
+        build_tangent_plane(vel_dir, theta, u, v);
+    }
+
+    // Calculate sensor distance
+    float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(), epos2, cohort);
+
+    // Project velocity onto the tangent plane to get 2D orientation
+    vec2 orientation_2d = vec2(dot(vel, u), dot(vel, v));
+    vec2 orientation = safenorm(orientation_2d);
+
+    // Absolute orientation modes (project reference directions onto plane)
+    int ORIENTATION_MODE = get_particle_absolute_orientation();
+    float mix_amt = min(1, ORIENTATION_MODE) * ORIENTATION_MIX;
+    if (ORIENTATION_MODE == 1) {
+        // Y-axis orientation: project (0,1,0) onto the plane
+        vec2 y_axis_on_plane = vec2(dot(vec3(0,1,0), u), dot(vec3(0,1,0), v));
+        orientation = mix(orientation, safenorm(y_axis_on_plane), mix_amt);
+    } else if (ORIENTATION_MODE == 2) {
+        // Radial orientation: project -normalize(pos) onto the plane
+        vec3 radial = -safenorm3(pos);
+        vec2 radial_on_plane = vec2(dot(radial, u), dot(radial, v));
+        orientation = mix(orientation, safenorm(radial_on_plane), mix_amt);
+    }
+
+    // Sensor offsets in 2D plane coordinates, then lifted to 3D
+    vec2 left_offset_2d = orientation * sample_dist;
+    vec2 right_offset_2d = orientation * sample_dist;
+    float sensor_angle = calculate_setting(get_particle_sensor_angle(), epos2, cohort) * PI;
+    pR(left_offset_2d, sensor_angle);
+    pR(right_offset_2d, -sensor_angle);
+
+    // Convert 2D plane offsets to 3D world offsets
+    vec3 left_offset_3d = left_offset_2d.x * u + left_offset_2d.y * v;
+    vec3 right_offset_3d = right_offset_2d.x * u + right_offset_2d.y * v;
+
+    // Read 3D canvas at sensor positions
+    vec3 ltap_3d = get_can_3d(pos + left_offset_3d);
+    vec3 rtap_3d = get_can_3d(pos + right_offset_3d);
+
+    // Project 3D trail vectors onto the 2D plane
+    vec2 ltap = vec2(dot(ltap_3d, u), dot(ltap_3d, v));
+    vec2 rtap = vec2(dot(rtap_3d, u), dot(rtap_3d, v));
+
+    // Rescale sensor values
+    float sensor_scaling = SQRT_WORLD_SIZE * 38.855 * calculate_setting(get_particle_sensor_gain(), epos2, cohort);
+    ltap *= sensor_scaling;
+    rtap *= sensor_scaling;
+
+    // Run the existing 2D physics on the plane
+    vec2 force_2d = vec2(0);
+    vec2 strafe_2d = vec2(0);
+    vec2 col_params = vec2(0);
+    calculate_entity_behavior(ltap, rtap, orientation, current_rule, epos2, cohort, force_2d, strafe_2d, col_params);
+
+    // Rescale output forces (same as current 2D code)
+    float gfm = 1./SQRT_WORLD_SIZE * calculate_setting(get_particle_global_force_mult(), epos2, cohort);
+    force_2d *= gfm / 400.;
+    strafe_2d *= gfm / 20.;
+
+    // Convert 2D force/strafe back to 3D world coordinates
+    vec3 force_3d = force_2d.x * u + force_2d.y * v;
+    vec3 strafe_3d = strafe_2d.x * u + strafe_2d.y * v;
+
+    force_accum += force_3d;
+    strafe_accum += strafe_3d;
+    col_accum += col_params;
+}
 void main() {
     uint index = gl_GlobalInvocationID.x;
     if (index >= ENTITY_COUNT) return;
 
     // Inactive entities get zeroed out. Position offscreen so they don't accidentally get clicked on
     if (index >= ACTIVE_COUNT) {
-        entities[index] = Entity(vec2(10000), vec2(0), 0.0, 0.0, float[2](0,0));
+        entities[index] = Entity(10000.0, 10000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         return;
     }
     Entity e=entities[index];
@@ -499,115 +632,125 @@ void main() {
         current_rule = Rule(generate_random_centers(get_particle_rule_seed()+floor(cohort)));
     }
     //Each cohort gets a random mutation
-    mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),e.pos,cohort),get_particle_rule_seed()+floor(cohort));
+    mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),vec2(e.px,e.py),cohort),get_particle_rule_seed()+floor(cohort));
     // Only write rules when explicitly requested (expensive - 320 bytes per particle)
     if(WRITE_RULES) {
         rules[index] = current_rule;
     }
     
     //frame_count == 0 signals a simulation reset
-    if (frame_count==0||calculate_setting(get_particle_hazard_rate(),e.pos,cohort)>hash(vec2(float(index)/float(ACTIVE_COUNT),frame_count))){reset(index);return;}
+    vec2 epos2 = vec2(e.px, e.py); // 2D position for parameter sweeps
+    if (frame_count==0||calculate_setting(get_particle_hazard_rate(),epos2,cohort)>hash(vec2(float(index)/float(ACTIVE_COUNT),frame_count))){reset(index);return;}
 
 
 
-    //Calculate position offsets for the two sensors.
-    float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(),e.pos,cohort);
-    
-    //variable sample distance?
-    //sample_dist *= (get_can(e.pos).z*10);
-    //GOOD 1./dot(normalize(e.vel),normalize(get_can(e.pos).xy));
-    //length(e.vel)/.05;//length(get_can(e.pos).xy)/.01;
-    
-    int ORIENTATION_MODE =get_particle_absolute_orientation();
-    float mix_amt = min(1,ORIENTATION_MODE)*ORIENTATION_MIX;
-    vec2 orientation = safenorm(e.vel);//vector facing the same direction as velocity, with length==samplen
-    if(ORIENTATION_MODE==1){orientation = mix(orientation,vec2(0,1),mix_amt);}
-    else if(ORIENTATION_MODE==2){orientation = mix(orientation,-normalize(e.pos),mix_amt);}
-    vec2 left_sensor_offset = orientation*sample_dist;
-    vec2 right_sensor_offset = orientation*sample_dist;
-    pR(left_sensor_offset,calculate_setting(get_particle_sensor_angle(),e.pos,cohort)*PI);//rotate them opposite directions
-    pR(right_sensor_offset,-calculate_setting(get_particle_sensor_angle(),e.pos,cohort)*PI);
+    //Monte Carlo plane sampling: sample PLANE_SAMPLES random tangent planes,
+    //run 2D physics on each, and average the resulting 3D forces.
+    vec3 pos3 = get_pos(e);
+    vec3 vel3 = get_vel(e);
+    vec3 force_accum = vec3(0);
+    vec3 strafe_accum = vec3(0);
+    vec2 col_accum = vec2(0);
+    int num_samples = max(1, PLANE_SAMPLES);
+    for (int s = 0; s < num_samples; s++) {
+        sample_plane_physics(force_accum, strafe_accum, col_accum,
+                             pos3, vel3, current_rule, cohort, s, epos2);
+    }
+    vec3 force3 = force_accum / float(num_samples);
+    vec3 strafe3 = strafe_accum / float(num_samples);
+    vec2 col_params = col_accum / float(num_samples);
 
-    //read the trails from canvas (RG32F: velocity only)
-    vec2 ltap = get_can(e.pos+left_sensor_offset);
-    vec2 rtap = get_can(e.pos+right_sensor_offset);
-
-    
-    //rescale sensor values
-    float sensor_scaling = SQRT_WORLD_SIZE*38.855*calculate_setting(get_particle_sensor_gain(),e.pos,cohort);
-    ltap *= sensor_scaling;
-    rtap *= sensor_scaling;
-
-    //compute entity action
-    vec2 strafe =vec2(0);
-    vec2 force = vec2(0);
-    vec2 col_params = vec2(0);
-    calculate_entity_behavior(ltap,rtap,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
-    if(index%500==0){report(length(ltap-rtap),0);}//small sample
-
-    //rescale output forces
-    force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
-    strafe *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/20.;
-
+    if(index%500==0){report(length(col_params),0);}//small sample
 
     //Set entity hue (saturation/brightness/alpha are computed in vertex shaders)
     e.hue = get_particle_hue_sensitivity()*col_params.x;
     if(get_particle_color_by_cohort()) {e.hue = hash(vec2(floor(cohort)));}
 
-    //Accelerate: Apply drag and add force to e.vel,
-    e.vel = e.vel*calculate_setting(get_particle_drag(),e.pos,cohort) + force;
-    //Move: add e.vel and strafe to e.pos
-    e.pos += e.vel;
-    e.pos += strafe*calculate_setting(get_particle_strafe_power(),e.pos,cohort);
+    //Accelerate: Apply drag and add force to e.vel (now 3D)
+    float drag = calculate_setting(get_particle_drag(),epos2,cohort);
+    e.vx = e.vx*drag + force3.x;
+    e.vy = e.vy*drag + force3.y;
+    e.vz = e.vz*drag + force3.z;
 
-    //ADVANCED DRAWING force / strafe
-    vec4 draw_sample =get_field(e.pos);
-    e.vel += .01*force_field_strength*draw_sample.xy;
-    e.pos += .01*strafe_field_strength*draw_sample.zw;
+    //Move: add e.vel and strafe to e.pos (now 3D)
+    float strafe_power = calculate_setting(get_particle_strafe_power(),epos2,cohort);
+    e.px += e.vx + strafe3.x*strafe_power;
+    e.py += e.vy + strafe3.y*strafe_power;
+    e.pz += e.vz + strafe3.z*strafe_power;
+
+    //TESTING_MODE: clamp z to 0
+    if (TESTING_MODE) {
+        e.pz = 0.0;
+        e.vz = 0.0;
+    }
+
+    //ADVANCED DRAWING force / strafe (still 2D, applied to XY only)
+    vec4 draw_sample =get_field(vec2(e.px, e.py));
+    e.vx += .01*force_field_strength*draw_sample.x;
+    e.vy += .01*force_field_strength*draw_sample.y;
+    e.px += .01*strafe_field_strength*draw_sample.z;
+    e.py += .01*strafe_field_strength*draw_sample.w;
 
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
     float ca = canvas_resolution.x / canvas_resolution.y;
     float x_edge = sqrt(ca);
     float y_edge = 1.0 / sqrt(ca);
+    float z_edge = 1.0; // Z always spans [-1, 1] for now
     int boundary_mode = get_particle_boundary_conditions();
     if(boundary_mode==0){
         //reflect particles off canvas boundaries
-        if (e.pos.x < -x_edge || e.pos.x > x_edge){
-            e.vel.x=-e.vel.x;
-            e.pos.x=edgeflect(e.pos.x/x_edge)*x_edge;
+        if (e.px < -x_edge || e.px > x_edge){
+            e.vx=-e.vx;
+            e.px=edgeflect(e.px/x_edge)*x_edge;
         }
-        if (e.pos.y < -y_edge || e.pos.y > y_edge){
-            e.vel.y=-e.vel.y;
-            e.pos.y=edgeflect(e.pos.y/y_edge)*y_edge;
+        if (e.py < -y_edge || e.py > y_edge){
+            e.vy=-e.vy;
+            e.py=edgeflect(e.py/y_edge)*y_edge;
+        }
+        if (!TESTING_MODE && canvas_3d_size.z > 1) {
+            if (e.pz < -z_edge || e.pz > z_edge){
+                e.vz=-e.vz;
+                e.pz=edgeflect(e.pz/z_edge)*z_edge;
+            }
         }
     }
     else if(boundary_mode==1){
         //reset to initial conditions
-        if(e.pos.x<-x_edge||e.pos.x>x_edge||e.pos.y<-y_edge||e.pos.y>y_edge){
+        bool out_xy = e.px<-x_edge||e.px>x_edge||e.py<-y_edge||e.py>y_edge;
+        bool out_z = !TESTING_MODE && canvas_3d_size.z > 1 && (e.pz < -z_edge || e.pz > z_edge);
+        if(out_xy || out_z){
             reset(index);
             return;//reset expects to be the last thing we do. It handles entity buffer storage
         }
     }
     else if(boundary_mode==2){
         //wrap: X wraps [-x_edge,x_edge], Y wraps [-y_edge, y_edge]
-        e.pos.x = x_edge * 2.0 * (fract(e.pos.x / (x_edge * 2.0) - 0.5) - 0.5);
-        e.pos.y = y_edge * 2.0 * (fract(e.pos.y / (y_edge * 2.0) - 0.5) - 0.5);
+        e.px = x_edge * 2.0 * (fract(e.px / (x_edge * 2.0) - 0.5) - 0.5);
+        e.py = y_edge * 2.0 * (fract(e.py / (y_edge * 2.0) - 0.5) - 0.5);
+        if (!TESTING_MODE && canvas_3d_size.z > 1) {
+            e.pz = z_edge * 2.0 * (fract(e.pz / (z_edge * 2.0) - 0.5) - 0.5);
+        }
     }
 
     //Atomic splat to canvas: scale by (1-p)/p so canvas_update's *p gives net (1-p)*splat
-    float trail_p = calculate_setting(TRAIL_PERSISTENCE_SETTING, e.pos, cohort);
+    float trail_p = calculate_setting(TRAIL_PERSISTENCE_SETTING, vec2(e.px, e.py), cohort);
     trail_p = clamp(trail_p, 0.001, 0.999);
     float splat_scale = (1.0 - trail_p) / trail_p;
 
-    vec2 img_res = vec2(imageSize(can_img_x));
+    ivec3 img_res_3d = imageSize(can_img_x);
     vec2 half_ext = vec2(sqrt(ca), 1.0 / sqrt(ca));
-    vec2 uv_pos = e.pos / (2.0 * half_ext) + 0.5;
-    ivec2 pixel = ivec2(uv_pos * img_res);
+    vec2 uv_xy = vec2(e.px, e.py) / (2.0 * half_ext) + 0.5;
+    float uv_z = e.pz * 0.5 + 0.5;
+    // When depth is 1, always splat to z=0
+    int voxel_z = (img_res_3d.z <= 1) ? 0 : int(uv_z * float(img_res_3d.z));
+    ivec3 voxel = ivec3(ivec2(uv_xy * vec2(img_res_3d.xy)), voxel_z);
 
-    if (pixel.x >= 0 && pixel.x < int(img_res.x) &&
-        pixel.y >= 0 && pixel.y < int(img_res.y)) {
-        imageAtomicAdd(can_img_x, pixel, splat_scale * e.vel.x);
-        imageAtomicAdd(can_img_y, pixel, splat_scale * e.vel.y);
+    if (voxel.x >= 0 && voxel.x < img_res_3d.x &&
+        voxel.y >= 0 && voxel.y < img_res_3d.y &&
+        voxel.z >= 0 && voxel.z < img_res_3d.z) {
+        imageAtomicAdd(can_img_x, voxel, splat_scale * e.vx);
+        imageAtomicAdd(can_img_y, voxel, splat_scale * e.vy);
+        imageAtomicAdd(can_img_z, voxel, splat_scale * e.vz);
     }
 
     //Commit new entity state to buffers

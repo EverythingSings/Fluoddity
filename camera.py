@@ -1,6 +1,7 @@
 import glfw
+import math
 import numpy as np
-from utilities.gl_helpers import read_shader, tryset
+from utilities.gl_helpers import read_shader, tryset, tryset_mat4
 import moderngl
 from state import CameraState
 from utilities.frame_assembler import FrameAssembler
@@ -18,6 +19,13 @@ class Camera:
         # Camera state
         self.position = np.array([0.0, 0.0])  # 2D position
         self.zoom = 1.0
+
+        # 3D orbital camera state
+        self.render_3d = False
+        self.orbit_distance = 3.0
+        self.orbit_yaw = 0.0
+        self.orbit_pitch = 0.3
+        self.orbit_target = np.array([0.0, 0.0, 0.0])
 
         self.setup_rendering()
 
@@ -77,6 +85,22 @@ class Camera:
         self.cam_brush_target = self.ctx.texture(glfw.get_framebuffer_size(self.window), 4, dtype='f4')
         self.cam_brush_fbo = self.ctx.framebuffer([self.cam_brush_target])
 
+        # 3D point renderer
+        try:
+            points_vert = read_shader('shaders/points_3d.vert')
+            points_frag = read_shader('shaders/points_3d.frag')
+            self.points_3d_program = self.ctx.program(
+                vertex_shader=points_vert,
+                fragment_shader=points_frag
+            )
+        except Exception as e:
+            print('Points 3D shader failed')
+            print(e)
+            self.points_3d_program = None
+
+        # Empty VAO for GL_POINTS rendering (reads from SSBO via gl_VertexID)
+        self.points_3d_vao = self.ctx.vertex_array(self.points_3d_program, []) if self.points_3d_program else None
+
         # Frame assembler (temporal accumulation + gamma correction)
         self.frame_assembler = FrameAssembler(self.ctx, self.cam_brush_target)
         self.assembled_texture = None
@@ -84,12 +108,60 @@ class Camera:
         # Bloom processor (lazily initialized on first use)
         self._bloom_processor = None
 
+    @staticmethod
+    def _look_at(eye, target, up):
+        """Build a 4x4 view matrix (column-major, OpenGL convention)."""
+        f = target - eye
+        f = f / np.linalg.norm(f)
+        s = np.cross(f, up)
+        s = s / np.linalg.norm(s)
+        u = np.cross(s, f)
+
+        m = np.eye(4, dtype=np.float32)
+        m[0, 0:3] = s
+        m[1, 0:3] = u
+        m[2, 0:3] = -f
+        m[0, 3] = -np.dot(s, eye)
+        m[1, 3] = -np.dot(u, eye)
+        m[2, 3] = np.dot(f, eye)
+        return m
+
+    @staticmethod
+    def _perspective(fov_y, aspect, near, far):
+        """Build a 4x4 perspective projection matrix."""
+        f = 1.0 / math.tan(fov_y / 2.0)
+        m = np.zeros((4, 4), dtype=np.float32)
+        m[0, 0] = f / aspect
+        m[1, 1] = f
+        m[2, 2] = (far + near) / (near - far)
+        m[2, 3] = (2.0 * far * near) / (near - far)
+        m[3, 2] = -1.0
+        return m
+
+    def compute_orbital_view_proj(self, aspect):
+        """Compute combined view*projection matrix for the orbital camera."""
+        cy = math.cos(self.orbit_yaw)
+        sy = math.sin(self.orbit_yaw)
+        cp = math.cos(self.orbit_pitch)
+        sp = math.sin(self.orbit_pitch)
+
+        eye = self.orbit_target + self.orbit_distance * np.array([
+            cp * sy, sp, cp * cy
+        ], dtype=np.float32)
+
+        view = self._look_at(eye, self.orbit_target, np.array([0, 1, 0], dtype=np.float32))
+        proj = self._perspective(math.radians(60.0), aspect, 0.01, 100.0)
+        return proj @ view
+
     def generate_view_texture(self, tiling_mode: bool = False):
         """Generate raw view texture (PRE-gamma correction) based on current mode.
 
         Args:
             tiling_mode: Whether tiling mode is enabled
         """
+
+        if self.render_3d and self.points_3d_program is not None:
+            return self._generate_3d_view_texture()
 
         if self.cam_brush_mode:
             # Render particles to cam_brush_target
@@ -125,12 +197,43 @@ class Camera:
         else:
             return self.sim.view_tex
 
+    def _generate_3d_view_texture(self):
+        """Render particles as GL_POINTS in 3D to cam_brush_target."""
+        self.cam_brush_fbo.use()
+        width, height = glfw.get_framebuffer_size(self.window)
+        self.ctx.viewport = (0, 0, width, height)
+        self.ctx.clear(0, 0, 0, 1)
+
+        aspect = width / max(height, 1)
+        view_proj = self.compute_orbital_view_proj(aspect)
+        tryset_mat4(self.points_3d_program, 'view_proj', view_proj)
+        tryset(self.points_3d_program, 'point_scale', 800.0 / max(self.orbit_distance, 0.1))
+
+        # Enable point size from vertex shader, depth test, and additive blending
+        self.ctx.enable_only(moderngl.PROGRAM_POINT_SIZE | moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
+        self.ctx.blend_equation = moderngl.FUNC_ADD
+
+        self.points_3d_vao.render(mode=moderngl.POINTS, vertices=self.sim.entity_count)
+
+        self.ctx.disable(moderngl.BLEND)
+        self.ctx.enable_only(0)  # Reset to defaults
+
+        return self.cam_brush_target
+
     def apply_state(self, state: CameraState) -> None:
         """Apply camera state from Orchestrator."""
         self.position = state.position.copy()
         self.zoom = state.zoom
         self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
+
+        # 3D orbital camera state
+        self.render_3d = state.render_3d
+        self.orbit_distance = state.orbit_distance
+        self.orbit_yaw = state.orbit_yaw
+        self.orbit_pitch = state.orbit_pitch
+        self.orbit_target = state.orbit_target.copy()
 
     def compute_tiling_view_bounds(self):
         """Compute entity-space view bounds for tiling mode.

@@ -16,11 +16,10 @@ const float TILING_MARGIN = 0.993;
 
 //SYNC WITH ENTITY_UPDATE.GLSL
 struct Entity {
-    vec2 pos;
-    vec2 vel;
+    float px, py, pz;    // position (3D)
+    float vx, vy, vz;    // velocity (3D)
     float hue;
     float size;
-    float padding[2];  // Align to 16-byte boundary
 };  // Total: 32 bytes (8 floats)
 layout(std430, binding = 0) buffer EntityBuffer {
     Entity entities[];
@@ -41,9 +40,9 @@ vec2 a2w(vec2 v,vec2 axis){
 void main() {
     int instance_id = gl_InstanceID;
     int vertex_id = gl_VertexID;
-    // Read entity data
-    vec2 entity_pos = entities[instance_id].pos;
-    vec2 entity_vel = entities[instance_id].vel;
+    // Read entity data (use XY only — 2D cam_brush ignores Z)
+    vec2 entity_pos = vec2(entities[instance_id].px, entities[instance_id].py);
+    vec2 entity_vel = vec2(entities[instance_id].vx, entities[instance_id].vy);
     float size = entities[instance_id].size;
 
     // Entity-to-NDC transform: entity bounds [-x_edge,x_edge]x[-y_edge,y_edge] -> [-1,1]^2

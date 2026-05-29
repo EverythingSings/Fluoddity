@@ -43,10 +43,11 @@ class EntityPicker:
         """
         ent_cache = np.frombuffer(self.entity_buffer.read(), dtype=np.float32)
 
-        # Extract positions (every Nth float starting at 0 and 1)
-        # Entity structure: pos(2) + vel(2) + hue(1) + size(1) + padding(2)
+        # Extract positions (every Nth float starting at 0, 1, 2)
+        # Entity structure: px(1) + py(1) + pz(1) + vx(1) + vy(1) + vz(1) + hue(1) + size(1)
         xs = ent_cache[0::self.entity_stride].copy()
         ys = ent_cache[1::self.entity_stride].copy()
+        # zs = ent_cache[2::self.entity_stride].copy()  # Available for 3D picking later
         xs *= (canvas_aspect_ratio)**.5
         ys *= (1./canvas_aspect_ratio)**.5
         # Convert from [-1,1] to [0,1] texture space
