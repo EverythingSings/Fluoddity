@@ -2,8 +2,12 @@
 
 in vec2 texcoord;
 
-uniform sampler2D can_tex;
-out vec2 can_out;
+uniform sampler2D can_tex_x;  // R32F canvas X velocity channel
+uniform sampler2D can_tex_y;  // R32F canvas Y velocity channel
+
+// MRT output: separate float outputs for X and Y velocity channels
+layout(location = 0) out float can_out_x;
+layout(location = 1) out float can_out_y;
 
 // Draw trail mode uniforms
 uniform bool draw_mode;
@@ -103,24 +107,23 @@ float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     return result;
 }
 
-vec2 getCan(vec2 p, sampler2D sam) {
+// Read canvas velocity from 2 R32F textures
+vec2 getCan(vec2 p) {
     vec2 uv = (BOUNDARY_CONDITIONS_MODE == 2) ? fract(p) : p;
-    return texture(sam, uv).rg;
+    return vec2(texture(can_tex_x, uv).r, texture(can_tex_y, uv).r);
 }
 
-vec2 getBlur(vec2 pos, sampler2D sam,float diffusion_constant) {
-    ivec2 imsz = textureSize(sam, 0);
+// Diffusion blur on 2-channel canvas
+vec2 getBlur(vec2 pos, float diffusion_constant) {
+    ivec2 imsz = textureSize(can_tex_x, 0);
     vec3 off = vec3(1. / vec2(imsz), 0);
-    vec2 np = pos + off.zy;
-    vec2 sp = pos - off.zy;
-    vec2 wp = pos - off.xz;
-    vec2 ep = pos + off.xz;
-    vec2 nc = getCan(np, sam);
-    vec2 sc = getCan(sp, sam);
-    vec2 wc = getCan(wp, sam);
-    vec2 ec = getCan(ep, sam);
+    vec2 center = getCan(pos);
+    vec2 n = getCan(pos + off.zy);
+    vec2 s = getCan(pos - off.zy);
+    vec2 w = getCan(pos - off.xz);
+    vec2 e = getCan(pos + off.xz);
     float K = diffusion_constant;
-    return (getCan(pos, sam) * K + nc + sc + wc + ec) / (4. + K);
+    return (center * K + n + s + w + e) / (4. + K);
 }
 
 // Aspect-correct UV delta so length() is isotropic in entity space
@@ -163,9 +166,10 @@ float draw_kernel(float distance, float size) {
 }
 
 void main() {
-    // Clear to zero on frame 0 to prevent garbage data
+    // Clear on frame 0 to prevent garbage data
     if (frame_count == 0) {
-        can_out = vec2(0);
+        can_out_x = 0.0;
+        can_out_y = 0.0;
         return;
     }
 
@@ -178,16 +182,20 @@ void main() {
     if(TRAIL_DIFFUSION>0){
         TRAIL_DIFFUSION= TRAIL_DIFFUSION*TRAIL_DIFFUSION;//better scaling for slider
         TRAIL_DIFFUSION = 4/(pow(5,(TRAIL_DIFFUSION))-1);//better scaling for slider
-        can_color = getBlur(texcoord, can_tex,TRAIL_DIFFUSION);
+        can_color = getBlur(texcoord, TRAIL_DIFFUSION);
     }
     else{
-        can_color = texture(can_tex,texcoord).rg;
+        can_color = getCan(texcoord);
     }
 
     // Use entity space position for position-based sweeps
     float trail_persistence = calculate_setting(TRAIL_PERSISTENCE_SETTING, entity_space_pos, 0.0);
     trail_persistence = clamp(trail_persistence,0.0,0.999);
-    can_out = can_color * trail_persistence;
+    // Splats are pre-added to canvas by entity_update atomicAdds, scaled by (1-p)/p.
+    // Multiplying by persistence yields: p * (old + (1-p)/p * splat) = p*old + (1-p)*splat
+    vec2 result = can_color * trail_persistence;
+    can_out_x = result.x;
+    can_out_y = result.y;
 
     // Draw trail mode: add velocity based on mouse drag
     if (draw_mode && canvas_draw_active && draw_power > 0.0) {
@@ -224,9 +232,11 @@ void main() {
         );
         draw_vector *= draw_power/5;
 
-        // Apply Gaussian kernel and add to velocity channels (RG)
+        // Apply Gaussian kernel and add to velocity channels
         float kernel_weight = draw_kernel(distance_to_mouse, draw_size);
-        can_out += draw_vector * kernel_weight/draw_size*(1-trail_persistence);
+        vec2 dv = draw_vector * kernel_weight/draw_size*(1-trail_persistence);
+        can_out_x += dv.x;
+        can_out_y += dv.y;
     }
 
     // Right-click eraser: hard circle erase within draw_size radius
@@ -245,7 +255,8 @@ void main() {
             erase_distance = length(aspect_correct_uv(texcoord - mouse));
         }
         if (erase_distance < draw_size*2) {//Match the reticle size from frame_assembly.frag
-            can_out = vec2(0.0);
+            can_out_x = 0.0;
+            can_out_y = 0.0;
         }
     }
 
@@ -270,6 +281,7 @@ void main() {
             fill_vector = len > 0.0 ? corrected / len : vec2(0.0);
         }
         fill_vector *= draw_power / 5.0;
-        can_out += .25*fill_vector;
+        can_out_x += .25*fill_vector.x;
+        can_out_y += .25*fill_vector.y;
     }
 }

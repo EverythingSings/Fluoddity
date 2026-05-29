@@ -1,7 +1,7 @@
 #version 450
 layout(local_size_x = 64) in;
 
-//SAME STRUCT USED IN BRUSH.VERT AND CAM_BRUSH.VERT
+//SAME STRUCT USED IN CAM_BRUSH.VERT
 struct Entity {
     vec2 pos;
     vec2 vel;
@@ -32,7 +32,8 @@ struct PhysicsSetting {
 uniform float WORLD_SIZE;
 uniform int frame_count;
 uniform Rule target_rule;
-uniform sampler2D canvas; //trails canvas
+uniform sampler2D canvas; //trails canvas X channel (R32F)
+uniform sampler2D canvas_y; //trails canvas Y channel (R32F)
 uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
 uniform float force_field_strength; // Multiplier for force field effects
@@ -48,6 +49,9 @@ uniform PhysicsSetting LATERAL_FORCE_SETTING;
 uniform PhysicsSetting SENSOR_GAIN_SETTING;
 uniform PhysicsSetting MUTATION_SCALE_SETTING;
 uniform PhysicsSetting HAZARD_RATE_SETTING;
+uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
+layout(r32f, binding = 0) uniform image2D can_img_x;
+layout(r32f, binding = 1) uniform image2D can_img_y;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
@@ -332,14 +336,14 @@ void pR(inout vec2 p, float a) {
 }
 
 
-//convert p (entity space) to texture coords and retrieve canvas (RG32F: velocity only)
+//convert p (entity space) to texture coords and retrieve canvas (2x R32F: velocity X and Y)
 vec2 get_can(vec2 p){
     vec2 res=textureSize(canvas,0);
     float ca = res.x / res.y;
     vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
     vec2 uv = p / (2.0 * half_extent) + 0.5;
     if(get_particle_boundary_conditions() == 2) uv = fract(uv);
-    return texture(canvas, uv).rg;
+    return vec2(texture(canvas, uv).r, texture(canvas_y, uv).r);
 }
 vec4 get_field(vec2 p){
     if(!advanced_drawing_resources_initialized)return vec4(0);
@@ -539,7 +543,7 @@ void main() {
     vec2 force = vec2(0);
     vec2 col_params = vec2(0);
     calculate_entity_behavior(ltap,rtap,orientation,current_rule,e.pos,cohort,force,strafe,col_params);
-    if(index%500==0){report(length(ltap-rtap),0);}
+    if(index%500==0){report(length(ltap-rtap),0);}//small sample
 
     //rescale output forces
     force *= 1./SQRT_WORLD_SIZE*calculate_setting(get_particle_global_force_mult(),e.pos,cohort)/400.;
@@ -588,6 +592,22 @@ void main() {
         //wrap: X wraps [-x_edge,x_edge], Y wraps [-y_edge, y_edge]
         e.pos.x = x_edge * 2.0 * (fract(e.pos.x / (x_edge * 2.0) - 0.5) - 0.5);
         e.pos.y = y_edge * 2.0 * (fract(e.pos.y / (y_edge * 2.0) - 0.5) - 0.5);
+    }
+
+    //Atomic splat to canvas: scale by (1-p)/p so canvas_update's *p gives net (1-p)*splat
+    float trail_p = calculate_setting(TRAIL_PERSISTENCE_SETTING, e.pos, cohort);
+    trail_p = clamp(trail_p, 0.001, 0.999);
+    float splat_scale = (1.0 - trail_p) / trail_p;
+
+    vec2 img_res = vec2(imageSize(can_img_x));
+    vec2 half_ext = vec2(sqrt(ca), 1.0 / sqrt(ca));
+    vec2 uv_pos = e.pos / (2.0 * half_ext) + 0.5;
+    ivec2 pixel = ivec2(uv_pos * img_res);
+
+    if (pixel.x >= 0 && pixel.x < int(img_res.x) &&
+        pixel.y >= 0 && pixel.y < int(img_res.y)) {
+        imageAtomicAdd(can_img_x, pixel, splat_scale * e.vel.x);
+        imageAtomicAdd(can_img_y, pixel, splat_scale * e.vel.y);
     }
 
     //Commit new entity state to buffers

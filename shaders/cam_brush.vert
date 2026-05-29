@@ -14,7 +14,7 @@ uniform vec2 view_max;  // World-space maximum of view rectangle
 // Must match the value in frame_assembly.frag. Smaller = more margin for edge blending.
 const float TILING_MARGIN = 0.993;
 
-//SYNC WITH ENTITY_UPDATE.GLSL AND BRUSH.VERT
+//SYNC WITH ENTITY_UPDATE.GLSL
 struct Entity {
     vec2 pos;
     vec2 vel;

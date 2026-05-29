@@ -22,8 +22,8 @@ class Sim:
         self.setup_shaders()
 
         # View options (for UI combo box)
-        self.view_options = [self.can_textures[self.can_read_index]]
-        self.view_option_labels = ['DEBUG - Canvas (Persistent particle trails)']
+        self.view_options = [self.can_x_textures[self.can_read_index]]
+        self.view_option_labels = ['DEBUG - Canvas X (Velocity field)']
 
         # Current state (will be updated by apply_state each frame)
         self._state = SimState()
@@ -50,8 +50,8 @@ class Sim:
 
     @property
     def can(self):
-        """The most recently completed canvas texture (read buffer)."""
-        return self.can_textures[self.can_read_index]
+        """The most recently completed canvas texture (read buffer, X channel)."""
+        return self.can_x_textures[self.can_read_index]
 
     def setup_simulation_state(self):
         # Update entity_count in case world_size changed
@@ -78,23 +78,29 @@ class Sim:
         self.multi_load_buffer.bind_to_storage_buffer(3)  # Binding 3 matches shader layout
         self.multi_load_rule_buffer.bind_to_storage_buffer(4)  # Binding 4 for multi-load rules
 
-        # Create double-buffered canvas textures (2-channel RG32F: velocity only)
-        # We ping-pong between these to avoid reading and writing the same texture
-        self.can_textures = [
-            self.ctx.texture(canvas_shape, 2, dtype='f4'),
-            self.ctx.texture(canvas_shape, 2, dtype='f4')
+        # Create double-buffered R32F canvas textures (separate X and Y velocity channels)
+        # Entity_update splatts atomically into these, canvas_update reads and applies persistence/diffusion
+        self.can_x_textures = [
+            self.ctx.texture(canvas_shape, 1, dtype='f4'),
+            self.ctx.texture(canvas_shape, 1, dtype='f4'),
         ]
-        for tex in self.can_textures:
+        self.can_y_textures = [
+            self.ctx.texture(canvas_shape, 1, dtype='f4'),
+            self.ctx.texture(canvas_shape, 1, dtype='f4'),
+        ]
+        for tex in self.can_x_textures + self.can_y_textures:
             tex.repeat_x = True
             tex.repeat_y = True
+
+        # MRT framebuffers: each writes to paired X and Y textures
         self.can_framebuffers = [
-            self.ctx.framebuffer([self.can_textures[0]]),
-            self.ctx.framebuffer([self.can_textures[1]])
+            self.ctx.framebuffer([self.can_x_textures[0], self.can_y_textures[0]]),
+            self.ctx.framebuffer([self.can_x_textures[1], self.can_y_textures[1]]),
         ]
-        self.can_read_index = 0  # Index of texture to read from (write to the other)
+        self.can_read_index = 0  # Index of texture pair to read from (write to the other)
 
         # For camera to use (will be updated each frame to point to the most recently written buffer)
-        self.view_tex = self.can_textures[self.can_read_index]
+        self.view_tex = self.can_x_textures[self.can_read_index]
 
         # Clear both canvas buffers initially
         for fb in self.can_framebuffers:
@@ -102,7 +108,7 @@ class Sim:
             self.ctx.clear()
 
         # View options for debug view modes
-        self.view_options = [self.can_textures[self.can_read_index]]
+        self.view_options = [self.can_x_textures[self.can_read_index]]
     def setup_shaders(self):
         canvas_dim_x,canvas_dim_y = self.get_canvas_dimensions()
         canvas_shape = (canvas_dim_x, canvas_dim_y)
@@ -120,26 +126,10 @@ class Sim:
 
         tryset(self.entity_update_program, 'canvas_resolution', canvas_shape)
         tryset(self.entity_update_program, 'canvas', 1)
+        tryset(self.entity_update_program, 'canvas_y', 6)
         tryset(self.entity_update_program, 'field_texture', 5)
 
-        # 2. Brush update shaders (instanced rendering)
-        self.brush_vertex_source = read_shader('shaders/brush.vert')
-        self.brush_vertex_source = prepend_defines(self.brush_vertex_source, self.entity_count)
-        self.brush_fragment_source = read_shader('shaders/brush.frag')
-
-        try:
-            self.brush_update_program = self.ctx.program(
-                vertex_shader=self.brush_vertex_source,
-                fragment_shader=self.brush_fragment_source
-            )
-        except Exception as e:
-            print('Brush Update Compilation Failed:')
-            print(e)
-
-        self.brush_update_program['canvas_resolution'] = canvas_shape
-        self.brush_vao = self.ctx.vertex_array(self.brush_update_program, [])
-
-        # 3. Canvas update shaders (fullscreen quad)
+        # 2. Canvas update shaders (fullscreen quad)
         self.canvas_vertex_source = read_shader('shaders/canvas.vert')
         self.canvas_fragment_source = read_shader('shaders/canvas.frag')
 
@@ -166,6 +156,7 @@ class Sim:
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas', 1)
+        tryset(self.entity_update_program, 'canvas_y', 6)
         tryset(self.entity_update_program, 'WORLD_SIZE', self.world_size)
 
         # Advanced drawing field texture
@@ -204,6 +195,7 @@ class Sim:
         tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
         tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
         self._assign_physics_setting('HAZARD_RATE_SETTING', self._state.HAZARD_RATE, 'Hazard Rate', 'HAZARD_RATE', 0.0, 0.05)
+        self._assign_physics_setting('TRAIL_PERSISTENCE_SETTING', self._state.TRAIL_PERSISTENCE, 'Trail Persistence', 'TRAIL_PERSISTENCE', 0.0, 1.0)
 
         # Appearance settings from sim state (now part of physics config)
         tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
@@ -218,33 +210,17 @@ class Sim:
         ctx.memory_barrier()
         self.entity_update_program.run(num_workgroups)
 
-    def brush_update(self, ctx: moderngl.Context):
-        """Render particles additively into the canvas write-target FBO.
-
-        FBO must already be bound by update(). Brush pre-scales output by
-        (1-p)/p so that after canvas decay (multiply by p), the net
-        contribution is (1-p) * original_brush_value.
-        """
-        tryset(self.brush_update_program, 'frame_count', self.frame_count)
-        tryset(self.brush_update_program, 'trail_persistence', self._state.TRAIL_PERSISTENCE)
-
-        # Pure additive blending (no alpha channel in RG32F canvas)
-        ctx.enable(moderngl.BLEND)
-        ctx.blend_func = moderngl.ONE, moderngl.ONE
-        ctx.blend_equation = moderngl.FUNC_ADD
-
-        self.brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=self.entity_count, vertices=4)
-
     def can_update(self, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                    prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
                    multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
+                   strong_determinism: bool = False,
                    brush_mode: int = 0, fixed_direction_heading: float = 0.0,
                    erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
                    canvas_draw_active: bool = True):
         """Apply canvas decay (old * trail_persistence) plus draw/erase/fill.
 
-        FBO must already be bound by update(). Canvas read texture must
-        already be bound at location 1.
+        Handles FBO binding and double-buffering internally.
+        Canvas read textures must already be bound at locations 1 and 6.
         """
         # Boundary conditions mode for wrap behavior
         tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
@@ -291,7 +267,8 @@ class Sim:
         # Always apply jitter (independent of parameter_sweeps_enabled)
         tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.jitter', self._state.jitters.get('TRAIL_DIFFUSION', 0.0))
 
-        tryset(self.canvas_update_program, 'can_tex', 1)
+        tryset(self.canvas_update_program, 'can_tex_x', 1)
+        tryset(self.canvas_update_program, 'can_tex_y', 6)
 
         # Pass frame count to shader for initialization
         tryset(self.canvas_update_program, 'frame_count', self.frame_count)
@@ -310,8 +287,21 @@ class Sim:
             tryset(self.canvas_update_program, 'draw_size', draw_size)
             tryset(self.canvas_update_program, 'draw_power', draw_power)
 
-        # FBO already bound by update() — just render the fullscreen quad
-        self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
+        # Bind FBO and render, handling double-buffering
+        if strong_determinism:
+            write_index = 1 - self.can_read_index
+            self.can_framebuffers[write_index].use()
+            self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
+
+            # Swap buffers: the one we just wrote to becomes the new read buffer
+            self.can_read_index = write_index
+            self.view_options[0] = self.can_x_textures[self.can_read_index]
+            if self._state.current_view_option == 0:
+                self.view_tex = self.can_x_textures[self.can_read_index]
+        else:
+            # Single-buffer: read and write same texture (non-deterministic but faster)
+            self.can_framebuffers[self.can_read_index].use()
+            self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
@@ -324,8 +314,13 @@ class Sim:
                force_field_strength: float = 1.0,
                strafe_field_strength: float = 1.0,
                generics: tuple = None):
-        # Bind the current read buffer for entity_update sampling
-        self.can_textures[self.can_read_index].use(location=1)
+        # Bind canvas X/Y textures for entity_update sampling (sensors)
+        self.can_x_textures[self.can_read_index].use(location=1)
+        self.can_y_textures[self.can_read_index].use(location=6)
+
+        # Bind canvas X/Y as images for atomic splatting
+        self.can_x_textures[self.can_read_index].bind_to_image(0, read=False, write=True)
+        self.can_y_textures[self.can_read_index].bind_to_image(1, read=False, write=True)
 
         # Bind advanced drawing field texture if available
         if field_texture is not None:
@@ -334,38 +329,22 @@ class Sim:
         current_time = time.time()
         self.time = current_time - self.start_time_stamp
 
-        # 1. Entity physics (reads canvas read buffer for sensors)
+        # 1. Entity physics + atomic splat (reads canvas for sensors, writes trails atomically)
         self.entity_update(ctx, multi_load_service, is_preview_active,
                            field_texture_bound=field_texture is not None,
                            force_field_strength=force_field_strength,
                            strafe_field_strength=strafe_field_strength,
                            generics=generics)
 
-        # 2. Determine write target for canvas decay + brush
-        if strong_determinism:
-            write_index = 1 - self.can_read_index
-        else:
-            write_index = self.can_read_index
-
-        # 3. Canvas decay: read from read_index, write decayed values to write_index
-        self.can_framebuffers[write_index].use()
+        # 2. Memory barrier: ensure atomic writes visible to canvas fragment shader
+        ctx.memory_barrier()
         ctx.disable(moderngl.BLEND)
+
+        # 3. Canvas decay + diffusion
         self.can_update(draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power,
-                        multi_load_service, is_preview_active, tiling_mode,
+                        multi_load_service, is_preview_active, tiling_mode, strong_determinism,
                         brush_mode, fixed_direction_heading, erase_mode, fill_mode,
                         fill_direction_type, canvas_draw_active)
-
-        # 4. Brush: additive render into same write_index FBO
-        ctx.memory_barrier()
-        self.brush_update(ctx)
-        ctx.disable(moderngl.BLEND)
-
-        # 5. Swap buffers if double-buffering
-        if strong_determinism:
-            self.can_read_index = write_index
-            self.view_options[0] = self.can_textures[self.can_read_index]
-            if self._state.current_view_option == 0:
-                self.view_tex = self.can_textures[self.can_read_index]
 
         self.frame_count += 1
 
