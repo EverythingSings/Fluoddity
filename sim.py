@@ -9,13 +9,15 @@ from state import SimState
 SIZE_OF_ENTITY_STRUCT = 4*8  # 4 bytes per 32bit value. 8 values (pos:2, vel:2, hue:1, size:1, padding:2)
 SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
 
+# Debug override: cubic canvas for isotropic 3D physics.
+# Change this single value to resize the 3D canvas uniformly.
+CANVAS_3D_DIM = 256
+
 class Sim:
-    def __init__(self, ctx: moderngl.Context, world_size: float = 1.0, canvas_aspect_ratio: str = "1:1",
-                 canvas_3d_depth: int = 257):
+    def __init__(self, ctx: moderngl.Context, world_size: float = 1.0, canvas_aspect_ratio: str = "1:1"):
         self.ctx = ctx
         self.world_size = world_size
         self.canvas_aspect_ratio = canvas_aspect_ratio
-        self.canvas_3d_depth = canvas_3d_depth
         self.entity_count = self.get_entity_count()
         self.time = 0.0
         self.start_time_stamp = time.time()
@@ -42,6 +44,7 @@ class Sim:
         """Calculate canvas dimensions based on world size and aspect ratio."""
         # Parse aspect ratio string "W:H" into a scale factor
         # factor = sqrt(W/H) so that width*height = 1024^2 * world_size (area preserved)
+        return (CANVAS_3D_DIM,CANVAS_3D_DIM)#HARDCODING DIMENSIONS
         try:
             w, h = self.canvas_aspect_ratio.split(":")
             factor = math.sqrt(int(w) / int(h))
@@ -57,7 +60,7 @@ class Sim:
     def setup_simulation_state(self):
         # Update entity_count in case world_size changed
         self.entity_count = self.get_entity_count()
-        canvas_dim_x,canvas_dim_y = self.get_canvas_dimensions()
+        canvas_dim_x = canvas_dim_y = CANVAS_3D_DIM
         canvas_shape = (canvas_dim_x, canvas_dim_y)
 
         # Allocate state buffers
@@ -83,7 +86,7 @@ class Sim:
 
         # 3D canvas textures: 3 velocity components (X, Y, Z), double-buffered
         # Each is R32F for imageAtomicAdd compatibility
-        canvas_3d_shape = (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth)
+        canvas_3d_shape = (CANVAS_3D_DIM, CANVAS_3D_DIM, CANVAS_3D_DIM)
         self.can_x_3d = [
             self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
             self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
@@ -102,7 +105,7 @@ class Sim:
             tex.repeat_z = True
 
         # Clear 3D textures
-        zero_data = bytes(canvas_dim_x * canvas_dim_y * self.canvas_3d_depth * 4)
+        zero_data = bytes(CANVAS_3D_DIM * CANVAS_3D_DIM * CANVAS_3D_DIM * 4)
         for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
             tex.write(zero_data)
 
@@ -119,9 +122,6 @@ class Sim:
         self.view_option_labels_base = ['DEBUG - Canvas X (z-slice)']
 
     def setup_shaders(self):
-        canvas_dim_x,canvas_dim_y = self.get_canvas_dimensions()
-        canvas_shape = (canvas_dim_x, canvas_dim_y)
-
         # 1. Entity update compute shader
         self.entity_update_source = read_shader('shaders/entity_update.glsl')
         self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('shaders/fourier4_4.glsl'))
@@ -133,11 +133,11 @@ class Sim:
             print('Entity Update Compilation Failed:')
             print(e)
 
-        tryset(self.entity_update_program, 'canvas_resolution', canvas_shape)
+        tryset(self.entity_update_program, 'canvas_resolution', (CANVAS_3D_DIM, CANVAS_3D_DIM))
         tryset(self.entity_update_program, 'canvas_3d_x', 1)
         tryset(self.entity_update_program, 'canvas_3d_y', 6)
         tryset(self.entity_update_program, 'canvas_3d_z', 7)
-        tryset(self.entity_update_program, 'canvas_3d_size', (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth))
+        tryset(self.entity_update_program, 'canvas_3d_size', (CANVAS_3D_DIM, CANVAS_3D_DIM, CANVAS_3D_DIM))
         tryset(self.entity_update_program, 'field_texture', 5)
 
         # 2. Canvas update 3D compute shader
@@ -169,9 +169,8 @@ class Sim:
         tryset(self.entity_update_program, 'canvas_3d_x', 1)
         tryset(self.entity_update_program, 'canvas_3d_y', 6)
         tryset(self.entity_update_program, 'canvas_3d_z', 7)
-        canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
-        tryset(self.entity_update_program, 'canvas_3d_size', (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth))
-        tryset(self.entity_update_program, 'WORLD_SIZE', self.world_size)
+        tryset(self.entity_update_program, 'canvas_3d_size', (CANVAS_3D_DIM, CANVAS_3D_DIM, CANVAS_3D_DIM))
+        tryset(self.entity_update_program, 'WORLD_SIZE', 1.0)
 
         # Advanced drawing field texture
         tryset(self.entity_update_program, 'field_texture', 5)
@@ -234,10 +233,7 @@ class Sim:
         Handles double-buffering: reads from can_read_index, writes to 1-can_read_index.
         """
         prog = self.canvas_update_3d_program
-        canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
-        canvas_3d_size = (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth)
-
-        tryset(prog, 'canvas_3d_size', canvas_3d_size)
+        tryset(prog, 'canvas_3d_size', (CANVAS_3D_DIM, CANVAS_3D_DIM, CANVAS_3D_DIM))
         tryset(prog, 'TESTING_MODE', self._state.TESTING_MODE)
         tryset(prog, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(prog, 'frame_count', self.frame_count)
@@ -292,9 +288,9 @@ class Sim:
         self.can_z_3d[write_index].bind_to_image(2, read=False, write=True)
 
         # Dispatch compute shader
-        gx = (canvas_dim_x + 3) // 4
-        gy = (canvas_dim_y + 3) // 4
-        gz = (self.canvas_3d_depth + 3) // 4
+        gx = (CANVAS_3D_DIM + 3) // 4
+        gy = (CANVAS_3D_DIM + 3) // 4
+        gz = (CANVAS_3D_DIM + 3) // 4
         prog.run(gx, gy, gz)
 
         # Swap buffers
@@ -314,22 +310,21 @@ class Sim:
         if not hasattr(self, 'canvas_slice_program') or self.canvas_slice_program is None:
             return
 
-        slice_z = min(self.canvas_3d_view_slice, self.canvas_3d_depth - 1)
-        canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
+        slice_z = min(self.canvas_3d_view_slice, CANVAS_3D_DIM - 1)
 
         # Bind source 3D texture as sampler
         self.can_x_3d[self.can_read_index].use(location=0)
         tryset(self.canvas_slice_program, 'source_3d', 0)
         tryset(self.canvas_slice_program, 'slice_z', slice_z)
         tryset(self.canvas_slice_program, 'canvas_3d_size',
-               (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth))
+               (CANVAS_3D_DIM, CANVAS_3D_DIM, CANVAS_3D_DIM))
 
         # Bind destination 2D texture as image
         self.view_slice_tex.bind_to_image(0, read=False, write=True)
 
         # Dispatch compute shader
-        gx = (canvas_dim_x + 15) // 16
-        gy = (canvas_dim_y + 15) // 16
+        gx = (CANVAS_3D_DIM + 15) // 16
+        gy = (CANVAS_3D_DIM + 15) // 16
         self.canvas_slice_program.run(gx, gy, 1)
         self.ctx.memory_barrier()
 
@@ -384,7 +379,7 @@ class Sim:
     def _clear_3d_textures(self):
         """Clear all 3D canvas textures to zero."""
         canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
-        zero_data = bytes(canvas_dim_x * canvas_dim_y * self.canvas_3d_depth * 4)
+        zero_data = bytes(canvas_dim_x * canvas_dim_y * CANVAS_3D_DIM* 4)
         for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
             tex.write(zero_data)
 

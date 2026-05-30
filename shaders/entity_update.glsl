@@ -404,41 +404,38 @@ void reset(uint index){
     float cohort_val = get_cohort(index);
     float aspect = sqrt(canvas_resolution.x/canvas_resolution.y);
 
-    //set pos and vel to random values on a small disk
-    float cohort_scale = 0.019;//Size of each disk
-    vec2 pos=cohort_scale*vec2(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)));
-    vec2 vel=.00005*(vec2(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)))*2-1);
+    //set pos and vel to random values on a small ball (3D)
+    float cohort_scale = 0.019;//Size of each cluster
+    vec3 pos=cohort_scale*vec3(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)),hash(vec2(cohort_val+index+7.531)));
+    vec3 vel=.00005*(vec3(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)),hash(vec2(index,pos.z+3.77)))*2-1);
 
-    //RESET_MODE: 0=Grid, 1=Random, 2=Ring
+    //RESET_MODE: 0=Grid, 1=Random, 2=Ring/Sphere
     int reset_mode = get_particle_reset_mode();
     int cohorts = get_particle_cohorts();
     if(reset_mode == 0) {
-        //GRID: position different cohorts at different places in a grid
+        //GRID: position different cohorts at different places in a 3D grid
         float spots=float(cohorts);
-        float spot_rows=ceil(aspect*sqrt(spots));
-        vec2 gridcell=vec2(int(cohort_val)%int(spot_rows),(int(cohort_val))/int(spot_rows));
-        //pR(pos,floor(cohort_val)*3.1415*2*spots);
-        //this aspect transform is good enough, but not perfect
-        pos+=1.8*((gridcell)/spot_rows)*vec2(aspect);
-        pos+= 1.8*(1/2.*(1./vec2(spot_rows,spots/spot_rows)-1))*vec2(aspect,1/aspect);
+        float grid_side=ceil(pow(spots, 1.0/3.0));
+        int ci = int(cohort_val);
+        vec3 gridcell=vec3(ci%int(grid_side), (ci/int(grid_side))%int(grid_side), ci/int(grid_side*grid_side));
+        pos+=1.8*((gridcell)/grid_side - 0.5);
     }
     else if(reset_mode == 1) {
-        //RANDOM: scatter cohorts randomly across the canvas, homogenous start
-        pos= vec2(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0))) * 2.0 - 1.0;
-        pos.x*=aspect;
-        pos.y/=aspect;
+        //RANDOM: scatter cohorts randomly across the cubic canvas
+        pos= vec3(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0)), hash(vec2(cohort_val, 3.0))) * 2.0 - 1.0;
     }
     else if(reset_mode == 2) {
-        //RING: arrange cohorts in a ring pattern
-        float angle = cohort_val / float(cohorts) * 2.0 * PI;
+        //SPHERE: arrange cohorts on a spherical shell
+        float phi = hash(vec2(cohort_val, 4.0)) * 2.0 * PI;
+        float cos_theta = hash(vec2(cohort_val, 5.0)) * 2.0 - 1.0;
+        float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
         float radius = 0.5;
-        pos += vec2(cos(angle), sin(angle)) * radius;
-        //pos += 0.02 * vec2(hash(vec2(cohort_val)), hash(vec2(cohort_val + 1.0))); // Small jitter
+        pos += vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta) * radius;
     }
 
-    
+
     //store to persistent entity buffer
-    entities[index]=Entity(pos.x, pos.y, 0.0, vel.x, vel.y, 0.0, 0.0, size);
+    entities[index]=Entity(pos.x, pos.y, pos.z, vel.x, vel.y, vel.z, 0.0, size);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
@@ -521,7 +518,17 @@ void sample_plane_physics(
     vec3 pos, vec3 vel, Rule current_rule, float cohort,
     int sample_index, vec2 epos2
 ) {
-    vec3 vel_dir = length(vel) > 1e-10 ? normalize(vel) : vec3(0,0,1);
+    vec3 vel_dir;
+    if (length(vel) > 1e-10) {
+        vel_dir = normalize(vel);
+    } else {
+        // Deterministic random direction per-particle to avoid axis bias
+        float idx_f = float(gl_GlobalInvocationID.x);
+        float phi = hash(vec2(idx_f, 1.0)) * 2.0 * PI;
+        float cos_theta = hash(vec2(idx_f, 2.0)) * 2.0 - 1.0;
+        float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+        vel_dir = vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
+    }
 
     vec3 u, v; // Tangent plane basis vectors
 
