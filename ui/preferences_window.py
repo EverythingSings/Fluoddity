@@ -217,6 +217,16 @@ class PreferencesWindowMixin:
                 _, self.state.sim.canvas_3d_depth = imgui.slider_int(
                     "Canvas Z Depth", self.state.sim.canvas_3d_depth, 1, 256
                 )
+                max_slice = max(0, self.state.sim.canvas_3d_depth - 1)
+                _, self.state.sim.canvas_3d_view_slice = imgui.slider_int(
+                    "Debug View Slice", self.state.sim.canvas_3d_view_slice, 0, max_slice
+                )
+                _, self.state.camera.orbit_speed = imgui.slider_float(
+                    "Orbit Speed", self.state.camera.orbit_speed, 0.1, 10.0, format="%.1f"
+                )
+                _, self.state.camera.lazy_susan = imgui.slider_float(
+                    "Lazy Susan", self.state.camera.lazy_susan, -2.0, 2.0, format="%.2f"
+                )
                 imgui.tree_pop()
 
             # Physics tooltips checkbox

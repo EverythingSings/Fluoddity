@@ -25,7 +25,7 @@ def process_camera_input(ui_state, window, keybindings, sim_view_tex, dt):
 
     # 3D orbital camera mode
     if ui_state.camera.render_3d:
-        orbit_speed = 2.0 * dt
+        orbit_speed = ui_state.camera.orbit_speed * dt
         zoom_speed = 2.6 * dt
 
         # WASD orbits around the target
@@ -57,6 +57,10 @@ def process_camera_input(ui_state, window, keybindings, sim_view_tex, dt):
             ui_state.camera.orbit_distance *= zoom_factor
 
         ui_state.camera.orbit_distance = max(0.1, ui_state.camera.orbit_distance)
+
+        # Lazy susan: automatic yaw rotation
+        ui_state.camera.orbit_yaw += ui_state.camera.lazy_susan * dt
+
         return
 
     # 2D camera mode

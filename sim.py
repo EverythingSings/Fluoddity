@@ -11,7 +11,7 @@ SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s
 
 class Sim:
     def __init__(self, ctx: moderngl.Context, world_size: float = 1.0, canvas_aspect_ratio: str = "1:1",
-                 canvas_3d_depth: int = 1):
+                 canvas_3d_depth: int = 257):
         self.ctx = ctx
         self.world_size = world_size
         self.canvas_aspect_ratio = canvas_aspect_ratio
@@ -23,9 +23,8 @@ class Sim:
         self.setup_simulation_state()
         self.setup_shaders()
 
-        # View options (for UI combo box)
-        self.view_options = [self.can_x_textures[self.can_read_index]]
-        self.view_option_labels = ['DEBUG - Canvas X (Velocity field)']
+        # View options (for UI combo box) — set by setup_simulation_state
+        self.view_option_labels = self.view_option_labels_base.copy()
 
         # Current state (will be updated by apply_state each frame)
         self._state = SimState()
@@ -37,7 +36,7 @@ class Sim:
 
     def get_entity_count(self) -> int:
         """Calculate entity count based on world size."""
-        return int(600000 * self.world_size)
+        return 1000000#int(600000 * self.world_size)
 
     def get_canvas_dimensions(self) -> tuple[int, int]:
         """Calculate canvas dimensions based on world size and aspect ratio."""
@@ -52,8 +51,8 @@ class Sim:
 
     @property
     def can(self):
-        """The most recently completed canvas texture (read buffer, X channel)."""
-        return self.can_x_textures[self.can_read_index]
+        """2D view-slice of the 3D canvas X channel (for debug views, arrow overlays, etc.)."""
+        return self.view_slice_tex
 
     def setup_simulation_state(self):
         # Update entity_count in case world_size changed
@@ -80,25 +79,6 @@ class Sim:
         self.multi_load_buffer.bind_to_storage_buffer(3)  # Binding 3 matches shader layout
         self.multi_load_rule_buffer.bind_to_storage_buffer(4)  # Binding 4 for multi-load rules
 
-        # Create double-buffered R32F canvas textures (separate X and Y velocity channels)
-        # Entity_update splatts atomically into these, canvas_update reads and applies persistence/diffusion
-        self.can_x_textures = [
-            self.ctx.texture(canvas_shape, 1, dtype='f4'),
-            self.ctx.texture(canvas_shape, 1, dtype='f4'),
-        ]
-        self.can_y_textures = [
-            self.ctx.texture(canvas_shape, 1, dtype='f4'),
-            self.ctx.texture(canvas_shape, 1, dtype='f4'),
-        ]
-        for tex in self.can_x_textures + self.can_y_textures:
-            tex.repeat_x = True
-            tex.repeat_y = True
-
-        # MRT framebuffers: each writes to paired X and Y textures
-        self.can_framebuffers = [
-            self.ctx.framebuffer([self.can_x_textures[0], self.can_y_textures[0]]),
-            self.ctx.framebuffer([self.can_x_textures[1], self.can_y_textures[1]]),
-        ]
         self.can_read_index = 0  # Index of texture pair to read from (write to the other)
 
         # 3D canvas textures: 3 velocity components (X, Y, Z), double-buffered
@@ -126,16 +106,18 @@ class Sim:
         for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
             tex.write(zero_data)
 
-        # For camera to use (will be updated each frame to point to the most recently written buffer)
-        self.view_tex = self.can_x_textures[self.can_read_index]
+        # 2D view-slice texture: shows one z-slice of the 3D canvas X channel
+        # Used for debug views, arrow overlays, and as view_tex for aspect ratio queries
+        self.view_slice_tex = self.ctx.texture(canvas_shape, 1, dtype='f4')
+        self.view_slice_tex.repeat_x = True
+        self.view_slice_tex.repeat_y = True
+        self.canvas_3d_view_slice = 0  # Which z-slice to display (0-based)
 
-        # Clear both 2D canvas buffers initially
-        for fb in self.can_framebuffers:
-            fb.use()
-            self.ctx.clear()
+        # For camera/UI to use
+        self.view_tex = self.view_slice_tex
+        self.view_options = [self.view_slice_tex]
+        self.view_option_labels_base = ['DEBUG - Canvas X (z-slice)']
 
-        # View options for debug view modes
-        self.view_options = [self.can_x_textures[self.can_read_index]]
     def setup_shaders(self):
         canvas_dim_x,canvas_dim_y = self.get_canvas_dimensions()
         canvas_shape = (canvas_dim_x, canvas_dim_y)
@@ -158,23 +140,7 @@ class Sim:
         tryset(self.entity_update_program, 'canvas_3d_size', (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth))
         tryset(self.entity_update_program, 'field_texture', 5)
 
-        # 2. Canvas update shaders (fullscreen quad)
-        self.canvas_vertex_source = read_shader('shaders/canvas.vert')
-        self.canvas_fragment_source = read_shader('shaders/canvas.frag')
-
-        try:
-            self.canvas_update_program = self.ctx.program(
-                vertex_shader=self.canvas_vertex_source,
-                fragment_shader=self.canvas_fragment_source
-            )
-        except Exception as e:
-            print('Canvas Update Compilation Failed:')
-            print(e)
-
-        self.canvas_vao = self.ctx.vertex_array(self.canvas_update_program, [])
-        tryset(self.canvas_update_program, 'canvas_resolution', canvas_shape)
-
-        # 3. Canvas update 3D compute shader
+        # 2. Canvas update 3D compute shader
         try:
             self.canvas_update_3d_source = read_shader('shaders/canvas_update_3d.glsl')
             self.canvas_update_3d_program = self.ctx.compute_shader(self.canvas_update_3d_source)
@@ -182,6 +148,14 @@ class Sim:
             print('Canvas Update 3D Compilation Failed:')
             print(e)
 
+        # 4. Canvas slice compute shader (extracts a z-slice from 3D texture for debug view)
+        try:
+            self.canvas_slice_source = read_shader('shaders/canvas_slice.glsl')
+            self.canvas_slice_program = self.ctx.compute_shader(self.canvas_slice_source)
+        except Exception as e:
+            print('Canvas Slice Compilation Failed:')
+            print(e)
+            self.canvas_slice_program = None
 
     def entity_update(self, ctx: moderngl.Context, multi_load_service=None,
                       is_preview_active=False, field_texture_bound=False,
@@ -254,99 +228,6 @@ class Sim:
         ctx.memory_barrier()
         self.entity_update_program.run(num_workgroups)
 
-    def can_update(self, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
-                   prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-                   multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
-                   strong_determinism: bool = False,
-                   brush_mode: int = 0, fixed_direction_heading: float = 0.0,
-                   erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
-                   canvas_draw_active: bool = True):
-        """Apply canvas decay (old * trail_persistence) plus draw/erase/fill.
-
-        Handles FBO binding and double-buffering internally.
-        Canvas read textures must already be bound at locations 1 and 6.
-        """
-        # Boundary conditions mode for wrap behavior
-        tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
-        tryset(self.canvas_update_program, 'tiling_mode', tiling_mode)
-
-        # Multi-load mode: calculate weighted average trail settings
-        if multi_load_service and multi_load_service.is_active() and not is_preview_active:
-            trail_persistence, trail_diffusion = self._calculate_weighted_trail_settings(multi_load_service)
-        else:
-            trail_persistence = self._state.TRAIL_PERSISTENCE
-            trail_diffusion = self._state.TRAIL_DIFFUSION
-
-        # Assign TRAIL_PERSISTENCE as a PhysicsSetting struct
-        min_val, max_val = self._get_slider_range('Trail Persistence', 0.0, 1.0)
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.slider_value', trail_persistence)
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.min_value', min_val)
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.max_value', max_val)
-        # Only apply sweeps if parameter sweeps UI is enabled AND not in multi-load mode
-        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
-            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_PERSISTENCE', 0.0))
-            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_PERSISTENCE', 0.0))
-            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_PERSISTENCE', 0.0))
-        else:
-            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.x_sweep', 0.0)
-            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.y_sweep', 0.0)
-            tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.cohort_sweep', 0.0)
-        # Always apply jitter (independent of parameter_sweeps_enabled)
-        tryset(self.canvas_update_program, 'TRAIL_PERSISTENCE_SETTING.jitter', self._state.jitters.get('TRAIL_PERSISTENCE', 0.0))
-
-        # Assign TRAIL_DIFFUSION as a PhysicsSetting struct
-        min_val, max_val = self._get_slider_range('Trail Diffusion', 0.0, 1.0)
-        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.slider_value', trail_diffusion)
-        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.min_value', min_val)
-        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.max_value', max_val)
-        # Only apply sweeps if parameter sweeps UI is enabled AND not in multi-load mode
-        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
-            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_DIFFUSION', 0.0))
-            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_DIFFUSION', 0.0))
-            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', self._state.cohort_sweeps.get('TRAIL_DIFFUSION', 0.0))
-        else:
-            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.x_sweep', 0.0)
-            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.y_sweep', 0.0)
-            tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', 0.0)
-        # Always apply jitter (independent of parameter_sweeps_enabled)
-        tryset(self.canvas_update_program, 'TRAIL_DIFFUSION_SETTING.jitter', self._state.jitters.get('TRAIL_DIFFUSION', 0.0))
-
-        tryset(self.canvas_update_program, 'can_tex_x', 1)
-        tryset(self.canvas_update_program, 'can_tex_y', 6)
-
-        # Pass frame count to shader for initialization
-        tryset(self.canvas_update_program, 'frame_count', self.frame_count)
-
-        # Set draw mode uniforms if in draw mode
-        tryset(self.canvas_update_program, 'draw_mode', draw_mode)
-        tryset(self.canvas_update_program, 'brush_mode', brush_mode)
-        tryset(self.canvas_update_program, 'fixed_direction_heading', fixed_direction_heading)
-        tryset(self.canvas_update_program, 'erase_mode', erase_mode)
-        tryset(self.canvas_update_program, 'fill_mode', fill_mode)
-        tryset(self.canvas_update_program, 'fill_direction_type', fill_direction_type)
-        tryset(self.canvas_update_program, 'canvas_draw_active', canvas_draw_active)
-        if (draw_mode or erase_mode or fill_mode) and mouse_pos is not None and prev_mouse_pos is not None:
-            tryset(self.canvas_update_program, 'mouse', mouse_pos)
-            tryset(self.canvas_update_program, 'previous_mouse', prev_mouse_pos)
-            tryset(self.canvas_update_program, 'draw_size', draw_size)
-            tryset(self.canvas_update_program, 'draw_power', draw_power)
-
-        # Bind FBO and render, handling double-buffering
-        if strong_determinism:
-            write_index = 1 - self.can_read_index
-            self.can_framebuffers[write_index].use()
-            self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
-
-            # Swap buffers: the one we just wrote to becomes the new read buffer
-            self.can_read_index = write_index
-            self.view_options[0] = self.can_x_textures[self.can_read_index]
-            if self._state.current_view_option == 0:
-                self.view_tex = self.can_x_textures[self.can_read_index]
-        else:
-            # Single-buffer: read and write same texture (non-deterministic but faster)
-            self.can_framebuffers[self.can_read_index].use()
-            self.canvas_vao.render(mode=moderngl.TRIANGLE_FAN, vertices=4)
-
     def can_update_3d(self, multi_load_service=None, is_preview_active=False):
         """Apply 3D canvas decay + diffusion via compute shader.
 
@@ -418,9 +299,39 @@ class Sim:
 
         # Swap buffers
         self.can_read_index = write_index
-        self.view_options[0] = self.can_x_textures[self.can_read_index]
-        if self._state.current_view_option == 0:
-            self.view_tex = self.can_x_textures[self.can_read_index]
+
+        # Copy selected z-slice from 3D canvas X channel into view_slice_tex for debug views
+        self._update_view_slice()
+
+    def _update_view_slice(self):
+        """Copy one z-slice of the 3D canvas X channel into the 2D view_slice_tex.
+
+        Uses a GPU compute shader to avoid expensive CPU readback.
+        Only runs when the debug canvas view is selected (current_view_option == 0).
+        """
+        if self._state is None or self._state.current_view_option != 0:
+            return
+        if not hasattr(self, 'canvas_slice_program') or self.canvas_slice_program is None:
+            return
+
+        slice_z = min(self.canvas_3d_view_slice, self.canvas_3d_depth - 1)
+        canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
+
+        # Bind source 3D texture as sampler
+        self.can_x_3d[self.can_read_index].use(location=0)
+        tryset(self.canvas_slice_program, 'source_3d', 0)
+        tryset(self.canvas_slice_program, 'slice_z', slice_z)
+        tryset(self.canvas_slice_program, 'canvas_3d_size',
+               (canvas_dim_x, canvas_dim_y, self.canvas_3d_depth))
+
+        # Bind destination 2D texture as image
+        self.view_slice_tex.bind_to_image(0, read=False, write=True)
+
+        # Dispatch compute shader
+        gx = (canvas_dim_x + 15) // 16
+        gy = (canvas_dim_y + 15) // 16
+        self.canvas_slice_program.run(gx, gy, 1)
+        self.ctx.memory_barrier()
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
@@ -479,21 +390,10 @@ class Sim:
 
     def clear_canvas(self):
         """Clear only the trail/canvas textures (not particles or frame count)."""
-        old_fbo = self.ctx.fbo
-        for fb in self.can_framebuffers:
-            fb.use()
-            self.ctx.clear(0, 0, 0, 0)
-        old_fbo.use()
         self._clear_3d_textures()
 
     def reset(self):
-        old_fbo = self.ctx.fbo
-        # Clear both canvas buffers
-        for fb in self.can_framebuffers:
-            fb.use()
-            self.ctx.clear(0, 0, 0, 0)
         self.frame_count = 0
-        old_fbo.use()
         self._clear_3d_textures()
 
     def reload(self):
@@ -504,6 +404,8 @@ class Sim:
     def apply_state(self, state: SimState) -> None:
         """Apply state from Orchestrator before update."""
         self._state = state
+        # Sync z-slice view setting
+        self.canvas_3d_view_slice = state.canvas_3d_view_slice
         # Update view_tex based on current_view_option
         if state.current_view_option < len(self.view_options):
             self.view_tex = self.view_options[state.current_view_option]
@@ -528,8 +430,8 @@ class Sim:
                          x_sweep: float, y_sweep: float, cohort_sweep: float) -> float:
         """Python version of GLSL calculate_setting() function.
 
-        SYNCHRONIZED: This function must match entity_update.glsl and canvas.frag
-        Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
+        SYNCHRONIZED: This function must match entity_update.glsl and canvas_update_3d.glsl
+        Locations to synchronize: shaders/entity_update.glsl, shaders/canvas_update_3d.glsl, sim.py
 
         Calculates the effective parameter value based on sweeps and position/cohort.
         Mirrors the shader function for use when clicking particles to set slider values.

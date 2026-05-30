@@ -12,11 +12,13 @@ vec3 hsv2rgb(vec3 c) {
 
 void main() {
     // Circular point shape from gl_PointCoord
+    //frag_color = vec4(1);
+    //return;//DEBUG!!!!
     vec2 coord = gl_PointCoord * 2.0 - 1.0;
     float r2 = dot(coord, coord);
-    if (r2 > 1.0) discard;
+    //if (r2 > 1.0) discard;
 
     vec3 color = hsv2rgb(vec3(v_hue, 0.8, 1.0));
     float alpha = 0.15 * (1.0 - r2); // Soft falloff
-    frag_color = vec4(color, alpha);
+    frag_color = vec4(color, 1);
 }

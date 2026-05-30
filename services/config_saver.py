@@ -100,7 +100,7 @@ class PhysicsConfig:
     # 3D simulation settings
     plane_samples: int = 1
     testing_mode: bool = False
-    canvas_3d_depth: int = 1
+    canvas_3d_depth: int = 256
 
     def to_dict(self) -> dict:
         """Convert config to JSON-serializable dict."""

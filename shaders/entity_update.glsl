@@ -23,8 +23,8 @@ layout(std430, binding = 0) buffer EntityBuffer {
 layout(std430, binding = 2) buffer RuleBuffer {
     Rule rules[];
 };
-// SYNCHRONIZED: This struct must match canvas.frag
-// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag
+// SYNCHRONIZED: This struct must match canvas_update_3d.glsl
+// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas_update_3d.glsl
 struct PhysicsSetting {
     float slider_value;
     float min_value;
@@ -142,7 +142,7 @@ void report(float val, uint plot_num) {
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
-#define ACTIVE_COUNT (600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
+#define ACTIVE_COUNT 1000000//(600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
 #define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
@@ -176,8 +176,8 @@ int get_particle_cohorts() {
 }
 //Calculate the actual setting value for this particle. When sweeps are
 //active, physics settings can depend on entity position and cohort
-// SYNCHRONIZED: This function must match canvas.frag and sim.py::calculate_setting
-// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas.frag, sim.py
+// SYNCHRONIZED: This function must match canvas_update_3d.glsl and sim.py::calculate_setting
+// Locations to synchronize: shaders/entity_update.glsl, shaders/canvas_update_3d.glsl, sim.py
 float calculate_setting(PhysicsSetting setting, vec2 pos, float cohort){
     //if no sweep modes are active and no jitter, just return slider value
     if(setting.y_sweep == 0.0 && setting.cohort_sweep == 0.0 && setting.x_sweep == 0.0 && setting.jitter == 0.0)
@@ -345,18 +345,6 @@ void pR(inout vec2 p, float a) {
 	p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
 }
 
-
-//convert p (entity space, 2D) to texture coords and retrieve canvas from z=0.5 (3D textures)
-vec2 get_can(vec2 p){
-    float ca = float(canvas_3d_size.x) / float(canvas_3d_size.y);
-    vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
-    vec2 uv_xy = p / (2.0 * half_extent) + 0.5;
-    if(get_particle_boundary_conditions() == 2) uv_xy = fract(uv_xy);
-    // Sample at z=0.5 (center of the single z-slice when depth=1)
-    float uv_z = 0.5;
-    vec3 uvw = vec3(uv_xy, uv_z);
-    return vec2(texture(canvas_3d_x, uvw).r, texture(canvas_3d_y, uvw).r);
-}
 
 //convert p (entity space, 3D) to texture coords and retrieve 3-component canvas
 vec3 get_can_3d(vec3 p){
