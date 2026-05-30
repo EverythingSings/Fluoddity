@@ -10,11 +10,10 @@ class CameraState:
     BRIGHTNESS: float = 1.  # Kept for backward compat, sourced from SimState
     cam_brush_mode: bool = True
 
-    # 3D orbital camera
+    # 3D camera (driven by ControllerCam + joystick)
     render_3d: bool = False        # Toggle between 2D cam_brush and 3D point view
-    orbit_distance: float = 3.0    # Distance from target
-    orbit_yaw: float = 0.0         # Horizontal rotation (radians)
-    orbit_pitch: float = 0.3       # Vertical rotation (radians, slightly above horizon)
-    orbit_speed: float = 2.0          # Orbital rotation speed (radians/sec)
-    lazy_susan: float = 0.0            # Automatic yaw rotation speed (radians/sec)
-    orbit_target: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))
+    orbit_distance: float = 3.0    # Orbit radius / point scale reference distance
+    orbit_rate: float = 0.0        # Auto-orbit speed (rad/sec) around point ahead of camera
+    fov: float = 50.0              # Field of view (degrees)
+    move_speed: float = 2.0        # Joystick movement speed
+    rotate_speed: float = 2.0      # Joystick rotation speed

@@ -20,12 +20,11 @@ class Camera:
         self.position = np.array([0.0, 0.0])  # 2D position
         self.zoom = 1.0
 
-        # 3D orbital camera state
+        # 3D camera state
         self.render_3d = False
         self.orbit_distance = 3.0
-        self.orbit_yaw = 0.0
-        self.orbit_pitch = 0.3
-        self.orbit_target = np.array([0.0, 0.0, 0.0])
+        self.fov_3d = 50.0
+        self.controller_cam = None  # Set by orchestrator for 3D FPS rendering
 
         self.setup_rendering()
 
@@ -138,19 +137,13 @@ class Camera:
         m[3, 2] = -1.0
         return m
 
-    def compute_orbital_view_proj(self, aspect):
-        """Compute combined view*projection matrix for the orbital camera."""
-        cy = math.cos(self.orbit_yaw)
-        sy = math.sin(self.orbit_yaw)
-        cp = math.cos(self.orbit_pitch)
-        sp = math.sin(self.orbit_pitch)
-
-        eye = self.orbit_target + self.orbit_distance * np.array([
-            cp * sy, sp, cp * cy
-        ], dtype=np.float32)
-
-        view = self._look_at(eye, self.orbit_target, np.array([0, 1, 0], dtype=np.float32))
-        proj = self._perspective(math.radians(60.0), aspect, 0.01, 100.0)
+    def compute_fps_view_proj(self, pos, dir_vec, up, fov, aspect):
+        """Compute combined view*projection from FPS camera vectors."""
+        eye = np.array(pos, dtype=np.float32)
+        target = eye + np.array(dir_vec, dtype=np.float32)
+        up_vec = np.array(up, dtype=np.float32)
+        view = self._look_at(eye, target, up_vec)
+        proj = self._perspective(math.radians(fov), aspect, 0.01, 100.0)
         return proj @ view
 
     def generate_view_texture(self, tiling_mode: bool = False):
@@ -205,7 +198,10 @@ class Camera:
         self.ctx.clear(0, 0, 0, 1)
 
         aspect = width / max(height, 1)
-        view_proj = self.compute_orbital_view_proj(aspect)
+        cam = self.controller_cam
+        view_proj = self.compute_fps_view_proj(
+            cam.pos, cam.dir, cam.up, self.fov_3d, aspect
+        )
         tryset_mat4(self.points_3d_program, 'view_proj', view_proj)
         tryset(self.points_3d_program, 'point_scale', 800.0 / max(self.orbit_distance, 0.1))
 
@@ -228,12 +224,10 @@ class Camera:
         self.BRIGHTNESS = state.BRIGHTNESS
         self.cam_brush_mode = state.cam_brush_mode
 
-        # 3D orbital camera state
+        # 3D camera state
         self.render_3d = state.render_3d
         self.orbit_distance = state.orbit_distance
-        self.orbit_yaw = state.orbit_yaw
-        self.orbit_pitch = state.orbit_pitch
-        self.orbit_target = state.orbit_target.copy()
+        self.fov_3d = state.fov
 
     def compute_tiling_view_bounds(self):
         """Compute entity-space view bounds for tiling mode.

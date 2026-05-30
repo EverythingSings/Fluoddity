@@ -28,6 +28,7 @@ from .advanced_drawing_window import AdvancedDrawingWindowMixin
 from .field_loader_window import FieldLoaderWindowMixin
 from .generics_window import GenericsWindowMixin
 from .plotting import PlottingWindowMixin
+from .three_d_window import ThreeDWindowMixin
 
 
 @dataclass
@@ -50,6 +51,7 @@ class UI(
     FieldLoaderWindowMixin,
     GenericsWindowMixin,
     PlottingWindowMixin,
+    ThreeDWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -688,6 +690,10 @@ class UI(
         # Render Plotting window if enabled (not gated by sidebar — standalone data view)
         if self.state.preferences.show_plotting_window:
             self.render_plotting_window()
+
+        # Render 3D Controls window if enabled
+        if self.show_sidebar and self.state.preferences.show_three_d_window:
+            self.render_three_d_window()
 
         # Render field loader window (transient, not gated by sidebar)
         self.render_field_loader_window()

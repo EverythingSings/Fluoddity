@@ -114,13 +114,19 @@ def apply_deadzone(value):
     return sign * (abs(value) - DEADZONE) / (1.0 - DEADZONE)
 
 
-def process_controller_input(controller_cam, joystick_state, dt):
+def process_controller_input(controller_cam, joystick_state, dt, *,
+                              move_speed=MOVE_SPEED, rotate_speed=ROTATE_SPEED,
+                              orbit_rate=0.0, orbit_distance=3.0):
     """Update controller camera based on Xbox controller input.
 
     Args:
         controller_cam: ControllerCam instance to update.
         joystick_state: Mutable dict with 'joystick_id' and 'prev_buttons'.
         dt: Delta time in seconds.
+        move_speed: Movement speed multiplier.
+        rotate_speed: Rotation speed multiplier.
+        orbit_rate: Auto-orbit speed (rad/sec) around point ahead of camera.
+        orbit_distance: Distance ahead of camera for orbit target point.
     """
     jid = joystick_state['joystick_id']
 
@@ -176,17 +182,17 @@ def process_controller_input(controller_cam, joystick_state, dt):
     left_y = apply_deadzone(axes[AXIS_LEFT_Y])
 
     if left_x != 0 or left_y != 0:
-        move_speed = MOVE_SPEED * speed_mult * dt
+        move_speed_dt = move_speed * speed_mult * dt
         # Y axis inverted (up = negative)
-        controller_cam.move_xz(-left_y * move_speed, left_x * move_speed)
+        controller_cam.move_xz(-left_y * move_speed_dt, left_x * move_speed_dt)
 
     # Right stick - rotation
     right_x = apply_deadzone(axes[AXIS_RIGHT_X])
     right_y = apply_deadzone(axes[AXIS_RIGHT_Y])
 
     if right_x != 0 or right_y != 0:
-        rotate_speed = ROTATE_SPEED * dt
-        controller_cam.rotate(right_x * rotate_speed, -right_y * rotate_speed)
+        rotate_speed_dt = rotate_speed * dt
+        controller_cam.rotate(right_x * rotate_speed_dt, right_y * rotate_speed_dt)
 
     # Triggers - Y movement
     lt = axes[AXIS_LT]
@@ -196,6 +202,19 @@ def process_controller_input(controller_cam, joystick_state, dt):
     lt_normalized = (lt + 1.0) / 2.0 if lt < 0 else lt
     rt_normalized = (rt + 1.0) / 2.0 if rt < 0 else rt
 
-    y_movement = (rt_normalized - lt_normalized) * MOVE_SPEED * speed_mult * dt
+    y_movement = (lt_normalized - rt_normalized) * move_speed * speed_mult * dt
     if abs(y_movement) > 0.01:
         controller_cam.move_y(y_movement)
+
+    # Orbit rate: rotate camera around point orbit_distance ahead
+    if abs(orbit_rate) > 0.001:
+        angle = orbit_rate * dt
+        target = controller_cam.pos + controller_cam.dir * orbit_distance
+        dx = controller_cam.pos[0] - target[0]
+        dz = controller_cam.pos[2] - target[2]
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        controller_cam.pos[0] = target[0] + dx * cos_a - dz * sin_a
+        controller_cam.pos[2] = target[2] + dx * sin_a + dz * cos_a
+        controller_cam.yaw -= angle
+        controller_cam._update_vectors()

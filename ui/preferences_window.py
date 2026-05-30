@@ -201,34 +201,6 @@ class PreferencesWindowMixin:
                     # Watercolor is unsupported in non-camera views
                     self.state.sim.watercolor_mode = False
 
-            # 3D view toggle
-            _, self.state.camera.render_3d = imgui.checkbox(
-                "3D View", self.state.camera.render_3d
-            )
-
-            # 3D simulation settings
-            if imgui.tree_node_ex("3D Simulation", imgui.TreeNodeFlags_.default_open.value if self.state.camera.render_3d else 0):
-                _, self.state.sim.TESTING_MODE = imgui.checkbox(
-                    "Testing Mode (2D compat)", self.state.sim.TESTING_MODE
-                )
-                _, self.state.sim.PLANE_SAMPLES = imgui.slider_int(
-                    "Plane Samples", self.state.sim.PLANE_SAMPLES, 1, 8
-                )
-                _, self.state.sim.canvas_3d_depth = imgui.slider_int(
-                    "Canvas Z Depth", self.state.sim.canvas_3d_depth, 1, 256
-                )
-                max_slice = max(0, self.state.sim.canvas_3d_depth - 1)
-                _, self.state.sim.canvas_3d_view_slice = imgui.slider_int(
-                    "Debug View Slice", self.state.sim.canvas_3d_view_slice, 0, max_slice
-                )
-                _, self.state.camera.orbit_speed = imgui.slider_float(
-                    "Orbit Speed", self.state.camera.orbit_speed, 0.1, 10.0, format="%.1f"
-                )
-                _, self.state.camera.lazy_susan = imgui.slider_float(
-                    "Lazy Susan", self.state.camera.lazy_susan, -2.0, 2.0, format="%.2f"
-                )
-                imgui.tree_pop()
-
             # Physics tooltips checkbox
             _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
                 "Physics Tooltips",

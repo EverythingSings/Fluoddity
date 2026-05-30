@@ -92,8 +92,9 @@ class App:
             field_handler=self.field_handler,
             param_lock_service=self.param_lock_service
         )
-        # Xbox controller (FPS camera for shader-driven field)
+        # Xbox controller (FPS camera for 3D view and shader-driven field)
         self.controller_cam = ControllerCam()
+        self.camera.controller_cam = self.controller_cam
         self.joystick_state = {'joystick_id': find_joystick(), 'prev_buttons': []}
 
         self.command_handler.plotting_manager = self.plotting_manager
@@ -179,7 +180,11 @@ class App:
         self.last_update_time = current_time
         process_camera_input(ui_state, self.window, self.ui.keybindings,
                              self.sim.view_tex, dt)
-        process_controller_input(self.controller_cam, self.joystick_state, dt)
+        process_controller_input(self.controller_cam, self.joystick_state, dt,
+                                 move_speed=ui_state.camera.move_speed,
+                                 rotate_speed=ui_state.camera.rotate_speed,
+                                 orbit_rate=ui_state.camera.orbit_rate,
+                                 orbit_distance=ui_state.camera.orbit_distance)
 
         # 3.2. Check if pending video should start
         cmd = self.command_handler
@@ -227,6 +232,9 @@ class App:
         if ui_state.request_camera_reset:
             ui_state.camera.position[:] = [0.0, 0.0]
             ui_state.camera.zoom = 1.0
+            if ui_state.camera.render_3d:
+                self.controller_cam.reset()
+        self.controller_cam.fov = ui_state.camera.fov
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)

@@ -393,6 +393,13 @@ class MenuBarMixin:
                 )
                 self._delayed_tooltip("GPU histogram visualization from report()\ncalls in entity_update.glsl.")
 
+                # 3D Controls window toggle
+                _, self.state.preferences.show_three_d_window = imgui.checkbox(
+                    "3D Controls",
+                    self.state.preferences.show_three_d_window
+                )
+                self._delayed_tooltip("FPS camera settings, orbit rate, and\n3D simulation parameters.")
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

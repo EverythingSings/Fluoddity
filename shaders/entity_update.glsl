@@ -142,7 +142,7 @@ void report(float val, uint plot_num) {
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
-#define ACTIVE_COUNT 2000000//(600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
+#define ACTIVE_COUNT 4000000//(600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
 #define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {

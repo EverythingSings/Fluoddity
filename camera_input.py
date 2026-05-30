@@ -1,6 +1,5 @@
-"""Camera input processing: WASD movement, QE zoom, scroll-to-zoom, 3D orbit."""
+"""Camera input processing: WASD movement, QE zoom, scroll-to-zoom."""
 import glfw
-import math
 
 
 def process_camera_input(ui_state, window, keybindings, sim_view_tex, dt):
@@ -23,44 +22,8 @@ def process_camera_input(ui_state, window, keybindings, sim_view_tex, dt):
     key_e = keybindings.get_key("camera_in")
     key_q = keybindings.get_key("camera_out")
 
-    # 3D orbital camera mode
+    # 3D camera is driven by joystick controller, not WASD
     if ui_state.camera.render_3d:
-        orbit_speed = ui_state.camera.orbit_speed * dt
-        zoom_speed = 2.6 * dt
-
-        # WASD orbits around the target
-        if key_a and key_a in keys:
-            ui_state.camera.orbit_yaw -= orbit_speed
-        if key_d and key_d in keys:
-            ui_state.camera.orbit_yaw += orbit_speed
-        if key_w and key_w in keys:
-            ui_state.camera.orbit_pitch += orbit_speed
-        if key_s and key_s in keys:
-            ui_state.camera.orbit_pitch -= orbit_speed
-
-        # Clamp pitch to avoid gimbal lock
-        ui_state.camera.orbit_pitch = max(-math.pi/2 + 0.01,
-                                          min(math.pi/2 - 0.01,
-                                              ui_state.camera.orbit_pitch))
-
-        # QE zooms in/out (adjusts orbit distance)
-        if key_e and key_e in keys:
-            ui_state.camera.orbit_distance *= (1.0 - zoom_speed)
-        if key_q and key_q in keys:
-            ui_state.camera.orbit_distance *= (1.0 + zoom_speed)
-
-        # Scroll also adjusts orbit distance
-        if ui_state.scroll_delta != 0.0:
-            scroll_zoom_speed = 0.1
-            zoom_factor = 1.0 - ui_state.scroll_delta * scroll_zoom_speed
-            zoom_factor = max(0.5, min(2.0, zoom_factor))
-            ui_state.camera.orbit_distance *= zoom_factor
-
-        ui_state.camera.orbit_distance = max(0.1, ui_state.camera.orbit_distance)
-
-        # Lazy susan: automatic yaw rotation
-        ui_state.camera.orbit_yaw += ui_state.camera.lazy_susan * dt
-
         return
 
     # 2D camera mode
