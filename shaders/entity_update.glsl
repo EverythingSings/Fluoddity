@@ -142,7 +142,7 @@ void report(float val, uint plot_num) {
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
-#define ACTIVE_COUNT 1000000//(600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
+#define ACTIVE_COUNT 2000000//(600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
 #define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
@@ -413,16 +413,32 @@ void reset(uint index){
     int reset_mode = get_particle_reset_mode();
     int cohorts = get_particle_cohorts();
     if(reset_mode == 0) {
-        //GRID: position different cohorts at different places in a 3D grid
-        float spots=float(cohorts);
-        float grid_side=ceil(pow(spots, 1.0/3.0));
-        int ci = int(cohort_val);
-        vec3 gridcell=vec3(ci%int(grid_side), (ci/int(grid_side))%int(grid_side), ci/int(grid_side*grid_side));
-        pos+=1.8*((gridcell)/grid_side - 0.5);
+        //GRID: position cohorts in a centered 3D grid (next-largest cube with gaps)
+        int grid_side = int(ceil(pow(float(cohorts), 1.0/3.0)));
+        int total_slots = grid_side * grid_side * grid_side;
+        // Center the filled slots within the cube: skip (total_slots - cohorts)/2 at the start
+        int offset = (total_slots - cohorts) / 2;
+        int slot = int(cohort_val) + offset;
+        int gx = slot % grid_side;
+        int gy = (slot / grid_side) % grid_side;
+        int gz = slot / (grid_side * grid_side);
+        // Map grid cell to [-0.9, 0.9] centered (equal spacing in all axes)
+        pos += 1.8 * ((vec3(gx, gy, gz) + 0.5) / float(grid_side) - 0.5);
     }
     else if(reset_mode == 1) {
-        //RANDOM: scatter cohorts randomly across the cubic canvas
-        pos= vec3(hash(vec2(cohort_val, 1.0)), hash(vec2(cohort_val, 2.0)), hash(vec2(cohort_val, 3.0))) * 2.0 - 1.0;
+        //RANDOM: rejection-sample from the sphere inscribing the unit cube
+        vec3 candidate;
+        float seed_offset = 0.0;
+        for (int attempt = 0; attempt < 16; attempt++) {
+            candidate = vec3(
+                hash(vec2(cohort_val, 1.0 + seed_offset)),
+                hash(vec2(cohort_val, 2.0 + seed_offset)),
+                hash(vec2(cohort_val, 3.0 + seed_offset))
+            ) * 2.0 - 1.0;
+            if (dot(candidate, candidate) <= 1.0) break;
+            seed_offset += 3.0;
+        }
+        pos = candidate;
     }
     else if(reset_mode == 2) {
         //SPHERE: arrange cohorts on a spherical shell

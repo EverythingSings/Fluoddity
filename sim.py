@@ -38,7 +38,7 @@ class Sim:
 
     def get_entity_count(self) -> int:
         """Calculate entity count based on world size."""
-        return 1000000#int(600000 * self.world_size)
+        return 2000000#int(600000 * self.world_size)
 
     def get_canvas_dimensions(self) -> tuple[int, int]:
         """Calculate canvas dimensions based on world size and aspect ratio."""
