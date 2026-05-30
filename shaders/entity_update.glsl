@@ -564,9 +564,17 @@ void sample_plane_physics(
     // Calculate sensor distance
     float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(), epos2, cohort);
 
-    // Project velocity onto the tangent plane to get 2D orientation
-    vec2 orientation_2d = vec2(dot(vel, u), dot(vel, v));
-    vec2 orientation = safenorm(orientation_2d);
+    // In 3D, the tangent plane is perpendicular to vel_dir, so projecting
+    // velocity onto it yields zero. Instead, use u as forward direction —
+    // theta already randomizes which direction u points within the plane.
+    vec2 orientation;
+    if (TESTING_MODE) {
+        // 2D mode: velocity lies in the XY plane, project normally
+        orientation = safenorm(vec2(dot(vel, u), dot(vel, v)));
+    } else {
+        // 3D mode: use tangent plane basis directly (randomized by theta)
+        orientation = vec2(1, 0);
+    }
 
     // Absolute orientation modes (project reference directions onto plane)
     int ORIENTATION_MODE = get_particle_absolute_orientation();
