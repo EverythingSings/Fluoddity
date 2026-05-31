@@ -51,9 +51,10 @@ class ThreeDWindowMixin:
                 "Plane Samples", self.state.sim.PLANE_SAMPLES, 1, 8
             )
 
-            _, self.state.sim.canvas_3d_depth = imgui.slider_int(
-                "Canvas Z Depth", self.state.sim.canvas_3d_depth, 1, 256
-            )
+            # Canvas Z Depth (temporarily hidden — not hooked up)
+            # _, self.state.sim.canvas_3d_depth = imgui.slider_int(
+            #     "Canvas Z Depth", self.state.sim.canvas_3d_depth, 1, 256
+            # )
 
             max_slice = max(0, self.state.sim.canvas_3d_depth - 1)
             _, self.state.sim.canvas_3d_view_slice = imgui.slider_int(

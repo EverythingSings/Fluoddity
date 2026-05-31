@@ -230,7 +230,7 @@ class PhysicsConfig:
             strafe_field_strength=strafe_field_strength,
             plane_samples=sim_3d.get('plane_samples', 1),
             testing_mode=sim_3d.get('testing_mode', False),
-            canvas_3d_depth=sim_3d.get('canvas_3d_depth', 1),
+            canvas_3d_depth=sim_3d.get('canvas_3d_depth', 256),
         )
 
     def to_json(self, indent: int = 2) -> str:

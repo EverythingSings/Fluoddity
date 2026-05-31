@@ -32,53 +32,53 @@ class PreferencesWindowMixin:
         expanded, self.state.preferences.show_preferences_window = imgui.begin("Preferences", True)
 
         if expanded:
-            # === World Size section ===
-            imgui.text("World Size")
-
-            # Use input_float - only apply when user commits (Enter or focus loss)
-            changed, new_value = imgui.input_float(
-                "World Size",
-                self.state.preferences.world_size,
-                step=0.0,  # No step buttons
-                step_fast=0.0,
-                format="%.2f"
-            )
-
-            # Clamp to valid range
-            if new_value < 0.02:
-                new_value = 0.02
-            elif new_value > 4.0:
-                new_value = 4.0
-
-            # Update the displayed value (clamping happens immediately)
-            self.state.preferences.world_size = new_value
-
-            # Only trigger world size change when user commits the edit
-            if imgui.is_item_deactivated_after_edit():
-                if abs(self.state.preferences.world_size - self._last_applied_world_size) > 0.001:
-                    self._request_world_size_change = True
-
-            self._delayed_tooltip("EXPENSIVE - Controls the size of the simulation world.\nAffects both entity count and canvas resolution to keep density ~fixed")
-
-            # Canvas Aspect Ratio dropdown
-            current_ratio = self.state.preferences.canvas_aspect_ratio
-            if imgui.begin_combo("World Shape", current_ratio):
-                for label, ratio_str, is_sep in _ASPECT_RATIO_OPTIONS:
-                    if is_sep:
-                        imgui.separator()
-                    else:
-                        selected = (ratio_str == current_ratio)
-                        clicked, _ = imgui.selectable(label, selected)
-                        if clicked and ratio_str != current_ratio:
-                            self.state.preferences.canvas_aspect_ratio = ratio_str
-                            self._request_world_size_change = True
-                            self._request_reload = True
-                        if selected:
-                            imgui.set_item_default_focus()
-                imgui.end_combo()
-            self._delayed_tooltip("Changes the canvas aspect ratio.")
-
-            imgui.separator()
+            # === World Size section (temporarily hidden — not hooked up) ===
+            # imgui.text("World Size")
+            #
+            # # Use input_float - only apply when user commits (Enter or focus loss)
+            # changed, new_value = imgui.input_float(
+            #     "World Size",
+            #     self.state.preferences.world_size,
+            #     step=0.0,  # No step buttons
+            #     step_fast=0.0,
+            #     format="%.2f"
+            # )
+            #
+            # # Clamp to valid range
+            # if new_value < 0.02:
+            #     new_value = 0.02
+            # elif new_value > 4.0:
+            #     new_value = 4.0
+            #
+            # # Update the displayed value (clamping happens immediately)
+            # self.state.preferences.world_size = new_value
+            #
+            # # Only trigger world size change when user commits the edit
+            # if imgui.is_item_deactivated_after_edit():
+            #     if abs(self.state.preferences.world_size - self._last_applied_world_size) > 0.001:
+            #         self._request_world_size_change = True
+            #
+            # self._delayed_tooltip("EXPENSIVE - Controls the size of the simulation world.\nAffects both entity count and canvas resolution to keep density ~fixed")
+            #
+            # # Canvas Aspect Ratio dropdown
+            # current_ratio = self.state.preferences.canvas_aspect_ratio
+            # if imgui.begin_combo("World Shape", current_ratio):
+            #     for label, ratio_str, is_sep in _ASPECT_RATIO_OPTIONS:
+            #         if is_sep:
+            #             imgui.separator()
+            #         else:
+            #             selected = (ratio_str == current_ratio)
+            #             clicked, _ = imgui.selectable(label, selected)
+            #             if clicked and ratio_str != current_ratio:
+            #                 self.state.preferences.canvas_aspect_ratio = ratio_str
+            #                 self._request_world_size_change = True
+            #                 self._request_reload = True
+            #             if selected:
+            #                 imgui.set_item_default_focus()
+            #     imgui.end_combo()
+            # self._delayed_tooltip("Changes the canvas aspect ratio.")
+            #
+            # imgui.separator()
 
             # === Physics Update Frequency section ===
             imgui.text("Physics Update Frequency")

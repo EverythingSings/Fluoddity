@@ -93,7 +93,7 @@ class SimState:
         'HAZARD_RATE': 0.0,
     })
     # 3D simulation settings
-    canvas_3d_depth: int = 257       # Z-depth of 3D canvas (256 = full 3D resolution)
+    canvas_3d_depth: int = 256       # Z-depth of 3D canvas (256 = full 3D resolution)
     TESTING_MODE: bool = False       # Lock z=0, XY plane only, 4-neighbor blur
     PLANE_SAMPLES: int = 1           # Number of random plane samples per entity per frame
     canvas_3d_view_slice: int = 0    # Which z-slice to show in the debug canvas view

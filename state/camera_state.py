@@ -11,7 +11,7 @@ class CameraState:
     cam_brush_mode: bool = True
 
     # 3D camera (driven by ControllerCam + joystick)
-    render_3d: bool = False        # Toggle between 2D cam_brush and 3D point view
+    render_3d: bool = True         # Toggle between 2D cam_brush and 3D point view
     orbit_distance: float = 3.0    # Orbit radius / point scale reference distance
     orbit_rate: float = 0.0        # Auto-orbit speed (rad/sec) around point ahead of camera
     fov: float = 50.0              # Field of view (degrees)
