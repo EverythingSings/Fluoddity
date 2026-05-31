@@ -179,7 +179,7 @@ class App:
         dt = current_time - self.last_update_time
         self.last_update_time = current_time
         process_camera_input(ui_state, self.window, self.ui.keybindings,
-                             self.sim.view_tex, dt)
+                             self.sim.view_tex, dt, controller_cam=self.controller_cam)
         process_controller_input(self.controller_cam, self.joystick_state, dt,
                                  move_speed=ui_state.camera.move_speed,
                                  rotate_speed=ui_state.camera.rotate_speed,
@@ -234,6 +234,8 @@ class App:
             ui_state.camera.zoom = 1.0
             if ui_state.camera.render_3d:
                 self.controller_cam.reset()
+                # Position on orbit sphere at current orbit_distance
+                self.controller_cam.pos[:] = -self.controller_cam.dir * ui_state.camera.orbit_distance
         self.controller_cam.fov = ui_state.camera.fov
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)

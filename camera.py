@@ -203,7 +203,7 @@ class Camera:
             cam.pos, cam.dir, cam.up, self.fov_3d, aspect
         )
         tryset_mat4(self.points_3d_program, 'view_proj', view_proj)
-        tryset(self.points_3d_program, 'point_scale', 800.0 / max(self.orbit_distance, 0.1))
+        tryset(self.points_3d_program, 'point_scale', 800.0)
 
         # Enable point size from vertex shader, depth test, and additive blending
         self.ctx.enable_only(moderngl.PROGRAM_POINT_SIZE | moderngl.BLEND)

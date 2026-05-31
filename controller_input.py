@@ -13,8 +13,12 @@ class ControllerCam:
         self.reset()
 
     def reset(self):
-        """Reset camera to default position and orientation."""
-        self.pos = np.array([0.0, 0.0, 0.0])
+        """Reset camera to default position and orientation.
+
+        Starts at [0, 0, -3] looking along +Z toward the simulation origin,
+        matching the default orbit_distance of 3.0.
+        """
+        self.pos = np.array([0.0, 0.0, -3.0])
         self.yaw = 0.0      # Rotation around Y axis (radians)
         self.pitch = 0.0    # Rotation around X axis (radians), clamped to ±π/2
         self.fov = 50.
