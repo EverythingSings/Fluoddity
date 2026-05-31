@@ -1,0 +1,71 @@
+#version 430
+
+// Majorant grid build — one invocation per coarse cell.
+// Reads the fine density texture via imageLoad (no filtering),
+// finds the max physical_density in the cell (plus guard band),
+// and writes it into the majorant image.
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+// ---- common.glsl (prepended) provides: ----
+// uniform vec3  u_bounds_min, u_bounds_max, u_resolution;
+// uniform float u_voxel_volume;
+// vec3 world_to_grid(vec3), vec3 grid_to_world(vec3)
+
+uniform ivec3 u_majorant_resolution;   // coarse grid dims (e.g. 32,32,32)
+
+// Fine density — integer-coordinate read (no filtering)
+layout(r32f, binding = 0) readonly uniform image3D img_density;
+
+// Majorant output — one value per coarse cell
+layout(r32f, binding = 1) writeonly uniform image3D img_majorant;
+
+void main() {
+    ivec3 cell = ivec3(gl_GlobalInvocationID);
+
+    // Early-out for padded invocations beyond the majorant grid
+    if (any(greaterThanEqual(cell, u_majorant_resolution)))
+        return;
+
+    ivec3 fine_res = ivec3(u_resolution);
+    vec3  maj_res  = vec3(u_majorant_resolution);
+    vec3  extent   = u_bounds_max - u_bounds_min;
+
+    // --- Compute the world-space AABB of this coarse cell ---
+    vec3 cell_world_min = u_bounds_min + (vec3(cell)     / maj_res) * extent;
+    vec3 cell_world_max = u_bounds_min + (vec3(cell + 1) / maj_res) * extent;
+
+    // --- Map to fine grid coordinates ---
+    vec3 fine_lo_f = world_to_grid(cell_world_min);
+    vec3 fine_hi_f = world_to_grid(cell_world_max);
+
+    // Floor low, ceil high to capture any fine voxel partially overlapping
+    ivec3 fine_lo = ivec3(floor(fine_lo_f));
+    ivec3 fine_hi = ivec3(ceil(fine_hi_f));
+
+    // --- Guard band: expand by 1 fine voxel on every side ---
+    // Mandatory for correctness: trilinear filtering (GL_LINEAR) can read
+    // fine voxels from the neighboring coarse cell.  Without this, the
+    // majorant is a slight under-estimate and delta tracking becomes biased.
+    fine_lo -= 1;
+    fine_hi += 1;
+
+    // --- Clamp to valid fine grid range ---
+    fine_lo = max(fine_lo, ivec3(0));
+    fine_hi = min(fine_hi, fine_res - 1);
+
+    // --- Gather max physical density across covered fine voxels ---
+    float max_density = 0.0;
+
+    for (int z = fine_lo.z; z <= fine_hi.z; z++) {
+        for (int y = fine_lo.y; y <= fine_hi.y; y++) {
+            for (int x = fine_lo.x; x <= fine_hi.x; x++) {
+                float raw = imageLoad(img_density, ivec3(x, y, z)).r;
+                float physical = raw / u_voxel_volume;
+                max_density = max(max_density, physical);
+            }
+        }
+    }
+
+    imageStore(img_majorant, cell, vec4(max_density, 0.0, 0.0, 0.0));
+}

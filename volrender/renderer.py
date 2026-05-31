@@ -5,6 +5,7 @@ import numpy as np
 
 from .params import GridParams, MediumParams, SunParams, SkyParams, RenderParams
 from .grid import VoxelGrid
+from .majorant import MajorantBuilder
 
 
 class VolumeRenderer:
@@ -37,10 +38,12 @@ class VolumeRenderer:
         self.ctx = ctx
         self.grid_params = grid_params
         self.grid = VoxelGrid(ctx, grid_params)
+        self.majorant_builder = MajorantBuilder(ctx)
 
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
-        """Deposit entities into the voxel grid (trilinear atomic splat)."""
+        """Deposit entities into the voxel grid and rebuild the majorant."""
         self.grid.splat(entity_buffer, entity_count)
+        self.majorant_builder.build(self.grid)
 
     def reset_accumulation(self):
         """Zero the accumulation buffer and sample counter."""
