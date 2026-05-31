@@ -256,8 +256,8 @@ def test_stubs_still_raise(ctx: moderngl.Context) -> bool:
     renderer = VolumeRenderer(ctx, params)
     ok = True
 
+    # splat is implemented as of Step 3 — only check remaining stubs
     stub_calls = [
-        ("splat", (ctx.buffer(reserve=32), 1)),
         ("reset_accumulation", ()),
         ("accumulate", (1, None, None, None, None, None, None)),
         ("render_to_completion", (None, None, None, None, None, None)),

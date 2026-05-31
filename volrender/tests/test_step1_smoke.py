@@ -199,8 +199,8 @@ def test_stubs_raise() -> bool:
     renderer = VolumeRenderer(ctx, GridParams(bounds_min=(0, 0, 0), bounds_max=(1, 1, 1)))
     ok = True
 
+    # splat is implemented as of Step 3 — only check remaining stubs
     stub_calls: list[tuple[str, tuple]] = [
-        ("splat", (ctx.buffer(reserve=32), 1)),
         ("reset_accumulation", ()),
         ("accumulate", (1, None, None, None, None, None, None)),
         ("render_to_completion", (None, None, None, None, None, None)),

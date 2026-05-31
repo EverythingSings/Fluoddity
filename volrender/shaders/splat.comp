@@ -1,0 +1,109 @@
+#version 430
+#extension GL_NV_shader_atomic_float : require
+
+// Trilinear atomic splat — one invocation per entity.
+// Deposits density (and optionally outer-product) into the voxel grid.
+
+layout(local_size_x = 256) in;
+
+// ---- entity SSBO (flat float[], stride 8) ----
+layout(std430, binding = 0) buffer EntityBuffer {
+    float entities[];
+};
+
+uniform int u_entity_count;
+uniform bool u_splat_outer_product;
+
+// ---- common.glsl (prepended) provides: ----
+// uniform vec3  u_bounds_min, u_bounds_max, u_resolution;
+// uniform float u_voxel_volume;
+// vec3 world_to_grid(vec3), vec3 grid_to_world(vec3)
+
+// ---- image bindings ----
+layout(r32f, binding = 0) uniform image3D img_density;
+// Outer-product channels [xx, yy, zz, xy, xz, yz]
+layout(r32f, binding = 1) uniform image3D img_op_xx;
+layout(r32f, binding = 2) uniform image3D img_op_yy;
+layout(r32f, binding = 3) uniform image3D img_op_zz;
+layout(r32f, binding = 4) uniform image3D img_op_xy;
+layout(r32f, binding = 5) uniform image3D img_op_xz;
+layout(r32f, binding = 6) uniform image3D img_op_yz;
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= u_entity_count) return;
+
+    // Read entity (flat float array, stride 8)
+    uint base = id * 8u;
+    vec3 pos = vec3(entities[base], entities[base + 1u], entities[base + 2u]);
+    vec3 vel = vec3(entities[base + 3u], entities[base + 4u], entities[base + 5u]);
+    // entities[base+6] = hue (ignored)
+    // entities[base+7] = size (ignored)
+
+    // Skip entities outside bounds
+    if (any(lessThan(pos, u_bounds_min)) || any(greaterThanEqual(pos, u_bounds_max)))
+        return;
+
+    // Continuous grid coordinate
+    vec3 gc = world_to_grid(pos);
+
+    // The 8 surrounding voxel corner indices and trilinear weights.
+    // gc is in [0, resolution).  Subtract 0.5 to center on voxels
+    // (voxel i is centered at i+0.5 in grid coords), then floor.
+    vec3 gc_shifted = gc - 0.5;
+    ivec3 i0 = ivec3(floor(gc_shifted));   // lower corner
+    vec3 f = gc_shifted - vec3(i0);        // fractional part in [0,1)
+
+    // Trilinear weights
+    float w[8];
+    w[0] = (1.0 - f.x) * (1.0 - f.y) * (1.0 - f.z);
+    w[1] = (      f.x) * (1.0 - f.y) * (1.0 - f.z);
+    w[2] = (1.0 - f.x) * (      f.y) * (1.0 - f.z);
+    w[3] = (      f.x) * (      f.y) * (1.0 - f.z);
+    w[4] = (1.0 - f.x) * (1.0 - f.y) * (      f.z);
+    w[5] = (      f.x) * (1.0 - f.y) * (      f.z);
+    w[6] = (1.0 - f.x) * (      f.y) * (      f.z);
+    w[7] = (      f.x) * (      f.y) * (      f.z);
+
+    // Offsets for the 8 corners
+    ivec3 offsets[8] = ivec3[8](
+        ivec3(0,0,0), ivec3(1,0,0), ivec3(0,1,0), ivec3(1,1,0),
+        ivec3(0,0,1), ivec3(1,0,1), ivec3(0,1,1), ivec3(1,1,1)
+    );
+
+    ivec3 res = ivec3(u_resolution);
+
+    // Outer-product direction (normalized velocity)
+    bool do_op = false;
+    vec3 n = vec3(0.0);
+    if (u_splat_outer_product) {
+        float vlen = length(vel);
+        if (vlen > 1e-8) {
+            n = vel / vlen;
+            do_op = true;
+        }
+    }
+
+    // Deposit into the 8 surrounding voxels
+    for (int c = 0; c < 8; c++) {
+        ivec3 voxel = i0 + offsets[c];
+
+        // Clamp to valid range
+        if (any(lessThan(voxel, ivec3(0))) || any(greaterThanEqual(voxel, res)))
+            continue;
+
+        float wt = w[c];
+        if (wt <= 0.0) continue;
+
+        imageAtomicAdd(img_density, voxel, wt);
+
+        if (do_op) {
+            imageAtomicAdd(img_op_xx, voxel, wt * n.x * n.x);
+            imageAtomicAdd(img_op_yy, voxel, wt * n.y * n.y);
+            imageAtomicAdd(img_op_zz, voxel, wt * n.z * n.z);
+            imageAtomicAdd(img_op_xy, voxel, wt * n.x * n.y);
+            imageAtomicAdd(img_op_xz, voxel, wt * n.x * n.z);
+            imageAtomicAdd(img_op_yz, voxel, wt * n.y * n.z);
+        }
+    }
+}

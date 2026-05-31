@@ -40,7 +40,7 @@ class VolumeRenderer:
 
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
         """Deposit entities into the voxel grid (trilinear atomic splat)."""
-        raise NotImplementedError("VolumeRenderer.splat — implemented in Step 3")
+        self.grid.splat(entity_buffer, entity_count)
 
     def reset_accumulation(self):
         """Zero the accumulation buffer and sample counter."""
