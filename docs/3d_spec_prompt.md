@@ -1,0 +1,24 @@
+First I had claude change from an instanced rendering system to a simpler atomic splat pipeline. The prompt for that regrettably references specific commits, but here's it is:
+
+Look at the branch of this repo called "SimpleSplat". We want to switch from using instanced rendering to atomics with NVidia extension for float atomics just like simpleSplat. We won't be changing the physics (SimpleSplat also does away with velocity in favor of "orientation" and changes the way entity behavior is calculated), just removing the instanced rendering paradigm for depositing trails to the canvas. (The camera still needs to use instanced rendering for actual display).
+
+
+
+
+Next I had claude do the full 3d promotion with this spec:
+
+Let's take this repo and reorganize the simulation so that it takes place in 3d. The canvas texture will need 3 components instead of 2, because trails will be in 3d now. Each of these 3 components will have to be a 3d texture since we are working with volumes now. Ideally, we should be able to switch these canvas texture3Ds between f1, f2, and f4 datatypes pretty trivially. We need f4 by default so we can compare apples-to-apples with the current setup, but 3d textures get huge easily, so we will want to experiment with lower precision in the future and A-B test for fidelity issues.
+ First things we need:
+1. A super simple 3d renderer that will serve as our viewport on the simulation. I'm thinking simple instanced rendering of particles in 3d space with glpoints. We can get more sophisticated later, I just want to be able to rotate the camera around the simulation volume and see the particles within projected properly to my screen.
+2. An extension of the entity_update physics to 3D. This has been a sticking point in the past but I have a plan: Entity struct gets upgraded to have a vec3 pos and vec3 vel (no more padding necessary). Each frame, each entity randomly samples a plane that is tangent to the entity's velocity vector. Then we conduct ALL PHYSICS for that entity as if it is a normal 2d particle lying on the sampled plane. So ltap and rtap will sample points on the plane, and just project the 3d trail vectors they read from the canvas onto the sampled plane. In the end, all the forces/ strafe etc that our 2d physics algorithm calculates will be interpreted as existing on the sampled plane. (Our entity update is already guaranteed to be symmetric when reflected across the vel vector, in the sampled plane, so choice of sign for the plane normal should be irrelevant.) Thus, over many entity_update steps, our physics will act like a kind of monte carlo integration over all the possible selections for our sampled plane (normals selected from the circle around the origin, perpendicular to vel). IMPORTANT: A single sampled plane might be too coarse of a sample for one whole entity_update step. This operation must be a subroutine that can be run multiple times within a single entity_update shader invocation: "sample a plane tangent to vel -> project everything onto it and calculate one physics step, apply forces + strafe within that plane". Don't worry about hash quality too much. These 'multiple plane samples' can just be seeded with like a basic hash(vec2(frame_count+float(entity_index)/float(entity_count),sample_index)) type thing.
+3. An extension of the canvas_update step to 3D. Should be pretty simple. Wants to be a compute shader instead of a frag shader now. get_blur should average out the 8 cell neighborhood instead of 4, etc. 
+
+The idea here is to extend our 2d particle physics sim to 3d such that we can keep using all the same global parameters and entity rules and have the 3d behavior result from a monte-carlo style averaging over all possible orientations compatible with entity.vel == forward. In some sense we're already doing this in 2d, but the only 2 orientations that are possible are the "base term" and the reflect-across-vel "mirror term". Instead of 'sample exactly 2 symmetrical sensors on the same plane every time' we are extending to 'sample exactly 2 symmetrical sensors from the cone of possible sensor locations that have the chosen sensor angle with e.vel. This even gives us a pretty bulletproof testing paradigm to see if we're doing things right: in entity_update.glsl and canvas_update.glsl we want a uniform bool TESTING_MODE. When true, all particles should set their pos.z to 0, and ALWAYS sample the plane with normal (0,0,1). This should result in particle behavior identical to the 2d implementation that exists right now. When testing_mode is true, canvas_update.glsl should also revert back to the 4 neighbor get_blur() in the x,y dimensions. This is necessary to make sure that our testing_mode == true simulation will have identical dynamics to the existing repo once we've done our job right.
+
+Take a look, start formulating a plan, and then come back to me with any questions that you encounter in your travels.
+
+
+
+
+
+
