@@ -1,0 +1,106 @@
+#version 430
+
+// Path-trace compute shader — first version (Step 5).
+// Primary ray generation, AABB intersection, and debug fixed-step raymarch.
+// The real integrator (delta tracking, scattering, NEE) replaces the debug
+// path in Steps 6–9.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// ---- common.glsl (prepended) provides: ----
+// uniform vec3  u_bounds_min, u_bounds_max, u_resolution;
+// uniform float u_voxel_volume;
+// vec3 world_to_grid(vec3), vec3 grid_to_world(vec3)
+// RNG: rng_state, rng_init(), next_float(), next_float3()
+// bool intersect_aabb(origin, dir, box_min, box_max, out t_near, out t_far)
+
+// ---- camera ----
+uniform mat4  u_inv_view_proj;
+
+// ---- target ----
+uniform ivec2 u_target_size;       // (width, height) of output image
+
+// ---- debug mode ----
+uniform bool  u_debug_raymarch;    // true = fixed-step debug, false = placeholder
+// COMMENT FLAG: u_debug_steps — number of fixed march steps (tune for quality vs. speed)
+uniform int   u_debug_steps;
+
+// ---- medium params ----
+uniform vec3  u_extinction_rgb;
+uniform float u_density_scale;
+
+// ---- sky params ----
+uniform vec3  u_sky_color;
+uniform float u_sky_intensity;
+
+// ---- density (trilinear filtered sampler) ----
+uniform sampler3D u_density;
+
+// ---- output image ----
+layout(rgba16f, binding = 0) writeonly uniform image2D img_output;
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (pixel.x >= u_target_size.x || pixel.y >= u_target_size.y)
+        return;
+
+    // ---- 1. Build NDC at pixel center ----
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(u_target_size);
+    vec2 ndc_xy = uv * 2.0 - 1.0;
+
+    // ---- 2. Unproject near (z=-1) and far (z=+1) through inv_view_proj ----
+    vec4 near_h = u_inv_view_proj * vec4(ndc_xy, -1.0, 1.0);
+    vec4 far_h  = u_inv_view_proj * vec4(ndc_xy,  1.0, 1.0);
+    vec3 near_w = near_h.xyz / near_h.w;
+    vec3 far_w  = far_h.xyz / far_h.w;
+
+    // ---- 3. Ray ----
+    vec3 ray_origin = near_w;
+    vec3 ray_dir    = normalize(far_w - near_w);
+
+    // ---- 4. AABB slab intersection ----
+    float t_near, t_far;
+    bool hit = intersect_aabb(ray_origin, ray_dir,
+                              u_bounds_min, u_bounds_max,
+                              t_near, t_far);
+
+    vec3 sky = u_sky_color * u_sky_intensity;
+
+    if (!hit) {
+        imageStore(img_output, pixel, vec4(sky, 1.0));
+        return;
+    }
+
+    // ---- 5. Debug fixed-step raymarch ----
+    if (u_debug_raymarch) {
+        // Clamp t_near so camera can be inside the box
+        t_near = max(t_near, 0.0);
+        float path_length = t_far - t_near;
+        float step_size = path_length / float(u_debug_steps);
+
+        vec3 tau = vec3(0.0);  // optical depth accumulator (RGB)
+
+        for (int i = 0; i < u_debug_steps; i++) {
+            float t = t_near + (float(i) + 0.5) * step_size;
+            vec3 p = ray_origin + t * ray_dir;
+
+            // Normalized texture coords [0,1] for sampler3D
+            vec3 uvw = (p - u_bounds_min) / (u_bounds_max - u_bounds_min);
+            float raw_density = texture(u_density, uvw).r;
+            float physical_density = raw_density / u_voxel_volume;
+
+            vec3 sigma_t = u_extinction_rgb * u_density_scale * physical_density;
+            tau += sigma_t * step_size;
+        }
+
+        // Transmittance composited over sky: color = sky * exp(-tau)
+        // This is the "1 - exp(-tau_rgb)" alpha-over-sky composite.
+        vec3 transmittance = exp(-tau);
+        vec3 color = sky * transmittance;
+        imageStore(img_output, pixel, vec4(color, 1.0));
+        return;
+    }
+
+    // Placeholder for Step 6+ path tracing — sky fallback
+    imageStore(img_output, pixel, vec4(sky, 1.0));
+}
