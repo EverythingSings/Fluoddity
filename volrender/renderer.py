@@ -4,6 +4,7 @@ import moderngl
 import numpy as np
 
 from .params import GridParams, MediumParams, SunParams, SkyParams, RenderParams
+from .grid import VoxelGrid
 
 
 class VolumeRenderer:
@@ -35,6 +36,7 @@ class VolumeRenderer:
     def __init__(self, ctx: moderngl.Context, grid_params: GridParams):
         self.ctx = ctx
         self.grid_params = grid_params
+        self.grid = VoxelGrid(ctx, grid_params)
 
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
         """Deposit entities into the voxel grid (trilinear atomic splat)."""

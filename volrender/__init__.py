@@ -24,6 +24,7 @@ Density normalization:
 """
 
 from .params import GridParams, MediumParams, SunParams, SkyParams, RenderParams
+from .grid import VoxelGrid
 from .renderer import VolumeRenderer
 
 __all__ = [
@@ -32,5 +33,6 @@ __all__ = [
     'SunParams',
     'SkyParams',
     'RenderParams',
+    'VoxelGrid',
     'VolumeRenderer',
 ]
