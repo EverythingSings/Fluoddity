@@ -244,6 +244,16 @@ class CommandHandler:
         if not (self.sim.has_active_xy_sweep() or self.sim.has_active_cohort_sweep()):
             return
 
+        if self.camera.render_3d:
+            # In 3D mode, only cohort sweeps make sense (XY sweeps have no 3D analogue)
+            if self.sim.has_active_cohort_sweep():
+                ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
+                entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity_3d(
+                    ray_origin, ray_dir,
+                    num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+                self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+            return
+
         tex_coords = self.camera.screen_to_tex(
             ui_state.mouse_pos, self.sim.view_tex.size
         )
@@ -264,17 +274,23 @@ class CommandHandler:
 
     def _handle_entity_pick(self, ui_state, tiling_mode, canvas_aspect_ratio):
         """Handle entity selection via left click in Select Particle mode."""
-        tex_coords = self.camera.screen_to_tex(
-            ui_state.mouse_pos, self.sim.view_tex.size
-        )
-        if tiling_mode:
-            tex_coords = (
-                np.fmod(tex_coords[0] + 10.0, 1.0),
-                np.fmod(tex_coords[1] + 10.0, 1.0)
+        if self.camera.render_3d:
+            ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
+            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity_3d(
+                ray_origin, ray_dir,
+                num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+        else:
+            tex_coords = self.camera.screen_to_tex(
+                ui_state.mouse_pos, self.sim.view_tex.size
             )
-        entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(
-            tex_coords, canvas_aspect_ratio,
-            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+            if tiling_mode:
+                tex_coords = (
+                    np.fmod(tex_coords[0] + 10.0, 1.0),
+                    np.fmod(tex_coords[1] + 10.0, 1.0)
+                )
+            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(
+                tex_coords, canvas_aspect_ratio,
+                num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
 
         if entity_id >= 0 and entity_id < self.sim.entity_count:
             print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort} - requesting rule buffer update")

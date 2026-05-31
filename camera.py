@@ -421,6 +421,39 @@ class Camera:
 
         return (tex_x, tex_y)
 
+    def screen_to_ray_3d(self, screen_pos: tuple) -> tuple[np.ndarray, np.ndarray]:
+        """Convert screen coordinates to a 3D ray for entity picking.
+
+        Uses the same camera parameters as _generate_3d_view_texture() so the
+        ray matches the rendered perspective view exactly.
+
+        Args:
+            screen_pos: (x, y) screen coordinates where (0,0) is top-left
+
+        Returns:
+            (ray_origin, ray_direction) where both are (3,) numpy arrays
+            and ray_direction is unit length.
+        """
+        cam = self.controller_cam
+        width, height = glfw.get_framebuffer_size(self.window)
+        width = max(1, width)
+        height = max(1, height)
+
+        # Screen coords to NDC
+        x_ndc = (screen_pos[0] / width) * 2.0 - 1.0
+        y_ndc = 1.0 - (screen_pos[1] / height) * 2.0
+
+        aspect = width / height
+        tan_half_fov = math.tan(math.radians(self.fov_3d) / 2.0)
+
+        # Ray direction in world space (unnormalized)
+        direction = (cam.dir
+                     + cam.right * (x_ndc * tan_half_fov * aspect)
+                     + cam.up * (y_ndc * tan_half_fov))
+        direction = direction / np.linalg.norm(direction)
+
+        return (cam.pos.copy(), direction)
+
     def tex_to_screen(self, coord_tuple, tex_size: tuple = None):
         """
         Transform texture coordinates to screen coordinates.

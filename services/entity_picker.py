@@ -67,3 +67,51 @@ class EntityPicker:
         cohort_value = float(num_cohorts) * float(nearest_idx) / float(max(active_count, 1))
 
         return (nearest_idx, (pos_x, pos_y), cohort_value)
+
+    def find_nearest_entity_3d(self, ray_origin: np.ndarray, ray_direction: np.ndarray,
+                                num_cohorts: int = 1, active_count: int = 1) -> tuple[int, tuple[float, float], float]:
+        """Find the entity closest to a 3D ray (for 3D view picking).
+
+        Args:
+            ray_origin: (3,) camera position in world space
+            ray_direction: (3,) unit direction vector of the ray
+            num_cohorts: Number of cohorts (for computing cohort from index)
+            active_count: Number of active entities (for computing cohort from index)
+
+        Returns:
+            Tuple of (entity_index, (pos_x, pos_y), cohort_value)
+            - entity_index: Index of the nearest entity
+            - (pos_x, pos_y): World-space position of the entity (z dropped for downstream compat)
+            - cohort_value: Cohort value computed from index
+        """
+        ent_cache = np.frombuffer(self.entity_buffer.read(), dtype=np.float32)
+
+        # Extract 3D positions
+        xs = ent_cache[0::self.entity_stride]
+        ys = ent_cache[1::self.entity_stride]
+        zs = ent_cache[2::self.entity_stride]
+
+        # Build (N, 3) positions array and compute vectors from ray origin
+        positions = np.column_stack((xs, ys, zs))
+        vs = positions - ray_origin  # (N, 3)
+
+        # Scalar projection onto ray direction
+        ts = vs @ ray_direction  # (N,)
+
+        # Squared angular distance to ray (screen-space proximity).
+        # perpendicular_dist^2 / depth^2 = tan^2(angle) ≈ screen offset^2
+        perp_sq = (vs * vs).sum(axis=1) - ts * ts
+        # Clamp ts to avoid division by zero for particles near the camera
+        ts_safe = np.maximum(ts, 1e-10)
+        distances_sq = perp_sq / (ts_safe * ts_safe)
+
+        # Exclude entities behind the camera
+        distances_sq[ts <= 0] = np.inf
+
+        nearest_idx = int(distances_sq.argmin())
+
+        pos_x = float(xs[nearest_idx])
+        pos_y = float(ys[nearest_idx])
+        cohort_value = float(num_cohorts) * float(nearest_idx) / float(max(active_count, 1))
+
+        return (nearest_idx, (pos_x, pos_y), cohort_value)
