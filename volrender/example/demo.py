@@ -178,7 +178,7 @@ class VolrenderDemo:
 
         # ---- Generate entities ----
         print("Generating entities...")
-        entities = generate_entities(n_entities=50000)
+        entities = generate_entities(n_entities=5000000)
         self.entity_count = len(entities)
         self.entity_buffer = self.ctx.buffer(entities.tobytes())
 
@@ -187,9 +187,9 @@ class VolrenderDemo:
         grid_params = GridParams(
             bounds_min=(-1.5, -1.5, -1.5),
             bounds_max=(1.5, 1.5, 1.5),
-            resolution=(128, 128, 128),
-            majorant_resolution=(16, 16, 16),
-            splat_outer_product=True,
+            resolution=(512, 512, 512),
+            majorant_resolution=(32, 32, 32),
+            splat_outer_product=False,
         )
         self.renderer = VolumeRenderer(self.ctx, grid_params)
 
@@ -213,7 +213,7 @@ class VolrenderDemo:
         # ---- Render parameters ----
         self.extinction_rgb = [1.0, 1.0, 1.0]
         self.albedo_rgb = [0.8, 0.8, 0.8]
-        self.density_scale = 1.0
+        self.density_scale = .0001
         self.sun_direction = [0.577, 0.577, 0.577]
         self.sun_color = [1.0, 0.95, 0.9]
         self.sun_intensity = 3.0
