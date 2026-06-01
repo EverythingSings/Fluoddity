@@ -379,17 +379,29 @@ vec3 safenorm3(vec3 p){
     return length(p)==0?vec3(0):normalize(p);
 }
 
-// Build an orthonormal basis (u, v) on the plane perpendicular to dir,
-// rotated by angle theta around dir. u and v span the tangent plane.
-void build_tangent_plane(vec3 dir, float theta, out vec3 u, out vec3 v) {
-    // Find a vector not parallel to dir
-    vec3 arbitrary = abs(dir.x) < 0.9 ? vec3(1,0,0) : vec3(0,1,0);
-    // Gram-Schmidt to get first tangent vector
-    vec3 t1 = normalize(arbitrary - dot(arbitrary, dir) * dir);
-    vec3 t2 = cross(dir, t1);
-    // Rotate by theta around dir
-    u = cos(theta) * t1 + sin(theta) * t2;
-    v = cross(dir, u);
+void build_tangent_plane(
+    vec3 vel,
+    float theta,
+    out vec3 u,
+    out vec3 v
+) {
+    // Forward direction
+    u = normalize(vel);
+
+    // Pick something not parallel to u
+    vec3 arbitrary =
+        abs(u.x) < 0.9
+        ? vec3(1,0,0)
+        : vec3(0,1,0);
+
+    // First perpendicular direction
+    vec3 t1 = normalize(cross(u, arbitrary));
+
+    // Second perpendicular direction
+    vec3 t2 = cross(u, t1);
+
+    // Random perpendicular vector around u
+    v = cos(theta) * t1 + sin(theta) * t2;
 }
 
 
