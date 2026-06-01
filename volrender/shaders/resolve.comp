@@ -1,0 +1,26 @@
+#version 430
+
+// resolve.comp — divide accumulation buffer by sample count.
+//
+// Step 9: final resolve pass after progressive accumulation.
+// Reads the summed HDR radiance from img_accum, divides by the number
+// of accumulated samples, and writes the averaged linear HDR result
+// into img_output for the caller.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(rgba32f, binding = 0) readonly uniform image2D img_accum;
+layout(rgba16f, binding = 1) writeonly uniform image2D img_output;
+
+uniform ivec2 u_target_size;
+uniform int   u_sample_count;
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (pixel.x >= u_target_size.x || pixel.y >= u_target_size.y)
+        return;
+
+    vec4 accum = imageLoad(img_accum, pixel);
+    vec4 resolved = accum / float(u_sample_count);
+    imageStore(img_output, pixel, resolved);
+}

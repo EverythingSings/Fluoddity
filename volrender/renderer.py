@@ -70,10 +70,30 @@ class VolumeRenderer:
         pt_src = pt_src[:insert_pos + 1] + common_src + pt_src[insert_pos + 1:]
         self._pathtrace_program = ctx.compute_shader(pt_src)
 
+        # Compile resolve compute shader (Step 9) — no common.glsl needed
+        resolve_src = _read_shader("resolve.comp")
+        self._resolve_program = ctx.compute_shader(resolve_src)
+
+        # Accumulation state (lazily allocated to match target resolution)
+        self._accum_tex: moderngl.Texture | None = None
+        self._accum_size: tuple[int, int] = (0, 0)
+        self._accum_sample_count: int = 0
+        self._last_target: moderngl.Texture | None = None
+
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
         """Deposit entities into the voxel grid and rebuild the majorant."""
         self.grid.splat(entity_buffer, entity_count)
         self.majorant_builder.build(self.grid)
+
+    # -------------------------------------------------------- accumulation
+    def _ensure_accum_buffer(self, width: int, height: int):
+        """Allocate or reallocate the rgba32f accumulation buffer if needed."""
+        if self._accum_tex is not None and self._accum_size == (width, height):
+            return
+        if self._accum_tex is not None:
+            self._accum_tex.release()
+        self._accum_tex = self.ctx.texture((width, height), 4, dtype='f4')
+        self._accum_size = (width, height)
 
     # ------------------------------------------------------------------ debug
     def render_debug(self, view_proj, target: moderngl.Texture,
@@ -105,6 +125,7 @@ class VolumeRenderer:
         # Debug mode
         _tryset(prog, 'u_debug_raymarch', True)
         _tryset(prog, 'u_debug_steps', debug_steps)
+        _tryset(prog, 'u_accumulate', False)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -166,6 +187,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_debug_raymarch', False)
         # Step 6 visual validation mode (white/sky, no bounce loop)
         _tryset(prog, 'u_debug_delta_only', True)
+        _tryset(prog, 'u_accumulate', False)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -237,6 +259,7 @@ class VolumeRenderer:
         # Mode flags
         _tryset(prog, 'u_debug_raymarch', False)
         _tryset(prog, 'u_debug_delta_only', False)
+        _tryset(prog, 'u_accumulate', False)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -290,23 +313,175 @@ class VolumeRenderer:
 
         self.ctx.memory_barrier()
 
-    # ------------------------------------------------------------------ stubs
+    # -------------------------------------------------------- public API (Step 9)
     def reset_accumulation(self):
         """Zero the accumulation buffer and sample counter."""
-        raise NotImplementedError("VolumeRenderer.reset_accumulation — implemented in Step 9")
+        if self._accum_tex is not None:
+            w, h = self._accum_size
+            self._accum_tex.write(bytes(w * h * 4 * 4))  # 4 components × 4 bytes
+        self._accum_sample_count = 0
 
     def accumulate(self, n_spp: int, view_proj, target,
                    medium: MediumParams, sun: SunParams, sky: SkyParams,
                    render: RenderParams):
-        """Dispatch n_spp path-traced samples and add to the accumulator."""
-        raise NotImplementedError("VolumeRenderer.accumulate — implemented in Step 9")
+        """Dispatch n_spp path-traced samples and add to the accumulator.
+
+        Dispatches one sample per compute pass with a memory barrier after
+        each to avoid read-after-write hazards on the accumulation buffer.
+        The ``render.batch_spp`` field is preserved for future granularity
+        control; currently each sample is an independent dispatch.
+
+        COMMENT FLAG: batch_spp — dispatch granularity (TDR avoidance)
+        COMMENT FLAG: seed — deterministic RNG base
+
+        Args:
+            n_spp:    Number of samples to accumulate.
+            view_proj: 4×4 numpy array (proj @ view).
+            target:   moderngl Texture — used for sizing the accumulation
+                      buffer and bound to image 0 (unused placeholder).
+            medium:   MediumParams.
+            sun:      SunParams.
+            sky:      SkyParams.
+            render:   RenderParams (batch_spp, max_bounces, rr_start_depth,
+                      seed).
+        """
+        w, h = target.width, target.height
+        self._ensure_accum_buffer(w, h)
+        self._last_target = target
+
+        self.camera.set_view_proj(view_proj)
+        prog = self._pathtrace_program
+
+        # Camera
+        self.camera.upload(prog)
+
+        # Target size
+        _tryset(prog, 'u_target_size', (w, h))
+
+        # Mode flags
+        _tryset(prog, 'u_debug_raymarch', False)
+        _tryset(prog, 'u_debug_delta_only', False)
+        _tryset(prog, 'u_accumulate', True)
+
+        # Medium
+        _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
+        _tryset(prog, 'u_density_scale', medium.density_scale)
+        _tryset(prog, 'u_albedo_rgb', medium.albedo_rgb)
+
+        # Sky
+        _tryset(prog, 'u_sky_color', sky.color_rgb)
+        _tryset(prog, 'u_sky_intensity', sky.intensity)
+
+        # Sun
+        _tryset(prog, 'u_sun_direction', sun.direction)
+        _tryset(prog, 'u_sun_color', sun.color_rgb)
+        _tryset(prog, 'u_sun_intensity', sun.intensity)
+
+        # Bounce loop control
+        # COMMENT FLAG: max_bounces — 0 = unbounded (RR only)
+        _tryset(prog, 'u_max_bounces', render.max_bounces)
+        # COMMENT FLAG: rr_start_depth — Russian roulette onset
+        _tryset(prog, 'u_rr_start_depth', render.rr_start_depth)
+
+        # Grid uniforms
+        _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))
+        _tryset(prog, 'u_bounds_max', tuple(self.grid._bounds_max))
+        _tryset(prog, 'u_resolution', tuple(self.grid._resolution))
+        _tryset(prog, 'u_voxel_volume', self.grid._voxel_volume)
+
+        # Density sampler (trilinear filtered) on texture unit 0
+        self.grid.density.use(location=0)
+        _tryset(prog, 'u_density', 0)
+
+        # Majorant sampler (nearest filtered) on texture unit 1
+        self.grid.majorant.use(location=1)
+        _tryset(prog, 'u_majorant', 1)
+
+        # Majorant resolution
+        _tryset(prog, 'u_majorant_resolution',
+                self.grid.params.majorant_resolution)
+
+        # Bind accumulation buffer to image binding 1 (read + write)
+        self._accum_tex.bind_to_image(1, read=True, write=True)
+
+        # Bind target to image binding 0 (placeholder — not written when
+        # u_accumulate is true, but avoids an unbound image unit)
+        target.bind_to_image(0, read=False, write=True)
+
+        # Dispatch grid
+        gx = math.ceil(w / self._PT_WG_X)
+        gy = math.ceil(h / self._PT_WG_Y)
+
+        # Dispatch one sample at a time with a barrier after each to ensure
+        # the read-modify-write on img_accum is consistent.
+        for i in range(n_spp):
+            sample_idx = render.seed + self._accum_sample_count + i
+            _tryset(prog, 'u_sample_index', sample_idx)
+            prog.run(gx, gy, 1)
+            self.ctx.memory_barrier()
+
+        self._accum_sample_count += n_spp
 
     def render_to_completion(self, view_proj, target,
                              medium: MediumParams, sun: SunParams, sky: SkyParams,
                              render: RenderParams):
-        """Blocking render: reset, accumulate num_samples, resolve to target."""
-        raise NotImplementedError("VolumeRenderer.render_to_completion — implemented in Step 9")
+        """Blocking render: reset, accumulate num_samples, resolve to target.
+
+        Calls ``reset_accumulation``, then ``accumulate`` for
+        ``render.num_samples`` samples, then resolves (divides by sample
+        count) into the caller's ``target`` texture.
+
+        Args:
+            view_proj: 4×4 numpy array (proj @ view).
+            target:   moderngl Texture (2D, rgba16f/rgba32f) to receive the
+                      resolved linear HDR image.
+            medium:   MediumParams.
+            sun:      SunParams.
+            sky:      SkyParams.
+            render:   RenderParams (num_samples, batch_spp, max_bounces,
+                      rr_start_depth, seed).
+        """
+        w, h = target.width, target.height
+        self._ensure_accum_buffer(w, h)
+        self.reset_accumulation()
+        self.accumulate(render.num_samples, view_proj, target,
+                        medium, sun, sky, render)
+
+        # Resolve: divide accumulation by sample count, write to target
+        prog = self._resolve_program
+        _tryset(prog, 'u_target_size', (w, h))
+        _tryset(prog, 'u_sample_count', self._accum_sample_count)
+
+        self._accum_tex.bind_to_image(0, read=True, write=False)
+        target.bind_to_image(1, read=False, write=True)
+
+        gx = math.ceil(w / self._PT_WG_X)
+        gy = math.ceil(h / self._PT_WG_Y)
+        prog.run(gx, gy, 1)
+
+        self.ctx.memory_barrier()
+        self._last_target = target
 
     def read_frame(self) -> np.ndarray:
-        """Read back the current frame as a numpy array (H, W, 4) float32."""
-        raise NotImplementedError("VolumeRenderer.read_frame — implemented in Step 9")
+        """Read back the current frame as a numpy array (H, W, 4) float32.
+
+        Returns the last resolved target texture written by
+        ``render_to_completion``.  Automatically handles rgba16f and
+        rgba32f target formats.
+        """
+        if self._last_target is None:
+            raise RuntimeError(
+                "No frame to read — call render_to_completion first")
+        tex = self._last_target
+        raw = tex.read()
+        expected_f32 = tex.height * tex.width * 4 * 4
+        expected_f16 = tex.height * tex.width * 4 * 2
+        if len(raw) == expected_f32:
+            data = np.frombuffer(raw, dtype=np.float32)
+        elif len(raw) == expected_f16:
+            data = np.frombuffer(raw, dtype=np.float16).astype(np.float32)
+        else:
+            raise RuntimeError(
+                f"Unexpected read size {len(raw)} for "
+                f"{tex.width}x{tex.height} texture")
+        return data.reshape(tex.height, tex.width, 4)

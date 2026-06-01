@@ -61,6 +61,13 @@ uniform ivec3     u_majorant_resolution;  // e.g. (32, 32, 32)
 // ---- output image ----
 layout(rgba16f, binding = 0) writeonly uniform image2D img_output;
 
+// ---- accumulation image (Step 9) ----
+// When u_accumulate is true, samples are additively accumulated into
+// img_accum (rgba32f, read-write).  When false, the shader writes
+// directly to img_output (rgba16f, writeonly) as in Steps 5–8.
+layout(rgba32f, binding = 1) uniform image2D img_accum;
+uniform bool u_accumulate;
+
 
 // ====================================================================
 // Helper: evaluate sigma_t_rgb at a world-space position.
@@ -348,6 +355,19 @@ vec3 sample_sphere() {
 }
 
 
+// ====================================================================
+// Accumulate-aware output: adds to img_accum when accumulating,
+// writes to img_output otherwise.  (Step 9)
+// ====================================================================
+void write_output(ivec2 pixel, vec4 value) {
+    if (u_accumulate) {
+        imageStore(img_accum, pixel, imageLoad(img_accum, pixel) + value);
+    } else {
+        imageStore(img_output, pixel, value);
+    }
+}
+
+
 void main() {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
     if (pixel.x >= u_target_size.x || pixel.y >= u_target_size.y)
@@ -376,7 +396,7 @@ void main() {
     vec3 sky = u_sky_color * u_sky_intensity;
 
     if (!hit) {
-        imageStore(img_output, pixel, vec4(sky, 1.0));
+        write_output(pixel, vec4(sky, 1.0));
         return;
     }
 
@@ -406,7 +426,7 @@ void main() {
         // This is the "1 - exp(-tau_rgb)" alpha-over-sky composite.
         vec3 transmittance = exp(-tau);
         vec3 color = sky * transmittance;
-        imageStore(img_output, pixel, vec4(color, 1.0));
+        write_output(pixel, vec4(color, 1.0));
         return;
     }
 
@@ -423,9 +443,9 @@ void main() {
                                            t_near, t_far,
                                            throughput_dt, hit_pos_dt);
         if (collided) {
-            imageStore(img_output, pixel, vec4(1.0, 1.0, 1.0, 1.0));
+            write_output(pixel, vec4(1.0, 1.0, 1.0, 1.0));
         } else {
-            imageStore(img_output, pixel, vec4(sky, 1.0));
+            write_output(pixel, vec4(sky, 1.0));
         }
         return;
     }
@@ -522,5 +542,5 @@ void main() {
         walk_t_near = max(walk_t_near, 1e-5);
     }
 
-    imageStore(img_output, pixel, vec4(radiance, 1.0));
+    write_output(pixel, vec4(radiance, 1.0));
 }

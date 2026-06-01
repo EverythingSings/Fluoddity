@@ -60,4 +60,4 @@ class RenderParams:
     batch_spp:      int = 1        # COMMENT FLAG: dispatch granularity (TDR avoidance)
     max_bounces:    int = 0        # COMMENT FLAG: 0 = unbounded (RR only)
     rr_start_depth: int = 4        # COMMENT FLAG: Russian roulette onset
-    seed:           int = 0
+    seed:           int = 0        # COMMENT FLAG: seed — deterministic RNG base
