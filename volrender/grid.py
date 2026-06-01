@@ -82,9 +82,9 @@ class VoxelGrid:
         self.majorant.repeat_y = False
         self.majorant.repeat_z = False
 
-        # Pre-compute zero data for clears
-        self._density_zeros = bytes(res[0] * res[1] * res[2] * 4)
-        self._majorant_zeros = bytes(maj[0] * maj[1] * maj[2] * 4)
+        # --- compile clear compute shader (GPU-side zero fill) ---
+        clear_src = self._read_shader("clear3d.comp")
+        self._clear_program = ctx.compute_shader(clear_src)
 
         # --- compile splat compute shader ---
         common_src = self._read_shader("common.glsl")
@@ -100,12 +100,21 @@ class VoxelGrid:
         self.clear()
 
     # ------------------------------------------------------------------ clear
+    def _gpu_clear_texture(self, tex: moderngl.Texture3D, res: tuple):
+        """Zero a single 3D texture using the clear compute shader."""
+        prog = self._clear_program
+        _tryset(prog, 'u_resolution', res)
+        tex.bind_to_image(0, read=False, write=True)
+        prog.run(math.ceil(res[0] / 4), math.ceil(res[1] / 4), math.ceil(res[2] / 4))
+
     def clear(self):
-        """Zero density, outer-product, and majorant grids."""
-        self.density.write(self._density_zeros)
+        """Zero density, outer-product, and majorant grids on the GPU."""
+        res = self.params.resolution
+        self._gpu_clear_texture(self.density, res)
         for tex in self.outer_product:
-            tex.write(self._density_zeros)
-        self.majorant.write(self._majorant_zeros)
+            self._gpu_clear_texture(tex, res)
+        self._gpu_clear_texture(self.majorant, self.params.majorant_resolution)
+        self.ctx.memory_barrier()
 
     # ------------------------------------------------------------------ splat
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):

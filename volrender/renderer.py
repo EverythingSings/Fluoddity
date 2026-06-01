@@ -94,6 +94,8 @@ class VolumeRenderer:
             self._accum_tex.release()
         self._accum_tex = self.ctx.texture((width, height), 4, dtype='f4')
         self._accum_size = (width, height)
+        # Pre-allocate zero buffer for accumulation resets (screen-sized, not grid-sized)
+        self._accum_zeros = bytes(width * height * 4 * 4)
 
     # ------------------------------------------------------------------ debug
     def render_debug(self, view_proj, target: moderngl.Texture,
@@ -317,8 +319,7 @@ class VolumeRenderer:
     def reset_accumulation(self):
         """Zero the accumulation buffer and sample counter."""
         if self._accum_tex is not None:
-            w, h = self._accum_size
-            self._accum_tex.write(bytes(w * h * 4 * 4))  # 4 components × 4 bytes
+            self._accum_tex.write(self._accum_zeros)
         self._accum_sample_count = 0
 
     def accumulate(self, n_spp: int, view_proj, target,

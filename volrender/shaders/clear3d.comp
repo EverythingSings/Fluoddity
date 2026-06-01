@@ -1,0 +1,16 @@
+#version 430
+
+// Zero a single r32f 3D texture.
+// Dispatch with ceil(res.x/4), ceil(res.y/4), ceil(res.z/4) workgroups.
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(r32f, binding = 0) writeonly uniform image3D img_target;
+uniform ivec3 u_resolution;
+
+void main() {
+    ivec3 voxel = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(voxel, u_resolution)))
+        return;
+    imageStore(img_target, voxel, vec4(0.0));
+}
