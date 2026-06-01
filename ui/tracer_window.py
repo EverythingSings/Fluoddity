@@ -23,6 +23,10 @@ class TracerWindowMixin:
 
         ti = self._tracer_interface
 
+        # Tick progressive render if active (1 SPP per app frame)
+        if ti.is_rendering:
+            ti.tick()
+
         # ---- Medium ----
         if imgui.collapsing_header("Medium", imgui.TreeNodeFlags_.default_open.value):
             _, ti.extinction_rgb = imgui.color_edit3(
@@ -59,7 +63,10 @@ class TracerWindowMixin:
                 self._do_tracer_render(ti)
 
             # Progress indicator
-            if ti.has_result:
+            if ti.is_rendering:
+                imgui.same_line()
+                imgui.text(f"  [{ti.samples_done}/{ti.num_samples} spp]")
+            elif ti.has_result:
                 imgui.same_line()
                 imgui.text(f"  [done: {ti.last_spp} spp]")
 
@@ -79,7 +86,7 @@ class TracerWindowMixin:
         imgui.end()
 
     def _do_tracer_render(self, ti):
-        """Execute a blocking tracer render using the current entity buffer and camera."""
+        """Start a progressive tracer render using the current entity buffer and camera."""
         if self.tracer_sim is None or self.tracer_camera is None:
             return
 
@@ -96,5 +103,5 @@ class TracerWindowMixin:
             cam.pos, cam.dir, cam.up, cam.fov, render_aspect
         )
 
-        ti.render_blocking(entity_buffer, entity_count, view_proj,
-                           width=render_width, height=render_height)
+        ti.start_render(entity_buffer, entity_count, view_proj,
+                        width=render_width, height=render_height)

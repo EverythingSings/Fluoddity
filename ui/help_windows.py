@@ -352,6 +352,19 @@ class HelpWindowsMixin:
                 self._delayed_tooltip("Motion Blur can be expensive at high frequencies,\nskip some frames to improve performance.\nThis setting overrides the Blur Quality slider in Preferences while recording.")
                 imgui.unindent(20)
 
+            # Tracer Mode checkbox
+            imgui.spacing()
+            _, self.state.preferences.tracer_mode = imgui.checkbox(
+                "Tracer Mode",
+                self.state.preferences.tracer_mode
+            )
+            self._delayed_tooltip(
+                "Use the volumetric path tracer for video recording.\n"
+                "Renders the scene using Tracer window settings instead\n"
+                "of normal frame assembly. Physics steps are interleaved\n"
+                "with path-traced samples for motion blur."
+            )
+
             # Downsample Resolution Factor (was Supersample Kernel Width)
             _, self.state.preferences.supersample_k = imgui.input_int('Downsample Resolution Factor', self.state.preferences.supersample_k)
             self._delayed_tooltip("Set to '2' to render a video at half resolution.")

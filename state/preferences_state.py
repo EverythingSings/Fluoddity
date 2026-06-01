@@ -70,6 +70,7 @@ class PreferencesState:
     recording_motion_blur: bool = True  # Motion blur setting used during video recording
     recording_blur_quality: int = 1  # Blur quality setting used during video recording
     video_end_frame: int = 0  # Target frame for video to end on (0 = disabled, start immediately)
+    tracer_mode: bool = False  # Use volumetric path tracer for video recording instead of normal frame assembly
 
     # Simulation determinism
     strong_determinism: bool = False  # Double-buffer canvas for fully deterministic simulation

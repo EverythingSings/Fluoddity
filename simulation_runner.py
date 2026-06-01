@@ -1,4 +1,5 @@
 """Simulation runner: physics stepping, frame assembly, and video recording."""
+import math
 import glfw
 import numpy as np
 
@@ -386,3 +387,82 @@ class SimulationRunner:
 
         if self.plotting_manager is not None:
             self.plotting_manager.post_assembly_frame()
+
+    # ============================================================
+    #  Tracer video mode
+    # ============================================================
+
+    def init_tracer_video_state(self):
+        """Initialize tracer video recording state. Called once when recording starts."""
+        self._tracer_samples_done = 0
+        self._tracer_frame_started = False
+        self._tracer_physics_steps_this_frame = 0
+
+    def run_tracer_video_frame(self, ui_state, tracer_interface, tiling_mode=False):
+        """Run one app-frame of tracer video recording.
+
+        Accumulates 1 SPP per call. Runs physics steps at the correct cadence
+        so that each output video frame contains num_samples SPP spread over
+        physics_rate physics steps (motion blur).
+
+        Returns the tonemapped display texture when an output frame is complete,
+        or None if still accumulating.
+        """
+        ti = tracer_interface
+        spp = ti.num_samples
+        physics_rate = ui_state.preferences.motion_blur_samples
+        samples_per_physics = math.ceil(spp / physics_rate)
+
+        # --- Start a new output frame if needed ---
+        if not self._tracer_frame_started:
+            # Run initial physics step to advance simulation
+            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
+                                   tiling_mode, 0)
+
+            # Compute view_proj from the FPS camera
+            cam = self.controller_cam
+            width, height = glfw.get_framebuffer_size(self.window)
+            aspect = width / max(height, 1)
+            view_proj = self.camera.compute_fps_view_proj(
+                cam.pos, cam.dir, cam.up, cam.fov, aspect
+            )
+
+            # Start the tracer render at window resolution
+            ti.start_video_render(
+                self.sim.get_entity_buffer(), self.sim.entity_count,
+                view_proj, width, height
+            )
+            self._tracer_frame_started = True
+            self._tracer_samples_done = 0
+            self._tracer_physics_steps_this_frame = 1
+
+        # --- Check if we need a physics step before this sample ---
+        if (self._tracer_samples_done > 0 and
+                self._tracer_samples_done % samples_per_physics == 0 and
+                self._tracer_physics_steps_this_frame < physics_rate):
+            # Run a physics step
+            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
+                                   tiling_mode, self._tracer_physics_steps_this_frame)
+            self._tracer_physics_steps_this_frame += 1
+
+            # Re-splat entities with updated positions (don't reset accumulation)
+            cam = self.controller_cam
+            width, height = glfw.get_framebuffer_size(self.window)
+            aspect = width / max(height, 1)
+            view_proj = self.camera.compute_fps_view_proj(
+                cam.pos, cam.dir, cam.up, cam.fov, aspect
+            )
+            ti.re_splat(self.sim.get_entity_buffer(), self.sim.entity_count,
+                        view_proj)
+
+        # --- Accumulate 1 SPP ---
+        frame_complete = ti.tick_video()
+        self._tracer_samples_done += 1
+
+        if frame_complete:
+            # Output frame is ready — tonemap and return for video capture
+            display_tex = ti.tonemap_for_video()
+            self._tracer_frame_started = False
+            return display_tex
+
+        return None

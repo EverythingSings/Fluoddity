@@ -216,20 +216,33 @@ class App:
 
         # 4. Lock physics frequency to video recorder frequency if recording
         is_recording = self.video_service.is_active()
+        tracer_video_active = is_recording and ui_state.preferences.tracer_mode
 
         if is_recording and not self.was_recording:
             self.user_speedmult = ui_state.preferences.speedmult
             self.user_motion_blur = ui_state.preferences.motion_blur
             self.user_blur_quality = ui_state.preferences.blur_quality
+            # Initialize tracer video state when starting a tracer-mode recording
+            if tracer_video_active:
+                self.sim_runner.init_tracer_video_state()
+                # Ensure TracerInterface is created
+                if self.ui._tracer_interface is None:
+                    from tracer_interface import TracerInterface
+                    self.ui._tracer_interface = TracerInterface(self.ctx)
         elif not is_recording and self.was_recording:
             ui_state.preferences.speedmult = self.user_speedmult
             ui_state.preferences.motion_blur = self.user_motion_blur
             ui_state.preferences.blur_quality = self.user_blur_quality
 
         if is_recording:
-            ui_state.preferences.speedmult = ui_state.preferences.motion_blur_samples
-            ui_state.preferences.motion_blur = ui_state.preferences.recording_motion_blur
-            ui_state.preferences.blur_quality = ui_state.preferences.recording_blur_quality
+            if tracer_video_active:
+                # Tracer mode: physics steps are managed by run_tracer_video_frame
+                ui_state.preferences.speedmult = 1
+                ui_state.preferences.motion_blur = False
+            else:
+                ui_state.preferences.speedmult = ui_state.preferences.motion_blur_samples
+                ui_state.preferences.motion_blur = ui_state.preferences.recording_motion_blur
+                ui_state.preferences.blur_quality = ui_state.preferences.recording_blur_quality
 
         self.was_recording = is_recording
 
@@ -295,7 +308,21 @@ class App:
         self.prev_view_option = ui_state.sim.current_view_option
 
         # 6. Run simulation if going
-        if ui_state.sim.going:
+        if tracer_video_active and ui_state.sim.going:
+            # Tracer video mode: progressive path tracing with interleaved physics
+            tracer_frame = self.sim_runner.run_tracer_video_frame(
+                ui_state, self.ui._tracer_interface, tiling_mode=tiling_mode
+            )
+            if tracer_frame is not None:
+                # A complete output frame is ready — send to video recorder
+                self.video_service.process_frame(
+                    self.ctx,
+                    tracer_frame,
+                    ui_state.preferences.max_frames,
+                    ui_state.preferences.supersample_k,
+                    ui_state.preferences.filename_prefix
+                )
+        elif ui_state.sim.going:
             self.sim_runner.run_simulation_frame(
                 ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
                 screen_aspect, ui_state.sim.watercolor_mode,

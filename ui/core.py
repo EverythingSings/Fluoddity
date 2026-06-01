@@ -703,8 +703,8 @@ class UI(
         if self.show_sidebar and self.state.preferences.show_three_d_window:
             self.render_three_d_window()
 
-        # Render Tracer window if enabled
-        if self.state.preferences.show_tracer_window:
+        # Render Tracer window if enabled (hidden when windows toggled off)
+        if self.show_sidebar and self.state.preferences.show_tracer_window:
             self.render_tracer_window()
 
         # Render field loader window (transient, not gated by sidebar)
