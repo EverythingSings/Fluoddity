@@ -3,14 +3,14 @@
 VRAM accounting (per r32f 3D texture = 4 * Nx * Ny * Nz bytes):
 
     256^3 density                          =  67 MB
-    256^3 x 6 outer-product channels       = 402 MB
+    256^3 x 2 hue-color channels           = 134 MB
     32^3  majorant                         = 128 KB
-    Total (256^3, OP on)                  ~= 0.47 GB
+    Total (256^3)                         ~= 0.20 GB
 
     512^3 density                          = 537 MB
-    512^3 x 6 outer-product channels       = 3.22 GB
+    512^3 x 2 hue-color channels           = 1.07 GB
     32^3  majorant                         = 128 KB
-    Total (512^3, OP on)                  ~= 3.75 GB  (fits 8 GB with room)
+    Total (512^3)                         ~= 1.61 GB
 """
 from __future__ import annotations
 
@@ -30,12 +30,9 @@ def _tryset(prog: moderngl.Program, name: str, value):
     if name in prog:
         prog[name] = value
 
-# Outer-product channel order (symmetric 3x3 → 6 components)
-OP_CHANNELS = ("xx", "yy", "zz", "xy", "xz", "yz")
-
 
 class VoxelGrid:
-    """GPU-resident voxel grids: density, outer-product, and majorant.
+    """GPU-resident voxel grids: density, hue-color, and majorant.
 
     All textures are r32f so they can be bound as images for atomicAdd
     in the splat pass and sampled as sampler3D in the transport pass.
@@ -64,16 +61,20 @@ class VoxelGrid:
         self.density.repeat_y = False
         self.density.repeat_z = False
 
-        # --- outer-product textures (6 channels, linear filtering) ---
-        self.outer_product: list[moderngl.Texture3D] = []
-        if params.splat_outer_product:
-            for _ in OP_CHANNELS:
-                tex = ctx.texture3d(res, 1, dtype='f4')
-                tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
-                tex.repeat_x = False
-                tex.repeat_y = False
-                tex.repeat_z = False
-                self.outer_product.append(tex)
+        # --- hue-color accumulation textures (cos/sin of 2*pi*hue) ---
+        # Same resolution and filtering as density so the ratio |C|/W
+        # (where W = density = sum of trilinear weights) is well-defined.
+        self.color_x = ctx.texture3d(res, 1, dtype='f4')
+        self.color_x.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        self.color_x.repeat_x = False
+        self.color_x.repeat_y = False
+        self.color_x.repeat_z = False
+
+        self.color_y = ctx.texture3d(res, 1, dtype='f4')
+        self.color_y.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        self.color_y.repeat_x = False
+        self.color_y.repeat_y = False
+        self.color_y.repeat_z = False
 
         # --- majorant texture (nearest filtering, coarse resolution) ---
         self.majorant = ctx.texture3d(maj, 1, dtype='f4')
@@ -108,17 +109,17 @@ class VoxelGrid:
         prog.run(math.ceil(res[0] / 4), math.ceil(res[1] / 4), math.ceil(res[2] / 4))
 
     def clear(self):
-        """Zero density, outer-product, and majorant grids on the GPU."""
+        """Zero density, color, and majorant grids on the GPU."""
         res = self.params.resolution
         self._gpu_clear_texture(self.density, res)
-        for tex in self.outer_product:
-            self._gpu_clear_texture(tex, res)
+        self._gpu_clear_texture(self.color_x, res)
+        self._gpu_clear_texture(self.color_y, res)
         self._gpu_clear_texture(self.majorant, self.params.majorant_resolution)
         self.ctx.memory_barrier()
 
     # ------------------------------------------------------------------ splat
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
-        """Clear grids, then trilinear-splat entities into density (and OP)."""
+        """Clear grids, then trilinear-splat entities into density and color."""
         self.clear()
 
         prog = self._splat_program
@@ -129,24 +130,14 @@ class VoxelGrid:
         _tryset(prog, 'u_resolution', tuple(self._resolution))
         _tryset(prog, 'u_voxel_volume', self._voxel_volume)
         _tryset(prog, 'u_entity_count', entity_count)
-        _tryset(prog, 'u_splat_outer_product',
-                bool(self.params.splat_outer_product
-                     and len(self.outer_product) == 6))
 
         # Bind entity SSBO
         entity_buffer.bind_to_storage_buffer(0)
 
-        # Bind density image
+        # Bind images for atomic writes
         self.density.bind_to_image(0, read=False, write=True)
-
-        # Bind OP images (always bind something to avoid driver complaints)
-        if self.outer_product:
-            for i, tex in enumerate(self.outer_product):
-                tex.bind_to_image(i + 1, read=False, write=True)
-        else:
-            # Bind density as a dummy to all 6 OP slots (won't be written)
-            for i in range(6):
-                self.density.bind_to_image(i + 1, read=False, write=True)
+        self.color_x.bind_to_image(1, read=False, write=True)
+        self.color_y.bind_to_image(2, read=False, write=True)
 
         # Dispatch
         group_size = 256

@@ -35,8 +35,9 @@ uniform float u_density_scale;
 uniform vec3  u_sky_color;
 uniform float u_sky_intensity;
 
-// ---- albedo (Step 7) ----
-uniform vec3  u_albedo_rgb;         // single-scatter albedo
+// ---- albedo (Step 7, per-voxel hue from entity color) ----
+uniform float u_albedo_saturation;   // saturation ceiling [0,1]
+uniform float u_albedo_brightness;   // HSV value component [0,1]
 
 // ---- bounce loop control (Step 7) ----
 // COMMENT FLAG: max_bounces — 0 = unbounded (Russian roulette only)
@@ -58,6 +59,10 @@ uniform sampler3D u_density;
 uniform sampler3D u_majorant;
 uniform ivec3     u_majorant_resolution;  // e.g. (32, 32, 32)
 
+// ---- hue-color accumulation (trilinear filtered samplers) ----
+uniform sampler3D u_color_x;              // accumulated cos(2*pi*hue) * weight
+uniform sampler3D u_color_y;              // accumulated sin(2*pi*hue) * weight
+
 // ---- output image ----
 layout(rgba16f, binding = 0) writeonly uniform image2D img_output;
 
@@ -67,6 +72,54 @@ layout(rgba16f, binding = 0) writeonly uniform image2D img_output;
 // directly to img_output (rgba16f, writeonly) as in Steps 5–8.
 layout(rgba32f, binding = 1) uniform image2D img_accum;
 uniform bool u_accumulate;
+
+
+// ====================================================================
+// HSV -> RGB (same compact form used in frame_assembly.frag et al.)
+// ====================================================================
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+
+// ====================================================================
+// Per-voxel albedo from accumulated entity hue.
+//
+// Reconstructs mean hue from the circular-mean unit-vector (Cx, Cy),
+// derives saturation from |C|/W (W = density = same trilinear weight
+// sum), and returns HSV->RGB with user-controlled saturation ceiling
+// and brightness.
+//
+// W ~ 0 fallback: when density is negligible, R -> 0, yielding a
+// desaturated result.  Correct because albedo is irrelevant where
+// there is no scattering medium.
+//
+// Single-particle edge case: a voxel with one contributing particle
+// yields R = 1 (full saturation at that particle's exact hue).  This
+// is correct, not a bug.
+// ====================================================================
+vec3 get_albedo(vec3 pos) {
+    vec3 uvw = (pos - u_bounds_min) / (u_bounds_max - u_bounds_min);
+
+    float cx = texture(u_color_x, uvw).r;
+    float cy = texture(u_color_y, uvw).r;
+    float W  = texture(u_density, uvw).r;   // density IS sum of weights
+
+    // Reconstruct hue from accumulated unit vector direction
+    float hue = atan(cy, cx) / 6.283185307;   // atan2(y,x) / 2pi
+    hue = fract(hue);                          // wrap to [0, 1)
+
+    // Concentration: |C| / W.  When W ~ 0, eps guard yields R -> 0.
+    float C_len = length(vec2(cx, cy));
+    float R = clamp(C_len / max(W, 1e-7), 0.0, 1.0);
+
+    float S = u_albedo_saturation * R;
+    float V = u_albedo_brightness;
+
+    return hsv2rgb(vec3(hue, S, V));
+}
 
 
 // ====================================================================
@@ -500,12 +553,12 @@ void main() {
         }
 
         // ---- Real collision at hit_pos ----
-        // Fold absorption: throughput *= albedo
-        throughput *= u_albedo_rgb;
+        // Fold absorption: throughput *= per-voxel albedo
+        throughput *= get_albedo(hit_pos);
 
         // ---- Sun NEE (Step 8): direct illumination at collision ----
         // Delta light, isotropic phase = 1/(4*pi).
-        // throughput already includes albedo_rgb from the line above.
+        // throughput already includes per-voxel albedo from the line above.
         {
             vec3 T_sun = transmittance_to_sun(hit_pos);
             float phase = 1.0 / (4.0 * 3.141592653589793);

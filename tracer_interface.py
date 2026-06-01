@@ -47,7 +47,8 @@ class TracerInterface:
 
         # Default parameter state (matches demo defaults)
         self.extinction_rgb = [1.0, 1.0, 1.0]
-        self.albedo_rgb = [0.8, 0.8, 0.8]
+        self.albedo_saturation = 1.0
+        self.albedo_brightness = 0.8
         self.density_scale = 0.0001
         self.sun_direction = [0.577, 0.577, 0.577]
         self.sun_color = [1.0, 0.95, 0.9]
@@ -67,7 +68,6 @@ class TracerInterface:
             bounds_max=(1.0, 1.0, 1.0),
             resolution=(512, 512, 512),
             majorant_resolution=(16, 16, 16),
-            splat_outer_product=False,
         )
         self._renderer = VolumeRenderer(self.ctx, grid_params)
 
@@ -197,7 +197,8 @@ class TracerInterface:
 
         medium = MediumParams(
             extinction_rgb=tuple(self.extinction_rgb),
-            albedo_rgb=tuple(self.albedo_rgb),
+            albedo_saturation=self.albedo_saturation,
+            albedo_brightness=self.albedo_brightness,
             density_scale=self.density_scale,
         )
         sun = SunParams(

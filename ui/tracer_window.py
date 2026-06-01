@@ -35,8 +35,10 @@ class TracerWindowMixin:
         if imgui.collapsing_header("Medium", imgui.TreeNodeFlags_.default_open.value):
             _, ti.extinction_rgb = imgui.color_edit3(
                 "Extinction RGB", ti.extinction_rgb)
-            _, ti.albedo_rgb = imgui.color_edit3(
-                "Albedo RGB", ti.albedo_rgb)
+            _, ti.albedo_saturation = imgui.slider_float(
+                "Albedo Saturation", ti.albedo_saturation, 0.0, 1.0)
+            _, ti.albedo_brightness = imgui.slider_float(
+                "Albedo Brightness", ti.albedo_brightness, 0.0, 1.0)
             _, ti.density_scale = imgui.drag_float(
                 "Density Scale", ti.density_scale, 0.00001, 0.00001, 10.0, "%.5f")
 
@@ -93,7 +95,8 @@ class TracerWindowMixin:
         """Apply saved tracer preferences to a newly created TracerInterface."""
         p = self.state.preferences
         ti.extinction_rgb = list(p.tracer_extinction_rgb)
-        ti.albedo_rgb = list(p.tracer_albedo_rgb)
+        ti.albedo_saturation = p.tracer_albedo_saturation
+        ti.albedo_brightness = p.tracer_albedo_brightness
         ti.density_scale = p.tracer_density_scale
         ti.sun_direction = list(p.tracer_sun_direction)
         ti.sun_color = list(p.tracer_sun_color)

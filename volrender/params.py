@@ -13,7 +13,6 @@ class GridParams:
     bounds_max: tuple[float, float, float]              # REQUIRED, world space
     resolution: tuple[int, int, int] = (256, 256, 256)
     majorant_resolution: tuple[int, int, int] = (32, 32, 32)
-    splat_outer_product: bool = True                    # splat d⊗d now (read later)
 
 
 @dataclass
@@ -21,12 +20,14 @@ class MediumParams:
     """Participating-medium optical properties.
 
     sigma_t_rgb(x) = extinction_rgb * density_scale * physical_density(x)
-    albedo_rgb is the single-scatter albedo; scattering is folded as a
-    throughput multiply by albedo_rgb at each real collision.
+    Albedo is derived per-voxel from accumulated entity hue vectors.
+    albedo_saturation is the ceiling on saturation (scaled by hue
+    concentration R); albedo_brightness is the HSV value component.
     """
-    extinction_rgb: tuple[float, float, float] = (1.0, 1.0, 1.0)  # per-unit-density, vec3
-    albedo_rgb:     tuple[float, float, float] = (0.8, 0.8, 0.8)  # single-scatter albedo
-    density_scale:  float = 1.0
+    extinction_rgb:    tuple[float, float, float] = (1.0, 1.0, 1.0)  # per-unit-density, vec3
+    albedo_saturation: float = 1.0   # saturation ceiling for per-voxel hue [0, 1]
+    albedo_brightness: float = 0.8   # HSV value component [0, 1]
+    density_scale:     float = 1.0
 
 
 @dataclass

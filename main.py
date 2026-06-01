@@ -461,7 +461,8 @@ class App:
         ti = self.ui._tracer_interface
         if ti is not None:
             ui_state.preferences.tracer_extinction_rgb = list(ti.extinction_rgb)
-            ui_state.preferences.tracer_albedo_rgb = list(ti.albedo_rgb)
+            ui_state.preferences.tracer_albedo_saturation = ti.albedo_saturation
+            ui_state.preferences.tracer_albedo_brightness = ti.albedo_brightness
             ui_state.preferences.tracer_density_scale = ti.density_scale
             ui_state.preferences.tracer_sun_direction = list(ti.sun_direction)
             ui_state.preferences.tracer_sun_color = list(ti.sun_color)

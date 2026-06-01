@@ -98,7 +98,8 @@ class PreferencesState:
     # Tracer window (volumetric path tracer)
     show_tracer_window: bool = False
     tracer_extinction_rgb: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
-    tracer_albedo_rgb: list = field(default_factory=lambda: [0.8, 0.8, 0.8])
+    tracer_albedo_saturation: float = 1.0
+    tracer_albedo_brightness: float = 0.8
     tracer_density_scale: float = 0.0001
     tracer_sun_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
     tracer_sun_color: list = field(default_factory=lambda: [1.0, 0.95, 0.9])

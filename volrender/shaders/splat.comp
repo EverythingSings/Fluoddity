@@ -2,7 +2,7 @@
 #extension GL_NV_shader_atomic_float : require
 
 // Trilinear atomic splat — one invocation per entity.
-// Deposits density (and optionally outer-product) into the voxel grid.
+// Deposits density and hue-color into the voxel grid.
 
 layout(local_size_x = 256) in;
 
@@ -12,7 +12,6 @@ layout(std430, binding = 0) buffer EntityBuffer {
 };
 
 uniform int u_entity_count;
-uniform bool u_splat_outer_product;
 
 // ---- common.glsl (prepended) provides: ----
 // uniform vec3  u_bounds_min, u_bounds_max, u_resolution;
@@ -21,13 +20,10 @@ uniform bool u_splat_outer_product;
 
 // ---- image bindings ----
 layout(r32f, binding = 0) uniform image3D img_density;
-// Outer-product channels [xx, yy, zz, xy, xz, yz]
-layout(r32f, binding = 1) uniform image3D img_op_xx;
-layout(r32f, binding = 2) uniform image3D img_op_yy;
-layout(r32f, binding = 3) uniform image3D img_op_zz;
-layout(r32f, binding = 4) uniform image3D img_op_xy;
-layout(r32f, binding = 5) uniform image3D img_op_xz;
-layout(r32f, binding = 6) uniform image3D img_op_yz;
+
+// Hue color accumulation [cos(2*pi*hue), sin(2*pi*hue)]
+layout(r32f, binding = 1) uniform image3D img_color_x;
+layout(r32f, binding = 2) uniform image3D img_color_y;
 
 void main() {
     uint id = gl_GlobalInvocationID.x;
@@ -36,9 +32,14 @@ void main() {
     // Read entity (flat float array, stride 8)
     uint base = id * 8u;
     vec3 pos = vec3(entities[base], entities[base + 1u], entities[base + 2u]);
-    vec3 vel = vec3(entities[base + 3u], entities[base + 4u], entities[base + 5u]);
-    // entities[base+6] = hue (ignored)
-    // entities[base+7] = size (ignored)
+    // entities[base+3..5] = velocity (unused)
+    float hue = entities[base + 6u];
+    // entities[base+7] = size (unused)
+
+    // Convert hue to unit vector for circular-mean accumulation
+    float theta = 6.283185307 * hue;   // 2*pi*hue
+    float cos_theta = cos(theta);
+    float sin_theta = sin(theta);
 
     // Skip entities outside bounds
     if (any(lessThan(pos, u_bounds_min)) || any(greaterThanEqual(pos, u_bounds_max)))
@@ -73,17 +74,6 @@ void main() {
 
     ivec3 res = ivec3(u_resolution);
 
-    // Outer-product direction (normalized velocity)
-    bool do_op = false;
-    vec3 n = vec3(0.0);
-    if (u_splat_outer_product) {
-        float vlen = length(vel);
-        if (vlen > 1e-8) {
-            n = vel / vlen;
-            do_op = true;
-        }
-    }
-
     // Deposit into the 8 surrounding voxels
     for (int c = 0; c < 8; c++) {
         ivec3 voxel = i0 + offsets[c];
@@ -96,14 +86,7 @@ void main() {
         if (wt <= 0.0) continue;
 
         imageAtomicAdd(img_density, voxel, wt);
-
-        if (do_op) {
-            imageAtomicAdd(img_op_xx, voxel, wt * n.x * n.x);
-            imageAtomicAdd(img_op_yy, voxel, wt * n.y * n.y);
-            imageAtomicAdd(img_op_zz, voxel, wt * n.z * n.z);
-            imageAtomicAdd(img_op_xy, voxel, wt * n.x * n.y);
-            imageAtomicAdd(img_op_xz, voxel, wt * n.x * n.z);
-            imageAtomicAdd(img_op_yz, voxel, wt * n.y * n.z);
-        }
+        imageAtomicAdd(img_color_x, voxel, wt * cos_theta);
+        imageAtomicAdd(img_color_y, voxel, wt * sin_theta);
     }
 }

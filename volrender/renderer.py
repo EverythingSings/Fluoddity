@@ -31,16 +31,16 @@ class VolumeRenderer:
 
     Ingests a moderngl Buffer of Entity structs, splats them into a dense
     voxel grid, and path-traces an isotropic participating medium with
-    colored extinction, single-scattering albedo, ratio-tracked direct sun
-    lighting, and uniform sky illumination.
+    colored extinction, per-voxel hue-derived albedo, ratio-tracked direct
+    sun lighting, and uniform sky illumination.
 
     Global conventions
     ------------------
     Entity buffer layout (std430, 32 bytes / 8 floats per entity):
         float px, py, pz   — position (world space)
-        float vx, vy, vz   — velocity (orientation for outer product)
-        float hue           — IGNORED in v1
-        float size          — IGNORED in v1
+        float vx, vy, vz   — velocity (unused by splat)
+        float hue           — per-particle hue, splatted as circular-mean
+        float size          — IGNORED
     Bind as a flat float[] array with stride 8 (base = id*8).
 
     Sun direction:
@@ -242,7 +242,7 @@ class VolumeRenderer:
         Args:
             view_proj:    4x4 numpy array (proj @ view).
             target:       moderngl Texture (2D, rgba16f/rgba32f) to write into.
-            medium:       MediumParams (extinction_rgb, density_scale, albedo_rgb).
+            medium:       MediumParams (extinction_rgb, density_scale, albedo_saturation/brightness).
             sky:          SkyParams (color_rgb, intensity).
             render:       RenderParams (max_bounces, rr_start_depth).
             sample_index: Per-sample seed offset for RNG decorrelation.
@@ -266,7 +266,8 @@ class VolumeRenderer:
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
         _tryset(prog, 'u_density_scale', medium.density_scale)
-        _tryset(prog, 'u_albedo_rgb', medium.albedo_rgb)
+        _tryset(prog, 'u_albedo_saturation', medium.albedo_saturation)
+        _tryset(prog, 'u_albedo_brightness', medium.albedo_brightness)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -304,6 +305,12 @@ class VolumeRenderer:
         # Majorant resolution
         _tryset(prog, 'u_majorant_resolution',
                 self.grid.params.majorant_resolution)
+
+        # Hue-color accumulation samplers (trilinear filtered) on units 2, 3
+        self.grid.color_x.use(location=2)
+        _tryset(prog, 'u_color_x', 2)
+        self.grid.color_y.use(location=3)
+        _tryset(prog, 'u_color_y', 3)
 
         # Bind output target as image (binding 0)
         target.bind_to_image(0, read=False, write=True)
@@ -367,7 +374,8 @@ class VolumeRenderer:
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
         _tryset(prog, 'u_density_scale', medium.density_scale)
-        _tryset(prog, 'u_albedo_rgb', medium.albedo_rgb)
+        _tryset(prog, 'u_albedo_saturation', medium.albedo_saturation)
+        _tryset(prog, 'u_albedo_brightness', medium.albedo_brightness)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -401,6 +409,12 @@ class VolumeRenderer:
         # Majorant resolution
         _tryset(prog, 'u_majorant_resolution',
                 self.grid.params.majorant_resolution)
+
+        # Hue-color accumulation samplers (trilinear filtered) on units 2, 3
+        self.grid.color_x.use(location=2)
+        _tryset(prog, 'u_color_x', 2)
+        self.grid.color_y.use(location=3)
+        _tryset(prog, 'u_color_y', 3)
 
         # Bind accumulation buffer to image binding 1 (read + write)
         self._accum_tex.bind_to_image(1, read=True, write=True)
