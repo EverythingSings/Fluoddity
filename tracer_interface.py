@@ -41,6 +41,7 @@ class TracerInterface:
         self._rendering = False
         self._samples_done = 0
         self._render_view_proj = None
+        self._render_target_spp = 0
         self._render_complete = False
         self._last_spp = 0
 
@@ -98,8 +99,9 @@ class TracerInterface:
         # Splat entities into voxel grid + rebuild majorant
         self._renderer.splat(entity_buffer, entity_count)
 
-        # Lock camera for this render
+        # Lock camera and target SPP for this render
         self._render_view_proj = view_proj.copy()
+        self._render_target_spp = self.num_samples
 
         # Reset accumulation
         self._renderer.reset_accumulation()
@@ -125,7 +127,7 @@ class TracerInterface:
         # Tonemap into display texture
         self._tonemap_to_display()
 
-        if self._samples_done >= self.num_samples:
+        if self._samples_done >= self._render_target_spp:
             self._rendering = False
             self._last_spp = self._samples_done
             self._render_complete = True
@@ -161,7 +163,7 @@ class TracerInterface:
         )
         self._samples_done += 1
 
-        if self._samples_done >= self.num_samples:
+        if self._samples_done >= self._render_target_spp:
             # Resolve final accumulation into target
             self._resolve_current()
             self._rendering = False

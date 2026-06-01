@@ -396,7 +396,7 @@ class SimulationRunner:
         """Initialize tracer video recording state. Called once when recording starts."""
         self._tracer_samples_done = 0
         self._tracer_frame_started = False
-        self._tracer_physics_steps_this_frame = 0
+        self._tracer_physics_steps_done = 0
 
     def run_tracer_video_frame(self, ui_state, tracer_interface, tiling_mode=False):
         """Run one app-frame of tracer video recording.
@@ -405,53 +405,57 @@ class SimulationRunner:
         so that each output video frame contains num_samples SPP spread over
         physics_rate physics steps (motion blur).
 
+        The total physics_rate steps are distributed evenly across spp samples.
+        When physics_rate > spp, multiple physics steps run before each sample.
+        When physics_rate <= spp, one physics step runs every
+        ceil(spp / physics_rate) samples.
+
         Returns the tonemapped display texture when an output frame is complete,
         or None if still accumulating.
         """
         ti = tracer_interface
         spp = ti.num_samples
         physics_rate = ui_state.preferences.motion_blur_samples
-        samples_per_physics = math.ceil(spp / physics_rate)
 
         # --- Start a new output frame if needed ---
         if not self._tracer_frame_started:
+            # Build the schedule: for each sample index, how many total physics
+            # steps should have been run BEFORE that sample is accumulated.
+            # Distributes physics_rate steps as evenly as possible across spp
+            # samples, ensuring all steps complete by the last sample.
+            # Uses (i+1) so that schedule[spp-1] = physics_rate.
+            self._tracer_schedule = []
+            for i in range(spp):
+                self._tracer_schedule.append(((i + 1) * physics_rate) // spp)
+            # Ensure at least 1 step at the start (the initial physics step)
+            self._tracer_schedule[0] = max(self._tracer_schedule[0], 1)
+
             # Run initial physics step to advance simulation
             self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
                                    tiling_mode, 0)
 
             # Compute view_proj from the FPS camera
-            cam = self.controller_cam
-            width, height = glfw.get_framebuffer_size(self.window)
-            aspect = width / max(height, 1)
-            view_proj = self.camera.compute_fps_view_proj(
-                cam.pos, cam.dir, cam.up, cam.fov, aspect
-            )
+            view_proj = self._tracer_compute_view_proj()
 
             # Start the tracer render at window resolution
+            width, height = glfw.get_framebuffer_size(self.window)
             ti.start_video_render(
                 self.sim.get_entity_buffer(), self.sim.entity_count,
                 view_proj, width, height
             )
             self._tracer_frame_started = True
             self._tracer_samples_done = 0
-            self._tracer_physics_steps_this_frame = 1
+            self._tracer_physics_steps_done = 1
 
-        # --- Check if we need a physics step before this sample ---
-        if (self._tracer_samples_done > 0 and
-                self._tracer_samples_done % samples_per_physics == 0 and
-                self._tracer_physics_steps_this_frame < physics_rate):
-            # Run a physics step
+        # --- Run any physics steps needed before this sample ---
+        target_steps = self._tracer_schedule[self._tracer_samples_done]
+        while self._tracer_physics_steps_done < target_steps:
             self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                   tiling_mode, self._tracer_physics_steps_this_frame)
-            self._tracer_physics_steps_this_frame += 1
+                                   tiling_mode, self._tracer_physics_steps_done)
+            self._tracer_physics_steps_done += 1
 
-            # Re-splat entities with updated positions (don't reset accumulation)
-            cam = self.controller_cam
-            width, height = glfw.get_framebuffer_size(self.window)
-            aspect = width / max(height, 1)
-            view_proj = self.camera.compute_fps_view_proj(
-                cam.pos, cam.dir, cam.up, cam.fov, aspect
-            )
+            # Re-splat entities with updated positions (keeps accumulation)
+            view_proj = self._tracer_compute_view_proj()
             ti.re_splat(self.sim.get_entity_buffer(), self.sim.entity_count,
                         view_proj)
 
@@ -466,3 +470,12 @@ class SimulationRunner:
             return display_tex
 
         return None
+
+    def _tracer_compute_view_proj(self):
+        """Compute view_proj from the FPS camera for tracer rendering."""
+        cam = self.controller_cam
+        width, height = glfw.get_framebuffer_size(self.window)
+        aspect = width / max(height, 1)
+        return self.camera.compute_fps_view_proj(
+            cam.pos, cam.dir, cam.up, cam.fov, aspect
+        )

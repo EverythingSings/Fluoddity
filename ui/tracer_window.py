@@ -24,7 +24,10 @@ class TracerWindowMixin:
         ti = self._tracer_interface
 
         # Tick progressive render if active (1 SPP per app frame)
-        if ti.is_rendering:
+        # Skip during tracer video recording — the orchestrator drives accumulation
+        recording_tracer = (self._display_info.get('recording_active', False)
+                            and self.state.preferences.tracer_mode)
+        if ti.is_rendering and not recording_tracer:
             ti.tick()
 
         # ---- Medium ----
