@@ -60,6 +60,15 @@ class App:
         self.ui.state.preferences = loaded_prefs
         self.ui._last_applied_world_size = loaded_prefs.world_size
 
+        # Restore 3D camera settings from preferences
+        cam = self.ui.state.camera
+        cam.render_3d = loaded_prefs.three_d_render_3d
+        cam.fov = loaded_prefs.three_d_fov
+        cam.move_speed = loaded_prefs.three_d_move_speed
+        cam.rotate_speed = loaded_prefs.three_d_rotate_speed
+        cam.orbit_distance = loaded_prefs.three_d_orbit_distance
+        cam.orbit_rate = loaded_prefs.three_d_orbit_rate
+
         # Create services (Orchestrator owns these)
         self.rule_manager = RuleManager()
         entity_stride = SIZE_OF_ENTITY_STRUCT // 4
@@ -229,6 +238,7 @@ class App:
                 if self.ui._tracer_interface is None:
                     from tracer_interface import TracerInterface
                     self.ui._tracer_interface = TracerInterface(self.ctx)
+                    self.ui._apply_tracer_preferences(self.ui._tracer_interface)
         elif not is_recording and self.was_recording:
             ui_state.preferences.speedmult = self.user_speedmult
             ui_state.preferences.motion_blur = self.user_motion_blur
@@ -437,6 +447,30 @@ class App:
     def cleanup(self):
         # Save preferences before cleanup
         ui_state = self.ui.get_state()
+
+        # Sync 3D camera settings into preferences
+        cam = ui_state.camera
+        ui_state.preferences.three_d_render_3d = cam.render_3d
+        ui_state.preferences.three_d_fov = cam.fov
+        ui_state.preferences.three_d_move_speed = cam.move_speed
+        ui_state.preferences.three_d_rotate_speed = cam.rotate_speed
+        ui_state.preferences.three_d_orbit_distance = cam.orbit_distance
+        ui_state.preferences.three_d_orbit_rate = cam.orbit_rate
+
+        # Sync tracer settings into preferences
+        ti = self.ui._tracer_interface
+        if ti is not None:
+            ui_state.preferences.tracer_extinction_rgb = list(ti.extinction_rgb)
+            ui_state.preferences.tracer_albedo_rgb = list(ti.albedo_rgb)
+            ui_state.preferences.tracer_density_scale = ti.density_scale
+            ui_state.preferences.tracer_sun_direction = list(ti.sun_direction)
+            ui_state.preferences.tracer_sun_color = list(ti.sun_color)
+            ui_state.preferences.tracer_sun_intensity = ti.sun_intensity
+            ui_state.preferences.tracer_sky_color = list(ti.sky_color)
+            ui_state.preferences.tracer_sky_intensity = ti.sky_intensity
+            ui_state.preferences.tracer_num_samples = ti.num_samples
+            ui_state.preferences.tracer_exposure = ti.exposure
+
         save_preferences(ui_state.preferences)
 
         self.advanced_drawing_processor.cleanup()

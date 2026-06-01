@@ -20,6 +20,7 @@ class TracerWindowMixin:
         if self._tracer_interface is None:
             from tracer_interface import TracerInterface
             self._tracer_interface = TracerInterface(self.ctx)
+            self._apply_tracer_preferences(self._tracer_interface)
 
         ti = self._tracer_interface
 
@@ -87,6 +88,20 @@ class TracerWindowMixin:
             )
 
         imgui.end()
+
+    def _apply_tracer_preferences(self, ti):
+        """Apply saved tracer preferences to a newly created TracerInterface."""
+        p = self.state.preferences
+        ti.extinction_rgb = list(p.tracer_extinction_rgb)
+        ti.albedo_rgb = list(p.tracer_albedo_rgb)
+        ti.density_scale = p.tracer_density_scale
+        ti.sun_direction = list(p.tracer_sun_direction)
+        ti.sun_color = list(p.tracer_sun_color)
+        ti.sun_intensity = p.tracer_sun_intensity
+        ti.sky_color = list(p.tracer_sky_color)
+        ti.sky_intensity = p.tracer_sky_intensity
+        ti.num_samples = p.tracer_num_samples
+        ti.exposure = p.tracer_exposure
 
     def _do_tracer_render(self, ti):
         """Start a progressive tracer render using the current entity buffer and camera."""

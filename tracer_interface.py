@@ -63,9 +63,9 @@ class TracerInterface:
         if self._renderer is not None:
             return
         grid_params = GridParams(
-            bounds_min=(-1.5, -1.5, -1.5),
-            bounds_max=(1.5, 1.5, 1.5),
-            resolution=(256, 256, 256),
+            bounds_min=(-1.0, -1.0, -1.0),
+            bounds_max=(1.0, 1.0, 1.0),
+            resolution=(512, 512, 512),
             majorant_resolution=(16, 16, 16),
             splat_outer_product=False,
         )

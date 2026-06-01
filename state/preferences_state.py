@@ -97,6 +97,24 @@ class PreferencesState:
 
     # Tracer window (volumetric path tracer)
     show_tracer_window: bool = False
+    tracer_extinction_rgb: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
+    tracer_albedo_rgb: list = field(default_factory=lambda: [0.8, 0.8, 0.8])
+    tracer_density_scale: float = 0.0001
+    tracer_sun_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
+    tracer_sun_color: list = field(default_factory=lambda: [1.0, 0.95, 0.9])
+    tracer_sun_intensity: float = 3.0
+    tracer_sky_color: list = field(default_factory=lambda: [0.5, 0.7, 1.0])
+    tracer_sky_intensity: float = 1.0
+    tracer_num_samples: int = 64
+    tracer_exposure: float = 1.5
+
+    # 3D camera settings
+    three_d_render_3d: bool = True
+    three_d_fov: float = 50.0
+    three_d_move_speed: float = 2.0
+    three_d_rotate_speed: float = 2.0
+    three_d_orbit_distance: float = 3.0
+    three_d_orbit_rate: float = 0.0
 
 
 def save_preferences(prefs: PreferencesState, filepath: Path | str = None) -> None:
