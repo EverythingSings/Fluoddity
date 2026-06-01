@@ -187,8 +187,8 @@ class VolrenderDemo:
         grid_params = GridParams(
             bounds_min=(-1.5, -1.5, -1.5),
             bounds_max=(1.5, 1.5, 1.5),
-            resolution=(512, 512, 512),
-            majorant_resolution=(32, 32, 32),
+            resolution=(256, 256, 256),
+            majorant_resolution=(16, 16, 16),
             splat_outer_product=False,
         )
         self.renderer = VolumeRenderer(self.ctx, grid_params)

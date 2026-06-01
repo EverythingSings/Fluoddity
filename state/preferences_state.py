@@ -94,6 +94,9 @@ class PreferencesState:
     # 3D Controls window
     show_three_d_window: bool = False
 
+    # Tracer window (volumetric path tracer)
+    show_tracer_window: bool = False
+
 
 def save_preferences(prefs: PreferencesState, filepath: Path | str = None) -> None:
     """Save preferences to a JSON file."""

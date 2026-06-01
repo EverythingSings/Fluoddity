@@ -99,6 +99,11 @@ class App:
 
         self.command_handler.plotting_manager = self.plotting_manager
 
+        # Tracer references (for entity buffer and camera access)
+        self.ui.tracer_sim = self.sim
+        self.ui.tracer_controller_cam = self.controller_cam
+        self.ui.tracer_camera = self.camera
+
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
             self.command_handler, self.window,

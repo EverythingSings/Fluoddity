@@ -400,6 +400,13 @@ class MenuBarMixin:
                 )
                 self._delayed_tooltip("FPS camera settings, orbit rate, and\n3D simulation parameters.")
 
+                # Tracer window toggle
+                _, self.state.preferences.show_tracer_window = imgui.checkbox(
+                    "Tracer",
+                    self.state.preferences.show_tracer_window
+                )
+                self._delayed_tooltip("Volumetric path tracer.\nSplats entities into a voxel grid and\npath-traces with adjustable medium/lighting.")
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

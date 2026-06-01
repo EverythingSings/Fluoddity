@@ -29,6 +29,7 @@ from .field_loader_window import FieldLoaderWindowMixin
 from .generics_window import GenericsWindowMixin
 from .plotting import PlottingWindowMixin
 from .three_d_window import ThreeDWindowMixin
+from .tracer_window import TracerWindowMixin
 
 
 @dataclass
@@ -52,6 +53,7 @@ class UI(
     GenericsWindowMixin,
     PlottingWindowMixin,
     ThreeDWindowMixin,
+    TracerWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -62,6 +64,12 @@ class UI(
         self.multi_load_service = multi_load_service
         self.param_lock_service = None  # Set by App after construction
         self.plotting_manager = None  # Set by App after construction
+
+        # Tracer references (set by App after construction)
+        self._tracer_interface = None
+        self.tracer_sim = None
+        self.tracer_controller_cam = None
+        self.tracer_camera = None
 
         # Initialize keybinding manager
         self.keybindings = KeybindingManager()
@@ -694,6 +702,10 @@ class UI(
         # Render 3D Controls window if enabled
         if self.show_sidebar and self.state.preferences.show_three_d_window:
             self.render_three_d_window()
+
+        # Render Tracer window if enabled
+        if self.state.preferences.show_tracer_window:
+            self.render_tracer_window()
 
         # Render field loader window (transient, not gated by sidebar)
         self.render_field_loader_window()
