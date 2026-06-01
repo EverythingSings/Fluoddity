@@ -1,9 +1,10 @@
 #version 430
 
-// Path-trace compute shader — Steps 5–6.
+// Path-trace compute shader — Steps 5–7.
 // Primary ray generation, AABB intersection, debug fixed-step raymarch (Step 5),
-// and delta-tracked free flight with weighted null-scattering (Step 6).
-// The full bounce loop, NEE, and accumulation come in Steps 7–9.
+// delta-tracked free flight with weighted null-scattering (Step 6),
+// and isotropic scattering bounce loop with RR (Step 7).
+// Sun NEE comes in Step 8; progressive accumulation in Step 9.
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
@@ -32,6 +33,17 @@ uniform float u_density_scale;
 // ---- sky params ----
 uniform vec3  u_sky_color;
 uniform float u_sky_intensity;
+
+// ---- albedo (Step 7) ----
+uniform vec3  u_albedo_rgb;         // single-scatter albedo
+
+// ---- bounce loop control (Step 7) ----
+// COMMENT FLAG: max_bounces — 0 = unbounded (Russian roulette only)
+uniform int   u_max_bounces;
+// COMMENT FLAG: rr_start_depth — Russian roulette begins past this depth
+uniform int   u_rr_start_depth;
+uniform uint  u_sample_index;       // per-sample RNG seed offset
+uniform bool  u_debug_delta_only;   // true = Step 6 visual mode (white/sky)
 
 // ---- density (trilinear filtered sampler) ----
 uniform sampler3D u_density;
@@ -190,6 +202,24 @@ bool sample_free_flight(vec3 origin, vec3 dir,
 }
 
 
+// ====================================================================
+// Sample a direction uniformly on the unit sphere.
+//
+// Analytic cos-theta / sin-theta method: branchless, exactly 2 random
+// draws, no rejection waste.  Used for isotropic phase function.
+// ====================================================================
+vec3 sample_sphere() {
+    float xi1 = next_float();
+    float xi2 = next_float();
+    float cos_theta = 1.0 - 2.0 * xi1;          // uniform in [-1, +1]
+    float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+    float phi = 6.283185307 * xi2;               // 2*pi
+    return vec3(sin_theta * cos(phi),
+                sin_theta * sin(phi),
+                cos_theta);
+}
+
+
 void main() {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
     if (pixel.x >= u_target_size.x || pixel.y >= u_target_size.y)
@@ -253,25 +283,109 @@ void main() {
     }
 
     // ---- 6. Delta-tracked free flight (visual validation mode) ----
-    // Single sample per pixel — real collision → white, escape → sky.
-    // Steps 7–9 replace this block with the full bounce loop + NEE +
-    // progressive accumulation.
+    // When u_debug_delta_only is set, use the Step 6 visual test:
+    // single free flight, white on collision, sky on escape.
+    if (u_debug_delta_only) {
+        rng_init(uvec3(pixel, 0u));
+        t_near = max(t_near, 0.0);
 
-    rng_init(uvec3(pixel, 0u));
+        vec3 throughput_dt = vec3(1.0);
+        vec3 hit_pos_dt;
+        bool collided = sample_free_flight(ray_origin, ray_dir,
+                                           t_near, t_far,
+                                           throughput_dt, hit_pos_dt);
+        if (collided) {
+            imageStore(img_output, pixel, vec4(1.0, 1.0, 1.0, 1.0));
+        } else {
+            imageStore(img_output, pixel, vec4(sky, 1.0));
+        }
+        return;
+    }
 
-    t_near = max(t_near, 0.0);
+    // ---- 7. Bounce loop (isotropic scattering, sky environment) ----
+    // Full random walk with throughput, albedo absorption, and
+    // Russian roulette termination.  The medium is lit purely by
+    // the sky environment via escaped random walks.
+    // Direct sun NEE is added in Step 8.
+
+    rng_init(uvec3(pixel, u_sample_index));
 
     vec3 throughput = vec3(1.0);
-    vec3 hit_pos;
-    bool collided = sample_free_flight(ray_origin, ray_dir,
-                                       t_near, t_far,
-                                       throughput, hit_pos);
+    vec3 radiance   = vec3(0.0);
+    int  depth      = 0;
 
-    if (collided) {
-        // Visual validation: white on real collision
-        imageStore(img_output, pixel, vec4(1.0, 1.0, 1.0, 1.0));
-    } else {
-        // Escaped grid: show sky background
-        imageStore(img_output, pixel, vec4(sky, 1.0));
+    vec3  walk_origin = ray_origin;
+    vec3  walk_dir    = ray_dir;
+    float walk_t_near = max(t_near, 0.0);
+    float walk_t_far  = t_far;
+
+    // COMMENT FLAG: MAX_WALK_BOUNCES — absolute safety cap on walk length.
+    // Should never be reached when max_bounces > 0 or RR is active.
+    const int MAX_WALK_BOUNCES = 512;
+
+    for (int bounce = 0; bounce < MAX_WALK_BOUNCES; bounce++) {
+
+        // ---- Free flight ----
+        vec3 dt_throughput = vec3(1.0);
+        vec3 hit_pos;
+        bool collided = sample_free_flight(walk_origin, walk_dir,
+                                           walk_t_near, walk_t_far,
+                                           dt_throughput, hit_pos);
+
+        throughput *= dt_throughput;
+
+        if (!collided) {
+            // Escaped grid: add sky contribution.
+            // Primary escape = visible background;
+            // deeper escape = environment illumination of the medium.
+            radiance += throughput * u_sky_color * u_sky_intensity;
+            break;
+        }
+
+        // ---- Real collision at hit_pos ----
+        // Fold absorption: throughput *= albedo
+        throughput *= u_albedo_rgb;
+
+        // (Step 8 will add sun NEE here, before scattering direction.)
+
+        depth += 1;
+
+        // ---- Termination: max_bounces ----
+        // COMMENT FLAG: max_bounces
+        if (u_max_bounces > 0 && depth >= u_max_bounces) {
+            break;
+        }
+
+        // ---- Termination: Russian roulette ----
+        // COMMENT FLAG: rr_start_depth
+        if (depth > u_rr_start_depth) {
+            float p_survive = max(throughput.r, max(throughput.g, throughput.b));
+            p_survive = clamp(p_survive, 0.05, 1.0);  // floor prevents fireflies
+            if (next_float() >= p_survive) {
+                break;
+            }
+            throughput /= p_survive;
+        }
+
+        // ---- Scatter: uniform sphere direction (isotropic phase) ----
+        walk_dir = sample_sphere();
+
+        // ---- Re-intersect AABB from collision point ----
+        walk_origin = hit_pos;
+        bool re_hit = intersect_aabb(walk_origin, walk_dir,
+                                     u_bounds_min, u_bounds_max,
+                                     walk_t_near, walk_t_far);
+
+        if (!re_hit) {
+            // New direction immediately leaves the volume → escape
+            radiance += throughput * u_sky_color * u_sky_intensity;
+            break;
+        }
+
+        // Origin is inside the box, so t_near <= 0.
+        // Step forward slightly to avoid self-intersection.
+        walk_t_near = max(walk_t_near, 1e-5);
     }
+
+    imageStore(img_output, pixel, vec4(radiance, 1.0));
 }

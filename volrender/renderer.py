@@ -164,6 +164,8 @@ class VolumeRenderer:
 
         # Debug mode OFF — use the real delta-tracking path
         _tryset(prog, 'u_debug_raymarch', False)
+        # Step 6 visual validation mode (white/sky, no bounce loop)
+        _tryset(prog, 'u_debug_delta_only', True)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -172,6 +174,83 @@ class VolumeRenderer:
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
+
+        # Grid uniforms
+        _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))
+        _tryset(prog, 'u_bounds_max', tuple(self.grid._bounds_max))
+        _tryset(prog, 'u_resolution', tuple(self.grid._resolution))
+        _tryset(prog, 'u_voxel_volume', self.grid._voxel_volume)
+
+        # Density sampler (trilinear filtered) on texture unit 0
+        self.grid.density.use(location=0)
+        _tryset(prog, 'u_density', 0)
+
+        # Majorant sampler (nearest filtered) on texture unit 1
+        self.grid.majorant.use(location=1)
+        _tryset(prog, 'u_majorant', 1)
+
+        # Majorant resolution
+        _tryset(prog, 'u_majorant_resolution',
+                self.grid.params.majorant_resolution)
+
+        # Bind output target as image (binding 0)
+        target.bind_to_image(0, read=False, write=True)
+
+        # Dispatch
+        gx = math.ceil(target.width / self._PT_WG_X)
+        gy = math.ceil(target.height / self._PT_WG_Y)
+        prog.run(gx, gy, 1)
+
+        self.ctx.memory_barrier()
+
+    # --------------------------------------------------------- bounce test
+    def render_bounce_test(self, view_proj, target: moderngl.Texture,
+                           medium: MediumParams, sky: SkyParams,
+                           render: RenderParams, sample_index: int = 0):
+        """Dispatch the Step 7 bounce-loop integrator (single sample).
+
+        Writes linear HDR into ``target`` (expected rgba16f or rgba32f).
+        Single-sample, non-accumulating dispatch.  Escaped rays contribute
+        sky radiance; real collisions scatter isotropically with albedo.
+
+        This is the Step 7 validation entry point.  Step 9 wraps this in
+        progressive accumulation.
+
+        Args:
+            view_proj:    4x4 numpy array (proj @ view).
+            target:       moderngl Texture (2D, rgba16f/rgba32f) to write into.
+            medium:       MediumParams (extinction_rgb, density_scale, albedo_rgb).
+            sky:          SkyParams (color_rgb, intensity).
+            render:       RenderParams (max_bounces, rr_start_depth).
+            sample_index: Per-sample seed offset for RNG decorrelation.
+        """
+        self.camera.set_view_proj(view_proj)
+
+        prog = self._pathtrace_program
+
+        # Camera
+        self.camera.upload(prog)
+
+        # Target size
+        _tryset(prog, 'u_target_size', (target.width, target.height))
+
+        # Mode flags
+        _tryset(prog, 'u_debug_raymarch', False)
+        _tryset(prog, 'u_debug_delta_only', False)
+
+        # Medium
+        _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
+        _tryset(prog, 'u_density_scale', medium.density_scale)
+        _tryset(prog, 'u_albedo_rgb', medium.albedo_rgb)
+
+        # Sky
+        _tryset(prog, 'u_sky_color', sky.color_rgb)
+        _tryset(prog, 'u_sky_intensity', sky.intensity)
+
+        # Bounce loop control
+        _tryset(prog, 'u_max_bounces', render.max_bounces)
+        _tryset(prog, 'u_rr_start_depth', render.rr_start_depth)
+        _tryset(prog, 'u_sample_index', sample_index)
 
         # Grid uniforms
         _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))
