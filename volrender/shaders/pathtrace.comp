@@ -1,9 +1,9 @@
 #version 430
 
-// Path-trace compute shader — first version (Step 5).
-// Primary ray generation, AABB intersection, and debug fixed-step raymarch.
-// The real integrator (delta tracking, scattering, NEE) replaces the debug
-// path in Steps 6–9.
+// Path-trace compute shader — Steps 5–6.
+// Primary ray generation, AABB intersection, debug fixed-step raymarch (Step 5),
+// and delta-tracked free flight with weighted null-scattering (Step 6).
+// The full bounce loop, NEE, and accumulation come in Steps 7–9.
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
@@ -21,7 +21,7 @@ uniform mat4  u_inv_view_proj;
 uniform ivec2 u_target_size;       // (width, height) of output image
 
 // ---- debug mode ----
-uniform bool  u_debug_raymarch;    // true = fixed-step debug, false = placeholder
+uniform bool  u_debug_raymarch;    // true = fixed-step debug, false = delta tracking
 // COMMENT FLAG: u_debug_steps — number of fixed march steps (tune for quality vs. speed)
 uniform int   u_debug_steps;
 
@@ -36,8 +36,159 @@ uniform float u_sky_intensity;
 // ---- density (trilinear filtered sampler) ----
 uniform sampler3D u_density;
 
+// ---- majorant grid (nearest-filtered sampler, coarse resolution) ----
+uniform sampler3D u_majorant;
+uniform ivec3     u_majorant_resolution;  // e.g. (32, 32, 32)
+
 // ---- output image ----
 layout(rgba16f, binding = 0) writeonly uniform image2D img_output;
+
+
+// ====================================================================
+// Helper: evaluate sigma_t_rgb at a world-space position.
+//
+// sigma_t = extinction_rgb * density_scale * physical_density(p)
+// where physical_density = raw_density / voxel_volume  (density
+// normalization convention — applied here and in the majorant build,
+// nowhere else).
+// ====================================================================
+vec3 sigma_t_at(vec3 p) {
+    vec3 uvw = (p - u_bounds_min) / (u_bounds_max - u_bounds_min);
+    float raw_density = texture(u_density, uvw).r;
+    float physical_density = raw_density / u_voxel_volume;
+    return u_extinction_rgb * u_density_scale * physical_density;
+}
+
+
+// ====================================================================
+// Delta-tracked free flight with weighted null-scattering (RGB).
+//
+// Walks the ray through the coarse majorant grid.  Within each coarse
+// cell, samples tentative free-flight distances from the local
+// majorant.  On a tentative event, evaluates the true extinction and
+// stochastically accepts (real collision) or rejects (null collision),
+// updating the RGB throughput either way for unbiased estimation.
+//
+// Returns true  if a real collision occurred (position in `hit_pos`).
+// Returns false if the ray escaped the grid with no real collision.
+//
+// `throughput` is an inout RGB weight — caller initializes to vec3(1).
+// The weighted delta-tracking factors keep colored extinction unbiased
+// under a single scalar accept/reject decision.
+//
+// Steps 7–8 call this to find collision points, then handle scattering
+// and NEE at the collision site.
+// ====================================================================
+bool sample_free_flight(vec3 origin, vec3 dir,
+                        float t_enter, float t_exit,
+                        inout vec3 throughput,
+                        out vec3 hit_pos)
+{
+    float t = t_enter;
+
+    // Coarse cell size in world space
+    vec3 grid_extent = u_bounds_max - u_bounds_min;
+    vec3 cell_size   = grid_extent / vec3(u_majorant_resolution);
+
+    // Max extinction channel (constant across the ray)
+    float max_ext = max(u_extinction_rgb.r,
+                    max(u_extinction_rgb.g, u_extinction_rgb.b));
+
+    // Precompute inverse direction for slab math
+    vec3 inv_dir = 1.0 / dir;
+
+    // COMMENT FLAG: MAX_DT_ITERS — safety cap on total delta-tracking
+    // iterations.  Should never be reached in practice; increase if
+    // the majorant grid is very fine or rays are very long.
+    const int MAX_DT_ITERS = 2048;
+
+    for (int iter = 0; iter < MAX_DT_ITERS; iter++) {
+
+        // ---- Have we left the volume? ----
+        if (t >= t_exit)
+            return false;
+
+        // ---- Current position on the ray ----
+        vec3 p = origin + t * dir;
+
+        // ---- Identify the coarse cell containing p ----
+        vec3 coarse_gc = (p - u_bounds_min) / cell_size;
+        ivec3 cell = ivec3(floor(coarse_gc));
+        cell = clamp(cell, ivec3(0), u_majorant_resolution - 1);
+
+        // ---- Parametric t at which the ray exits this cell ----
+        vec3 cell_world_min = u_bounds_min + vec3(cell) * cell_size;
+        vec3 cell_world_max = cell_world_min + cell_size;
+
+        vec3 t_to_min = (cell_world_min - origin) * inv_dir;
+        vec3 t_to_max = (cell_world_max - origin) * inv_dir;
+        vec3 t_exit_planes = max(t_to_min, t_to_max);
+
+        float t_cell_exit = min(t_exit_planes.x,
+                            min(t_exit_planes.y, t_exit_planes.z));
+        t_cell_exit = min(t_cell_exit, t_exit);
+
+        // ---- Look up majorant for this cell ----
+        // Sample at cell center — nearest filtering reads the stored max.
+        vec3 cell_center_uvw = (vec3(cell) + 0.5) / vec3(u_majorant_resolution);
+        float majorant_density = texture(u_majorant, cell_center_uvw).r;
+        float mu_bar = max_ext * u_density_scale * majorant_density;
+
+        // ---- Empty cell: skip straight to boundary ----
+        if (mu_bar <= 0.0) {
+            t = t_cell_exit + 1e-5;
+            continue;
+        }
+
+        // ---- Delta tracking within this cell ----
+        bool left_cell = false;
+        while (!left_cell) {
+            // Sample exponential free-flight distance
+            float xi = next_float();
+            xi = max(xi, 1e-30);            // guard log(0)
+            float dt = -log(1.0 - xi) / mu_bar;
+            t += dt;
+
+            // Overshot cell boundary → advance to next cell
+            if (t >= t_cell_exit) {
+                t = t_cell_exit + 1e-5;
+                left_cell = true;
+                break;
+            }
+
+            // Overshot volume → escaped
+            if (t >= t_exit)
+                return false;
+
+            // ---- Tentative event at this position ----
+            vec3 event_pos = origin + t * dir;
+            vec3 sigma_t   = sigma_t_at(event_pos);
+
+            // Scalar real-collision probability
+            float sigma_max = max(sigma_t.r, max(sigma_t.g, sigma_t.b));
+            float Pr = clamp(sigma_max / mu_bar, 0.0, 1.0);
+
+            float xi2 = next_float();
+
+            if (xi2 < Pr) {
+                // ---- Real collision ----
+                // Throughput weight: sigma_t / (mu_bar * Pr)
+                throughput *= sigma_t / (mu_bar * Pr);
+                hit_pos = event_pos;
+                return true;
+            } else {
+                // ---- Null collision ----
+                // Throughput weight: (mu_bar - sigma_t) / (mu_bar * (1 - Pr))
+                float one_minus_Pr = max(1.0 - Pr, 1e-10);
+                throughput *= (mu_bar - sigma_t) / (mu_bar * one_minus_Pr);
+            }
+        }
+    }
+
+    // Safety: exceeded MAX_DT_ITERS (should not happen in practice)
+    return false;
+}
+
 
 void main() {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
@@ -101,6 +252,26 @@ void main() {
         return;
     }
 
-    // Placeholder for Step 6+ path tracing — sky fallback
-    imageStore(img_output, pixel, vec4(sky, 1.0));
+    // ---- 6. Delta-tracked free flight (visual validation mode) ----
+    // Single sample per pixel — real collision → white, escape → sky.
+    // Steps 7–9 replace this block with the full bounce loop + NEE +
+    // progressive accumulation.
+
+    rng_init(uvec3(pixel, 0u));
+
+    t_near = max(t_near, 0.0);
+
+    vec3 throughput = vec3(1.0);
+    vec3 hit_pos;
+    bool collided = sample_free_flight(ray_origin, ray_dir,
+                                       t_near, t_far,
+                                       throughput, hit_pos);
+
+    if (collided) {
+        // Visual validation: white on real collision
+        imageStore(img_output, pixel, vec4(1.0, 1.0, 1.0, 1.0));
+    } else {
+        // Escaped grid: show sky background
+        imageStore(img_output, pixel, vec4(sky, 1.0));
+    }
 }

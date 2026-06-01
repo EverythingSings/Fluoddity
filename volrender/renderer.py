@@ -134,6 +134,73 @@ class VolumeRenderer:
 
         self.ctx.memory_barrier()
 
+    # --------------------------------------------------------- delta test
+    def render_delta_test(self, view_proj, target: moderngl.Texture,
+                          medium: MediumParams, sky: SkyParams):
+        """Dispatch delta-tracked free flight for visual validation.
+
+        Writes linear HDR into ``target`` (expected rgba16f or rgba32f).
+        Single-sample, non-accumulating dispatch.  Real collisions are
+        rendered white, escapes as sky color.
+
+        This is the Step 6 validation entry point.  Steps 7–9 fold
+        the delta-tracking call into the full bounce loop.
+
+        Args:
+            view_proj: 4x4 numpy array (proj @ view).
+            target:    moderngl Texture (2D, rgba16f/rgba32f) to write into.
+            medium:    MediumParams (extinction_rgb, density_scale used).
+            sky:       SkyParams (color_rgb, intensity used).
+        """
+        self.camera.set_view_proj(view_proj)
+
+        prog = self._pathtrace_program
+
+        # Camera
+        self.camera.upload(prog)
+
+        # Target size
+        _tryset(prog, 'u_target_size', (target.width, target.height))
+
+        # Debug mode OFF — use the real delta-tracking path
+        _tryset(prog, 'u_debug_raymarch', False)
+
+        # Medium
+        _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
+        _tryset(prog, 'u_density_scale', medium.density_scale)
+
+        # Sky
+        _tryset(prog, 'u_sky_color', sky.color_rgb)
+        _tryset(prog, 'u_sky_intensity', sky.intensity)
+
+        # Grid uniforms
+        _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))
+        _tryset(prog, 'u_bounds_max', tuple(self.grid._bounds_max))
+        _tryset(prog, 'u_resolution', tuple(self.grid._resolution))
+        _tryset(prog, 'u_voxel_volume', self.grid._voxel_volume)
+
+        # Density sampler (trilinear filtered) on texture unit 0
+        self.grid.density.use(location=0)
+        _tryset(prog, 'u_density', 0)
+
+        # Majorant sampler (nearest filtered) on texture unit 1
+        self.grid.majorant.use(location=1)
+        _tryset(prog, 'u_majorant', 1)
+
+        # Majorant resolution
+        _tryset(prog, 'u_majorant_resolution',
+                self.grid.params.majorant_resolution)
+
+        # Bind output target as image (binding 0)
+        target.bind_to_image(0, read=False, write=True)
+
+        # Dispatch
+        gx = math.ceil(target.width / self._PT_WG_X)
+        gy = math.ceil(target.height / self._PT_WG_Y)
+        prog.run(gx, gy, 1)
+
+        self.ctx.memory_barrier()
+
     # ------------------------------------------------------------------ stubs
     def reset_accumulation(self):
         """Zero the accumulation buffer and sample counter."""
