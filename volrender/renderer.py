@@ -206,15 +206,14 @@ class VolumeRenderer:
     # --------------------------------------------------------- bounce test
     def render_bounce_test(self, view_proj, target: moderngl.Texture,
                            medium: MediumParams, sky: SkyParams,
-                           render: RenderParams, sample_index: int = 0):
-        """Dispatch the Step 7 bounce-loop integrator (single sample).
+                           render: RenderParams, sample_index: int = 0,
+                           sun: SunParams | None = None):
+        """Dispatch the bounce-loop integrator (single sample).
 
         Writes linear HDR into ``target`` (expected rgba16f or rgba32f).
         Single-sample, non-accumulating dispatch.  Escaped rays contribute
-        sky radiance; real collisions scatter isotropically with albedo.
-
-        This is the Step 7 validation entry point.  Step 9 wraps this in
-        progressive accumulation.
+        sky radiance; real collisions add ratio-tracked sun NEE (Step 8)
+        and scatter isotropically with albedo.
 
         Args:
             view_proj:    4x4 numpy array (proj @ view).
@@ -223,6 +222,7 @@ class VolumeRenderer:
             sky:          SkyParams (color_rgb, intensity).
             render:       RenderParams (max_bounces, rr_start_depth).
             sample_index: Per-sample seed offset for RNG decorrelation.
+            sun:          SunParams or None.  None = no direct sun (Step 7 compat).
         """
         self.camera.set_view_proj(view_proj)
 
@@ -246,6 +246,16 @@ class VolumeRenderer:
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
+
+        # Sun (Step 8)
+        if sun is not None:
+            _tryset(prog, 'u_sun_direction', sun.direction)
+            _tryset(prog, 'u_sun_color', sun.color_rgb)
+            _tryset(prog, 'u_sun_intensity', sun.intensity)
+        else:
+            _tryset(prog, 'u_sun_direction', (0.0, 1.0, 0.0))
+            _tryset(prog, 'u_sun_color', (0.0, 0.0, 0.0))
+            _tryset(prog, 'u_sun_intensity', 0.0)
 
         # Bounce loop control
         _tryset(prog, 'u_max_bounces', render.max_bounces)

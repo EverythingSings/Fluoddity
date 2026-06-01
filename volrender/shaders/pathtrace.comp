@@ -1,10 +1,11 @@
 #version 430
 
-// Path-trace compute shader — Steps 5–7.
+// Path-trace compute shader — Steps 5–8.
 // Primary ray generation, AABB intersection, debug fixed-step raymarch (Step 5),
 // delta-tracked free flight with weighted null-scattering (Step 6),
-// and isotropic scattering bounce loop with RR (Step 7).
-// Sun NEE comes in Step 8; progressive accumulation in Step 9.
+// isotropic scattering bounce loop with RR (Step 7),
+// and sun NEE via ratio-tracked shadow rays (Step 8).
+// Progressive accumulation in Step 9.
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
@@ -44,6 +45,11 @@ uniform int   u_max_bounces;
 uniform int   u_rr_start_depth;
 uniform uint  u_sample_index;       // per-sample RNG seed offset
 uniform bool  u_debug_delta_only;   // true = Step 6 visual mode (white/sky)
+
+// ---- sun params (Step 8) ----
+uniform vec3  u_sun_direction;     // unit, scene -> sun
+uniform vec3  u_sun_color;         // sun color RGB
+uniform float u_sun_intensity;     // sun radiance multiplier
 
 // ---- density (trilinear filtered sampler) ----
 uniform sampler3D u_density;
@@ -203,6 +209,128 @@ bool sample_free_flight(vec3 origin, vec3 dir,
 
 
 // ====================================================================
+// Ratio-tracked transmittance toward the sun (RGB, unbiased).
+//
+// Marches from world-space position `x` along u_sun_direction until
+// the ray exits the grid, accumulating the ratio-tracking weight at
+// each tentative event.  Unlike delta tracking (sample_free_flight),
+// ratio tracking does NOT make a real/null decision — every tentative
+// event multiplicatively updates T.  This produces an unbiased RGB
+// transmittance estimate with naturally colored shadows.
+//
+// T starts at vec3(1).  At each tentative event position x':
+//   T *= (mu_bar_cell - sigma_t_rgb(x')) / mu_bar_cell
+//
+// Returns T after the ray exits the grid.
+// ====================================================================
+vec3 transmittance_to_sun(vec3 x) {
+    vec3 dir = u_sun_direction;
+
+    // Intersect the shadow ray with the grid AABB
+    float t_near, t_far;
+    bool hit = intersect_aabb(x, dir, u_bounds_min, u_bounds_max,
+                              t_near, t_far);
+    if (!hit)
+        return vec3(1.0);   // outside grid entirely
+
+    // Origin is inside the grid, so t_near <= 0.
+    // Start slightly ahead to avoid self-intersection.
+    float t = max(t_near, 1e-5);
+
+    vec3 T = vec3(1.0);
+
+    // Coarse cell size in world space
+    vec3 grid_extent = u_bounds_max - u_bounds_min;
+    vec3 cell_size   = grid_extent / vec3(u_majorant_resolution);
+
+    // Max extinction channel (constant)
+    float max_ext = max(u_extinction_rgb.r,
+                    max(u_extinction_rgb.g, u_extinction_rgb.b));
+
+    // Precompute inverse direction for slab math
+    vec3 inv_dir = 1.0 / dir;
+
+    // COMMENT FLAG: MAX_SHADOW_ITERS — safety cap on ratio-tracking
+    // iterations along the shadow ray.  Should never be reached in
+    // practice; increase if the majorant grid is very fine.
+    const int MAX_SHADOW_ITERS = 2048;
+
+    for (int iter = 0; iter < MAX_SHADOW_ITERS; iter++) {
+
+        // ---- Have we left the volume? ----
+        if (t >= t_far)
+            return T;
+
+        // ---- Current position on the ray ----
+        vec3 p = x + t * dir;
+
+        // ---- Identify the coarse cell containing p ----
+        vec3 coarse_gc = (p - u_bounds_min) / cell_size;
+        ivec3 cell = ivec3(floor(coarse_gc));
+        cell = clamp(cell, ivec3(0), u_majorant_resolution - 1);
+
+        // ---- Parametric t at which the ray exits this cell ----
+        vec3 cell_world_min = u_bounds_min + vec3(cell) * cell_size;
+        vec3 cell_world_max = cell_world_min + cell_size;
+
+        vec3 t_to_min = (cell_world_min - x) * inv_dir;
+        vec3 t_to_max = (cell_world_max - x) * inv_dir;
+        vec3 t_exit_planes = max(t_to_min, t_to_max);
+
+        float t_cell_exit = min(t_exit_planes.x,
+                            min(t_exit_planes.y, t_exit_planes.z));
+        t_cell_exit = min(t_cell_exit, t_far);
+
+        // ---- Look up majorant for this cell ----
+        vec3 cell_center_uvw = (vec3(cell) + 0.5) / vec3(u_majorant_resolution);
+        float majorant_density = texture(u_majorant, cell_center_uvw).r;
+        float mu_bar = max_ext * u_density_scale * majorant_density;
+
+        // ---- Empty cell: skip straight to boundary ----
+        if (mu_bar <= 0.0) {
+            t = t_cell_exit + 1e-5;
+            continue;
+        }
+
+        // ---- Ratio tracking within this cell ----
+        bool left_cell = false;
+        while (!left_cell) {
+            // Sample exponential free-flight distance
+            float xi = next_float();
+            xi = max(xi, 1e-30);            // guard log(0)
+            float dt = -log(1.0 - xi) / mu_bar;
+            t += dt;
+
+            // Overshot cell boundary → advance to next cell
+            if (t >= t_cell_exit) {
+                t = t_cell_exit + 1e-5;
+                left_cell = true;
+                break;
+            }
+
+            // Overshot volume → done
+            if (t >= t_far)
+                return T;
+
+            // ---- Tentative event: ratio-tracking weight update ----
+            // T *= (mu_bar - sigma_t) / mu_bar   (per channel)
+            // No real/null decision — every event contributes.
+            vec3 event_pos = x + t * dir;
+            vec3 sigma_t   = sigma_t_at(event_pos);
+            T *= (mu_bar - sigma_t) / mu_bar;
+
+            // Early termination: if T is negligibly small, stop
+            if (max(T.r, max(T.g, T.b)) < 1e-6)
+                return T;
+        }
+    }
+
+    // Safety: exceeded MAX_SHADOW_ITERS
+    return T;
+}
+
+
+// ====================================================================
 // Sample a direction uniformly on the unit sphere.
 //
 // Analytic cos-theta / sin-theta method: branchless, exactly 2 random
@@ -346,7 +474,14 @@ void main() {
         // Fold absorption: throughput *= albedo
         throughput *= u_albedo_rgb;
 
-        // (Step 8 will add sun NEE here, before scattering direction.)
+        // ---- Sun NEE (Step 8): direct illumination at collision ----
+        // Delta light, isotropic phase = 1/(4*pi).
+        // throughput already includes albedo_rgb from the line above.
+        {
+            vec3 T_sun = transmittance_to_sun(hit_pos);
+            float phase = 1.0 / (4.0 * 3.141592653589793);
+            radiance += throughput * phase * T_sun * u_sun_color * u_sun_intensity;
+        }
 
         depth += 1;
 
