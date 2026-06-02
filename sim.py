@@ -124,6 +124,9 @@ class Sim:
     def setup_shaders(self):
         # 1. Entity update compute shader
         self.entity_update_source = read_shader('shaders/entity_update.glsl')
+        # SDF scene definition for particle-surface interactions (before fourier so #extension stays first)
+        self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('volrender/shaders/volume_scene.glsl'))
+        self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('volrender/shaders/common.glsl'))
         self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('shaders/fourier4_4.glsl'))
         self.entity_update_source = prepend_defines(self.entity_update_source, self.entity_count)
 

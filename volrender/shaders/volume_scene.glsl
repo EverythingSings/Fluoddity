@@ -69,7 +69,7 @@ vec2 scene(vec3 p) {
                        MAT_DIFFUSE + 0.0);
 
     // Reflective sphere at origin
-    vec2 sphere = vec2(sd_sphere(p, vec3(0.0, 0.0, 0.0), 0.3),
+    vec2 sphere = vec2(sd_sphere(p, vec3(0.0, -.50, 0.0), 0.3),
                        MAT_GLOSSY + 0.0);
 
     return sdf_union(ground, sphere);

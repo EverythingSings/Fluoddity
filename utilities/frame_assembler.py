@@ -1,6 +1,6 @@
 import moderngl
 import numpy as np
-from utilities.gl_helpers import tryset, read_shader
+from utilities.gl_helpers import tryset, tryset_mat4, read_shader
 
 def create_frame_assembly_shader(ctx, total_samples):
     """Create a shader program for frame assembly with temporal accumulation and gamma correction."""
@@ -11,6 +11,14 @@ def create_frame_assembly_shader(ctx, total_samples):
     # Load fragment shader and replace total_samples placeholder
     fragment_shader = read_shader('shaders/frame_assembly.frag')
     fragment_shader = fragment_shader.replace('{total_samples}', str(total_samples))
+
+    # Prepend SDF scene definition (common.glsl + volume_scene.glsl) after #version line
+    common_src = read_shader('volrender/shaders/common.glsl')
+    scene_src = read_shader('volrender/shaders/volume_scene.glsl')
+    insert_pos = fragment_shader.find("\n")
+    fragment_shader = (fragment_shader[:insert_pos + 1]
+                       + common_src + scene_src
+                       + fragment_shader[insert_pos + 1:])
 
     return ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
 
@@ -78,7 +86,11 @@ class FrameAssembler:
                        brush_mode=0, fixed_direction_heading=0.0,
                        field_texture=None, advanced_drawing_resources_initialized=False,
                        force_field_checked=False, strafe_field_checked=False,
-                       draw_target_overlay_opacity=0.0):
+                       draw_target_overlay_opacity=0.0,
+                       sdf_enabled=False, inv_view_proj=None,
+                       sdf_sun_dir=(0.577, 0.577, 0.577),
+                       sdf_sun_color=(3.0, 3.0, 3.0),
+                       sdf_sky_color=(0.5, 0.7, 1.0)):
         """
         Accumulate a frame and optionally apply gamma correction.
 
@@ -168,6 +180,13 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'force_field_checked', force_field_checked)
         tryset(self.resources['shader'], 'strafe_field_checked', strafe_field_checked)
         tryset(self.resources['shader'], 'draw_target_overlay_opacity', draw_target_overlay_opacity)
+        # SDF preview uniforms
+        tryset(self.resources['shader'], 'u_sdf_enabled', sdf_enabled)
+        if sdf_enabled and inv_view_proj is not None:
+            tryset_mat4(self.resources['shader'], 'u_inv_view_proj', inv_view_proj)
+            tryset(self.resources['shader'], 'u_sdf_sun_dir', sdf_sun_dir)
+            tryset(self.resources['shader'], 'u_sdf_sun_color', sdf_sun_color)
+            tryset(self.resources['shader'], 'u_sdf_sky_color', sdf_sky_color)
 
         # Render to accumulation buffer
         self.resources['accumulation_fbo'].use()

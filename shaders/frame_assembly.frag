@@ -38,6 +38,13 @@ uniform vec2 view_max;              // Entity-space maximum of view rectangle
 uniform vec2 tiling_scale;          // Converts frame_assembly world_pos to entity space
 uniform vec2 canvas_resolution;     // Canvas pixel dimensions (width, height)
 
+// SDF preview uniforms (3D mode only)
+uniform bool u_sdf_enabled;        // "Enable SDF" toggle from Tracer controls
+uniform mat4 u_inv_view_proj;      // Inverse view-projection for ray generation
+uniform vec3 u_sdf_sun_dir;        // Normalized sun direction
+uniform vec3 u_sdf_sun_color;      // Sun color * intensity
+uniform vec3 u_sdf_sky_color;      // Sky color * intensity
+
 // Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
 // Must match the value in cam_brush.vert. Smaller = more margin for edge blending.
 const float TILING_MARGIN = 0.993;
@@ -253,6 +260,55 @@ vec3 sample_tiled_color(vec2 screen_uv) {
     return color;
 }
 
+// ====================================================================
+// SDF preview rendering (primary ray + shadow + AO)
+// Uses scene(), sdf_normal(), trace_sdf(), sdf_shadow_test(),
+// sdf_get_albedo() from volume_scene.glsl (prepended at compile time).
+// ====================================================================
+
+float calc_sdf_ao(vec3 pos, vec3 nor) {
+    float occ = 0.0;
+    float sca = 1.0;
+    for (int i = 0; i < 5; i++) {
+        float h = 0.01 + 0.12 * float(i) / 4.0;
+        float d = scene(pos + h * nor).x;
+        occ += (h - d) * sca;
+        sca *= 0.95;
+    }
+    return clamp(1.0 - 3.0 * occ, 0.0, 1.0);
+}
+
+vec3 sdf_preview_shade(vec3 ro, vec3 rd) {
+    float hit_t;
+    vec2 hit_mat;
+    if (!trace_sdf(ro, rd, 0.001, SDF_MAX_DIST, hit_t, hit_mat)) {
+        // Sky gradient
+        float sky_t = max(rd.y, 0.0);
+        vec3 sky_base = u_sdf_sky_color * 0.15;
+        return mix(sky_base, u_sdf_sky_color * 0.5, sky_t);
+    }
+
+    vec3 pos = ro + hit_t * rd;
+    vec3 nor = sdf_normal(pos);
+    vec3 albedo = sdf_get_albedo(hit_mat);
+
+    // Direct sun lighting
+    float NdotL = max(dot(nor, u_sdf_sun_dir), 0.0);
+    float shadow = 1.0;
+    if (NdotL > 0.0) {
+        shadow = sdf_shadow_test(pos + nor * 0.01, u_sdf_sun_dir,
+                                  0.01, SDF_MAX_DIST) ? 0.0 : 1.0;
+    }
+
+    // AO
+    float ao = calc_sdf_ao(pos, nor);
+
+    // Ambient from sky
+    vec3 ambient = u_sdf_sky_color * 0.15 * ao;
+
+    return albedo * (u_sdf_sun_color * NdotL * shadow + ambient);
+}
+
 void main() {
     // Sample the input frame (tiling mode handles edge blending internally)
     vec3 current_color;
@@ -264,6 +320,21 @@ void main() {
         current_color = vec3(field_sample.z, field_sample.w, 0.0);
     } else {
         current_color = texture(input_frame, uv).rgb;
+    }
+
+    // SDF background: composite particles over raymarched scene
+    if (u_sdf_enabled) {
+        vec2 ndc_xy = uv * 2.0 - 1.0;
+        vec4 near_h = u_inv_view_proj * vec4(ndc_xy, -1.0, 1.0);
+        vec4 far_h  = u_inv_view_proj * vec4(ndc_xy,  1.0, 1.0);
+        vec3 near_w = near_h.xyz / near_h.w;
+        vec3 far_w  = far_h.xyz / far_h.w;
+        vec3 ray_origin = near_w;
+        vec3 ray_dir = normalize(far_w - near_w);
+
+        vec3 bg = sdf_preview_shade(ray_origin, ray_dir);
+        // Particles are additive on black — overlay on top of raymarched scene
+        current_color = bg + current_color;
     }
 
     // In watercolor mode, convert from log-space optical density to linear transmission

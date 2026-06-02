@@ -201,6 +201,37 @@ class SimulationRunner:
         adv_prefs = ui_state.preferences
         advanced_active = adv_prefs.advanced_drawing_enabled
 
+        # SDF preview params (for 3D mode)
+        sdf_enabled = False
+        inv_view_proj = None
+        sdf_sun_dir = (0.577, 0.577, 0.577)
+        sdf_sun_color = (3.0, 3.0, 3.0)
+        sdf_sky_color = (0.5, 0.7, 1.0)
+
+        if self.camera.render_3d:
+            sdf_enabled = ui_state.preferences.tracer_sdf_enabled
+            if sdf_enabled:
+                cam = self.controller_cam
+                width, height = glfw.get_framebuffer_size(self.window)
+                aspect = width / max(height, 1)
+                view_proj = self.camera.compute_fps_view_proj(
+                    cam.pos, cam.dir, cam.up, cam.fov, aspect
+                )
+                inv_view_proj = np.linalg.inv(
+                    view_proj.astype(np.float64)
+                ).astype(np.float32)
+
+                p = ui_state.preferences
+                sun_d = np.array(p.tracer_sun_direction, dtype=np.float64)
+                sun_len = max(np.linalg.norm(sun_d), 1e-8)
+                sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
+                sc = p.tracer_sun_color
+                si = p.tracer_sun_intensity
+                sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
+                skc = p.tracer_sky_color
+                ski = p.tracer_sky_intensity
+                sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
+
         return dict(
             view_mode=ui_state.sim.current_view_option,
             sweep_mode=sweep_mode,
@@ -231,6 +262,11 @@ class SimulationRunner:
             force_field_checked=adv_prefs.advanced_draw_force_field if advanced_active else False,
             strafe_field_checked=adv_prefs.advanced_draw_strafe_field if advanced_active else False,
             draw_target_overlay_opacity=adv_prefs.draw_target_overlay_opacity if advanced_active else 0.0,
+            sdf_enabled=sdf_enabled,
+            inv_view_proj=inv_view_proj,
+            sdf_sun_dir=sdf_sun_dir,
+            sdf_sun_color=sdf_sun_color,
+            sdf_sky_color=sdf_sky_color,
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
