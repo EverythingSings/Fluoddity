@@ -31,10 +31,10 @@ class Camera:
     def setup_rendering(self):
         # Fullscreen quad vertices (position + texcoord)
         quad_vertices = np.array([
-            -1.0, -1.0,  0.0, 0.0,  # bottom-left
-             1.0, -1.0,  1.0, 0.0,  # bottom-right
-             1.0,  1.0,  1.0, 1.0,  # top-right
-            -1.0,  1.0,  0.0, 1.0   # top-left
+            -1.0, -1.0,  0.0, 1.0,  # bottom-left
+             1.0, -1.0,  1.0, 1.0,  # bottom-right
+             1.0,  1.0,  1.0, 0.0,  # top-right
+            -1.0,  1.0,  0.0, 0.0   # top-left
         ], dtype=np.float32)
 
         quad_indices = np.array([0, 1, 2, 2, 3, 0], dtype=np.uint32)
@@ -441,7 +441,7 @@ class Camera:
 
         # Screen coords to NDC
         x_ndc = (screen_pos[0] / width) * 2.0 - 1.0
-        y_ndc = 1.0 - (screen_pos[1] / height) * 2.0
+        y_ndc = (screen_pos[1] / height) * 2.0 - 1.0  # Flipped to match Y-flipped render
 
         aspect = width / height
         tan_half_fov = math.tan(math.radians(self.fov_3d) / 2.0)

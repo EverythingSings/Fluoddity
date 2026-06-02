@@ -91,6 +91,8 @@ class TracerWindowMixin:
             imgui.image(
                 tex_id,
                 imgui.ImVec2(avail_width, display_height),
+                uv0=imgui.ImVec2(0, 1),
+                uv1=imgui.ImVec2(1, 0),
             )
 
         imgui.end()

@@ -64,7 +64,6 @@ vec2 sdf_intersect(vec2 a, vec2 b) {
 // ====================================================================
 
 vec2 scene(vec3 p) {
-        p.y*=-1;
     // Dark diffuse ground plane at y = -1
     vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -1.0),
                        MAT_DIFFUSE + 0.0);

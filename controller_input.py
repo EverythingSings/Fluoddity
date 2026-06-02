@@ -196,7 +196,7 @@ def process_controller_input(controller_cam, joystick_state, dt, *,
 
     if right_x != 0 or right_y != 0:
         rotate_speed_dt = rotate_speed * dt
-        controller_cam.rotate(right_x * rotate_speed_dt, right_y * rotate_speed_dt)
+        controller_cam.rotate(right_x * rotate_speed_dt, -right_y * rotate_speed_dt)
 
     # Triggers - Y movement
     lt = axes[AXIS_LT]
@@ -206,7 +206,7 @@ def process_controller_input(controller_cam, joystick_state, dt, *,
     lt_normalized = (lt + 1.0) / 2.0 if lt < 0 else lt
     rt_normalized = (rt + 1.0) / 2.0 if rt < 0 else rt
 
-    y_movement = (lt_normalized - rt_normalized) * move_speed * speed_mult * dt
+    y_movement = (rt_normalized - lt_normalized) * move_speed * speed_mult * dt
     if abs(y_movement) > 0.01:
         controller_cam.move_y(y_movement)
 
