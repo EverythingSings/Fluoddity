@@ -79,7 +79,7 @@ class TracerInterface:
             bounds_min=(-1.0, -1.0, -1.0),
             bounds_max=(1.0, 1.0, 1.0),
             resolution=(512, 512, 512),
-            majorant_resolution=(16, 16, 16),
+            majorant_resolution=(128,128,128),
         )
         self._renderer = VolumeRenderer(self.ctx, grid_params)
 
