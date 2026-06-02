@@ -13,6 +13,7 @@ Supports two modes:
 from __future__ import annotations
 
 import math
+import os
 
 import moderngl
 import numpy as np
@@ -21,6 +22,8 @@ from volrender import (
     VolumeRenderer, GridParams, MediumParams, SunParams, SkyParams, RenderParams
 )
 from volrender.renderer import _tryset
+
+_VOLRENDER_SHADER_DIR = os.path.join(os.path.dirname(__file__), "volrender", "shaders")
 
 
 class TracerInterface:
@@ -36,6 +39,12 @@ class TracerInterface:
         self._target_tex: moderngl.Texture | None = None   # rgba16f HDR result
         self._display_tex: moderngl.Texture | None = None   # rgba8 tonemapped for imgui
         self._display_size: tuple[int, int] = (0, 0)
+
+        # Compile tonemap compute shader
+        tonemap_path = os.path.join(_VOLRENDER_SHADER_DIR, "tonemap.comp")
+        with open(tonemap_path, 'r') as f:
+            tonemap_src = f.read()
+        self._tonemap_program = ctx.compute_shader(tonemap_src)
 
         # Progressive render state
         self._rendering = False
@@ -238,35 +247,24 @@ class TracerInterface:
         self.ctx.memory_barrier()
 
     def _tonemap_to_display(self):
-        """Read back HDR target, apply exposure+reinhard+gamma, write to rgba8 display tex."""
-        tex = self._target_tex
-        raw = tex.read()
-        expected_f16 = tex.height * tex.width * 4 * 2
-        if len(raw) == expected_f16:
-            hdr = np.frombuffer(raw, dtype=np.float16).astype(
-                np.float32).reshape(tex.height, tex.width, 4)
-        else:
-            hdr = np.frombuffer(raw, dtype=np.float32).reshape(
-                tex.height, tex.width, 4)
+        """GPU tonemap: brightness + asinh + gamma, matching the 2D renderer's curve.
 
-        rgb = hdr[:, :, :3].copy()
+        Dispatches tonemap.comp which reads the resolved HDR target (rgba16f),
+        applies the same brightness * asinh(softness) tonemap as frame_assembly.frag,
+        and writes the flipped LDR result into the rgba8 display texture.
+        """
+        w, h = self._target_tex.width, self._target_tex.height
+        prog = self._tonemap_program
+        _tryset(prog, 'u_target_size', (w, h))
+        _tryset(prog, 'u_exposure', self.exposure)
 
-        # Exposure + Reinhard tonemap (matches demo shader)
-        exposed = rgb * self.exposure
-        ldr = exposed / (1.0 + exposed)
+        self._target_tex.bind_to_image(0, read=True, write=False)
+        self._display_tex.bind_to_image(1, read=False, write=True)
 
-        # Gamma correction
-        ldr = np.power(np.clip(ldr, 0.0, None), 1.0 / 2.2)
-
-        # To uint8 RGBA
-        alpha = np.ones((tex.height, tex.width, 1), dtype=np.float32)
-        rgba = np.concatenate([ldr, alpha], axis=2)
-        img_u8 = (np.clip(rgba, 0.0, 1.0) * 255).astype(np.uint8)
-
-        # Flip vertically (OpenGL y=0 bottom -> imgui y=0 top)
-        img_u8 = img_u8[::-1].copy()
-
-        self._display_tex.write(img_u8.tobytes())
+        gx = math.ceil(w / 8)
+        gy = math.ceil(h / 8)
+        prog.run(gx, gy, 1)
+        self.ctx.memory_barrier()
 
     def tonemap_for_video(self) -> moderngl.Texture:
         """Tonemap the resolved HDR target into the display texture and return it.
