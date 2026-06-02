@@ -14,7 +14,16 @@ layout(local_size_x = 8, local_size_y = 8) in;
 // uniform float u_voxel_volume;
 // vec3 world_to_grid(vec3), vec3 grid_to_world(vec3)
 // RNG: rng_state, rng_init(), next_float(), next_float3()
+// vec3 sample_sphere()
 // bool intersect_aabb(origin, dir, box_min, box_max, out t_near, out t_far)
+//
+// ---- volume_scene.glsl (prepended) provides: ----
+// vec2 scene(vec3 p), vec3 sdf_normal(vec3 p)
+// bool trace_sdf(...), bool sdf_shadow_test(...)
+// vec3 sample_brdf(...), vec3 eval_brdf_cos(...)
+
+// ---- SDF scene enable ----
+uniform bool u_sdf_enabled;    // false = media-only (existing behavior)
 
 // ---- camera ----
 uniform mat4  u_inv_view_proj;
@@ -293,6 +302,12 @@ bool sample_free_flight(vec3 origin, vec3 dir,
 vec3 transmittance_to_sun(vec3 x) {
     vec3 dir = u_sun_direction;
 
+    // SDF occlusion: opaque surfaces fully block light
+    if (u_sdf_enabled) {
+        if (sdf_shadow_test(x, dir, SDF_SURFACE_EPS * 10.0, SDF_MAX_DIST))
+            return vec3(0.0);
+    }
+
     // Intersect the shadow ray with the grid AABB
     float t_near, t_far;
     bool hit = intersect_aabb(x, dir, u_bounds_min, u_bounds_max,
@@ -400,24 +415,6 @@ vec3 transmittance_to_sun(vec3 x) {
 
 
 // ====================================================================
-// Sample a direction uniformly on the unit sphere.
-//
-// Analytic cos-theta / sin-theta method: branchless, exactly 2 random
-// draws, no rejection waste.  Used for isotropic phase function.
-// ====================================================================
-vec3 sample_sphere() {
-    float xi1 = next_float();
-    float xi2 = next_float();
-    float cos_theta = 1.0 - 2.0 * xi1;          // uniform in [-1, +1]
-    float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
-    float phi = 6.283185307 * xi2;               // 2*pi
-    return vec3(sin_theta * cos(phi),
-                sin_theta * sin(phi),
-                cos_theta);
-}
-
-
-// ====================================================================
 // Accumulate-aware output: adds to img_accum when accumulating,
 // writes to img_output otherwise.  (Step 9)
 // ====================================================================
@@ -457,13 +454,27 @@ void main() {
 
     vec3 sky = u_sky_color * u_sky_intensity;
 
-    if (!hit) {
+    // ---- SDF primary ray test (before debug paths) ----
+    float primary_sdf_t;
+    vec2  primary_sdf_mat;
+    bool  primary_sdf_hit = false;
+    if (u_sdf_enabled) {
+        primary_sdf_hit = trace_sdf(ray_origin, ray_dir,
+                                     1e-4, SDF_MAX_DIST,
+                                     primary_sdf_t, primary_sdf_mat);
+    }
+
+    if (!hit && !primary_sdf_hit) {
         write_output(pixel, vec4(sky, 1.0));
         return;
     }
 
     // ---- 5. Debug fixed-step raymarch ----
     if (u_debug_raymarch) {
+        if (!hit) {
+            write_output(pixel, vec4(sky, 1.0));
+            return;
+        }
         // Clamp t_near so camera can be inside the box
         t_near = max(t_near, 0.0);
         float path_length = t_far - t_near;
@@ -485,7 +496,6 @@ void main() {
         }
 
         // Transmittance composited over sky: color = sky * exp(-tau)
-        // This is the "1 - exp(-tau_rgb)" alpha-over-sky composite.
         vec3 transmittance = exp(-tau);
         vec3 color = sky * transmittance;
         write_output(pixel, vec4(color, 1.0));
@@ -493,9 +503,11 @@ void main() {
     }
 
     // ---- 6. Delta-tracked free flight (visual validation mode) ----
-    // When u_debug_delta_only is set, use the Step 6 visual test:
-    // single free flight, white on collision, sky on escape.
     if (u_debug_delta_only) {
+        if (!hit) {
+            write_output(pixel, vec4(sky, 1.0));
+            return;
+        }
         rng_init(uvec3(pixel, 0u));
         t_near = max(t_near, 0.0);
 
@@ -512,11 +524,10 @@ void main() {
         return;
     }
 
-    // ---- 7. Bounce loop (isotropic scattering, sky environment) ----
-    // Full random walk with throughput, albedo absorption, and
-    // Russian roulette termination.  The medium is lit purely by
-    // the sky environment via escaped random walks.
-    // Direct sun NEE is added in Step 8.
+    // ---- 7. Bounce loop (media scattering + SDF surfaces) ----
+    // Full random walk handling both participating media (delta tracking)
+    // and SDF surfaces (sphere tracing).  At each bounce, the ray tests
+    // both systems and picks whichever intersection is closer.
 
     rng_init(uvec3(pixel, u_sample_index));
 
@@ -524,84 +535,150 @@ void main() {
     vec3 radiance   = vec3(0.0);
     int  depth      = 0;
 
-    vec3  walk_origin = ray_origin;
-    vec3  walk_dir    = ray_dir;
-    float walk_t_near = max(t_near, 0.0);
-    float walk_t_far  = t_far;
+    vec3 walk_origin = ray_origin;
+    vec3 walk_dir    = ray_dir;
 
     // COMMENT FLAG: MAX_WALK_BOUNCES — absolute safety cap on walk length.
-    // Should never be reached when max_bounces > 0 or RR is active.
     const int MAX_WALK_BOUNCES = 512;
 
     for (int bounce = 0; bounce < MAX_WALK_BOUNCES; bounce++) {
 
-        // ---- Free flight ----
-        vec3 dt_throughput = vec3(1.0);
+        // ---- Determine intersection candidates ----
+
+        // 1. SDF intersection
+        float sdf_t = SDF_MAX_DIST + 1.0;
+        vec2  sdf_mat = vec2(0.0);
+        bool  sdf_hit = false;
+        if (u_sdf_enabled) {
+            sdf_hit = trace_sdf(walk_origin, walk_dir,
+                                SDF_SURFACE_EPS * 2.0, SDF_MAX_DIST,
+                                sdf_t, sdf_mat);
+        }
+
+        // 2. AABB (media) intersection
+        float aabb_t_near, aabb_t_far;
+        bool  aabb_hit = intersect_aabb(walk_origin, walk_dir,
+                                        u_bounds_min, u_bounds_max,
+                                        aabb_t_near, aabb_t_far);
+        if (aabb_hit)
+            aabb_t_near = max(aabb_t_near, 1e-5);
+
+        // ---- No intersection at all → sky escape ----
+        if (!sdf_hit && !aabb_hit) {
+            radiance += throughput * sky;
+            break;
+        }
+
+        // ---- Determine what happens first ----
+        // surface_interaction = true means SDF surface, false means media scatter
+        bool surface_interaction = false;
         vec3 hit_pos;
-        bool collided = sample_free_flight(walk_origin, walk_dir,
-                                           walk_t_near, walk_t_far,
-                                           dt_throughput, hit_pos);
 
-        throughput *= dt_throughput;
+        bool try_media = aabb_hit && (!sdf_hit || aabb_t_near < sdf_t);
 
-        if (!collided) {
-            // Escaped grid: add sky contribution.
-            // Primary escape = visible background;
-            // deeper escape = environment illumination of the medium.
-            radiance += throughput * u_sky_color * u_sky_intensity;
-            break;
-        }
+        if (try_media) {
+            // Media AABB is the closer candidate (or SDF not hit).
+            // Delta-track through media, but clip t_far at SDF hit distance
+            // so that tracking stops if the ray reaches the SDF surface
+            // without a media collision.
+            float effective_t_far = aabb_t_far;
+            if (sdf_hit)
+                effective_t_far = min(effective_t_far, sdf_t);
 
-        // ---- Real collision at hit_pos ----
-        // Fold absorption: throughput *= per-voxel albedo
-        throughput *= get_albedo(hit_pos);
+            vec3 dt_throughput = vec3(1.0);
+            bool collided = sample_free_flight(walk_origin, walk_dir,
+                                               aabb_t_near, effective_t_far,
+                                               dt_throughput, hit_pos);
+            throughput *= dt_throughput;
 
-        // ---- Sun NEE (Step 8): direct illumination at collision ----
-        // Delta light, isotropic phase = 1/(4*pi).
-        // throughput already includes per-voxel albedo from the line above.
-        {
-            vec3 T_sun = transmittance_to_sun(hit_pos);
-            float phase = 1.0 / (4.0 * 3.141592653589793);
-            radiance += throughput * phase * T_sun * u_sun_color * u_sun_intensity;
-        }
-
-        depth += 1;
-
-        // ---- Termination: max_bounces ----
-        // COMMENT FLAG: max_bounces
-        if (u_max_bounces > 0 && depth >= u_max_bounces) {
-            break;
-        }
-
-        // ---- Termination: Russian roulette ----
-        // COMMENT FLAG: rr_start_depth
-        if (depth > u_rr_start_depth) {
-            float p_survive = max(throughput.r, max(throughput.g, throughput.b));
-            p_survive = clamp(p_survive, 0.05, 1.0);  // floor prevents fireflies
-            if (next_float() >= p_survive) {
+            if (collided) {
+                // Media scatter — hit_pos set by sample_free_flight
+                surface_interaction = false;
+            } else if (sdf_hit && effective_t_far <= sdf_t + 1e-4) {
+                // Passed through media without collision, reached SDF surface
+                surface_interaction = true;
+                hit_pos = walk_origin + sdf_t * walk_dir;
+                sdf_mat = scene(hit_pos);
+            } else {
+                // Escaped AABB, no SDF beyond → sky
+                radiance += throughput * sky;
                 break;
             }
-            throughput /= p_survive;
+        } else {
+            // SDF is closer than media entry (or no media hit)
+            surface_interaction = true;
+            hit_pos = walk_origin + sdf_t * walk_dir;
         }
 
-        // ---- Scatter: uniform sphere direction (isotropic phase) ----
-        walk_dir = sample_sphere();
+        // ---- Handle the interaction ----
 
-        // ---- Re-intersect AABB from collision point ----
-        walk_origin = hit_pos;
-        bool re_hit = intersect_aabb(walk_origin, walk_dir,
-                                     u_bounds_min, u_bounds_max,
-                                     walk_t_near, walk_t_far);
+        if (!surface_interaction) {
+            // ---- Media scatter (existing logic) ----
+            throughput *= get_albedo(hit_pos);
 
-        if (!re_hit) {
-            // New direction immediately leaves the volume → escape
-            radiance += throughput * u_sky_color * u_sky_intensity;
-            break;
+            // Sun NEE: isotropic phase = 1/(4*pi)
+            {
+                vec3 T_sun = transmittance_to_sun(hit_pos);
+                float phase = 1.0 / (4.0 * 3.141592653589793);
+                radiance += throughput * phase * T_sun
+                            * u_sun_color * u_sun_intensity;
+            }
+
+            depth += 1;
+
+            // Max bounces termination
+            if (u_max_bounces > 0 && depth >= u_max_bounces)
+                break;
+
+            // Russian roulette
+            if (depth > u_rr_start_depth) {
+                float p_survive = max(throughput.r, max(throughput.g, throughput.b));
+                p_survive = clamp(p_survive, 0.05, 1.0);
+                if (next_float() >= p_survive) break;
+                throughput /= p_survive;
+            }
+
+            // Isotropic scatter
+            walk_dir = sample_sphere();
+            walk_origin = hit_pos;
+
+        } else {
+            // ---- SDF surface interaction ----
+            vec3 N = sdf_normal(hit_pos);
+            // Ensure normal faces the incoming ray
+            if (dot(N, walk_dir) > 0.0) N = -N;
+
+            // Sun NEE for surfaces (BRDF-weighted)
+            // Offset shadow origin along normal to avoid self-shadowing
+            {
+                vec3 shadow_origin = hit_pos + N * SDF_SURFACE_EPS * 4.0;
+                vec3 T_sun = transmittance_to_sun(shadow_origin);
+                vec3 brdf_cos = eval_brdf_cos(walk_dir, u_sun_direction,
+                                               N, sdf_mat);
+                radiance += throughput * brdf_cos * T_sun
+                            * u_sun_color * u_sun_intensity;
+            }
+
+            depth += 1;
+
+            if (u_max_bounces > 0 && depth >= u_max_bounces)
+                break;
+
+            if (depth > u_rr_start_depth) {
+                float p_survive = max(throughput.r, max(throughput.g, throughput.b));
+                p_survive = clamp(p_survive, 0.05, 1.0);
+                if (next_float() >= p_survive) break;
+                throughput /= p_survive;
+            }
+
+            // Sample BRDF for next bounce direction
+            vec3 bounce_dir;
+            vec3 brdf_weight = sample_brdf(walk_dir, N, sdf_mat, bounce_dir);
+            throughput *= brdf_weight;
+            walk_dir = bounce_dir;
+            // Offset origin along normal to prevent self-intersection
+            walk_origin = hit_pos + N * SDF_SURFACE_EPS * 2.0;
         }
-
-        // Origin is inside the box, so t_near <= 0.
-        // Step forward slightly to avoid self-intersection.
-        walk_t_near = max(walk_t_near, 1e-5);
     }
 
     write_output(pixel, vec4(radiance, 1.0));

@@ -58,6 +58,10 @@ class TracerWindowMixin:
             _, ti.sky_intensity = imgui.slider_float(
                 "Sky Intensity", ti.sky_intensity, 0.0, 5.0)
 
+        # ---- SDF Scene ----
+        if imgui.collapsing_header("SDF Scene", imgui.TreeNodeFlags_.default_open.value):
+            _, ti.sdf_enabled = imgui.checkbox("Enable SDF", ti.sdf_enabled)
+
         # ---- Render ----
         if imgui.collapsing_header("Render", imgui.TreeNodeFlags_.default_open.value):
             _, ti.num_samples = imgui.slider_int(
@@ -94,6 +98,7 @@ class TracerWindowMixin:
     def _apply_tracer_preferences(self, ti):
         """Apply saved tracer preferences to a newly created TracerInterface."""
         p = self.state.preferences
+        ti.sdf_enabled = p.tracer_sdf_enabled
         ti.extinction_rgb = list(p.tracer_extinction_rgb)
         ti.albedo_saturation = p.tracer_albedo_saturation
         ti.albedo_brightness = p.tracer_albedo_brightness

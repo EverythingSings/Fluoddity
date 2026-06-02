@@ -63,11 +63,16 @@ class VolumeRenderer:
         self.majorant_builder = MajorantBuilder(ctx)
         self.camera = Camera()
 
-        # Compile pathtrace compute shader (prepend common.glsl after #version)
+        # Compile pathtrace compute shader
+        # Prepend common.glsl then volume_scene.glsl after #version line.
+        # Order matters: common provides RNG + sample_sphere,
+        # volume_scene uses those and provides scene/BRDF functions,
+        # pathtrace.comp uses everything.
         common_src = _read_shader("common.glsl")
+        scene_src = _read_shader("volume_scene.glsl")
         pt_src = _read_shader("pathtrace.comp")
         insert_pos = pt_src.find("\n")
-        pt_src = pt_src[:insert_pos + 1] + common_src + pt_src[insert_pos + 1:]
+        pt_src = pt_src[:insert_pos + 1] + common_src + scene_src + pt_src[insert_pos + 1:]
         self._pathtrace_program = ctx.compute_shader(pt_src)
 
         # Compile resolve compute shader (Step 9) — no common.glsl needed
@@ -128,6 +133,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_debug_raymarch', True)
         _tryset(prog, 'u_debug_steps', debug_steps)
         _tryset(prog, 'u_accumulate', False)
+        _tryset(prog, 'u_sdf_enabled', False)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -190,6 +196,7 @@ class VolumeRenderer:
         # Step 6 visual validation mode (white/sky, no bounce loop)
         _tryset(prog, 'u_debug_delta_only', True)
         _tryset(prog, 'u_accumulate', False)
+        _tryset(prog, 'u_sdf_enabled', False)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -231,7 +238,8 @@ class VolumeRenderer:
     def render_bounce_test(self, view_proj, target: moderngl.Texture,
                            medium: MediumParams, sky: SkyParams,
                            render: RenderParams, sample_index: int = 0,
-                           sun: SunParams | None = None):
+                           sun: SunParams | None = None,
+                           sdf_enabled: bool = False):
         """Dispatch the bounce-loop integrator (single sample).
 
         Writes linear HDR into ``target`` (expected rgba16f or rgba32f).
@@ -262,6 +270,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_debug_raymarch', False)
         _tryset(prog, 'u_debug_delta_only', False)
         _tryset(prog, 'u_accumulate', False)
+        _tryset(prog, 'u_sdf_enabled', sdf_enabled)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -331,7 +340,7 @@ class VolumeRenderer:
 
     def accumulate(self, n_spp: int, view_proj, target,
                    medium: MediumParams, sun: SunParams, sky: SkyParams,
-                   render: RenderParams):
+                   render: RenderParams, sdf_enabled: bool = False):
         """Dispatch n_spp path-traced samples and add to the accumulator.
 
         Dispatches one sample per compute pass with a memory barrier after
@@ -370,6 +379,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_debug_raymarch', False)
         _tryset(prog, 'u_debug_delta_only', False)
         _tryset(prog, 'u_accumulate', True)
+        _tryset(prog, 'u_sdf_enabled', sdf_enabled)
 
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
@@ -439,7 +449,7 @@ class VolumeRenderer:
 
     def render_to_completion(self, view_proj, target,
                              medium: MediumParams, sun: SunParams, sky: SkyParams,
-                             render: RenderParams):
+                             render: RenderParams, sdf_enabled: bool = False):
         """Blocking render: reset, accumulate num_samples, resolve to target.
 
         Calls ``reset_accumulation``, then ``accumulate`` for
@@ -460,7 +470,7 @@ class VolumeRenderer:
         self._ensure_accum_buffer(w, h)
         self.reset_accumulation()
         self.accumulate(render.num_samples, view_proj, target,
-                        medium, sun, sky, render)
+                        medium, sun, sky, render, sdf_enabled)
 
         # Resolve: divide accumulation by sample count, write to target
         prog = self._resolve_program

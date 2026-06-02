@@ -50,6 +50,22 @@ vec3 next_float3() {
     return vec3(next_float(), next_float(), next_float());
 }
 
+// ---- uniform sphere sampling ----
+// Analytic cos-theta / sin-theta method: branchless, exactly 2 random
+// draws, no rejection waste.  Used for isotropic phase function and
+// cosine-weighted hemisphere sampling (via the N + sphere trick).
+
+vec3 sample_sphere() {
+    float xi1 = next_float();
+    float xi2 = next_float();
+    float cos_theta = 1.0 - 2.0 * xi1;          // uniform in [-1, +1]
+    float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+    float phi = 6.283185307 * xi2;               // 2*pi
+    return vec3(sin_theta * cos(phi),
+                sin_theta * sin(phi),
+                cos_theta);
+}
+
 // ---- AABB slab intersection ----
 // Returns true if the ray [origin, origin + dir*t] intersects the AABB.
 // On hit, t_near/t_far give the parametric interval (t_near may be < 0

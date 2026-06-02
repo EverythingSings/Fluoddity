@@ -54,6 +54,9 @@ class TracerInterface:
         self._render_complete = False
         self._last_spp = 0
 
+        # SDF scene
+        self.sdf_enabled = True
+
         # Default parameter state (matches demo defaults)
         self.extinction_rgb = [1.0, 1.0, 1.0]
         self.albedo_saturation = 1.0
@@ -123,11 +126,11 @@ class TracerInterface:
         if not self._rendering:
             return False
 
-        medium, sun, sky, render = self._build_params()
+        medium, sun, sky, render, sdf_enabled = self._build_params()
 
         self._renderer.accumulate(
             1, self._render_view_proj, self._target_tex,
-            medium, sun, sky, render
+            medium, sun, sky, render, sdf_enabled
         )
         self._samples_done += 1
 
@@ -164,11 +167,11 @@ class TracerInterface:
         if not self._rendering:
             return False
 
-        medium, sun, sky, render = self._build_params()
+        medium, sun, sky, render, sdf_enabled = self._build_params()
 
         self._renderer.accumulate(
             1, self._render_view_proj, self._target_tex,
-            medium, sun, sky, render
+            medium, sun, sky, render, sdf_enabled
         )
         self._samples_done += 1
 
@@ -226,7 +229,7 @@ class TracerInterface:
             rr_start_depth=4,
             seed=0,
         )
-        return medium, sun, sky, render
+        return medium, sun, sky, render, self.sdf_enabled
 
     # ------------------------------------------------------- resolve / tonemap
     def _resolve_current(self):

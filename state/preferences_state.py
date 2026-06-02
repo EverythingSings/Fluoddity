@@ -97,6 +97,7 @@ class PreferencesState:
 
     # Tracer window (volumetric path tracer)
     show_tracer_window: bool = False
+    tracer_sdf_enabled: bool = True
     tracer_extinction_rgb: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
     tracer_albedo_saturation: float = 1.0
     tracer_albedo_brightness: float = 0.8

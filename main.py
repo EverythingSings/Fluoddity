@@ -460,6 +460,7 @@ class App:
         # Sync tracer settings into preferences
         ti = self.ui._tracer_interface
         if ti is not None:
+            ui_state.preferences.tracer_sdf_enabled = ti.sdf_enabled
             ui_state.preferences.tracer_extinction_rgb = list(ti.extinction_rgb)
             ui_state.preferences.tracer_albedo_saturation = ti.albedo_saturation
             ui_state.preferences.tracer_albedo_brightness = ti.albedo_brightness
