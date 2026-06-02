@@ -59,6 +59,7 @@ class TracerInterface:
 
         # Realtime tracer mode: 0=Off, 1=1spp, 2=Accumulate
         self.realtime_mode = 0
+        self._rt_needs_initial_splat = True
 
         # Default parameter state (matches demo defaults)
         self.extinction_rgb = [1.0, 1.0, 1.0]
@@ -172,18 +173,25 @@ class TracerInterface:
     # ---------------------------------------------------- realtime tracer API
 
     def realtime_tick(self, entity_buffer: moderngl.Buffer, entity_count: int,
-                      view_proj: np.ndarray, width: int, height: int):
+                      view_proj: np.ndarray, width: int, height: int,
+                      sim_going: bool = True):
         """Perform one realtime tracing step (1 SPP).
 
         In 1spp mode: splat, reset accumulation, trace 1 sample, resolve+tonemap.
         In Accumulate mode: splat new positions, trace 1 sample without resetting,
         resolve+tonemap.
+
+        Args:
+            sim_going: If True, re-splat entities (they may have moved).
+                       If False, skip the splat since entities are unchanged.
         """
         self._ensure_renderer()
         self._ensure_textures(width, height)
 
-        # Always splat current entity positions
-        self._renderer.splat(entity_buffer, entity_count)
+        # Re-splat when entities have moved (sim running) or on first use
+        if sim_going or self._rt_needs_initial_splat:
+            self._renderer.splat(entity_buffer, entity_count)
+            self._rt_needs_initial_splat = False
         self._render_view_proj = view_proj.copy()
 
         if self.realtime_mode == 1:

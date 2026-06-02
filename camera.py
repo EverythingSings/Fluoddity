@@ -130,7 +130,7 @@ class Camera:
         """Build a 4x4 perspective projection matrix."""
         f = 1.0 / math.tan(fov_y / 2.0)
         m = np.zeros((4, 4), dtype=np.float32)
-        m[0, 0] = f / aspect
+        m[0, 0] = f / max(.0001,aspect)
         m[1, 1] = f
         m[2, 2] = (far + near) / (near - far)
         m[2, 3] = (2.0 * far * near) / (near - far)

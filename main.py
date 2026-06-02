@@ -371,10 +371,11 @@ class App:
             rt_width = max(1, int(width * scale))
             rt_height = max(1, int(height * scale))
             view_proj = self.camera.compute_fps_view_proj(
-                cam.pos, cam.dir, cam.up, cam.fov, width / max(height, 1)
+                cam.pos, cam.dir, cam.up, cam.fov, (width / max(height, 1))
             )
             ti.realtime_tick(entity_buffer, entity_count, view_proj,
-                             rt_width, rt_height)
+                             rt_width, rt_height,
+                             sim_going=ui_state.sim.going)
 
         # 6.5. Screenshot save and settings restoration
         if self.screenshot_in_progress:

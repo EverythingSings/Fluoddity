@@ -723,9 +723,9 @@ void main() {
     e.py += .01*strafe_field_strength*draw_sample.w;
     vec3 sp = vec3(e.px,e.py,e.pz);
     vec3 n = scene(sp).x*-.01*sdf_normal(sp);
-    e.px+=n.x;
-    e.py+=n.y;
-    e.pz+=n.z;
+    //e.px+=n.x;
+    //e.py+=n.y;
+    //e.pz+=n.z;
     //BOUNDARY_CONDITIONS_MODE:  0-1-2 == BOUNCE-RESET-WRAP
     float ca = canvas_resolution.x / canvas_resolution.y;
     float x_edge = sqrt(ca);
