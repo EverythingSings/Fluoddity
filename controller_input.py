@@ -176,6 +176,11 @@ def process_controller_input(controller_cam, joystick_state, dt, *,
             print("Controller: Reset camera!")
             controller_cam.reset()
 
+    # Select button edge detection (for tracer accumulation reset)
+    joystick_state['select_pressed'] = bool(
+        len(prev) > BUTTON_SELECT and buttons[BUTTON_SELECT] and not prev[BUTTON_SELECT]
+    )
+
     joystick_state['prev_buttons'] = buttons.copy()
 
     # Right bumper held = fast mode

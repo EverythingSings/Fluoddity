@@ -28,7 +28,7 @@ class TracerWindowMixin:
         # Skip during tracer video recording — the orchestrator drives accumulation
         recording_tracer = (self._display_info.get('recording_active', False)
                             and self.state.preferences.tracer_mode)
-        if ti.is_rendering and not recording_tracer:
+        if ti.is_rendering and not recording_tracer and ti.realtime_mode == 0:
             ti.tick()
 
         # ---- Medium ----
@@ -68,20 +68,47 @@ class TracerWindowMixin:
                 "Samples (SPP)", ti.num_samples, 1, 512)
             _, ti.exposure = imgui.slider_float(
                 "Exposure", ti.exposure, 0.1, 10.0)
+            _, ti.max_bounces = imgui.drag_int(
+                "Max Bounces", ti.max_bounces, 0.1, 0, 64)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("0 = unbounded (Russian roulette only)")
 
+            # Resolution scale (applied on Enter key)
+            imgui.set_next_item_width(100)
+            changed, new_scale = imgui.input_float(
+                "Resolution Scale", ti.resolution_scale, 0.0, 0.0, "%.2f"
+            )
+            if imgui.is_item_deactivated_after_edit():
+                ti.resolution_scale = max(0.1, min(4.0, new_scale))
+            # Realtime tracer mode cycling button
+            mode_labels = ["RT: Off", "RT: 1spp", "RT: Accumulate"]
+            if imgui.button(mode_labels[ti.realtime_mode]):
+                ti.realtime_mode = (ti.realtime_mode + 1) % 3
+
+            rt_active = ti.realtime_mode > 0
+            if rt_active:
+                imgui.begin_disabled()
             if imgui.button("Re-render"):
                 self._do_tracer_render(ti)
+            if rt_active:
+                imgui.end_disabled()
 
-            # Progress indicator
-            if ti.is_rendering:
+            # Progress / status indicator
+            if ti.realtime_mode == 1:
+                imgui.same_line()
+                imgui.text("  [RT 1spp]")
+            elif ti.realtime_mode == 2:
+                imgui.same_line()
+                imgui.text(f"  [RT accum: {ti.samples_done} spp]")
+            elif ti.is_rendering:
                 imgui.same_line()
                 imgui.text(f"  [{ti.samples_done}/{ti.num_samples} spp]")
             elif ti.has_result:
                 imgui.same_line()
                 imgui.text(f"  [done: {ti.last_spp} spp]")
 
-        # ---- Image display ----
-        if ti.display_texture is not None:
+        # ---- Image display (only in Off mode; realtime renders fullscreen) ----
+        if ti.realtime_mode == 0 and ti.display_texture is not None:
             imgui.separator()
             tex_id = imgui.ImTextureRef(ti.display_texture.glo)
             avail_width = imgui.get_content_region_avail().x
@@ -112,6 +139,9 @@ class TracerWindowMixin:
         ti.sky_intensity = p.tracer_sky_intensity
         ti.num_samples = p.tracer_num_samples
         ti.exposure = p.tracer_exposure
+        ti.realtime_mode = p.tracer_realtime_mode
+        ti.max_bounces = p.tracer_max_bounces
+        ti.resolution_scale = p.tracer_resolution_scale
 
     def _do_tracer_render(self, ti):
         """Start a progressive tracer render using the current entity buffer and camera."""
@@ -125,7 +155,9 @@ class TracerWindowMixin:
         cam = self.tracer_controller_cam
         if cam is None:
             return
-        render_width, render_height = 512, 512
+        scale = max(0.1, ti.resolution_scale)
+        render_width = max(1, int(512 * scale))
+        render_height = max(1, int(512 * scale))
         render_aspect = render_width / render_height
         view_proj = self.tracer_camera.compute_fps_view_proj(
             cam.pos, cam.dir, cam.up, cam.fov, render_aspect

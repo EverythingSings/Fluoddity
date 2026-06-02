@@ -29,7 +29,8 @@ class SimulationRunner:
     def run_simulation_frame(self, ui_state, sweep_mode, sweep_reticle_pos,
                               sweep_reticle_visible, screen_aspect,
                               watercolor_mode=False, tiling_mode=False,
-                              screenshot_in_progress=False):
+                              screenshot_in_progress=False,
+                              skip_view_generation=False):
         """Run simulation step(s) with frame assembly and video recording."""
         self._screenshot_in_progress = screenshot_in_progress
         self.camera.watercolor_mode = watercolor_mode
@@ -133,12 +134,14 @@ class SimulationRunner:
         if motion_blur:
             self._run_with_motion_blur(
                 ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, assemble_kwargs, erase_mode=erase_mode
+                tiling_mode, assemble_kwargs, erase_mode=erase_mode,
+                skip_view_generation=skip_view_generation
             )
         else:
             self._run_without_motion_blur(
                 ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, assemble_kwargs, erase_mode=erase_mode
+                tiling_mode, assemble_kwargs, erase_mode=erase_mode,
+                skip_view_generation=skip_view_generation
             )
 
         # Update previous mouse position for next frame
@@ -359,7 +362,8 @@ class SimulationRunner:
 
     def _run_with_motion_blur(self, ui_state, speedmult, draw_mode,
                                mouse_tex_coords, draw_power_value,
-                               tiling_mode, assemble_kwargs, erase_mode=False):
+                               tiling_mode, assemble_kwargs, erase_mode=False,
+                               skip_view_generation=False):
         """Motion blur path: temporal accumulation with multiple render calls."""
         if self.plotting_manager is not None:
             self.plotting_manager.pre_physics_frame(self.sim.entity_update_program)
@@ -380,24 +384,26 @@ class SimulationRunner:
             if step % motion_blur_render_cadence != 0:
                 continue
 
-            raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
+            if not skip_view_generation:
+                raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 
-            assembled_tex = self.camera.frame_assembler.assemble_frame(
-                raw_view_tex,
-                total_samples=total_render_samples,
-                current_sample_index=render_sample_index,
-                **assemble_kwargs
-            )
-            render_sample_index += 1
+                assembled_tex = self.camera.frame_assembler.assemble_frame(
+                    raw_view_tex,
+                    total_samples=total_render_samples,
+                    current_sample_index=render_sample_index,
+                    **assemble_kwargs
+                )
+                render_sample_index += 1
 
-            self._process_assembled_frame(assembled_tex, ui_state)
+                self._process_assembled_frame(assembled_tex, ui_state)
 
         if self.plotting_manager is not None:
             self.plotting_manager.post_assembly_frame()
 
     def _run_without_motion_blur(self, ui_state, speedmult, draw_mode,
                                   mouse_tex_coords, draw_power_value,
-                                  tiling_mode, assemble_kwargs, erase_mode=False):
+                                  tiling_mode, assemble_kwargs, erase_mode=False,
+                                  skip_view_generation=False):
         """Non-motion-blur path: multiple physics steps, single render call."""
         if self.plotting_manager is not None:
             self.plotting_manager.pre_physics_frame(self.sim.entity_update_program)
@@ -410,16 +416,17 @@ class SimulationRunner:
             if self.plotting_manager is not None:
                 self.plotting_manager.notify_physics_step()
 
-        raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
+        if not skip_view_generation:
+            raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
 
-        assembled_tex = self.camera.frame_assembler.assemble_frame(
-            raw_view_tex,
-            total_samples=1,
-            current_sample_index=0,
-            **assemble_kwargs
-        )
+            assembled_tex = self.camera.frame_assembler.assemble_frame(
+                raw_view_tex,
+                total_samples=1,
+                current_sample_index=0,
+                **assemble_kwargs
+            )
 
-        self._process_assembled_frame(assembled_tex, ui_state)
+            self._process_assembled_frame(assembled_tex, ui_state)
 
         if self.plotting_manager is not None:
             self.plotting_manager.post_assembly_frame()
@@ -473,11 +480,14 @@ class SimulationRunner:
             # Compute view_proj from the FPS camera
             view_proj = self._tracer_compute_view_proj()
 
-            # Start the tracer render at window resolution
+            # Start the tracer render at (optionally scaled) window resolution
             width, height = glfw.get_framebuffer_size(self.window)
+            scale = max(0.1, ti.resolution_scale)
+            rt_width = max(1, int(width * scale))
+            rt_height = max(1, int(height * scale))
             ti.start_video_render(
                 self.sim.get_entity_buffer(), self.sim.entity_count,
-                view_proj, width, height
+                view_proj, rt_width, rt_height
             )
             self._tracer_frame_started = True
             self._tracer_samples_done = 0

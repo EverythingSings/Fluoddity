@@ -85,6 +85,26 @@ class VolumeRenderer:
         self._accum_sample_count: int = 0
         self._last_target: moderngl.Texture | None = None
 
+    def reload_shaders(self):
+        """Recompile pathtrace and resolve compute shaders from disk."""
+        try:
+            common_src = _read_shader("common.glsl")
+            scene_src = _read_shader("volume_scene.glsl")
+            pt_src = _read_shader("pathtrace.comp")
+            insert_pos = pt_src.find("\n")
+            pt_src = pt_src[:insert_pos + 1] + common_src + scene_src + pt_src[insert_pos + 1:]
+            new_pt = self.ctx.compute_shader(pt_src)
+
+            resolve_src = _read_shader("resolve.comp")
+            new_resolve = self.ctx.compute_shader(resolve_src)
+
+            # Only swap after both compile successfully
+            self._pathtrace_program = new_pt
+            self._resolve_program = new_resolve
+            print("VolumeRenderer shaders reloaded")
+        except Exception as e:
+            print(f"VolumeRenderer shader reload failed: {e}")
+
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
         """Deposit entities into the voxel grid and rebuild the majorant."""
         self.grid.splat(entity_buffer, entity_count)

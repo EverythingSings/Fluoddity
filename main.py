@@ -138,6 +138,13 @@ class App:
         # Track previous view option for camera repositioning when leaving tiling mode
         self.prev_view_option = 0
 
+        # Camera movement tracking for realtime tracer accumulation reset
+        self._prev_controller_pos = self.controller_cam.pos.copy()
+        self._prev_controller_yaw = self.controller_cam.yaw
+        self._prev_controller_pitch = self.controller_cam.pitch
+        self._prev_camera_position = np.array([0.0, 0.0])
+        self._prev_camera_zoom = 1.0
+
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
         self._load_default_config()
@@ -323,6 +330,9 @@ class App:
         self.prev_view_option = ui_state.sim.current_view_option
 
         # 6. Run simulation if going
+        ti = self.ui._tracer_interface
+        rt_active = ti is not None and ti.realtime_mode > 0 and not is_recording
+
         if tracer_video_active and ui_state.sim.going:
             # Tracer video mode: progressive path tracing with interleaved physics
             tracer_frame = self.sim_runner.run_tracer_video_frame(
@@ -342,8 +352,29 @@ class App:
                 ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
                 screen_aspect, ui_state.sim.watercolor_mode,
                 tiling_mode=tiling_mode,
-                screenshot_in_progress=self.screenshot_in_progress
+                screenshot_in_progress=self.screenshot_in_progress,
+                skip_view_generation=rt_active
             )
+
+        # 6.3. Realtime tracer mode (runs every frame, even when sim is paused)
+        if rt_active:
+            # In Accumulate mode, reset on camera move or joystick select
+            if ti.realtime_mode == 2:
+                if self._camera_moved() or self.joystick_state.get('select_pressed', False):
+                    ti.reset_realtime_accumulation()
+
+            entity_buffer = self.sim.get_entity_buffer()
+            entity_count = self.sim.entity_count
+            cam = self.controller_cam
+            width, height = glfw.get_framebuffer_size(self.window)
+            scale = max(0.1, ti.resolution_scale)
+            rt_width = max(1, int(width * scale))
+            rt_height = max(1, int(height * scale))
+            view_proj = self.camera.compute_fps_view_proj(
+                cam.pos, cam.dir, cam.up, cam.fov, width / max(height, 1)
+            )
+            ti.realtime_tick(entity_buffer, entity_count, view_proj,
+                             rt_width, rt_height)
 
         # 6.5. Screenshot save and settings restoration
         if self.screenshot_in_progress:
@@ -351,7 +382,8 @@ class App:
 
         # 7. Render camera view
         self._render_camera_view(ui_state, sweep_mode, sweep_reticle_pos,
-                                  sweep_reticle_visible, screen_aspect, tiling_mode)
+                                  sweep_reticle_visible, screen_aspect, tiling_mode,
+                                  rt_active=rt_active)
 
         # 7.5. Render arrow debug overlay if enabled
         if ui_state.preferences.debug_arrows:
@@ -378,6 +410,9 @@ class App:
                 use_zw_channels=use_zw,
             )
 
+        # 7.9. Snapshot camera for next-frame movement detection
+        self._snapshot_camera()
+
         # 8. Update UI display info and render
         self.ui.update_display_info({
             'time': self.sim.time,
@@ -389,9 +424,45 @@ class App:
         })
         self.ui.render()
 
+    def _camera_moved(self):
+        """Check if the camera has moved since last frame (3D or 2D)."""
+        cam = self.controller_cam
+        pos_changed = not np.allclose(cam.pos, self._prev_controller_pos, atol=1e-6)
+        yaw_changed = abs(cam.yaw - self._prev_controller_yaw) > 1e-6
+        pitch_changed = abs(cam.pitch - self._prev_controller_pitch) > 1e-6
+        pos_2d_changed = not np.allclose(
+            self.ui.state.camera.position, self._prev_camera_position, atol=1e-6)
+        zoom_changed = abs(self.ui.state.camera.zoom - self._prev_camera_zoom) > 1e-6
+        return pos_changed or yaw_changed or pitch_changed or pos_2d_changed or zoom_changed
+
+    def _snapshot_camera(self):
+        """Snapshot current camera state for next-frame comparison."""
+        self._prev_controller_pos = self.controller_cam.pos.copy()
+        self._prev_controller_yaw = self.controller_cam.yaw
+        self._prev_controller_pitch = self.controller_cam.pitch
+        self._prev_camera_position = self.ui.state.camera.position.copy()
+        self._prev_camera_zoom = self.ui.state.camera.zoom
+
     def _render_camera_view(self, ui_state, sweep_mode, sweep_reticle_pos,
-                             sweep_reticle_visible, screen_aspect, tiling_mode):
+                             sweep_reticle_visible, screen_aspect, tiling_mode,
+                             rt_active=False):
         """Render the camera view to screen."""
+        # Realtime tracer mode: render path-traced image fullscreen
+        ti = self.ui._tracer_interface
+        if rt_active and ti is not None and ti.display_texture is not None:
+            self.ctx.screen.use()
+            width, height = glfw.get_framebuffer_size(self.window)
+            self.ctx.viewport = (0, 0, width, height)
+            self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+            self.camera.program['cam_pos'].value = (0, 0)
+            self.camera.program['cam_zoom'].value = 1.0
+            self.camera.program['tex_size'].value = (float(width), float(height))
+            self.camera.program['window_size'].value = (width, height)
+            ti.display_texture.use(location=0)
+            self.camera.program['view_tex'].value = 0
+            self.camera.vao.render()
+            return
+
         draw_trail_mode = ui_state.preferences.mouse_mode == "Draw Trail"
 
         width, height = glfw.get_framebuffer_size(self.window)
@@ -510,6 +581,9 @@ class App:
             ui_state.preferences.tracer_sky_intensity = ti.sky_intensity
             ui_state.preferences.tracer_num_samples = ti.num_samples
             ui_state.preferences.tracer_exposure = ti.exposure
+            ui_state.preferences.tracer_realtime_mode = ti.realtime_mode
+            ui_state.preferences.tracer_max_bounces = ti.max_bounces
+            ui_state.preferences.tracer_resolution_scale = ti.resolution_scale
 
         save_preferences(ui_state.preferences)
 

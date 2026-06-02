@@ -109,6 +109,9 @@ class PreferencesState:
     tracer_sky_intensity: float = 1.0
     tracer_num_samples: int = 64
     tracer_exposure: float = 1.5
+    tracer_realtime_mode: int = 0  # 0=Off, 1=1spp, 2=Accumulate
+    tracer_max_bounces: int = 0  # 0=unbounded (RR only)
+    tracer_resolution_scale: float = 1.0  # multiplier on render resolution
 
     # 3D camera settings
     three_d_render_3d: bool = True

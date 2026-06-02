@@ -57,6 +57,9 @@ class TracerInterface:
         # SDF scene
         self.sdf_enabled = True
 
+        # Realtime tracer mode: 0=Off, 1=1spp, 2=Accumulate
+        self.realtime_mode = 0
+
         # Default parameter state (matches demo defaults)
         self.extinction_rgb = [1.0, 1.0, 1.0]
         self.albedo_saturation = 1.0
@@ -69,6 +72,25 @@ class TracerInterface:
         self.sky_intensity = 1.0
         self.num_samples = 64
         self.exposure = 1.5
+        self.max_bounces = 0  # 0=unbounded (RR only)
+        self.resolution_scale = 1.0  # multiplier on render resolution
+
+    # ------------------------------------------------------------------ reload
+    def reload_shaders(self):
+        """Recompile all path tracing shaders from disk (called on hot-reload key)."""
+        # Reload VolumeRenderer shaders (pathtrace.comp, resolve.comp)
+        if self._renderer is not None:
+            self._renderer.reload_shaders()
+
+        # Reload tonemap.comp
+        try:
+            tonemap_path = os.path.join(_VOLRENDER_SHADER_DIR, "tonemap.comp")
+            with open(tonemap_path, 'r') as f:
+                tonemap_src = f.read()
+            self._tonemap_program = self.ctx.compute_shader(tonemap_src)
+            print("Tonemap shader reloaded")
+        except Exception as e:
+            print(f"Tonemap shader reload failed: {e}")
 
     # ------------------------------------------------------------------ setup
     def _ensure_renderer(self):
@@ -146,6 +168,50 @@ class TracerInterface:
             return True
 
         return False
+
+    # ---------------------------------------------------- realtime tracer API
+
+    def realtime_tick(self, entity_buffer: moderngl.Buffer, entity_count: int,
+                      view_proj: np.ndarray, width: int, height: int):
+        """Perform one realtime tracing step (1 SPP).
+
+        In 1spp mode: splat, reset accumulation, trace 1 sample, resolve+tonemap.
+        In Accumulate mode: splat new positions, trace 1 sample without resetting,
+        resolve+tonemap.
+        """
+        self._ensure_renderer()
+        self._ensure_textures(width, height)
+
+        # Always splat current entity positions
+        self._renderer.splat(entity_buffer, entity_count)
+        self._render_view_proj = view_proj.copy()
+
+        if self.realtime_mode == 1:
+            # 1spp: full reset each frame
+            self._renderer.reset_accumulation()
+            self._samples_done = 0
+
+        # Accumulate 1 SPP
+        medium, sun, sky, render, sdf_enabled = self._build_params()
+        self._renderer.accumulate(
+            1, self._render_view_proj, self._target_tex,
+            medium, sun, sky, render, sdf_enabled
+        )
+        self._samples_done += 1
+
+        # Resolve and tonemap for display (no Y-flip for fullscreen rendering)
+        self._resolve_current()
+        self._tonemap_to_display(flip_y=False)
+
+        self._rendering = False
+        self._render_complete = True
+        self._last_spp = self._samples_done
+
+    def reset_realtime_accumulation(self):
+        """Reset accumulation buffer (called on camera move or select press in Accumulate mode)."""
+        if self._renderer is not None:
+            self._renderer.reset_accumulation()
+        self._samples_done = 0
 
     # -------------------------------------------------- video recording API
 
@@ -225,7 +291,7 @@ class TracerInterface:
         render = RenderParams(
             num_samples=self.num_samples,
             batch_spp=1,
-            max_bounces=0,
+            max_bounces=self.max_bounces,
             rr_start_depth=4,
             seed=0,
         )
@@ -249,17 +315,22 @@ class TracerInterface:
         prog.run(gx, gy, 1)
         self.ctx.memory_barrier()
 
-    def _tonemap_to_display(self):
+    def _tonemap_to_display(self, flip_y: bool = True):
         """GPU tonemap: brightness + asinh + gamma, matching the 2D renderer's curve.
 
         Dispatches tonemap.comp which reads the resolved HDR target (rgba16f),
         applies the same brightness * asinh(softness) tonemap as frame_assembly.frag,
-        and writes the flipped LDR result into the rgba8 display texture.
+        and writes the LDR result into the rgba8 display texture.
+
+        Args:
+            flip_y: If True, flip Y for imgui preview. If False, keep natural
+                    OpenGL orientation for fullscreen rendering.
         """
         w, h = self._target_tex.width, self._target_tex.height
         prog = self._tonemap_program
         _tryset(prog, 'u_target_size', (w, h))
         _tryset(prog, 'u_exposure', self.exposure)
+        _tryset(prog, 'u_flip_y', flip_y)
 
         self._target_tex.bind_to_image(0, read=True, write=False)
         self._display_tex.bind_to_image(1, read=False, write=True)

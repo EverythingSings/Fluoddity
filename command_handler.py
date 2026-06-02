@@ -113,6 +113,8 @@ class CommandHandler:
                 self.field_handler.adv_draw.reload()
             if self.plotting_manager is not None:
                 self.plotting_manager.reload_shader()
+            if self.ui._tracer_interface is not None:
+                self.ui._tracer_interface.reload_shaders()
 
         # Simple reset (R key)
         if ui_state.request_reset:
