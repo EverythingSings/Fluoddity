@@ -417,7 +417,7 @@ void reset(uint index){
     float aspect = sqrt(canvas_resolution.x/canvas_resolution.y);
 
     //set pos and vel to random values on a small ball (3D)
-    float cohort_scale = 0.019;//Size of each cluster
+    float cohort_scale = 0.019*0;//Size of each cluster
     vec3 pos=cohort_scale*vec3(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)),hash(vec2(cohort_val+index+7.531)));
     vec3 vel=.00005*(vec3(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)),hash(vec2(index,pos.z+3.77)))*2-1);
 

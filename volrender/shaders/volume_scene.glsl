@@ -65,12 +65,16 @@ vec2 sdf_intersect(vec2 a, vec2 b) {
 
 vec2 scene(vec3 p) {
     // Dark diffuse ground plane at y = -1
-    vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -1.0),
+    vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -.250),
                        MAT_DIFFUSE + 0.0);
-
+    vec2 wall = vec2(p.x+.95,MAT_DIFFUSE+.2);
+    vec2 wall2 = vec2(p.z+.95,MAT_DIFFUSE+.4);
+    ground= sdf_union(ground,wall);
+    ground = sdf_union(ground, wall2);
     // Reflective sphere at origin
-    vec2 sphere = vec2(sd_sphere(p, vec3(0.0, .50, 0.0), 0.3),
-                       MAT_GLOSSY + 0.0);
+    p-=vec3(.25,.25,.25);
+    vec2 sphere = vec2(length(p)-.25,
+                       MAT_MIRROR + 0.0);
 
     return sdf_union(ground, sphere);
 }
@@ -84,7 +88,19 @@ vec2 scene(vec3 p) {
 
 vec3 sdf_get_albedo(vec2 mat) {
     float id = floor(mat.y);
-    if (id == MAT_DIFFUSE) return vec3(0.02);   // dark ground
+    if (id == MAT_DIFFUSE) {
+    float fm = fract(mat.y);
+    if(fm == 0){
+    return vec3(0.2);   // dark ground
+    }
+    else if(fm ==.2){
+        return vec3(0.34,.02,.02);
+    }
+    else{
+        return vec3(.14,.38,.14);
+    }
+
+    }
     return vec3(0.9);                            // bright reflector/glossy
 }
 
@@ -117,9 +133,9 @@ vec3 sdf_normal(vec3 p) {
 // On hit: out_t = parametric distance, out_mat = scene(hit_pos).
 // ====================================================================
 
-const int   SDF_MAX_STEPS   = 256;
-const float SDF_SURFACE_EPS = 3e-3;
-const float SDF_MAX_DIST    = 20.0;
+const int   SDF_MAX_STEPS   = 356;
+const float SDF_SURFACE_EPS = 2e-4;
+const float SDF_MAX_DIST    = 60.0;
 
 bool trace_sdf(vec3 origin, vec3 dir, float t_min, float t_max,
                out float out_t, out vec2 out_mat) {

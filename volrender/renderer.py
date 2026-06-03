@@ -85,6 +85,11 @@ class VolumeRenderer:
         self._accum_sample_count: int = 0
         self._last_target: moderngl.Texture | None = None
 
+        # Monotonic dispatch counter — used as u_sample_index seed.
+        # Increments on every pathtrace dispatch and never resets,
+        # so every dispatch gets a unique RNG seed.
+        self._dispatch_count: int = 0
+
     def reload_shaders(self):
         """Recompile pathtrace and resolve compute shaders from disk."""
         try:
@@ -340,7 +345,7 @@ class VolumeRenderer:
         # Bounce loop control
         _tryset(prog, 'u_max_bounces', render.max_bounces)
         _tryset(prog, 'u_rr_start_depth', render.rr_start_depth)
-        _tryset(prog, 'u_sample_index', sample_index)
+        _tryset(prog, 'u_sample_index', self._dispatch_count)
 
         # Grid uniforms
         _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))
@@ -373,6 +378,7 @@ class VolumeRenderer:
         gx = math.ceil(target.width / self._PT_WG_X)
         gy = math.ceil(target.height / self._PT_WG_Y)
         prog.run(gx, gy, 1)
+        self._dispatch_count += 1
 
         self.ctx.memory_barrier()
 
@@ -488,9 +494,9 @@ class VolumeRenderer:
         # Dispatch one sample at a time with a barrier after each to ensure
         # the read-modify-write on img_accum is consistent.
         for i in range(n_spp):
-            sample_idx = render.seed + self._accum_sample_count + i
-            _tryset(prog, 'u_sample_index', sample_idx)
+            _tryset(prog, 'u_sample_index', self._dispatch_count)
             prog.run(gx, gy, 1)
+            self._dispatch_count += 1
             self.ctx.memory_barrier()
 
         self._accum_sample_count += n_spp
