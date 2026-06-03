@@ -158,6 +158,11 @@ class VolumeRenderer:
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
         _tryset(prog, 'u_density_scale', medium.density_scale)
+        _tryset(prog, 'u_colored_extinction', medium.colored_extinction)
+        _tryset(prog, 'u_albedo_saturation', medium.albedo_saturation)
+        _tryset(prog, 'u_albedo_brightness',
+                min(medium.albedo_brightness, 1.0) if medium.colored_extinction
+                else medium.albedo_brightness)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -172,6 +177,12 @@ class VolumeRenderer:
         # Bind density as sampler3D (trilinear filtered) on texture unit 0
         self.grid.density.use(location=0)
         _tryset(prog, 'u_density', 0)
+
+        # Hue-color accumulation samplers (needed for colored extinction)
+        self.grid.color_x.use(location=2)
+        _tryset(prog, 'u_color_x', 2)
+        self.grid.color_y.use(location=3)
+        _tryset(prog, 'u_color_y', 3)
 
         # Bind output target as image (binding 0)
         target.bind_to_image(0, read=False, write=True)
@@ -221,6 +232,11 @@ class VolumeRenderer:
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
         _tryset(prog, 'u_density_scale', medium.density_scale)
+        _tryset(prog, 'u_colored_extinction', medium.colored_extinction)
+        _tryset(prog, 'u_albedo_saturation', medium.albedo_saturation)
+        _tryset(prog, 'u_albedo_brightness',
+                min(medium.albedo_brightness, 1.0) if medium.colored_extinction
+                else medium.albedo_brightness)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -243,6 +259,12 @@ class VolumeRenderer:
         # Majorant resolution
         _tryset(prog, 'u_majorant_resolution',
                 self.grid.params.majorant_resolution)
+
+        # Hue-color accumulation samplers (needed for colored extinction)
+        self.grid.color_x.use(location=2)
+        _tryset(prog, 'u_color_x', 2)
+        self.grid.color_y.use(location=3)
+        _tryset(prog, 'u_color_y', 3)
 
         # Bind output target as image (binding 0)
         target.bind_to_image(0, read=False, write=True)
@@ -295,8 +317,11 @@ class VolumeRenderer:
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
         _tryset(prog, 'u_density_scale', medium.density_scale)
+        _tryset(prog, 'u_colored_extinction', medium.colored_extinction)
         _tryset(prog, 'u_albedo_saturation', medium.albedo_saturation)
-        _tryset(prog, 'u_albedo_brightness', medium.albedo_brightness)
+        _tryset(prog, 'u_albedo_brightness',
+                min(medium.albedo_brightness, 1.0) if medium.colored_extinction
+                else medium.albedo_brightness)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -404,8 +429,11 @@ class VolumeRenderer:
         # Medium
         _tryset(prog, 'u_extinction_rgb', medium.extinction_rgb)
         _tryset(prog, 'u_density_scale', medium.density_scale)
+        _tryset(prog, 'u_colored_extinction', medium.colored_extinction)
         _tryset(prog, 'u_albedo_saturation', medium.albedo_saturation)
-        _tryset(prog, 'u_albedo_brightness', medium.albedo_brightness)
+        _tryset(prog, 'u_albedo_brightness',
+                min(medium.albedo_brightness, 1.0) if medium.colored_extinction
+                else medium.albedo_brightness)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)

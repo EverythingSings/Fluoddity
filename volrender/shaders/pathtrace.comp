@@ -55,6 +55,7 @@ uniform int   u_max_bounces;
 uniform int   u_rr_start_depth;
 uniform uint  u_sample_index;       // per-sample RNG seed offset
 uniform bool  u_debug_delta_only;   // true = Step 6 visual mode (white/sky)
+uniform bool  u_colored_extinction; // true = hue→extinction, false = hue→albedo
 
 // ---- sun params (Step 8) ----
 uniform vec3  u_sun_direction;     // unit, scene -> sun
@@ -132,6 +133,35 @@ vec3 get_albedo(vec3 pos) {
 
 
 // ====================================================================
+// Per-voxel hue color for colored-extinction mode.
+//
+// Identical hue reconstruction as get_albedo, but used to tint the
+// extinction coefficient.  When u_colored_extinction is true, the
+// albedo uniforms (saturation, brightness) control extinction color
+// instead.  Brightness MUST be <= 1.0 to keep the majorant valid
+// (max channel of hsv2rgb with V<=1 is <= 1).
+// ====================================================================
+vec3 get_hue_color(vec3 pos) {
+    vec3 uvw = (pos - u_bounds_min) / (u_bounds_max - u_bounds_min);
+
+    float cx = texture(u_color_x, uvw).r;
+    float cy = texture(u_color_y, uvw).r;
+    float W  = texture(u_density, uvw).r;
+
+    float hue = atan(cy, cx) / 6.283185307;
+    hue = fract(hue);
+
+    float C_len = length(vec2(cx, cy));
+    float R = clamp(C_len / max(W, 1e-7), 0.0, 1.0);
+
+    float S = u_albedo_saturation * R;
+    float V = u_albedo_brightness;
+
+    return hsv2rgb(vec3(hue, S, V));
+}
+
+
+// ====================================================================
 // Helper: evaluate sigma_t_rgb at a world-space position.
 //
 // sigma_t = extinction_rgb * density_scale * physical_density(p)
@@ -143,7 +173,13 @@ vec3 sigma_t_at(vec3 p) {
     vec3 uvw = (p - u_bounds_min) / (u_bounds_max - u_bounds_min);
     float raw_density = texture(u_density, uvw).r;
     float physical_density = raw_density / u_voxel_volume;
-    return u_extinction_rgb * u_density_scale * physical_density;
+    if (u_colored_extinction) {
+        // Hue-derived extinction: color from texture, no uniform tint
+        return get_hue_color(p) * u_density_scale * physical_density;
+    } else {
+        // Legacy: uniform extinction color
+        return u_extinction_rgb * u_density_scale * physical_density;
+    }
 }
 
 
@@ -178,8 +214,11 @@ bool sample_free_flight(vec3 origin, vec3 dir,
     vec3 cell_size   = grid_extent / vec3(u_majorant_resolution);
 
     // Max extinction channel (constant across the ray)
-    float max_ext = max(u_extinction_rgb.r,
-                    max(u_extinction_rgb.g, u_extinction_rgb.b));
+    // In colored-extinction mode, hue color has max channel <= 1.0
+    // (guaranteed by brightness uniform clamped to [0,1]).
+    float max_ext = u_colored_extinction
+        ? 1.0
+        : max(u_extinction_rgb.r, max(u_extinction_rgb.g, u_extinction_rgb.b));
 
     // Precompute inverse direction for slab math
     vec3 inv_dir = 1.0 / dir;
@@ -326,8 +365,9 @@ vec3 transmittance_to_sun(vec3 x) {
     vec3 cell_size   = grid_extent / vec3(u_majorant_resolution);
 
     // Max extinction channel (constant)
-    float max_ext = max(u_extinction_rgb.r,
-                    max(u_extinction_rgb.g, u_extinction_rgb.b));
+    float max_ext = u_colored_extinction
+        ? 1.0
+        : max(u_extinction_rgb.r, max(u_extinction_rgb.g, u_extinction_rgb.b));
 
     // Precompute inverse direction for slab math
     vec3 inv_dir = 1.0 / dir;
@@ -486,12 +526,7 @@ void main() {
             float t = t_near + (float(i) + 0.5) * step_size;
             vec3 p = ray_origin + t * ray_dir;
 
-            // Normalized texture coords [0,1] for sampler3D
-            vec3 uvw = (p - u_bounds_min) / (u_bounds_max - u_bounds_min);
-            float raw_density = texture(u_density, uvw).r;
-            float physical_density = raw_density / u_voxel_volume;
-
-            vec3 sigma_t = u_extinction_rgb * u_density_scale * physical_density;
+            vec3 sigma_t = sigma_t_at(p);
             tau += sigma_t * step_size;
         }
 
@@ -613,8 +648,14 @@ void main() {
         // ---- Handle the interaction ----
 
         if (!surface_interaction) {
-            // ---- Media scatter (existing logic) ----
-            throughput *= get_albedo(hit_pos);
+            // ---- Media scatter ----
+            if (u_colored_extinction) {
+                // Colored extinction mode: u_extinction_rgb is the albedo
+                throughput *= u_extinction_rgb;
+            } else {
+                // Legacy mode: albedo from per-voxel hue
+                throughput *= get_albedo(hit_pos);
+            }
 
             // Sun NEE: isotropic phase = 1/(4*pi)
             {

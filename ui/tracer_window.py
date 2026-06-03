@@ -33,12 +33,24 @@ class TracerWindowMixin:
 
         # ---- Medium ----
         if imgui.collapsing_header("Medium", imgui.TreeNodeFlags_.default_open.value):
-            _, ti.extinction_rgb = imgui.color_edit3(
-                "Extinction RGB", ti.extinction_rgb)
-            _, ti.albedo_saturation = imgui.slider_float(
-                "Albedo Saturation", ti.albedo_saturation, 0.0, 1.0)
-            _, ti.albedo_brightness = imgui.slider_float(
-                "Albedo Brightness", ti.albedo_brightness, 0.0, 1.0)
+            _, ti.colored_extinction = imgui.checkbox(
+                "Colored Extinction", ti.colored_extinction)
+            if ti.colored_extinction:
+                # Colored extinction: RGB picker is albedo, sliders are extinction
+                _, ti.extinction_rgb = imgui.color_edit3(
+                    "Albedo RGB", ti.extinction_rgb)
+                _, ti.albedo_saturation = imgui.slider_float(
+                    "Ext Saturation", ti.albedo_saturation, 0.0, 1.0)
+                _, ti.albedo_brightness = imgui.slider_float(
+                    "Ext Brightness", ti.albedo_brightness, 0.0, 1.0)
+            else:
+                # Legacy: RGB picker is extinction, sliders are albedo
+                _, ti.extinction_rgb = imgui.color_edit3(
+                    "Extinction RGB", ti.extinction_rgb)
+                _, ti.albedo_saturation = imgui.slider_float(
+                    "Albedo Saturation", ti.albedo_saturation, 0.0, 1.0)
+                _, ti.albedo_brightness = imgui.slider_float(
+                    "Albedo Brightness", ti.albedo_brightness, 0.0, 1.0)
             _, ti.density_scale = imgui.drag_float(
                 "Density Scale", ti.density_scale, 0.00001, 0.00001, 10.0, "%.5f")
 
@@ -127,6 +139,7 @@ class TracerWindowMixin:
     def _apply_tracer_preferences(self, ti):
         """Apply saved tracer preferences to a newly created TracerInterface."""
         p = self.state.preferences
+        ti.colored_extinction = p.tracer_colored_extinction
         ti.sdf_enabled = p.tracer_sdf_enabled
         ti.extinction_rgb = list(p.tracer_extinction_rgb)
         ti.albedo_saturation = p.tracer_albedo_saturation

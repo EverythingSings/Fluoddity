@@ -62,6 +62,7 @@ class TracerInterface:
         self._rt_needs_initial_splat = True
 
         # Default parameter state (matches demo defaults)
+        self.colored_extinction = False  # true = hue→extinction, false = hue→albedo
         self.extinction_rgb = [1.0, 1.0, 1.0]
         self.albedo_saturation = 1.0
         self.albedo_brightness = 0.8
@@ -286,6 +287,7 @@ class TracerInterface:
             albedo_saturation=self.albedo_saturation,
             albedo_brightness=self.albedo_brightness,
             density_scale=self.density_scale,
+            colored_extinction=self.colored_extinction,
         )
         sun = SunParams(
             direction=tuple(sd),

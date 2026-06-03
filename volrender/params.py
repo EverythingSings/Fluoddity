@@ -24,10 +24,11 @@ class MediumParams:
     albedo_saturation is the ceiling on saturation (scaled by hue
     concentration R); albedo_brightness is the HSV value component.
     """
-    extinction_rgb:    tuple[float, float, float] = (1.0, 1.0, 1.0)  # per-unit-density, vec3
-    albedo_saturation: float = 1.0   # saturation ceiling for per-voxel hue [0, 1]
-    albedo_brightness: float = 0.8   # HSV value component [0, 1]
-    density_scale:     float = 1.0
+    extinction_rgb:      tuple[float, float, float] = (1.0, 1.0, 1.0)  # per-unit-density, vec3
+    albedo_saturation:   float = 1.0   # saturation ceiling for per-voxel hue [0, 1]
+    albedo_brightness:   float = 0.8   # HSV value component [0, 1]
+    density_scale:       float = 1.0
+    colored_extinction:  bool = False  # true = hue→extinction, false = hue→albedo
 
 
 @dataclass
