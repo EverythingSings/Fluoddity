@@ -376,7 +376,7 @@ vec2 safenorm(vec2 p){
     return length(p)==0?vec2(0):normalize(p);
 }
 vec3 safenorm3(vec3 p){
-    return length(p)==0?vec3(0):normalize(p);
+    return length(p)<=1e-10?vec3(0):normalize(p);
 }
 
 void build_tangent_plane(
@@ -434,8 +434,22 @@ void reset(uint index){
         int gx = slot % grid_side;
         int gy = (slot / grid_side) % grid_side;
         int gz = slot / (grid_side * grid_side);
-        // Map grid cell to [-0.9, 0.9] centered (equal spacing in all axes)
-        pos += 1.8 * ((vec3(gx, gy, gz) + 0.5) / float(grid_side) - 0.5);
+        // Grid cell center in [-0.9, 0.9]
+        vec3 cell_center = 1.8 * ((vec3(gx, gy, gz) + 0.5) / float(grid_side) - 0.5);
+        // Rejection-sample a sphere inscribed in the grid cell for isotropic distribution
+        float cell_radius = 0.09 / float(grid_side);
+        vec3 candidate;
+        float seed_offset = 0.0;
+        for (int attempt = 0; attempt < 16; attempt++) {
+            candidate = vec3(
+                hash(vec2(cohort_val + index, 1.0 + seed_offset)),
+                hash(vec2(cohort_val + index, 2.0 + seed_offset)),
+                hash(vec2(cohort_val + index, 3.0 + seed_offset))
+            ) * 2.0 - 1.0;
+            if (dot(candidate, candidate) <= 1.0) break;
+            seed_offset += 3.0;
+        }
+        pos = cell_center + candidate * cell_radius;
     }
     else if(reset_mode == 1) {
         //RANDOM: rejection-sample from the sphere inscribing the unit cube
@@ -565,12 +579,25 @@ void sample_plane_physics(
         u = vec3(1,0,0);
         v = vec3(0,1,0);
     } else {
-        // Random angle for this sample
-        float theta = hash(vec2(
-            float(frame_count) + float(gl_GlobalInvocationID.x) / float(ACTIVE_COUNT),
-            float(sample_index)
-        )) * 2.0 * PI;
-        build_tangent_plane(vel_dir, theta, u, v);
+
+        
+        vec3 env = (get_can_3d(pos));
+        env = safenorm3(env);
+        u = vel_dir;
+        v = (cross(u,cross(u,env)));
+        if(length(v)>1e-10){
+            v = normalize(v);
+        }
+        else{
+            // Random angle for this sample
+            float r0 =  hash(vec2(
+                float(frame_count) + float(gl_GlobalInvocationID.x) / float(ACTIVE_COUNT),
+                float(sample_index)
+            ));
+            float theta =r0 * 2.0 * PI;
+            build_tangent_plane(vel_dir, theta, u, v);
+        }
+
     }
 
     // Calculate sensor distance
