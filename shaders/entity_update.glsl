@@ -417,7 +417,7 @@ void reset(uint index){
     float aspect = sqrt(canvas_resolution.x/canvas_resolution.y);
 
     //set pos and vel to random values on a small ball (3D)
-    float cohort_scale = 0.019*0;//Size of each cluster
+    float cohort_scale = 0.019;//Size of each cluster
     vec3 pos=cohort_scale*vec3(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)),hash(vec2(cohort_val+index+7.531)));
     vec3 vel=.00005*(vec3(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)),hash(vec2(index,pos.z+3.77)))*2-1);
 
@@ -458,7 +458,7 @@ void reset(uint index){
         float cos_theta = hash(vec2(cohort_val, 5.0)) * 2.0 - 1.0;
         float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
         float radius = 0.5;
-        pos += vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta) * radius;
+        pos = .5*vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta) * radius;
     }
 
 
@@ -695,6 +695,8 @@ void main() {
 
     //Set entity hue (saturation/brightness/alpha are computed in vertex shaders)
     e.hue = get_particle_hue_sensitivity()*col_params.x;
+    e.size = 0.00015;
+    if(!(abs(col_params.x-generic03.x*15)<generic03.y*5)){e.size=.0;}
     if(get_particle_color_by_cohort()) {e.hue = hash(vec2(floor(cohort)));}
 
     //Accelerate: Apply drag and add force to e.vel (now 3D)

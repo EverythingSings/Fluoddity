@@ -20,9 +20,18 @@ out float v_depth;
 
 void main() {
     int id = gl_VertexID;
-    vec3 pos = vec3(entities[id].px, entities[id].py, entities[id].pz);
     float size = entities[id].size;
 
+    // Skip zero-size entities by placing outside clip volume
+    if (size <= 0.0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        gl_PointSize = 1.0;
+        v_hue = 0.0;
+        v_depth = 0.0;
+        return;
+    }
+
+    vec3 pos = vec3(entities[id].px, entities[id].py, entities[id].pz);
     vec4 clip_pos = view_proj * vec4(pos, 1.0);
     gl_Position = clip_pos;
 

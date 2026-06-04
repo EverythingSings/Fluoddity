@@ -34,7 +34,13 @@ void main() {
     vec3 pos = vec3(entities[base], entities[base + 1u], entities[base + 2u]);
     // entities[base+3..5] = velocity (unused)
     float hue = entities[base + 6u];
-    // entities[base+7] = size (unused)
+    float entity_size = entities[base + 7u];
+
+    // Size-proportional scaling: at DEFAULT_SIZE contribution is 1.0 (unchanged),
+    // at zero the entity is skipped entirely.
+    const float DEFAULT_SIZE = 0.0015;
+    float size_scale = entity_size / DEFAULT_SIZE;
+    if (size_scale <= 0.0) return;
 
     // Convert hue to unit vector for circular-mean accumulation
     float theta = 6.283185307 * hue;   // 2*pi*hue
@@ -85,8 +91,9 @@ void main() {
         float wt = w[c];
         if (wt <= 0.0) continue;
 
-        imageAtomicAdd(img_density, voxel, wt);
-        imageAtomicAdd(img_color_x, voxel, wt * cos_theta);
-        imageAtomicAdd(img_color_y, voxel, wt * sin_theta);
+        float deposit = wt * size_scale;
+        imageAtomicAdd(img_density, voxel, deposit);
+        imageAtomicAdd(img_color_x, voxel, deposit * cos_theta);
+        imageAtomicAdd(img_color_y, voxel, deposit * sin_theta);
     }
 }

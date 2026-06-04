@@ -65,18 +65,18 @@ vec2 sdf_intersect(vec2 a, vec2 b) {
 
 vec2 scene(vec3 p) {
     // Dark diffuse ground plane at y = -1
-    vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -.250),
+    vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -.80),
                        MAT_DIFFUSE + 0.0);
     vec2 wall = vec2(p.x+.95,MAT_DIFFUSE+.2);
     vec2 wall2 = vec2(p.z+.95,MAT_DIFFUSE+.4);
-    ground= sdf_union(ground,wall);
-    ground = sdf_union(ground, wall2);
+    //ground= sdf_union(ground,wall);
+    //ground = sdf_union(ground, wall2);
     // Reflective sphere at origin
     p-=vec3(.25,.25,.25);
     vec2 sphere = vec2(length(p)-.25,
                        MAT_MIRROR + 0.0);
 
-    return sdf_union(ground, sphere);
+    return ground;//sdf_union(ground, sphere);
 }
 
 
