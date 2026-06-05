@@ -144,6 +144,14 @@ void report(float val, uint plot_num) {
 #define PI 3.1415926
 #define ACTIVE_COUNT 4000000//(600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
 #define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
+
+// 6D noise channel wiring (edit and hot-reload with V key)
+// INPUT_PROJECTION true:  sensor taps projected to 2D (u,v). false: 3D (u,v,w), filling fourier inputs 5-6
+// OUTPUT_PROJECTION true: 4 fourier outputs -> 2D force/strafe. false: 6 outputs -> 3D force/strafe
+// PLANAR_SYMMETRY false:  normal. true: average over w and -w for chirality-invariant dynamics
+#define INPUT_PROJECTION false
+#define OUTPUT_PROJECTION false
+#define PLANAR_SYMMETRY true
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
     if (MULTILOAD_COUNT == 0) return -1; // Not in multi-load mode
@@ -505,6 +513,9 @@ void mutate_rule(inout Rule current_rule,float amount,float cohort){
 vec2 y_reflect(vec2 p){
     return p*vec2(1,-1);
 }
+vec3 y_reflect(vec3 p){
+    return p*vec3(1,-1,1); // negate lateral (v), keep axial (u) and normal (w)
+}
 vec2 x_reflect(vec2 p){
     return p*vec2(-1,1);
 }
@@ -519,46 +530,83 @@ vec4 black_box(vec2 L,vec2 R,Rule rule){
     return (fourier_noise(rule.centers, vec4(L,R), vec2(0.0)));
 }
 
+//6-output version: 6 float inputs (L.xyz, R.xyz) -> 6 float outputs (result_lo.xyzw, result_hi.xy)
+void black_box_6(vec3 L,vec3 R,Rule rule, out vec4 result_lo, out vec2 result_hi){
+    fourier_noise_6(rule.centers, vec4(L.xy, R.xy), vec2(L.z, R.z), result_lo, result_hi);
+}
+
 
 
 //This function determines entity output by plugging sensor values into a noise function called black_box()
 //The calculation is performed twice, once in mirrored coordinates, and the two values are averaged.
 //This keeps entities from displaying clockwise/counterclockwise bias.
 //PARAMETERS:
-//--L and R: velocity field measurements from left sensor and right sensor.
-//--axis: forward vector that defines our orientation.
+//--L and R: velocity field measurements from left sensor and right sensor (vec3: xy=plane, z=normal).
+//    When INPUT_PROJECTION is true, L.z and R.z are 0 (caller zeros them).
+//--axis: forward vector that defines our orientation (2D in the tangent plane).
 //--rule: coefficients for the noise function that dictates entity behavior.
 //--pos: entity position (for parameter sweeps)
 //--cohort: entity cohort (for parameter sweeps)
 //RETURNS:
-//--force: A "push" vector that will be added to entity.vel
-//--strafe: A "hop" vector that will be added to entity.pos and have no effect on velocity
+//--force: A "push" vector in tangent-plane coords (xy=plane, z=normal). z=0 when OUTPUT_PROJECTION is true.
+//--strafe: A "hop" vector in tangent-plane coords. z=0 when OUTPUT_PROJECTION is true.
 //--color: vec2 to be used as parameters in a coloring function
-void calculate_entity_behavior( vec2 L,vec2 R, vec2 axis, Rule rule, vec2 pos, float cohort, out vec2 force, out vec2 strafe, out vec2 color){
+void calculate_entity_behavior(vec3 L, vec3 R, vec2 axis, Rule rule, vec2 pos, float cohort, out vec3 force, out vec3 strafe, out vec2 color){
 
     //build a local coordinate frame where "axis" is forward.
     vec2 forward=safenorm(axis);
     vec2 left=vec2(forward.y,-forward.x);
 
-    //Convert L and R to local coordinates.
-    //Ie. decompose each into an axial component and a lateral component
-    L=vec2(dot(L,forward),dot(L,left));
-    R=vec2(dot(R,forward),dot(R,left));
+    //Convert L and R xy to local coordinates; z (normal component) passes through unchanged
+    L=vec3(dot(L.xy,forward),dot(L.xy,left),L.z);
+    R=vec3(dot(R.xy,forward),dot(R.xy,left),R.z);
 
-    //calculate black box noise values
-    vec4 baseterm= black_box(L,R,rule);
-    vec4 mirrorterm=black_box(y_reflect(R),y_reflect(L),rule);
-    if(DISABLE_SYMMETRY){mirrorterm = vec4(0);}//disable symmetry by zeroing the mirror term
+#if !OUTPUT_PROJECTION
+    //6D noise path: use all 6 inputs and 6 outputs
+    vec4 base_lo, mirror_lo;
+    vec2 base_hi, mirror_hi;
+    black_box_6(L, R, rule, base_lo, base_hi);
+    black_box_6(y_reflect(R), y_reflect(L), rule, mirror_lo, mirror_hi);
+    if(DISABLE_SYMMETRY){ mirror_lo = vec4(0); mirror_hi = vec2(0); }
 
     //Combine base and mirror terms
-    force = baseterm.xy+y_reflect(mirrorterm.xy);
-    strafe = baseterm.zw + y_reflect(mirrorterm.zw);
+    //xy: standard left-right symmetry. z (w-component): even under mirror (w not negated)
+    force = vec3(
+        base_lo.x + mirror_lo.x,
+        base_lo.y - mirror_lo.y,
+        base_hi.x + mirror_hi.x
+    );
+    strafe = vec3(
+        base_lo.z + mirror_lo.z,
+        base_lo.w - mirror_lo.w,
+        base_hi.y + mirror_hi.y
+    );
+
+    //Convert force and strafe xy back to world coordinates; z scaled separately
+    float axial_s = calculate_setting(get_particle_axial_force(),pos,cohort);
+    float lateral_s = calculate_setting(get_particle_lateral_force(),pos,cohort);
+    force = vec3(forward*force.x*axial_s + left*force.y*lateral_s, force.z*axial_s);
+    strafe = vec3(forward*strafe.x*axial_s + left*strafe.y*lateral_s, strafe.z*axial_s);
+
+    color = base_lo.xy + mirror_lo.xy;
+#else
+    //Original 4D noise path (L.z and R.z are ignored)
+    vec4 baseterm= black_box(L.xy,R.xy,rule);
+    vec4 mirrorterm=black_box(y_reflect(R.xy),y_reflect(L.xy),rule);
+    if(DISABLE_SYMMETRY){mirrorterm = vec4(0);}
+
+    //Combine base and mirror terms
+    vec2 f2 = baseterm.xy+y_reflect(mirrorterm.xy);
+    vec2 s2 = baseterm.zw + y_reflect(mirrorterm.zw);
 
     //Convert force and strafe back to world coordinates
-    force=forward*force.x*calculate_setting(get_particle_axial_force(),pos,cohort)+left*force.y*calculate_setting(get_particle_lateral_force(),pos,cohort);
-    strafe = forward*strafe.x*calculate_setting(get_particle_axial_force(),pos,cohort) + left * strafe.y * calculate_setting(get_particle_lateral_force(),pos,cohort);
+    f2=forward*f2.x*calculate_setting(get_particle_axial_force(),pos,cohort)+left*f2.y*calculate_setting(get_particle_lateral_force(),pos,cohort);
+    s2 = forward*s2.x*calculate_setting(get_particle_axial_force(),pos,cohort) + left * s2.y * calculate_setting(get_particle_lateral_force(),pos,cohort);
 
-    color = baseterm.xy+(mirrorterm.xy); //Just an arbitrary function of blackbox output. Reuses force terms.
+    force = vec3(f2, 0.0);
+    strafe = vec3(s2, 0.0);
+    color = baseterm.xy+(mirrorterm.xy);
+#endif
     return;
 }
 // Run one sample of the 2D physics projected onto a random tangent plane.
@@ -652,29 +700,60 @@ void sample_plane_physics(
     vec3 ltap_3d = get_can_3d(pos + left_offset_3d);
     vec3 rtap_3d = get_can_3d(pos + right_offset_3d);
 
-    // Project 3D trail vectors onto the 2D plane
-    vec2 ltap = vec2(dot(ltap_3d, u), dot(ltap_3d, v));
-    vec2 rtap = vec2(dot(rtap_3d, u), dot(rtap_3d, v));
+    // Normal vector for the tangent plane
+    vec3 w = cross(u, v);
 
     // Rescale sensor values
     float sensor_scaling = SQRT_WORLD_SIZE * 38.855 * calculate_setting(get_particle_sensor_gain(), epos2, cohort);
-    ltap *= sensor_scaling;
-    rtap *= sensor_scaling;
 
-    // Run the existing 2D physics on the plane
-    vec2 force_2d = vec2(0);
-    vec2 strafe_2d = vec2(0);
-    vec2 col_params = vec2(0);
-    calculate_entity_behavior(ltap, rtap, orientation, current_rule, epos2, cohort, force_2d, strafe_2d, col_params);
-
-    // Rescale output forces (same as current 2D code)
+    // Global force multiplier for output rescaling
     float gfm = 1./SQRT_WORLD_SIZE * calculate_setting(get_particle_global_force_mult(), epos2, cohort);
-    force_2d *= gfm / 400.;
-    strafe_2d *= gfm / 20.;
 
-    // Convert 2D force/strafe back to 3D world coordinates
-    vec3 force_3d = force_2d.x * u + force_2d.y * v;
-    vec3 strafe_3d = strafe_2d.x * u + strafe_2d.y * v;
+#if PLANAR_SYMMETRY
+    // Run calculation twice with w and -w, average for chirality invariance
+    vec3 force_3d_total = vec3(0);
+    vec3 strafe_3d_total = vec3(0);
+    vec2 col_total = vec2(0);
+    for (int ws = 0; ws < 2; ws++) {
+        vec3 w_signed = (ws == 0) ? w : -w;
+#else
+        vec3 w_signed = w;
+#endif
+
+        // Project 3D trail vectors onto the tangent plane (+ normal when INPUT_PROJECTION is false)
+#if !INPUT_PROJECTION
+        vec3 ltap = vec3(dot(ltap_3d, u), dot(ltap_3d, v), dot(ltap_3d, w_signed));
+        vec3 rtap = vec3(dot(rtap_3d, u), dot(rtap_3d, v), dot(rtap_3d, w_signed));
+#else
+        vec3 ltap = vec3(dot(ltap_3d, u), dot(ltap_3d, v), 0.0);
+        vec3 rtap = vec3(dot(rtap_3d, u), dot(rtap_3d, v), 0.0);
+#endif
+        ltap *= sensor_scaling;
+        rtap *= sensor_scaling;
+
+        // Run physics on the tangent plane
+        vec3 force_local = vec3(0);
+        vec3 strafe_local = vec3(0);
+        vec2 col_params = vec2(0);
+        calculate_entity_behavior(ltap, rtap, orientation, current_rule, epos2, cohort, force_local, strafe_local, col_params);
+
+        // Rescale output forces
+        force_local *= gfm / 400.;
+        strafe_local *= gfm / 20.;
+
+        // Lift tangent-plane coords to 3D world coordinates
+        vec3 force_3d = force_local.x * u + force_local.y * v + force_local.z * w_signed;
+        vec3 strafe_3d = strafe_local.x * u + strafe_local.y * v + strafe_local.z * w_signed;
+
+#if PLANAR_SYMMETRY
+        force_3d_total += force_3d;
+        strafe_3d_total += strafe_3d;
+        col_total += col_params;
+    }
+    vec3 force_3d = force_3d_total * 0.5;
+    vec3 strafe_3d = strafe_3d_total * 0.5;
+    vec2 col_params = col_total * 0.5;
+#endif
 
     force_accum += force_3d;
     strafe_accum += strafe_3d;
