@@ -87,8 +87,8 @@ class PhysicsConfig:
     color_by_cohort: bool = True
     watercolor_mode: bool = False
 
-    # Rule data (10 centers * 8 floats = 80 floats)
-    rule: np.ndarray = field(default_factory=lambda: np.zeros((10, 8), dtype=np.float32))
+    # Rule data (10 centers * 12 floats = 120 floats)
+    rule: np.ndarray = field(default_factory=lambda: np.zeros((10, 12), dtype=np.float32))
 
     # User notes (optional)
     notes: str = ""
@@ -172,9 +172,18 @@ class PhysicsConfig:
         force_field_strength = field_strengths['force'] if field_strengths else None
         strafe_field_strength = field_strengths['strafe'] if field_strengths else None
 
-        # Parse rule from flat list
-        rule_list = data.get('rule', [0.0] * 80)
-        rule = np.array(rule_list, dtype=np.float32).reshape(10, 8)
+        # Parse rule from flat list (backward compat: old configs have 80 floats)
+        rule_list = data.get('rule', [0.0] * 120)
+        if len(rule_list) == 80:
+            # Legacy 4D rule: pad each center from 8 to 12 floats
+            padded = []
+            for c in range(10):
+                padded.extend(rule_list[c*8 : c*8+8])  # Original 8 floats
+                padded.extend([0.0, 0.0, 0.0, 0.0])    # 4 zeros for extensions
+            rule_list = padded
+        elif len(rule_list) < 120:
+            rule_list = rule_list + [0.0] * (120 - len(rule_list))
+        rule = np.array(rule_list, dtype=np.float32).reshape(10, 12)
 
         # Ensure sweep dicts have all params (fill missing with 0.0)
         x_sweeps = _default_sweeps()
@@ -255,7 +264,7 @@ class ConfigSaver:
                 Only set when a non-zero field texture is being saved alongside.
         """
         if rule is None:
-            rule = np.zeros((10, 8), dtype=np.float32)
+            rule = np.zeros((10, 12), dtype=np.float32)
 
         return PhysicsConfig(
             axial_force=sim_state.AXIAL_FORCE,
@@ -454,9 +463,11 @@ class ConfigSaver:
         """Convert legacy binary format to PhysicsConfig."""
         # Unpack physics params (10 floats = 40 bytes)
         physics = struct.unpack('10f', data[:40])
-        # Unpack rule (80 floats = 320 bytes)
+        # Unpack rule (80 floats = 320 bytes from legacy, pad to 10x12)
         rule_data = np.frombuffer(data[40:360], dtype=np.float32).copy()
-        rule = rule_data.reshape(10, 8)
+        rule_8col = rule_data.reshape(10, 8)
+        rule = np.zeros((10, 12), dtype=np.float32)
+        rule[:, :8] = rule_8col
 
         # Default values
         disable_symmetry = False

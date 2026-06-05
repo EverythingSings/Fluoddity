@@ -22,7 +22,7 @@ class RuleManager:
 
     def push_zero_rule(self, seed: float) -> np.ndarray:
         """Push a zero rule (no target) with seed to history. Returns the zero rule."""
-        zero_rule = np.zeros((10, 8), dtype=np.float32)
+        zero_rule = np.zeros((10, 12), dtype=np.float32)
         self.push_rule(zero_rule, seed)
         return zero_rule
 

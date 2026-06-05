@@ -73,46 +73,47 @@ def tryset_mat4(program: moderngl.Program, uniform, mat):
 def readback_rule(rule_buffer, rule_index):
     """
     Read back a single Rule from the buffer at the specified index.
-    
+
     Structure:
-    - FourierCenter: vec4 frequency + vec4 amplitude = 8 floats = 32 bytes
-    - Rule: 10 RbfCenters = 10 * 32 = 320 bytes
+    - FourierCenter: vec4 freq + vec4 amp + vec2 freq_ext + vec2 amp_ext = 12 floats = 48 bytes
+    - Rule: 10 FourierCenters = 10 * 48 = 480 bytes
     """
-    
+
     # Calculate the byte offset for the specific rule
-    rule_size_bytes = 320  # 10 centers * 32 bytes per center
+    rule_size_bytes = 480  # 10 centers * 48 bytes per center
     offset = rule_index * rule_size_bytes
-    
+
     # Read the specific rule from the buffer
     rule_bytes = rule_buffer.read(size=rule_size_bytes, offset=offset)
-    
+
     # Convert bytes to numpy array
-    # Each Rule contains 80 floats (10 centers * 8 floats per center)
+    # Each Rule contains 120 floats (10 centers * 12 floats per center)
     rule_data = np.frombuffer(rule_bytes, dtype=np.float32)
-    
-    # Reshape to [10 centers, 8 floats per center]
-    rule_reshaped = rule_data.reshape(10, 8)
-    
+
+    # Reshape to [10 centers, 12 floats per center]
+    rule_reshaped = rule_data.reshape(10, 12)
+
     return rule_reshaped
 def set_rule_uniform(program, rule_data):
     """
     Set a Rule as a uniform in the shader program.
 
     Args:
-        example_prog: ModernGL program object
-        rule_data: numpy array of shape (10, 8) containing the rule data
+        rule_data: numpy array of shape (10, 12) containing the rule data
     """
 
-    # Method 1: Set individual FourierCenter uniforms
     for i in range(10):
         center_data = rule_data[i]
-        frequency = center_data[:4]      # First 4 floats are frequency
-        amplitude = center_data[4:]      # Last 4 floats are amplitude
+        frequency = center_data[:4]        # First 4 floats: frequency vec4
+        amplitude = center_data[4:8]       # Next 4 floats: amplitude vec4
+        frequency_ext = center_data[8:10]  # Next 2 floats: frequency_ext vec2
+        amplitude_ext = center_data[10:12] # Last 2 floats: amplitude_ext vec2
 
-        # Set uniforms (assuming uniform names like target_rule.centers[0].frequency, etc.)
         try:
             program[f'target_rule.centers[{i}].frequency'] = tuple(frequency)
             program[f'target_rule.centers[{i}].amplitude'] = tuple(amplitude)
+            program[f'target_rule.centers[{i}].frequency_ext'] = tuple(frequency_ext)
+            program[f'target_rule.centers[{i}].amplitude_ext'] = tuple(amplitude_ext)
         except Exception:
             print('failed rule uniforms')
 

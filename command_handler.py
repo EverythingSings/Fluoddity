@@ -199,7 +199,7 @@ class CommandHandler:
     def _handle_full_reset(self, ui_state):
         """Handle full reset (Z key): reset entities, apply zero rule, randomize, push new state."""
         self.sim.reset()
-        zero_rule = np.zeros((10, 8), dtype=np.float32)
+        zero_rule = np.zeros((10, 12), dtype=np.float32)
         self.sim.apply_rule(zero_rule)
         ui_state.sim.rule_seed = random.random()
         self.rule_manager.push_rule(zero_rule, ui_state.sim.rule_seed)

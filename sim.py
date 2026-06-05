@@ -7,7 +7,7 @@ from state import SimState
 
 # Global constants
 SIZE_OF_ENTITY_STRUCT = 4*8  # 4 bytes per 32bit value. 8 values (pos:2, vel:2, hue:1, size:1, padding:2)
-SIZE_OF_RULE_STRUCT = 4*4*20  # 4 bytes per float32. 4 floats per vec4. 20 vec4s per rule
+SIZE_OF_RULE_STRUCT = 10 * 12 * 4  # 10 centers * 12 floats per center * 4 bytes per float = 480
 
 # Debug override: cubic canvas for isotropic 3D physics.
 # Change this single value to resize the 3D canvas uniformly.
@@ -127,7 +127,7 @@ class Sim:
         # SDF scene definition for particle-surface interactions (before fourier so #extension stays first)
         self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('volrender/shaders/volume_scene.glsl'))
         self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('volrender/shaders/common.glsl'))
-        self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('shaders/fourier4_4.glsl'))
+        self.entity_update_source = shader_prepend(self.entity_update_source, read_shader('shaders/fourier6_6.glsl'))
         self.entity_update_source = prepend_defines(self.entity_update_source, self.entity_count)
 
         try:
@@ -714,7 +714,7 @@ class Sim:
                 # Write zeros for missing rules
                 rule_data.extend(bytes(SIZE_OF_RULE_STRUCT))
             else:
-                # Write rule as flat float32 array (10 centers * 8 floats = 80 floats)
+                # Write rule as flat float32 array (10 centers * 12 floats = 120 floats)
                 rule_data.extend(config.rule.astype(np.float32).tobytes())
 
         self.multi_load_rule_buffer.write(bytes(rule_data))
@@ -722,7 +722,7 @@ class Sim:
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""
         if rule is None:
-            set_rule_uniform(self.entity_update_program, np.zeros((10, 8), dtype=np.float32))
+            set_rule_uniform(self.entity_update_program, np.zeros((10, 12), dtype=np.float32))
         else:
             set_rule_uniform(self.entity_update_program, rule)
 

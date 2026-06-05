@@ -158,7 +158,7 @@ class App:
         default_path = self.app_configs_dir / "Core/_Default.json"
         if not default_path.exists():
             default_state = SimState()
-            zero_rule = np.zeros((10, 8), dtype=np.float32)
+            zero_rule = np.zeros((10, 12), dtype=np.float32)
             config = self.config_saver.create_config(default_state, zero_rule)
             self.config_saver.save_to_file(config, default_path)
             print(f"Created default config: {default_path}")

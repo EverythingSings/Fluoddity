@@ -337,7 +337,7 @@ Rule get_particle_target_rule() {
 
 ////////////////////////////////////
 //FOURIER NOISE IS IMPORTED INTO THIS SHADER
-//FROM fourier4_4.glsl
+//FROM fourier6_6.glsl
 ////////////////////////////////////
 
 //rotate p around origin by angle a
@@ -489,6 +489,14 @@ void mutate_rule(inout Rule current_rule,float amount,float cohort){
         vec4 amp_mutation = amount * (-1.0 + 2.0 * hash4(-.5+vec2(-i+seed,i)));
         current_rule.centers[i].amplitude += amp_mutation;
         current_rule.centers[i].frequency *= 1 + amount * 0.5 * (hash(vec2(seed,i))-.5);
+
+        // Mutate extension fields (dims 5-6)
+        vec2 amp_ext_mutation = amount * (-1.0 + 2.0 * vec2(
+            hash(vec2(seed + 100.0, float(i))),
+            hash(vec2(seed + 200.0, float(i)))
+        ));
+        current_rule.centers[i].amplitude_ext += amp_ext_mutation;
+        current_rule.centers[i].frequency_ext *= 1 + amount * 0.5 * (hash(vec2(seed + 300.0, float(i))) - .5);
     }
 }
 
@@ -508,7 +516,7 @@ float edgeflect(float x){
 //Somewhat arbitrary generator of functions with 4 float inputs and 4 float outputs,
 //varying rule should smoothly change the behavior of the function
 vec4 black_box(vec2 L,vec2 R,Rule rule){
-    return (fourier_noise(rule.centers, vec4(L,R)));
+    return (fourier_noise(rule.centers, vec4(L,R), vec2(0.0)));
 }
 
 
@@ -691,7 +699,7 @@ void main() {
     }
     //Each cohort gets a random mutation
     mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),vec2(e.px,e.py),cohort),get_particle_rule_seed()+floor(cohort));
-    // Only write rules when explicitly requested (expensive - 320 bytes per particle)
+    // Only write rules when explicitly requested (expensive - 480 bytes per particle)
     if(WRITE_RULES) {
         rules[index] = current_rule;
     }
