@@ -90,6 +90,14 @@ class VolumeRenderer:
         # so every dispatch gets a unique RNG seed.
         self._dispatch_count: int = 0
 
+        # Photosphere / skybox state
+        self._skybox_tex: moderngl.Texture | None = None
+        self._use_photosphere: bool = False
+
+        # Depth of field
+        self._aperture: float = 0.0
+        self._focal_plane_depth: float = 5.0
+
     def reload_shaders(self):
         """Recompile pathtrace and resolve compute shaders from disk."""
         try:
@@ -109,6 +117,19 @@ class VolumeRenderer:
             print("VolumeRenderer shaders reloaded")
         except Exception as e:
             print(f"VolumeRenderer shader reload failed: {e}")
+
+    def set_skybox_texture(self, tex: moderngl.Texture | None):
+        """Set the skybox texture for photosphere mode (or None to disable)."""
+        self._skybox_tex = tex
+
+    def set_photosphere(self, enabled: bool):
+        """Enable/disable photosphere sky mode."""
+        self._use_photosphere = enabled
+
+    def set_dof(self, aperture: float, focal_plane_depth: float):
+        """Set depth-of-field parameters."""
+        self._aperture = aperture
+        self._focal_plane_depth = focal_plane_depth
 
     def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
         """Deposit entities into the voxel grid and rebuild the majorant."""
@@ -172,6 +193,10 @@ class VolumeRenderer:
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
+        _tryset(prog, 'u_use_photosphere', False)
+        _tryset(prog, 'u_sun_sampling', False)
+        _tryset(prog, 'u_aperture', 0.0)
+        _tryset(prog, 'u_sun_direction', (0.0, 1.0, 0.0))
 
         # Grid uniforms
         _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))
@@ -246,6 +271,10 @@ class VolumeRenderer:
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
+        _tryset(prog, 'u_use_photosphere', False)
+        _tryset(prog, 'u_sun_sampling', False)
+        _tryset(prog, 'u_aperture', 0.0)
+        _tryset(prog, 'u_sun_direction', (0.0, 1.0, 0.0))
 
         # Grid uniforms
         _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))
@@ -337,10 +366,19 @@ class VolumeRenderer:
             _tryset(prog, 'u_sun_direction', sun.direction)
             _tryset(prog, 'u_sun_color', sun.color_rgb)
             _tryset(prog, 'u_sun_intensity', sun.intensity)
+            _tryset(prog, 'u_sun_sampling', sun.sampling)
         else:
             _tryset(prog, 'u_sun_direction', (0.0, 1.0, 0.0))
             _tryset(prog, 'u_sun_color', (0.0, 0.0, 0.0))
             _tryset(prog, 'u_sun_intensity', 0.0)
+            _tryset(prog, 'u_sun_sampling', False)
+
+        # Photosphere
+        _tryset(prog, 'u_use_photosphere', self._use_photosphere)
+
+        # Depth of field
+        _tryset(prog, 'u_aperture', self._aperture)
+        _tryset(prog, 'u_focal_plane_depth', self._focal_plane_depth)
 
         # Bounce loop control
         _tryset(prog, 'u_max_bounces', render.max_bounces)
@@ -370,6 +408,11 @@ class VolumeRenderer:
         _tryset(prog, 'u_color_x', 2)
         self.grid.color_y.use(location=3)
         _tryset(prog, 'u_color_y', 3)
+
+        # Skybox texture (equirectangular) on unit 4
+        if self._skybox_tex is not None:
+            self._skybox_tex.use(location=4)
+            _tryset(prog, 'u_skybox', 4)
 
         # Bind output target as image (binding 0)
         target.bind_to_image(0, read=False, write=True)
@@ -449,6 +492,14 @@ class VolumeRenderer:
         _tryset(prog, 'u_sun_direction', sun.direction)
         _tryset(prog, 'u_sun_color', sun.color_rgb)
         _tryset(prog, 'u_sun_intensity', sun.intensity)
+        _tryset(prog, 'u_sun_sampling', sun.sampling)
+
+        # Photosphere
+        _tryset(prog, 'u_use_photosphere', self._use_photosphere)
+
+        # Depth of field
+        _tryset(prog, 'u_aperture', self._aperture)
+        _tryset(prog, 'u_focal_plane_depth', self._focal_plane_depth)
 
         # Bounce loop control
         # COMMENT FLAG: max_bounces — 0 = unbounded (RR only)
@@ -479,6 +530,11 @@ class VolumeRenderer:
         _tryset(prog, 'u_color_x', 2)
         self.grid.color_y.use(location=3)
         _tryset(prog, 'u_color_y', 3)
+
+        # Skybox texture (equirectangular) on unit 4
+        if self._skybox_tex is not None:
+            self._skybox_tex.use(location=4)
+            _tryset(prog, 'u_skybox', 4)
 
         # Bind accumulation buffer to image binding 1 (read + write)
         self._accum_tex.bind_to_image(1, read=True, write=True)

@@ -64,6 +64,8 @@ class App:
         cam = self.ui.state.camera
         cam.render_3d = loaded_prefs.three_d_render_3d
         cam.fov = loaded_prefs.three_d_fov
+        cam.aperture = loaded_prefs.three_d_aperture
+        cam.focal_plane_depth = loaded_prefs.three_d_focal_plane_depth
         cam.move_speed = loaded_prefs.three_d_move_speed
         cam.rotate_speed = loaded_prefs.three_d_rotate_speed
         cam.orbit_distance = loaded_prefs.three_d_orbit_distance
@@ -246,6 +248,9 @@ class App:
                     from tracer_interface import TracerInterface
                     self.ui._tracer_interface = TracerInterface(self.ctx)
                     self.ui._apply_tracer_preferences(self.ui._tracer_interface)
+                # Sync DOF from camera state
+                self.ui._tracer_interface.aperture = ui_state.camera.aperture
+                self.ui._tracer_interface.focal_plane_depth = ui_state.camera.focal_plane_depth
         elif not is_recording and self.was_recording:
             ui_state.preferences.speedmult = self.user_speedmult
             ui_state.preferences.motion_blur = self.user_motion_blur
@@ -373,9 +378,15 @@ class App:
             view_proj = self.camera.compute_fps_view_proj(
                 cam.pos, cam.dir, cam.up, cam.fov, (width / max(height, 1))
             )
+            cam_right, cam_up = self.camera.compute_fps_camera_basis(
+                cam.dir, cam.up
+            )
+            ti.aperture = ui_state.camera.aperture
+            ti.focal_plane_depth = ui_state.camera.focal_plane_depth
             ti.realtime_tick(entity_buffer, entity_count, view_proj,
                              rt_width, rt_height,
-                             sim_going=ui_state.sim.going)
+                             sim_going=ui_state.sim.going,
+                             camera_right=cam_right, camera_up=cam_up)
 
         # 6.5. Screenshot save and settings restoration
         if self.screenshot_in_progress:
@@ -562,6 +573,8 @@ class App:
         cam = ui_state.camera
         ui_state.preferences.three_d_render_3d = cam.render_3d
         ui_state.preferences.three_d_fov = cam.fov
+        ui_state.preferences.three_d_aperture = cam.aperture
+        ui_state.preferences.three_d_focal_plane_depth = cam.focal_plane_depth
         ui_state.preferences.three_d_move_speed = cam.move_speed
         ui_state.preferences.three_d_rotate_speed = cam.rotate_speed
         ui_state.preferences.three_d_orbit_distance = cam.orbit_distance
@@ -586,6 +599,8 @@ class App:
             ui_state.preferences.tracer_realtime_mode = ti.realtime_mode
             ui_state.preferences.tracer_max_bounces = ti.max_bounces
             ui_state.preferences.tracer_resolution_scale = ti.resolution_scale
+            ui_state.preferences.tracer_sun_sampling = ti.sun_sampling
+            ui_state.preferences.tracer_photosphere = ti.photosphere
 
         save_preferences(ui_state.preferences)
 

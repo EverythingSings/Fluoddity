@@ -61,6 +61,17 @@ uniform bool  u_colored_extinction; // true = hue→extinction, false = hue→al
 uniform vec3  u_sun_direction;     // unit, scene -> sun
 uniform vec3  u_sun_color;         // sun color RGB
 uniform float u_sun_intensity;     // sun radiance multiplier
+uniform bool  u_sun_sampling;      // false = skip NEE shadow rays
+
+// ---- photosphere / sky mode ----
+uniform bool      u_use_photosphere;  // true = sample skybox texture
+uniform sampler2D u_skybox;           // equirectangular skybox (texture unit 4)
+
+// ---- depth of field ----
+uniform float u_aperture;            // lens radius (0 = pinhole)
+uniform float u_focal_plane_depth;   // distance to focal plane
+uniform vec3  u_camera_right;        // camera right vector (world space)
+uniform vec3  u_camera_up;           // camera up vector (world space)
 
 // ---- density (trilinear filtered sampler) ----
 uniform sampler3D u_density;
@@ -91,6 +102,45 @@ vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+
+// ====================================================================
+// sRGB -> linear conversion helpers (for skybox texture).
+// ====================================================================
+vec3 LessThan(vec3 f, float value) {
+    return vec3(
+        (f.x < value) ? 1.0 : 0.0,
+        (f.y < value) ? 1.0 : 0.0,
+        (f.z < value) ? 1.0 : 0.0);
+}
+
+vec3 SRGBToLinear(vec3 rgb) {
+    rgb = clamp(rgb, 0.0, 1.0);
+    return mix(
+        pow(((rgb + 0.055) / 1.055), vec3(2.4)),
+        rgb / 12.92,
+        LessThan(rgb, 0.04045));
+}
+
+// ====================================================================
+// Sky color: direction-dependent sky radiance.
+//
+// In photosphere mode, samples an equirectangular skybox texture.
+// Otherwise, returns a procedural sky with soft brightening toward
+// the sun direction (low-frequency, no sharp sun disk).
+// ====================================================================
+vec3 get_sky_col(vec3 dir) {
+    if (u_use_photosphere) {
+        float theta = atan(dir.z, dir.x) / 3.141592653589793 / 2.0 + 0.5;
+        float phi = dir.y / 2.0 + 0.5;
+        return SRGBToLinear(texture(u_skybox, vec2(theta, phi)).xyz);
+    }
+    // Procedural: base sky + soft brightening toward sun direction
+    vec3 base = u_sky_color * u_sky_intensity;
+    float sun_dot = dot(dir, u_sun_direction);
+    float sun_glow = pow(clamp(sun_dot * 0.5 + 0.5, 0.0, 1.0), 4.0);
+    return base * (1.0 + sun_glow * 2.0);
 }
 
 
@@ -472,8 +522,11 @@ void main() {
     if (pixel.x >= u_target_size.x || pixel.y >= u_target_size.y)
         return;
 
-    // ---- 1. Build NDC at pixel center ----
-    vec2 uv = (vec2(pixel) + 0.5) / vec2(u_target_size);
+    // Initialize RNG early for subpixel jitter and DOF
+    rng_init(uvec3(pixel, u_sample_index));
+
+    // ---- 1. Build NDC with subpixel jitter (free AA over multiple samples) ----
+    vec2 uv = (vec2(pixel) + vec2(next_float(), next_float())) / vec2(u_target_size);
     vec2 ndc_xy = uv * 2.0 - 1.0;
 
     // ---- 2. Unproject near (z=-1) and far (z=+1) through inv_view_proj ----
@@ -486,13 +539,19 @@ void main() {
     vec3 ray_origin = near_w;
     vec3 ray_dir    = normalize(far_w - near_w);
 
+    // ---- 3b. Depth of field ----
+    if (u_aperture > 0.0) {
+        vec3 focal_point = ray_origin + ray_dir * u_focal_plane_depth;
+        vec2 lens_offset = sample_disk() * u_aperture;
+        ray_origin += u_camera_right * lens_offset.x + u_camera_up * lens_offset.y;
+        ray_dir = normalize(focal_point - ray_origin);
+    }
+
     // ---- 4. AABB slab intersection ----
     float t_near, t_far;
     bool hit = intersect_aabb(ray_origin, ray_dir,
                               u_bounds_min, u_bounds_max,
                               t_near, t_far);
-
-    vec3 sky = u_sky_color * u_sky_intensity;
 
     // ---- SDF primary ray test (before debug paths) ----
     float primary_sdf_t;
@@ -505,14 +564,14 @@ void main() {
     }
 
     if (!hit && !primary_sdf_hit) {
-        write_output(pixel, vec4(sky, 1.0));
+        write_output(pixel, vec4(get_sky_col(ray_dir), 1.0));
         return;
     }
 
     // ---- 5. Debug fixed-step raymarch ----
     if (u_debug_raymarch) {
         if (!hit) {
-            write_output(pixel, vec4(sky, 1.0));
+            write_output(pixel, vec4(get_sky_col(ray_dir), 1.0));
             return;
         }
         // Clamp t_near so camera can be inside the box
@@ -532,7 +591,7 @@ void main() {
 
         // Transmittance composited over sky: color = sky * exp(-tau)
         vec3 transmittance = exp(-tau);
-        vec3 color = sky * transmittance;
+        vec3 color = get_sky_col(ray_dir) * transmittance;
         write_output(pixel, vec4(color, 1.0));
         return;
     }
@@ -540,7 +599,7 @@ void main() {
     // ---- 6. Delta-tracked free flight (visual validation mode) ----
     if (u_debug_delta_only) {
         if (!hit) {
-            write_output(pixel, vec4(sky, 1.0));
+            write_output(pixel, vec4(get_sky_col(ray_dir), 1.0));
             return;
         }
         rng_init(uvec3(pixel, 0u));
@@ -554,7 +613,7 @@ void main() {
         if (collided) {
             write_output(pixel, vec4(1.0, 1.0, 1.0, 1.0));
         } else {
-            write_output(pixel, vec4(sky, 1.0));
+            write_output(pixel, vec4(get_sky_col(ray_dir), 1.0));
         }
         return;
     }
@@ -563,8 +622,6 @@ void main() {
     // Full random walk handling both participating media (delta tracking)
     // and SDF surfaces (sphere tracing).  At each bounce, the ray tests
     // both systems and picks whichever intersection is closer.
-
-    rng_init(uvec3(pixel, u_sample_index));
 
     vec3 throughput = vec3(1.0);
     vec3 radiance   = vec3(0.0);
@@ -600,7 +657,7 @@ void main() {
 
         // ---- No intersection at all → sky escape ----
         if (!sdf_hit && !aabb_hit) {
-            radiance += throughput * sky;
+            radiance += throughput * get_sky_col(walk_dir);
             break;
         }
 
@@ -636,7 +693,7 @@ void main() {
                 sdf_mat = scene(hit_pos);
             } else {
                 // Escaped AABB, no SDF beyond → sky
-                radiance += throughput * sky;
+                radiance += throughput * get_sky_col(walk_dir);
                 break;
             }
         } else {
@@ -658,7 +715,7 @@ void main() {
             }
 
             // Sun NEE: isotropic phase = 1/(4*pi)
-            {
+            if (u_sun_sampling) {
                 vec3 T_sun = transmittance_to_sun(hit_pos);
                 float phase = 1.0 / (4.0 * 3.141592653589793);
                 radiance += throughput * phase * T_sun
@@ -691,7 +748,7 @@ void main() {
 
             // Sun NEE for surfaces (BRDF-weighted)
             // Offset shadow origin along normal to avoid self-shadowing
-            {
+            if (u_sun_sampling) {
                 vec3 shadow_origin = hit_pos + N * SDF_SURFACE_EPS * 4.0;
                 vec3 T_sun = transmittance_to_sun(shadow_origin);
                 vec3 brdf_cos = eval_brdf_cos(walk_dir, u_sun_direction,

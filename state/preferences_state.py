@@ -113,10 +113,14 @@ class PreferencesState:
     tracer_realtime_mode: int = 0  # 0=Off, 1=1spp, 2=Accumulate
     tracer_max_bounces: int = 0  # 0=unbounded (RR only)
     tracer_resolution_scale: float = 1.0  # multiplier on render resolution
+    tracer_sun_sampling: bool = True  # NEE sun shadow rays
+    tracer_photosphere: bool = False  # skybox texture mode
 
     # 3D camera settings
     three_d_render_3d: bool = True
     three_d_fov: float = 50.0
+    three_d_aperture: float = 0.0  # DOF lens radius
+    three_d_focal_plane_depth: float = 5.0  # DOF focal plane distance
     three_d_move_speed: float = 2.0
     three_d_rotate_speed: float = 2.0
     three_d_orbit_distance: float = 3.0

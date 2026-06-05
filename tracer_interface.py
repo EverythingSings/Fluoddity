@@ -70,12 +70,23 @@ class TracerInterface:
         self.sun_direction = [0.577, 0.577, 0.577]
         self.sun_color = [1.0, 0.95, 0.9]
         self.sun_intensity = 3.0
+        self.sun_sampling = True  # NEE sun shadow rays
         self.sky_color = [0.5, 0.7, 1.0]
         self.sky_intensity = 1.0
+        self.photosphere = False  # use skybox texture for sky
+        self._skybox_tex = None  # moderngl.Texture loaded from skybox.jpg
         self.num_samples = 64
         self.exposure = 1.5
         self.max_bounces = 0  # 0=unbounded (RR only)
         self.resolution_scale = 1.0  # multiplier on render resolution
+
+        # Depth of field (driven from camera state)
+        self.aperture = 0.0
+        self.focal_plane_depth = 5.0
+
+        # Camera basis vectors for DOF
+        self._camera_right = None
+        self._camera_up = None
 
     # ------------------------------------------------------------------ reload
     def reload_shaders(self):
@@ -121,16 +132,52 @@ class TracerInterface:
         self._display_tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
         self._display_size = (width, height)
 
+    def _load_skybox(self):
+        """Try to load volrender/textures/skybox.jpg. Return texture or None."""
+        skybox_path = os.path.join(os.path.dirname(__file__),
+                                   "volrender", "textures", "skybox.jpg")
+        if not os.path.exists(skybox_path):
+            return None
+        try:
+            from PIL import Image
+            img = Image.open(skybox_path).convert('RGB')
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            data = img.tobytes()
+            tex = self.ctx.texture(img.size, 3, data)
+            tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            tex.repeat_x = True
+            tex.repeat_y = True
+            return tex
+        except Exception as e:
+            print(f"Failed to load skybox: {e}")
+            return None
+
+    def _apply_renderer_state(self):
+        """Push photosphere, DOF, and camera basis state to the renderer."""
+        r = self._renderer
+        r.set_photosphere(self.photosphere)
+        r.set_skybox_texture(self._skybox_tex)
+        r.set_dof(self.aperture, self.focal_plane_depth)
+        if self._camera_right is not None and self._camera_up is not None:
+            r.camera.set_camera_basis(self._camera_right, self._camera_up)
+
     # -------------------------------------------------------- progressive API
 
     def start_render(self, entity_buffer: moderngl.Buffer, entity_count: int,
-                     view_proj: np.ndarray, width: int = 512, height: int = 512):
+                     view_proj: np.ndarray, width: int = 512, height: int = 512,
+                     camera_right=None, camera_up=None):
         """Begin a new progressive render: splat entities, reset accumulation, lock camera.
 
         After calling this, call tick() once per app frame to accumulate 1 SPP.
         """
         self._ensure_renderer()
         self._ensure_textures(width, height)
+
+        # Store camera basis for DOF
+        if camera_right is not None:
+            self._camera_right = camera_right
+        if camera_up is not None:
+            self._camera_up = camera_up
 
         # Splat entities into voxel grid + rebuild majorant
         self._renderer.splat(entity_buffer, entity_count)
@@ -150,6 +197,7 @@ class TracerInterface:
         if not self._rendering:
             return False
 
+        self._apply_renderer_state()
         medium, sun, sky, render, sdf_enabled = self._build_params()
 
         self._renderer.accumulate(
@@ -175,7 +223,8 @@ class TracerInterface:
 
     def realtime_tick(self, entity_buffer: moderngl.Buffer, entity_count: int,
                       view_proj: np.ndarray, width: int, height: int,
-                      sim_going: bool = True):
+                      sim_going: bool = True,
+                      camera_right=None, camera_up=None):
         """Perform one realtime tracing step (1 SPP).
 
         In 1spp mode: splat, reset accumulation, trace 1 sample, resolve+tonemap.
@@ -185,9 +234,17 @@ class TracerInterface:
         Args:
             sim_going: If True, re-splat entities (they may have moved).
                        If False, skip the splat since entities are unchanged.
+            camera_right: Camera right vector (world space) for DOF.
+            camera_up: Camera up vector (world space) for DOF.
         """
         self._ensure_renderer()
         self._ensure_textures(width, height)
+
+        # Store camera basis for DOF
+        if camera_right is not None:
+            self._camera_right = camera_right
+        if camera_up is not None:
+            self._camera_up = camera_up
 
         # Re-splat when entities have moved (sim running) or on first use
         if sim_going or self._rt_needs_initial_splat:
@@ -201,6 +258,7 @@ class TracerInterface:
             self._samples_done = 0
 
         # Accumulate 1 SPP
+        self._apply_renderer_state()
         medium, sun, sky, render, sdf_enabled = self._build_params()
         self._renderer.accumulate(
             1, self._render_view_proj, self._target_tex,
@@ -225,13 +283,15 @@ class TracerInterface:
     # -------------------------------------------------- video recording API
 
     def start_video_render(self, entity_buffer: moderngl.Buffer, entity_count: int,
-                           view_proj: np.ndarray, width: int, height: int):
+                           view_proj: np.ndarray, width: int, height: int,
+                           camera_right=None, camera_up=None):
         """Begin a progressive render sized for video output.
 
         Same as start_render but with caller-specified dimensions matching
         the app window.
         """
-        self.start_render(entity_buffer, entity_count, view_proj, width, height)
+        self.start_render(entity_buffer, entity_count, view_proj, width, height,
+                          camera_right=camera_right, camera_up=camera_up)
 
     def tick_video(self) -> bool:
         """Accumulate 1 SPP for video. Returns True when this output frame is complete.
@@ -242,6 +302,7 @@ class TracerInterface:
         if not self._rendering:
             return False
 
+        self._apply_renderer_state()
         medium, sun, sky, render, sdf_enabled = self._build_params()
 
         self._renderer.accumulate(
@@ -293,6 +354,7 @@ class TracerInterface:
             direction=tuple(sd),
             color_rgb=tuple(self.sun_color),
             intensity=self.sun_intensity,
+            sampling=self.sun_sampling,
         )
         sky = SkyParams(
             color_rgb=tuple(self.sky_color),

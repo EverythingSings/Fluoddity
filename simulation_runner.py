@@ -485,9 +485,13 @@ class SimulationRunner:
             scale = max(0.1, ti.resolution_scale)
             rt_width = max(1, int(width * scale))
             rt_height = max(1, int(height * scale))
+            cam_right, cam_up = self.camera.compute_fps_camera_basis(
+                self.controller_cam.dir, self.controller_cam.up
+            )
             ti.start_video_render(
                 self.sim.get_entity_buffer(), self.sim.entity_count,
-                view_proj, rt_width, rt_height
+                view_proj, rt_width, rt_height,
+                camera_right=cam_right, camera_up=cam_up
             )
             self._tracer_frame_started = True
             self._tracer_samples_done = 0

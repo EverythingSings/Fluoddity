@@ -70,6 +70,16 @@ class TracerWindowMixin:
             _, ti.sky_intensity = imgui.slider_float(
                 "Sky Intensity", ti.sky_intensity, 0.0, 5.0)
 
+            changed_photo, ti.photosphere = imgui.checkbox(
+                "Photosphere", ti.photosphere)
+            if changed_photo and ti.photosphere:
+                if ti._skybox_tex is None:
+                    ti._skybox_tex = ti._load_skybox()
+                if ti._skybox_tex is None:
+                    ti.photosphere = False
+            imgui.same_line()
+            _, ti.sun_sampling = imgui.checkbox("Sun Sampling", ti.sun_sampling)
+
         # ---- SDF Scene ----
         if imgui.collapsing_header("SDF Scene", imgui.TreeNodeFlags_.default_open.value):
             _, ti.sdf_enabled = imgui.checkbox("Enable SDF", ti.sdf_enabled)
@@ -150,6 +160,12 @@ class TracerWindowMixin:
         ti.sun_intensity = p.tracer_sun_intensity
         ti.sky_color = list(p.tracer_sky_color)
         ti.sky_intensity = p.tracer_sky_intensity
+        ti.sun_sampling = p.tracer_sun_sampling
+        ti.photosphere = p.tracer_photosphere
+        if ti.photosphere:
+            ti._skybox_tex = ti._load_skybox()
+            if ti._skybox_tex is None:
+                ti.photosphere = False
         ti.num_samples = p.tracer_num_samples
         ti.exposure = p.tracer_exposure
         ti.realtime_mode = p.tracer_realtime_mode
@@ -164,6 +180,10 @@ class TracerWindowMixin:
         entity_buffer = self.tracer_sim.get_entity_buffer()
         entity_count = self.tracer_sim.entity_count
 
+        # Sync DOF from camera state
+        ti.aperture = self.state.camera.aperture
+        ti.focal_plane_depth = self.state.camera.focal_plane_depth
+
         # Compute view_proj from the FPS controller camera
         cam = self.tracer_controller_cam
         if cam is None:
@@ -175,6 +195,10 @@ class TracerWindowMixin:
         view_proj = self.tracer_camera.compute_fps_view_proj(
             cam.pos, cam.dir, cam.up, cam.fov, render_aspect
         )
+        cam_right, cam_up = self.tracer_camera.compute_fps_camera_basis(
+            cam.dir, cam.up
+        )
 
         ti.start_render(entity_buffer, entity_count, view_proj,
-                        width=render_width, height=render_height)
+                        width=render_width, height=render_height,
+                        camera_right=cam_right, camera_up=cam_up)

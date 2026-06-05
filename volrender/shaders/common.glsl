@@ -66,6 +66,14 @@ vec3 sample_sphere() {
                 cos_theta);
 }
 
+// ---- uniform disk sampling (for DOF lens offset) ----
+// Returns a uniformly distributed point on the unit disk.
+vec2 sample_disk() {
+    float r = sqrt(next_float());
+    float theta = 6.283185307 * next_float();
+    return vec2(r * cos(theta), r * sin(theta));
+}
+
 // ---- AABB slab intersection ----
 // Returns true if the ray [origin, origin + dir*t] intersects the AABB.
 // On hit, t_near/t_far give the parametric interval (t_near may be < 0

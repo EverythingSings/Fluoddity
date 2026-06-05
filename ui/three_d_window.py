@@ -23,6 +23,12 @@ class ThreeDWindowMixin:
             _, self.state.camera.fov = imgui.slider_float(
                 "FOV", self.state.camera.fov, 10.0, 120.0, format="%.0f deg"
             )
+            _, self.state.camera.aperture = imgui.slider_float(
+                "Aperture", self.state.camera.aperture, 0.0, 0.2, format="%.3f"
+            )
+            _, self.state.camera.focal_plane_depth = imgui.slider_float(
+                "Focal Depth", self.state.camera.focal_plane_depth, 0.1, 50.0, format="%.1f"
+            )
 
             _, self.state.camera.move_speed = imgui.slider_float(
                 "Move Speed", self.state.camera.move_speed, 0.1, 10.0, format="%.1f"

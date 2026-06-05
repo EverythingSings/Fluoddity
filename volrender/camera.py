@@ -31,6 +31,8 @@ class Camera:
 
     def __init__(self):
         self._inv_view_proj = np.eye(4, dtype=np.float32)
+        self._camera_right = np.array([1, 0, 0], dtype=np.float32)
+        self._camera_up = np.array([0, 1, 0], dtype=np.float32)
 
     def set_view_proj(self, view_proj: np.ndarray):
         """Invert the 4×4 view_proj on CPU and cache the result.
@@ -46,6 +48,15 @@ class Camera:
         """The cached inverse view-projection matrix (4×4, float32)."""
         return self._inv_view_proj
 
+    def set_camera_basis(self, right, up):
+        """Store camera right and up vectors for DOF lens offset."""
+        self._camera_right = np.array(right, dtype=np.float32)
+        self._camera_up = np.array(up, dtype=np.float32)
+
     def upload(self, prog):
-        """Upload ``u_inv_view_proj`` to the given compute program."""
+        """Upload ``u_inv_view_proj`` and camera basis to the given compute program."""
         _tryset_mat4(prog, 'u_inv_view_proj', self._inv_view_proj)
+        if 'u_camera_right' in prog:
+            prog['u_camera_right'] = tuple(self._camera_right)
+        if 'u_camera_up' in prog:
+            prog['u_camera_up'] = tuple(self._camera_up)

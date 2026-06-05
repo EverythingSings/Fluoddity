@@ -42,6 +42,7 @@ class SunParams:
     direction: tuple[float, float, float]               # unit, scene -> sun
     color_rgb: tuple[float, float, float] = (1.0, 0.95, 0.9)
     intensity: float = 3.0
+    sampling:  bool = True   # NEE shadow rays enabled
 
 
 @dataclass

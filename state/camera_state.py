@@ -15,5 +15,7 @@ class CameraState:
     orbit_distance: float = 3.0    # Orbit radius / point scale reference distance
     orbit_rate: float = 0.0        # Auto-orbit speed (rad/sec) around point ahead of camera
     fov: float = 50.0              # Field of view (degrees)
+    aperture: float = 0.0          # DOF lens radius (0 = pinhole, no DOF)
+    focal_plane_depth: float = 5.0 # DOF focal plane distance
     move_speed: float = 2.0        # Joystick movement speed
     rotate_speed: float = 2.0      # Joystick rotation speed

@@ -146,6 +146,20 @@ class Camera:
         proj = self._perspective(math.radians(fov), aspect, 0.01, 100.0)
         return proj @ view
 
+    @staticmethod
+    def compute_fps_camera_basis(dir_vec, up):
+        """Return (right, up) unit vectors for the camera.
+
+        Used for depth-of-field lens offset in the path tracer.
+        """
+        f = np.array(dir_vec, dtype=np.float32)
+        f = f / np.linalg.norm(f)
+        u = np.array(up, dtype=np.float32)
+        right = np.cross(f, u)
+        right = right / np.linalg.norm(right)
+        true_up = np.cross(right, f)
+        return right, true_up
+
     def generate_view_texture(self, tiling_mode: bool = False):
         """Generate raw view texture (PRE-gamma correction) based on current mode.
 
