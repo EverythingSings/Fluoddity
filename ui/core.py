@@ -211,6 +211,7 @@ class UI(
         self._request_clear_canvas = False
         self._request_camera_reset = False
         self._request_clear_canvas_and_fields = False
+        self._request_pick_focal = False
 
         # Config clipboard flags
         self._request_preview_clipboard_config = False
@@ -408,6 +409,8 @@ class UI(
                 self.show_sidebar = not self.show_sidebar
             elif key == self.keybindings.get_key("exit_keybinding"):
                 glfw.set_window_should_close(window, True)
+            elif key == self.keybindings.get_key("pick_focal_entity"):
+                self._request_pick_focal = True
             #elif key == self.keybindings.get_key("toggle_tooltips"):
             #    self.show_demo_window = not self.show_demo_window
 
@@ -468,6 +471,7 @@ class UI(
         self.state.request_clear_canvas = self._request_clear_canvas
         self.state.request_camera_reset = self._request_camera_reset
         self.state.request_clear_canvas_and_fields = self._request_clear_canvas_and_fields
+        self.state.request_pick_focal = self._request_pick_focal
 
         # Transfer field loader flags
         self.state.request_load_force_field_image = self._request_load_force_field_image
@@ -525,6 +529,7 @@ class UI(
         self._request_clear_canvas = False
         self._request_camera_reset = False
         self._request_clear_canvas_and_fields = False
+        self._request_pick_focal = False
         self._request_load_force_field_image = False
         self._request_load_strafe_field_image = False
         self._field_load_image_path = ""

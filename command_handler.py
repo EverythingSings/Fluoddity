@@ -91,6 +91,10 @@ class CommandHandler:
     def process_commands(self, ui_state, tiling_mode):
         """Handle one-shot commands from UI state."""
 
+        # Pick focal entity (N key) — set focal plane to nearest entity depth
+        if ui_state.request_pick_focal:
+            self._handle_pick_focal(ui_state)
+
         # Handle world size change
         if ui_state.request_world_size_change:
             self._handle_world_size_change(ui_state)
@@ -212,6 +216,17 @@ class CommandHandler:
             self.rule_manager.push_rule(current_rule.copy(), ui_state.sim.rule_seed)
             self.sim.apply_rule(current_rule)
 
+    def _handle_pick_focal(self, ui_state):
+        """Handle N key: pick nearest entity to mouse and set focal plane to its depth."""
+        if not self.camera.render_3d:
+            return
+        ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
+        _entity_id, _entity_pos, _cohort, depth = self.entity_picker.find_nearest_entity_3d(
+            ray_origin, ray_dir,
+            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+        if depth > 0:
+            ui_state.camera.focal_plane_depth = depth
+
     def _handle_sweep_preview_restore(self, ui_state):
         """Handle sweep preview restore: ANY click re-enables sweeps. Returns True if restored."""
         if ui_state.sim.sweep_preview_pending_restore:
@@ -250,7 +265,7 @@ class CommandHandler:
             # In 3D mode, only cohort sweeps make sense (XY sweeps have no 3D analogue)
             if self.sim.has_active_cohort_sweep():
                 ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
-                entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity_3d(
+                entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
                     ray_origin, ray_dir,
                     num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
                 self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
@@ -278,7 +293,7 @@ class CommandHandler:
         """Handle entity selection via left click in Select Particle mode."""
         if self.camera.render_3d:
             ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
-            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity_3d(
+            entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
                 ray_origin, ray_dir,
                 num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
         else:

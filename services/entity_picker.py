@@ -69,7 +69,7 @@ class EntityPicker:
         return (nearest_idx, (pos_x, pos_y), cohort_value)
 
     def find_nearest_entity_3d(self, ray_origin: np.ndarray, ray_direction: np.ndarray,
-                                num_cohorts: int = 1, active_count: int = 1) -> tuple[int, tuple[float, float], float]:
+                                num_cohorts: int = 1, active_count: int = 1) -> tuple[int, tuple[float, float], float, float]:
         """Find the entity closest to a 3D ray (for 3D view picking).
 
         Args:
@@ -79,10 +79,11 @@ class EntityPicker:
             active_count: Number of active entities (for computing cohort from index)
 
         Returns:
-            Tuple of (entity_index, (pos_x, pos_y), cohort_value)
+            Tuple of (entity_index, (pos_x, pos_y), cohort_value, depth)
             - entity_index: Index of the nearest entity
             - (pos_x, pos_y): World-space position of the entity (z dropped for downstream compat)
             - cohort_value: Cohort value computed from index
+            - depth: Distance along the ray from camera to entity
         """
         ent_cache = np.frombuffer(self.entity_buffer.read(), dtype=np.float32)
 
@@ -113,5 +114,6 @@ class EntityPicker:
         pos_x = float(xs[nearest_idx])
         pos_y = float(ys[nearest_idx])
         cohort_value = float(num_cohorts) * float(nearest_idx) / float(max(active_count, 1))
+        depth = float(ts[nearest_idx])
 
-        return (nearest_idx, (pos_x, pos_y), cohort_value)
+        return (nearest_idx, (pos_x, pos_y), cohort_value, depth)

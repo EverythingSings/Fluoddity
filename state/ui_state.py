@@ -51,6 +51,7 @@ class UIState:
     request_world_size_change: bool = False
     request_camera_reset: bool = False
     request_clear_canvas_and_fields: bool = False
+    request_pick_focal: bool = False  # N key: set focal plane to nearest entity
 
     # Config save/load (Ctrl+C/Ctrl+V)
     request_save_config: bool = False
