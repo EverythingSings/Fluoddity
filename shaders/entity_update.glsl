@@ -151,7 +151,7 @@ void report(float val, uint plot_num) {
 // PLANAR_SYMMETRY false:  normal. true: average over w and -w for chirality-invariant dynamics
 #define INPUT_PROJECTION false
 #define OUTPUT_PROJECTION false
-#define PLANAR_SYMMETRY true
+#define PLANAR_SYMMETRY false
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
     if (MULTILOAD_COUNT == 0) return -1; // Not in multi-load mode
@@ -716,17 +716,21 @@ void sample_plane_physics(
     vec2 col_total = vec2(0);
     for (int ws = 0; ws < 2; ws++) {
         vec3 w_signed = (ws == 0) ? w : -w;
+        vec3 v_signed = (ws == 0) ? v : -v; // flip v with w for true planar reflection
+        vec2 ori_signed = (ws == 0) ? orientation : orientation * vec2(1, -1); // flip lateral
 #else
         vec3 w_signed = w;
+        vec3 v_signed = v;
+        vec2 ori_signed = orientation;
 #endif
 
         // Project 3D trail vectors onto the tangent plane (+ normal when INPUT_PROJECTION is false)
 #if !INPUT_PROJECTION
-        vec3 ltap = vec3(dot(ltap_3d, u), dot(ltap_3d, v), dot(ltap_3d, w_signed));
-        vec3 rtap = vec3(dot(rtap_3d, u), dot(rtap_3d, v), dot(rtap_3d, w_signed));
+        vec3 ltap = vec3(dot(ltap_3d, u), dot(ltap_3d, v_signed), dot(ltap_3d, w_signed));
+        vec3 rtap = vec3(dot(rtap_3d, u), dot(rtap_3d, v_signed), dot(rtap_3d, w_signed));
 #else
-        vec3 ltap = vec3(dot(ltap_3d, u), dot(ltap_3d, v), 0.0);
-        vec3 rtap = vec3(dot(rtap_3d, u), dot(rtap_3d, v), 0.0);
+        vec3 ltap = vec3(dot(ltap_3d, u), dot(ltap_3d, v_signed), 0.0);
+        vec3 rtap = vec3(dot(rtap_3d, u), dot(rtap_3d, v_signed), 0.0);
 #endif
         ltap *= sensor_scaling;
         rtap *= sensor_scaling;
@@ -735,15 +739,15 @@ void sample_plane_physics(
         vec3 force_local = vec3(0);
         vec3 strafe_local = vec3(0);
         vec2 col_params = vec2(0);
-        calculate_entity_behavior(ltap, rtap, orientation, current_rule, epos2, cohort, force_local, strafe_local, col_params);
+        calculate_entity_behavior(ltap, rtap, ori_signed, current_rule, epos2, cohort, force_local, strafe_local, col_params);
 
         // Rescale output forces
         force_local *= gfm / 400.;
         strafe_local *= gfm / 20.;
 
         // Lift tangent-plane coords to 3D world coordinates
-        vec3 force_3d = force_local.x * u + force_local.y * v + force_local.z * w_signed;
-        vec3 strafe_3d = strafe_local.x * u + strafe_local.y * v + strafe_local.z * w_signed;
+        vec3 force_3d = force_local.x * u + force_local.y * v_signed + force_local.z * w_signed;
+        vec3 strafe_3d = strafe_local.x * u + strafe_local.y * v_signed + strafe_local.z * w_signed;
 
 #if PLANAR_SYMMETRY
         force_3d_total += force_3d;
