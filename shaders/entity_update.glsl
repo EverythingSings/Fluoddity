@@ -570,16 +570,16 @@ void calculate_entity_behavior(vec3 L, vec3 R, vec2 axis, Rule rule, vec2 pos, f
     if(DISABLE_SYMMETRY){ mirror_lo = vec4(0); mirror_hi = vec2(0); }
 
     //Combine base and mirror terms
-    //xy: standard left-right symmetry. z (w-component): even under mirror (w not negated)
+    //xy: standard left-right symmetry. z (w-component): odd under mirror (pseudoscalar)
     force = vec3(
         base_lo.x + mirror_lo.x,
         base_lo.y - mirror_lo.y,
-        base_hi.x + mirror_hi.x
+        base_hi.x - mirror_hi.x
     );
     strafe = vec3(
         base_lo.z + mirror_lo.z,
         base_lo.w - mirror_lo.w,
-        base_hi.y + mirror_hi.y
+        base_hi.y - mirror_hi.y
     );
 
     //Convert force and strafe xy back to world coordinates; z scaled separately
