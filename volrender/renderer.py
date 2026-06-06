@@ -410,9 +410,11 @@ class VolumeRenderer:
         _tryset(prog, 'u_color_y', 3)
 
         # Skybox texture (equirectangular) on unit 4
+        # Always assign u_skybox to unit 4 to avoid sampler type conflict
+        # with u_density (sampler3D) on the default unit 0.
         if self._skybox_tex is not None:
             self._skybox_tex.use(location=4)
-            _tryset(prog, 'u_skybox', 4)
+        _tryset(prog, 'u_skybox', 4)
 
         # Bind output target as image (binding 0)
         target.bind_to_image(0, read=False, write=True)
@@ -532,9 +534,11 @@ class VolumeRenderer:
         _tryset(prog, 'u_color_y', 3)
 
         # Skybox texture (equirectangular) on unit 4
+        # Always assign u_skybox to unit 4 to avoid sampler type conflict
+        # with u_density (sampler3D) on the default unit 0.
         if self._skybox_tex is not None:
             self._skybox_tex.use(location=4)
-            _tryset(prog, 'u_skybox', 4)
+        _tryset(prog, 'u_skybox', 4)
 
         # Bind accumulation buffer to image binding 1 (read + write)
         self._accum_tex.bind_to_image(1, read=True, write=True)
