@@ -64,19 +64,28 @@ vec2 sdf_intersect(vec2 a, vec2 b) {
 // ====================================================================
 
 vec2 scene(vec3 p) {
+    p*=2.;
+    p.xz = abs(p.xz);
+    float dts = sd_box(p,vec3(0),vec3(.5));
+    p-=.5;
+    dts = min(dts, (length(p)-.25));
+    dts = min(dts, sd_box(p,vec3(0),vec3(.1,.6,.1)));
+    return vec2(dts/2.,MAT_DIFFUSE);
+
+
     // Dark diffuse ground plane at y = -1
-    vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -.80),
-                       MAT_DIFFUSE + 0.0);
-    vec2 wall = vec2(p.x+.95,MAT_DIFFUSE+.2);
-    vec2 wall2 = vec2(p.z+.95,MAT_DIFFUSE+.4);
+    //vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -.80),
+    //                   MAT_DIFFUSE + 0.0);
+    //vec2 wall = vec2(p.x+.95,MAT_DIFFUSE+.2);
+    //vec2 wall2 = vec2(p.z+.95,MAT_DIFFUSE+.4);
     //ground= sdf_union(ground,wall);
     //ground = sdf_union(ground, wall2);
     // Reflective sphere at origin
-    p-=vec3(.25,.25,.25);
-    vec2 sphere = vec2(length(p)-.25,
-                       MAT_MIRROR + 0.0);
+    //p-=vec3(.25,.25,.25);
+    //vec2 sphere = vec2(length(p)-.25,
+    //                   MAT_MIRROR + 0.0);
 
-    return ground;//sdf_union(ground, sphere);
+    //return ground;//sdf_union(ground, sphere);
 }
 
 
@@ -123,6 +132,18 @@ vec3 sdf_normal(vec3 p) {
         k.yxy * scene(p + k.yxy * h).x +
         k.xxx * scene(p + k.xxx * h).x
     );
+}
+
+
+// ====================================================================
+// Nearest surface point via SDF projection
+//
+// Assumes scene() is a true distance function.
+// Returns p - f(p) * grad(f)(p), the closest point on the surface.
+// ====================================================================
+
+vec3 nearest_surf(vec3 p) {
+    return p - scene(p).x * sdf_normal(p);
 }
 
 

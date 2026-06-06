@@ -476,7 +476,7 @@ void reset(uint index){
             if (dot(candidate, candidate) <= 1.0) break;
             seed_offset += 3.0;
         }
-        pos = candidate;
+        pos = candidate;    
     }
     else if(reset_mode == 2) {
         //SPHERE: arrange cohorts on a spherical shell
@@ -487,7 +487,7 @@ void reset(uint index){
         pos = .5*vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta) * radius;
     }
 
-
+    //pos = nearest_surf(pos);
     //store to persistent entity buffer
     entities[index]=Entity(pos.x, pos.y, pos.z, vel.x, vel.y, vel.z, 0.0, size);
 }
