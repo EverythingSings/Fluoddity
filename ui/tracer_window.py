@@ -31,6 +31,32 @@ class TracerWindowMixin:
         if ti.is_rendering and not recording_tracer and ti.realtime_mode == 0:
             ti.tick()
 
+        # ---- Grid Resolutions ----
+        if imgui.collapsing_header("Grid Resolutions"):
+            _, ti.density_resolution_log2 = imgui.slider_int(
+                "Density (2^n)", ti.density_resolution_log2, 5, 10)
+            if imgui.is_item_hovered():
+                d = 2 ** ti.density_resolution_log2
+                imgui.set_tooltip(f"{d}x{d}x{d}  ({d**3 * 4 / 1024**2:.0f} MB)")
+
+            _, ti.color_resolution_log2 = imgui.slider_int(
+                "Color (2^n)", ti.color_resolution_log2, 5, 10)
+            if imgui.is_item_hovered():
+                c = 2 ** ti.color_resolution_log2
+                imgui.set_tooltip(f"{c}x{c}x{c}  ({c**3 * 4 * 2 / 1024**2:.0f} MB, 2 channels)")
+
+            _, ti.majorant_resolution_log2 = imgui.slider_int(
+                "Majorant (2^n)", ti.majorant_resolution_log2, 3, 8)
+            if imgui.is_item_hovered():
+                m = 2 ** ti.majorant_resolution_log2
+                imgui.set_tooltip(f"{m}x{m}x{m}")
+
+            d = 2 ** ti.density_resolution_log2
+            c = 2 ** ti.color_resolution_log2
+            m = 2 ** ti.majorant_resolution_log2
+            vram_mb = (d**3 * 4 + c**3 * 4 * 2 + m**3 * 4) / 1024**2
+            imgui.text(f"VRAM: ~{vram_mb:.0f} MB")
+
         # ---- Medium ----
         if imgui.collapsing_header("Medium", imgui.TreeNodeFlags_.default_open.value):
             _, ti.colored_extinction = imgui.checkbox(
@@ -176,6 +202,9 @@ class TracerWindowMixin:
         ti.realtime_mode = p.tracer_realtime_mode
         ti.max_bounces = p.tracer_max_bounces
         ti.resolution_scale = p.tracer_resolution_scale
+        ti.density_resolution_log2 = p.tracer_density_resolution_log2
+        ti.color_resolution_log2 = p.tracer_color_resolution_log2
+        ti.majorant_resolution_log2 = p.tracer_majorant_resolution_log2
 
     def _do_tracer_render(self, ti):
         """Start a progressive tracer render using the current entity buffer and camera."""

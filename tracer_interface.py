@@ -81,6 +81,11 @@ class TracerInterface:
         self.max_bounces = 0  # 0=unbounded (RR only)
         self.resolution_scale = 1.0  # multiplier on render resolution
 
+        # Grid resolution controls (log2 values; actual resolution = 2^n cubed)
+        self.density_resolution_log2 = 9        # 2^9 = 512
+        self.color_resolution_log2 = 9          # 2^9 = 512
+        self.majorant_resolution_log2 = 7       # 2^7 = 128
+
         # Depth of field (driven from camera state)
         self.aperture = 0.0
         self.focal_plane_depth = 5.0
@@ -107,17 +112,35 @@ class TracerInterface:
             print(f"Tonemap shader reload failed: {e}")
 
     # ------------------------------------------------------------------ setup
-    def _ensure_renderer(self):
-        """Lazily create the VolumeRenderer on first use."""
-        if self._renderer is not None:
-            return
-        grid_params = GridParams(
+    def _current_grid_params(self) -> GridParams:
+        """Build GridParams from current resolution settings."""
+        d = 2 ** self.density_resolution_log2
+        c = 2 ** self.color_resolution_log2
+        m = 2 ** self.majorant_resolution_log2
+        return GridParams(
             bounds_min=(-1.0, -1.0, -1.0),
             bounds_max=(1.0, 1.0, 1.0),
-            resolution=(512, 512, 512),
-            majorant_resolution=(128,128,128),
+            resolution=(d, d, d),
+            color_resolution=(c, c, c) if c != d else None,
+            majorant_resolution=(m, m, m),
         )
-        self._renderer = VolumeRenderer(self.ctx, grid_params)
+
+    def _ensure_renderer(self):
+        """Lazily create the VolumeRenderer, or recreate if resolutions changed."""
+        target_params = self._current_grid_params()
+
+        if self._renderer is not None:
+            current = self._renderer.grid_params
+            if (current.resolution == target_params.resolution
+                    and current.effective_color_resolution == target_params.effective_color_resolution
+                    and current.majorant_resolution == target_params.majorant_resolution):
+                return  # No change needed
+            # Resolutions changed — destroy and recreate
+            self._renderer = None
+            self._rendering = False
+            self._render_complete = False
+
+        self._renderer = VolumeRenderer(self.ctx, target_params)
 
     def _ensure_textures(self, width: int, height: int):
         """Allocate or reallocate HDR target and LDR display textures."""
@@ -181,7 +204,8 @@ class TracerInterface:
             self._camera_up = camera_up
 
         # Splat entities into voxel grid + rebuild majorant
-        self._renderer.splat(entity_buffer, entity_count)
+        self._renderer.splat(entity_buffer, entity_count,
+                             skip_color=self._should_skip_color())
 
         # Lock camera and target SPP for this render
         self._render_view_proj = view_proj.copy()
@@ -249,7 +273,8 @@ class TracerInterface:
 
         # Re-splat when entities have moved (sim running) or on first use
         if sim_going or self._rt_needs_initial_splat:
-            self._renderer.splat(entity_buffer, entity_count)
+            self._renderer.splat(entity_buffer, entity_count,
+                                 skip_color=self._should_skip_color())
             self._rt_needs_initial_splat = False
         self._render_view_proj = view_proj.copy()
 
@@ -331,10 +356,19 @@ class TracerInterface:
         producing temporal averaging (motion blur) when resolved.
         """
         self._ensure_renderer()
-        self._renderer.splat(entity_buffer, entity_count)
+        self._renderer.splat(entity_buffer, entity_count,
+                             skip_color=self._should_skip_color())
         self._render_view_proj = view_proj.copy()
 
     # --------------------------------------------------------- param building
+    def _should_skip_color(self) -> bool:
+        """Determine whether color splatting can be skipped this frame.
+
+        Safe to skip when hue-derived color does not contribute:
+        saturation = 0 means albedo/extinction is uniform gray in both modes.
+        """
+        return self.albedo_saturation <= 0.0
+
     def _build_params(self):
         """Build volrender parameter dataclasses from current slider state."""
         sd = np.array(self.sun_direction, dtype=np.float64)

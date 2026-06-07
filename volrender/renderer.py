@@ -131,9 +131,10 @@ class VolumeRenderer:
         self._aperture = aperture
         self._focal_plane_depth = focal_plane_depth
 
-    def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
+    def splat(self, entity_buffer: moderngl.Buffer, entity_count: int,
+              skip_color: bool = False):
         """Deposit entities into the voxel grid and rebuild the majorant."""
-        self.grid.splat(entity_buffer, entity_count)
+        self.grid.splat(entity_buffer, entity_count, skip_color=skip_color)
         self.majorant_builder.build(self.grid)
 
     # -------------------------------------------------------- accumulation

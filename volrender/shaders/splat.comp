@@ -3,6 +3,7 @@
 
 // Trilinear atomic splat — one invocation per entity.
 // Deposits density and hue-color into the voxel grid.
+// Density and color grids may have different resolutions.
 
 layout(local_size_x = 256) in;
 
@@ -17,6 +18,9 @@ uniform int u_entity_count;
 // uniform vec3  u_bounds_min, u_bounds_max, u_resolution;
 // uniform float u_voxel_volume;
 // vec3 world_to_grid(vec3), vec3 grid_to_world(vec3)
+
+uniform vec3 u_color_resolution;    // color grid resolution (may differ from u_resolution)
+uniform int  u_skip_color_splat;    // 1 = skip color deposits entirely
 
 // ---- image bindings ----
 layout(r32f, binding = 0) uniform image3D img_density;
@@ -42,35 +46,11 @@ void main() {
     float size_scale = entity_size / DEFAULT_SIZE;
     if (size_scale <= 0.0) return;
 
-    // Convert hue to unit vector for circular-mean accumulation
-    float theta = 6.283185307 * hue;   // 2*pi*hue
-    float cos_theta = cos(theta);
-    float sin_theta = sin(theta);
-
     // Skip entities outside bounds
     if (any(lessThan(pos, u_bounds_min)) || any(greaterThanEqual(pos, u_bounds_max)))
         return;
 
-    // Continuous grid coordinate
-    vec3 gc = world_to_grid(pos);
-
-    // The 8 surrounding voxel corner indices and trilinear weights.
-    // gc is in [0, resolution).  Subtract 0.5 to center on voxels
-    // (voxel i is centered at i+0.5 in grid coords), then floor.
-    vec3 gc_shifted = gc - 0.5;
-    ivec3 i0 = ivec3(floor(gc_shifted));   // lower corner
-    vec3 f = gc_shifted - vec3(i0);        // fractional part in [0,1)
-
-    // Trilinear weights
-    float w[8];
-    w[0] = (1.0 - f.x) * (1.0 - f.y) * (1.0 - f.z);
-    w[1] = (      f.x) * (1.0 - f.y) * (1.0 - f.z);
-    w[2] = (1.0 - f.x) * (      f.y) * (1.0 - f.z);
-    w[3] = (      f.x) * (      f.y) * (1.0 - f.z);
-    w[4] = (1.0 - f.x) * (1.0 - f.y) * (      f.z);
-    w[5] = (      f.x) * (1.0 - f.y) * (      f.z);
-    w[6] = (1.0 - f.x) * (      f.y) * (      f.z);
-    w[7] = (      f.x) * (      f.y) * (      f.z);
+    vec3 extent = u_bounds_max - u_bounds_min;
 
     // Offsets for the 8 corners
     ivec3 offsets[8] = ivec3[8](
@@ -78,22 +58,65 @@ void main() {
         ivec3(0,0,1), ivec3(1,0,1), ivec3(0,1,1), ivec3(1,1,1)
     );
 
-    ivec3 res = ivec3(u_resolution);
+    // ---- Density deposit (always runs) ----
+    {
+        vec3 gc = world_to_grid(pos);
+        vec3 gc_shifted = gc - 0.5;
+        ivec3 i0 = ivec3(floor(gc_shifted));
+        vec3 f = gc_shifted - vec3(i0);
 
-    // Deposit into the 8 surrounding voxels
-    for (int c = 0; c < 8; c++) {
-        ivec3 voxel = i0 + offsets[c];
+        float w[8];
+        w[0] = (1.0 - f.x) * (1.0 - f.y) * (1.0 - f.z);
+        w[1] = (      f.x) * (1.0 - f.y) * (1.0 - f.z);
+        w[2] = (1.0 - f.x) * (      f.y) * (1.0 - f.z);
+        w[3] = (      f.x) * (      f.y) * (1.0 - f.z);
+        w[4] = (1.0 - f.x) * (1.0 - f.y) * (      f.z);
+        w[5] = (      f.x) * (1.0 - f.y) * (      f.z);
+        w[6] = (1.0 - f.x) * (      f.y) * (      f.z);
+        w[7] = (      f.x) * (      f.y) * (      f.z);
 
-        // Clamp to valid range
-        if (any(lessThan(voxel, ivec3(0))) || any(greaterThanEqual(voxel, res)))
-            continue;
+        ivec3 res = ivec3(u_resolution);
+        for (int c = 0; c < 8; c++) {
+            ivec3 voxel = i0 + offsets[c];
+            if (any(lessThan(voxel, ivec3(0))) || any(greaterThanEqual(voxel, res)))
+                continue;
+            float wt = w[c];
+            if (wt <= 0.0) continue;
+            imageAtomicAdd(img_density, voxel, wt * size_scale);
+        }
+    }
 
-        float wt = w[c];
-        if (wt <= 0.0) continue;
+    // ---- Color deposit (skippable, possibly at different resolution) ----
+    if (u_skip_color_splat == 0) {
+        float theta = 6.283185307 * hue;
+        float cos_theta = cos(theta);
+        float sin_theta = sin(theta);
 
-        float deposit = wt * size_scale;
-        imageAtomicAdd(img_density, voxel, deposit);
-        imageAtomicAdd(img_color_x, voxel, deposit * cos_theta);
-        imageAtomicAdd(img_color_y, voxel, deposit * sin_theta);
+        vec3 color_gc = (pos - u_bounds_min) / extent * u_color_resolution;
+        vec3 color_shifted = color_gc - 0.5;
+        ivec3 ci0 = ivec3(floor(color_shifted));
+        vec3 cf = color_shifted - vec3(ci0);
+
+        float cw[8];
+        cw[0] = (1.0 - cf.x) * (1.0 - cf.y) * (1.0 - cf.z);
+        cw[1] = (      cf.x) * (1.0 - cf.y) * (1.0 - cf.z);
+        cw[2] = (1.0 - cf.x) * (      cf.y) * (1.0 - cf.z);
+        cw[3] = (      cf.x) * (      cf.y) * (1.0 - cf.z);
+        cw[4] = (1.0 - cf.x) * (1.0 - cf.y) * (      cf.z);
+        cw[5] = (      cf.x) * (1.0 - cf.y) * (      cf.z);
+        cw[6] = (1.0 - cf.x) * (      cf.y) * (      cf.z);
+        cw[7] = (      cf.x) * (      cf.y) * (      cf.z);
+
+        ivec3 col_res = ivec3(u_color_resolution);
+        for (int c = 0; c < 8; c++) {
+            ivec3 cvoxel = ci0 + offsets[c];
+            if (any(lessThan(cvoxel, ivec3(0))) || any(greaterThanEqual(cvoxel, col_res)))
+                continue;
+            float cwt = cw[c];
+            if (cwt <= 0.0) continue;
+            float cd = cwt * size_scale;
+            imageAtomicAdd(img_color_x, cvoxel, cd * cos_theta);
+            imageAtomicAdd(img_color_y, cvoxel, cd * sin_theta);
+        }
     }
 }

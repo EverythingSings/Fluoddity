@@ -54,6 +54,9 @@ class VoxelGrid:
         self._voxel_size = self._extent / self._resolution
         self._voxel_volume = float(np.prod(self._voxel_size))
 
+        col_res = params.effective_color_resolution
+        self._color_resolution = np.array(col_res, dtype=np.float32)
+
         # --- density texture (linear filtering for trilinear reconstruction) ---
         self.density = ctx.texture3d(res, 1, dtype='f4')
         self.density.filter = (moderngl.LINEAR, moderngl.LINEAR)
@@ -62,15 +65,15 @@ class VoxelGrid:
         self.density.repeat_z = False
 
         # --- hue-color accumulation textures (cos/sin of 2*pi*hue) ---
-        # Same resolution and filtering as density so the ratio |C|/W
-        # (where W = density = sum of trilinear weights) is well-defined.
-        self.color_x = ctx.texture3d(res, 1, dtype='f4')
+        # May differ in resolution from density.  The pathtrace shader reads
+        # via sampler3D with normalized UVW, so any resolution works.
+        self.color_x = ctx.texture3d(col_res, 1, dtype='f4')
         self.color_x.filter = (moderngl.LINEAR, moderngl.LINEAR)
         self.color_x.repeat_x = False
         self.color_x.repeat_y = False
         self.color_x.repeat_z = False
 
-        self.color_y = ctx.texture3d(res, 1, dtype='f4')
+        self.color_y = ctx.texture3d(col_res, 1, dtype='f4')
         self.color_y.filter = (moderngl.LINEAR, moderngl.LINEAR)
         self.color_y.repeat_x = False
         self.color_y.repeat_y = False
@@ -108,19 +111,22 @@ class VoxelGrid:
         tex.bind_to_image(0, read=False, write=True)
         prog.run(math.ceil(res[0] / 4), math.ceil(res[1] / 4), math.ceil(res[2] / 4))
 
-    def clear(self):
+    def clear(self, skip_color: bool = False):
         """Zero density, color, and majorant grids on the GPU."""
         res = self.params.resolution
+        col_res = self.params.effective_color_resolution
         self._gpu_clear_texture(self.density, res)
-        self._gpu_clear_texture(self.color_x, res)
-        self._gpu_clear_texture(self.color_y, res)
+        if not skip_color:
+            self._gpu_clear_texture(self.color_x, col_res)
+            self._gpu_clear_texture(self.color_y, col_res)
         self._gpu_clear_texture(self.majorant, self.params.majorant_resolution)
         self.ctx.memory_barrier()
 
     # ------------------------------------------------------------------ splat
-    def splat(self, entity_buffer: moderngl.Buffer, entity_count: int):
+    def splat(self, entity_buffer: moderngl.Buffer, entity_count: int,
+              skip_color: bool = False):
         """Clear grids, then trilinear-splat entities into density and color."""
-        self.clear()
+        self.clear(skip_color=skip_color)
 
         prog = self._splat_program
 
@@ -128,8 +134,10 @@ class VoxelGrid:
         _tryset(prog, 'u_bounds_min', tuple(self._bounds_min))
         _tryset(prog, 'u_bounds_max', tuple(self._bounds_max))
         _tryset(prog, 'u_resolution', tuple(self._resolution))
+        _tryset(prog, 'u_color_resolution', tuple(self._color_resolution))
         _tryset(prog, 'u_voxel_volume', self._voxel_volume)
         _tryset(prog, 'u_entity_count', entity_count)
+        _tryset(prog, 'u_skip_color_splat', 1 if skip_color else 0)
 
         # Bind entity SSBO
         entity_buffer.bind_to_storage_buffer(0)

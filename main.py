@@ -600,6 +600,9 @@ class App:
             ui_state.preferences.tracer_realtime_mode = ti.realtime_mode
             ui_state.preferences.tracer_max_bounces = ti.max_bounces
             ui_state.preferences.tracer_resolution_scale = ti.resolution_scale
+            ui_state.preferences.tracer_density_resolution_log2 = ti.density_resolution_log2
+            ui_state.preferences.tracer_color_resolution_log2 = ti.color_resolution_log2
+            ui_state.preferences.tracer_majorant_resolution_log2 = ti.majorant_resolution_log2
             ui_state.preferences.tracer_sun_sampling = ti.sun_sampling
             ui_state.preferences.tracer_photosphere = ti.photosphere
 

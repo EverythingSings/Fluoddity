@@ -12,7 +12,13 @@ class GridParams:
     bounds_min: tuple[float, float, float]              # REQUIRED, world space
     bounds_max: tuple[float, float, float]              # REQUIRED, world space
     resolution: tuple[int, int, int] = (256, 256, 256)
+    color_resolution: tuple[int, int, int] | None = None  # None = same as resolution
     majorant_resolution: tuple[int, int, int] = (32, 32, 32)
+
+    @property
+    def effective_color_resolution(self) -> tuple[int, int, int]:
+        """Color grid resolution, defaulting to density resolution if not set."""
+        return self.color_resolution if self.color_resolution is not None else self.resolution
 
 
 @dataclass

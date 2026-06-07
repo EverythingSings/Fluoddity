@@ -114,6 +114,9 @@ class PreferencesState:
     tracer_realtime_mode: int = 0  # 0=Off, 1=1spp, 2=Accumulate
     tracer_max_bounces: int = 0  # 0=unbounded (RR only)
     tracer_resolution_scale: float = 1.0  # multiplier on render resolution
+    tracer_density_resolution_log2: int = 9   # 2^9 = 512
+    tracer_color_resolution_log2: int = 9     # 2^9 = 512
+    tracer_majorant_resolution_log2: int = 7  # 2^7 = 128
     tracer_sun_sampling: bool = True  # NEE sun shadow rays
     tracer_photosphere: bool = False  # skybox texture mode
 
