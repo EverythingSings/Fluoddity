@@ -12,8 +12,10 @@ class CameraState:
 
     # 3D camera (driven by ControllerCam + joystick)
     render_3d: bool = True         # Toggle between 2D cam_brush and 3D point view
-    orbit_distance: float = 3.0    # Orbit radius / point scale reference distance
-    orbit_rate: float = 0.0        # Auto-orbit speed (rad/sec) around point ahead of camera
+    orbit_center: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))  # World-space point to orbit around
+    orbit_rate: float = 0.0        # Auto-orbit speed (rad/physics-frame)
+    orbit_angle: float = 0.0       # Accumulated orbit yaw angle (radians)
+    orbit_pitch: float = 0.0       # Orbit elevation angle (radians)
     fov: float = 50.0              # Field of view (degrees)
     aperture: float = 0.0          # DOF lens radius (0 = pinhole, no DOF)
     focal_plane_depth: float = 5.0 # DOF focal plane distance

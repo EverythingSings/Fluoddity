@@ -22,7 +22,6 @@ class Camera:
 
         # 3D camera state
         self.render_3d = False
-        self.orbit_distance = 3.0
         self.fov_3d = 50.0
         self.controller_cam = None  # Set by orchestrator for 3D FPS rendering
 
@@ -240,7 +239,6 @@ class Camera:
 
         # 3D camera state
         self.render_3d = state.render_3d
-        self.orbit_distance = state.orbit_distance
         self.fov_3d = state.fov
 
     def compute_tiling_view_bounds(self):

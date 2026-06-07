@@ -15,8 +15,7 @@ class ControllerCam:
     def reset(self):
         """Reset camera to default position and orientation.
 
-        Starts at [0, 0, -3] looking along +Z toward the simulation origin,
-        matching the default orbit_distance of 3.0.
+        Starts at [0, 0, -3] looking along +Z toward the simulation origin.
         """
         self.pos = np.array([0.0, 0.0, -3.0])
         self.yaw = 0.0      # Rotation around Y axis (radians)
@@ -119,8 +118,7 @@ def apply_deadzone(value):
 
 
 def process_controller_input(controller_cam, joystick_state, dt, *,
-                              move_speed=MOVE_SPEED, rotate_speed=ROTATE_SPEED,
-                              orbit_rate=0.0, orbit_distance=3.0):
+                              move_speed=MOVE_SPEED, rotate_speed=ROTATE_SPEED):
     """Update controller camera based on Xbox controller input.
 
     Args:
@@ -129,8 +127,6 @@ def process_controller_input(controller_cam, joystick_state, dt, *,
         dt: Delta time in seconds.
         move_speed: Movement speed multiplier.
         rotate_speed: Rotation speed multiplier.
-        orbit_rate: Auto-orbit speed (rad/sec) around point ahead of camera.
-        orbit_distance: Distance ahead of camera for orbit target point.
     """
     jid = joystick_state['joystick_id']
 
@@ -215,15 +211,3 @@ def process_controller_input(controller_cam, joystick_state, dt, *,
     if abs(y_movement) > 0.01:
         controller_cam.move_y(y_movement)
 
-    # Orbit rate: rotate camera around point orbit_distance ahead
-    if abs(orbit_rate) > 0.001:
-        angle = orbit_rate * dt
-        target = controller_cam.pos + controller_cam.dir * orbit_distance
-        dx = controller_cam.pos[0] - target[0]
-        dz = controller_cam.pos[2] - target[2]
-        cos_a = math.cos(angle)
-        sin_a = math.sin(angle)
-        controller_cam.pos[0] = target[0] + dx * cos_a - dz * sin_a
-        controller_cam.pos[2] = target[2] + dx * sin_a + dz * cos_a
-        controller_cam.yaw -= angle
-        controller_cam._update_vectors()

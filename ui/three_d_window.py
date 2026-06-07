@@ -1,5 +1,6 @@
 """3D Controls window: FPS camera settings and 3D simulation parameters."""
 from imgui_bundle import imgui
+from camera_input import sync_orbit_angles_from_camera
 
 
 class ThreeDWindowMixin:
@@ -38,12 +39,17 @@ class ThreeDWindowMixin:
                 "Rotate Speed", self.state.camera.rotate_speed, 0.1, 10.0, format="%.1f"
             )
 
-            _, self.state.camera.orbit_distance = imgui.slider_float(
-                "Orbit Distance", self.state.camera.orbit_distance, 0.1, 20.0, format="%.1f"
+            center = self.state.camera.orbit_center
+            changed, values = imgui.drag_float3(
+                "Orbit Center", list(center), 0.01, format="%.2f"
             )
+            if changed:
+                center[0], center[1], center[2] = values
+                if self.tracer_controller_cam is not None:
+                    sync_orbit_angles_from_camera(self.state.camera, self.tracer_controller_cam)
 
             _, self.state.camera.orbit_rate = imgui.slider_float(
-                "Orbit Rate", self.state.camera.orbit_rate, -2.0, 2.0, format="%.2f"
+                "Orbit Rate", self.state.camera.orbit_rate, -0.05, 0.05, format="%.4f"
             )
 
             imgui.separator()

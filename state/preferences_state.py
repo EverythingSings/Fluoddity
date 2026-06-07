@@ -127,7 +127,7 @@ class PreferencesState:
     three_d_focal_plane_depth: float = 5.0  # DOF focal plane distance
     three_d_move_speed: float = 2.0
     three_d_rotate_speed: float = 2.0
-    three_d_orbit_distance: float = 3.0
+    three_d_orbit_center: list = field(default_factory=lambda: [0.0, 0.0, 0.0])
     three_d_orbit_rate: float = 0.0
 
 

@@ -2,6 +2,7 @@
 import random
 import numpy as np
 from utilities.gl_helpers import readback_rule
+from camera_input import sync_orbit_angles_from_camera
 
 
 class CommandHandler:
@@ -217,7 +218,7 @@ class CommandHandler:
             self.sim.apply_rule(current_rule)
 
     def _handle_pick_focal(self, ui_state):
-        """Handle N key: pick nearest entity to mouse and set focal plane to its depth."""
+        """Handle N key: pick nearest entity to mouse, set focal plane and orbit center."""
         if not self.camera.render_3d:
             return
         ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
@@ -226,6 +227,10 @@ class CommandHandler:
             num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
         if depth > 0:
             ui_state.camera.focal_plane_depth = depth
+            ui_state.camera.orbit_center[:] = ray_origin + ray_dir * depth
+            # Sync orbit angles so camera doesn't jump when center changes
+            if self.camera.controller_cam is not None:
+                sync_orbit_angles_from_camera(ui_state.camera, self.camera.controller_cam)
 
     def _handle_sweep_preview_restore(self, ui_state):
         """Handle sweep preview restore: ANY click re-enables sweeps. Returns True if restored."""

@@ -12,7 +12,7 @@ from utilities.paths import initialize_user_data, get_user_physics_configs_dir, 
 from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
-from camera_input import process_camera_input
+from camera_input import process_camera_input, reposition_orbit_camera
 from controller_input import ControllerCam, process_controller_input, find_joystick
 from utilities.advanced_drawing import AdvancedDrawingProcessor
 from plotting_manager import PlottingManager
@@ -68,7 +68,7 @@ class App:
         cam.focal_plane_depth = loaded_prefs.three_d_focal_plane_depth
         cam.move_speed = loaded_prefs.three_d_move_speed
         cam.rotate_speed = loaded_prefs.three_d_rotate_speed
-        cam.orbit_distance = loaded_prefs.three_d_orbit_distance
+        cam.orbit_center[:] = loaded_prefs.three_d_orbit_center
         cam.orbit_rate = loaded_prefs.three_d_orbit_rate
 
         # Create services (Orchestrator owns these)
@@ -125,6 +125,7 @@ class App:
 
         # Frame timing
         self.last_update_time = time.time()
+        self.last_orbit_frame_count = 0  # For frame-synced orbit stepping
 
         # Track user's desired settings (for restoration after recording)
         self.user_speedmult = 1
@@ -205,9 +206,7 @@ class App:
                              self.sim.view_tex, dt, controller_cam=self.controller_cam)
         process_controller_input(self.controller_cam, self.joystick_state, dt,
                                  move_speed=ui_state.camera.move_speed,
-                                 rotate_speed=ui_state.camera.rotate_speed,
-                                 orbit_rate=ui_state.camera.orbit_rate,
-                                 orbit_distance=ui_state.camera.orbit_distance)
+                                 rotate_speed=ui_state.camera.rotate_speed)
 
         # 3.2. Check if pending video should start
         cmd = self.command_handler
@@ -274,8 +273,10 @@ class App:
             ui_state.camera.zoom = 1.0
             if ui_state.camera.render_3d:
                 self.controller_cam.reset()
-                # Position on orbit sphere at current orbit_distance
-                self.controller_cam.pos[:] = -self.controller_cam.dir * ui_state.camera.orbit_distance
+                ui_state.camera.orbit_angle = 0.0
+                ui_state.camera.orbit_pitch = 0.0
+                ui_state.camera.orbit_center[:] = [0.0, 0.0, 0.0]
+                reposition_orbit_camera(self.controller_cam, ui_state.camera)
         self.controller_cam.fov = ui_state.camera.fov
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
@@ -360,6 +361,14 @@ class App:
                 screenshot_in_progress=self.screenshot_in_progress,
                 skip_view_generation=rt_active
             )
+
+        # 6.2. Frame-synced orbit stepping (deterministic with physics)
+        steps = self.sim.frame_count - self.last_orbit_frame_count
+        self.last_orbit_frame_count = self.sim.frame_count
+        orbit_rate = ui_state.camera.orbit_rate
+        if abs(orbit_rate) > 1e-6 and steps > 0:
+            ui_state.camera.orbit_angle += orbit_rate * steps
+            reposition_orbit_camera(self.controller_cam, ui_state.camera)
 
         # 6.3. Realtime tracer mode (runs every frame, even when sim is paused)
         if rt_active:
@@ -577,7 +586,7 @@ class App:
         ui_state.preferences.three_d_focal_plane_depth = cam.focal_plane_depth
         ui_state.preferences.three_d_move_speed = cam.move_speed
         ui_state.preferences.three_d_rotate_speed = cam.rotate_speed
-        ui_state.preferences.three_d_orbit_distance = cam.orbit_distance
+        ui_state.preferences.three_d_orbit_center = list(cam.orbit_center)
         ui_state.preferences.three_d_orbit_rate = cam.orbit_rate
 
         # Sync tracer settings into preferences
