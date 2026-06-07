@@ -67,6 +67,7 @@ class TracerInterface:
         self.albedo_saturation = 1.0
         self.albedo_brightness = 0.8
         self.density_scale = 0.0001
+        self.hg_g = 0.0  # HG asymmetry: >0 forward, <0 back, 0 isotropic
         self.sun_direction = [0.577, 0.577, 0.577]
         self.sun_color = [1.0, 0.95, 0.9]
         self.sun_intensity = 3.0
@@ -349,6 +350,7 @@ class TracerInterface:
             albedo_brightness=self.albedo_brightness,
             density_scale=self.density_scale,
             colored_extinction=self.colored_extinction,
+            hg_g=self.hg_g,
         )
         sun = SunParams(
             direction=tuple(sd),

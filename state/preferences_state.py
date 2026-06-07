@@ -103,6 +103,7 @@ class PreferencesState:
     tracer_albedo_saturation: float = 1.0
     tracer_albedo_brightness: float = 0.8
     tracer_density_scale: float = 0.0001
+    tracer_hg_g: float = 0.0  # HG phase asymmetry [-1,1]
     tracer_sun_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
     tracer_sun_color: list = field(default_factory=lambda: [1.0, 0.95, 0.9])
     tracer_sun_intensity: float = 3.0

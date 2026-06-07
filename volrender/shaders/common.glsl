@@ -66,6 +66,49 @@ vec3 sample_sphere() {
                 cos_theta);
 }
 
+// ---- Henyey-Greenstein phase function ----
+// Evaluates the HG phase function for asymmetry parameter g and
+// cos(theta) between incident and scattered directions.
+// g > 0 = forward scattering, g < 0 = back scattering, g = 0 = isotropic.
+
+float hg_phase(float cos_theta, float g) {
+    if (abs(g) < 1e-4)
+        return 1.0 / (4.0 * 3.141592653589793);
+    float g2 = g * g;
+    float denom = 1.0 + g2 - 2.0 * g * cos_theta;
+    return (1.0 - g2) / (4.0 * 3.141592653589793 * denom * sqrt(denom));
+}
+
+// ---- HG importance sampling ----
+// Samples a direction from the HG phase function given an incident
+// direction.  Returns the new direction; the PDF equals the phase
+// function so the weight is 1 (no throughput correction needed).
+
+vec3 sample_hg(vec3 incident_dir, float g) {
+    if (abs(g) < 1e-4)
+        return sample_sphere();
+
+    float xi1 = next_float();
+    float xi2 = next_float();
+
+    // Sample cos_theta from the HG inverse CDF
+    float s = (1.0 - g * g) / (1.0 - g + 2.0 * g * xi1);
+    float cos_theta = (1.0 + g * g - s * s) / (2.0 * g);
+    cos_theta = clamp(cos_theta, -1.0, 1.0);
+    float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+    float phi = 6.283185307 * xi2;
+
+    // Build orthonormal basis around incident direction
+    vec3 w = incident_dir;
+    vec3 u = (abs(w.x) > 0.9) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    u = normalize(cross(u, w));
+    vec3 v = cross(w, u);
+
+    return normalize(sin_theta * cos(phi) * u
+                   + sin_theta * sin(phi) * v
+                   + cos_theta * w);
+}
+
 // ---- uniform disk sampling (for DOF lens offset) ----
 // Returns a uniformly distributed point on the unit disk.
 vec2 sample_disk() {

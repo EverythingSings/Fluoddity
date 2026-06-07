@@ -29,6 +29,7 @@ class MediumParams:
     albedo_brightness:   float = 0.8   # HSV value component [0, 1]
     density_scale:       float = 1.0
     colored_extinction:  bool = False  # true = hue→extinction, false = hue→albedo
+    hg_g:                float = 0.0   # HG asymmetry [-1,1]: >0 fwd, <0 back, 0 iso
 
 
 @dataclass

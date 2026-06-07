@@ -3,7 +3,7 @@
 // Path-trace compute shader — Steps 5–8.
 // Primary ray generation, AABB intersection, debug fixed-step raymarch (Step 5),
 // delta-tracked free flight with weighted null-scattering (Step 6),
-// isotropic scattering bounce loop with RR (Step 7),
+// Henyey-Greenstein scattering bounce loop with RR (Step 7),
 // and sun NEE via ratio-tracked shadow rays (Step 8).
 // Progressive accumulation in Step 9.
 
@@ -53,6 +53,8 @@ uniform float u_albedo_brightness;   // HSV value component [0,1]
 uniform int   u_max_bounces;
 // COMMENT FLAG: rr_start_depth — Russian roulette begins past this depth
 uniform int   u_rr_start_depth;
+// ---- HG phase function asymmetry ----
+uniform float u_hg_g;            // [-1,1]: >0 forward, <0 back, 0 isotropic
 uniform uint  u_sample_index;       // per-sample RNG seed offset
 uniform bool  u_debug_delta_only;   // true = Step 6 visual mode (white/sky)
 uniform bool  u_colored_extinction; // true = hue→extinction, false = hue→albedo
@@ -714,10 +716,11 @@ void main() {
                 throughput *= get_albedo(hit_pos);
             }
 
-            // Sun NEE: isotropic phase = 1/(4*pi)
+            // Sun NEE: HG phase function toward sun
             if (u_sun_sampling) {
                 vec3 T_sun = transmittance_to_sun(hit_pos);
-                float phase = 1.0 / (4.0 * 3.141592653589793);
+                float cos_theta = dot(walk_dir, u_sun_direction);
+                float phase = hg_phase(cos_theta, u_hg_g);
                 radiance += throughput * phase * T_sun
                             * u_sun_color * u_sun_intensity;
             }
@@ -736,8 +739,8 @@ void main() {
                 throughput /= p_survive;
             }
 
-            // Isotropic scatter
-            walk_dir = sample_sphere();
+            // HG scatter (importance-sampled; isotropic when g=0)
+            walk_dir = sample_hg(walk_dir, u_hg_g);
             walk_origin = hit_pos;
 
         } else {

@@ -356,6 +356,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_albedo_brightness',
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
+        _tryset(prog, 'u_hg_g', medium.hg_g)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -485,6 +486,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_albedo_brightness',
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
+        _tryset(prog, 'u_hg_g', medium.hg_g)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
