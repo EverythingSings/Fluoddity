@@ -30,17 +30,43 @@ vec3 grid_to_world(vec3 grid_pos) {
 
 uint rng_state;
 
+const uint PCG_MULT = 747796405u;
+const uint PCG_INC  = 2891336453u;
+
+// Fast O(log n) advance of the PCG LCG by `delta` steps.
+// Eliminates spatial correlation between nearby seeds.
+void _pcg_advance(inout uint state, uint delta) {
+    uint acc_mult = 1u;
+    uint acc_plus = 0u;
+    uint cur_mult = PCG_MULT;
+    uint cur_plus = PCG_INC;
+    while (delta > 0u) {
+        if ((delta & 1u) != 0u) {
+            acc_mult *= cur_mult;
+            acc_plus = acc_plus * cur_mult + cur_plus;
+        }
+        cur_plus = (cur_mult + 1u) * cur_plus;
+        cur_mult *= cur_mult;
+        delta >>= 1u;
+    }
+    state = acc_mult * state + acc_plus;
+}
+
 void rng_init(uvec3 seed) {
     rng_state = seed.x * 1664525u + seed.y * 1013904223u
               + seed.z * 214013u + 2531011u;
     // Warm up — one full PCG step + output hash
-    rng_state = rng_state * 747796405u + 2891336453u;
+    rng_state = rng_state * PCG_MULT + PCG_INC;
     rng_state = ((rng_state >> ((rng_state >> 28u) + 4u)) ^ rng_state) * 277803737u;
     rng_state ^= rng_state >> 22u;
+    // Discard a seed-dependent number of steps to break spatial correlation
+    // between neighboring pixels whose initial seeds differ by small amounts
+    uint discard_count = (rng_state >> 16u) ^ (rng_state & 0xFFFFu);
+    _pcg_advance(rng_state, discard_count);
 }
 
 float next_float() {
-    rng_state = rng_state * 747796405u + 2891336453u;
+    rng_state = rng_state * PCG_MULT + PCG_INC;
     uint word = ((rng_state >> ((rng_state >> 28u) + 4u)) ^ rng_state) * 277803737u;
     word ^= word >> 22u;
     return float(word) / 4294967295.0;

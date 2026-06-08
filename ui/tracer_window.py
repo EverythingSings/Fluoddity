@@ -83,6 +83,10 @@ class TracerWindowMixin:
                 "Scattering (g)", ti.hg_g, -1.0, 1.0)
             if imgui.is_item_hovered():
                 imgui.set_tooltip("HG phase: -1 back, 0 isotropic, +1 forward")
+            _, ti.emission_strength = imgui.drag_float(
+                "Emission", ti.emission_strength, 0.01, 0.0, 100.0, "%.3f")
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Self-emission intensity (0 = off)")
 
         # ---- Sun ----
         if imgui.collapsing_header("Sun", imgui.TreeNodeFlags_.default_open.value):
@@ -186,6 +190,7 @@ class TracerWindowMixin:
         ti.albedo_brightness = p.tracer_albedo_brightness
         ti.density_scale = p.tracer_density_scale
         ti.hg_g = p.tracer_hg_g
+        ti.emission_strength = p.tracer_emission_strength
         ti.sun_direction = list(p.tracer_sun_direction)
         ti.sun_color = list(p.tracer_sun_color)
         ti.sun_intensity = p.tracer_sun_intensity

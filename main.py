@@ -599,6 +599,7 @@ class App:
             ui_state.preferences.tracer_albedo_brightness = ti.albedo_brightness
             ui_state.preferences.tracer_density_scale = ti.density_scale
             ui_state.preferences.tracer_hg_g = ti.hg_g
+            ui_state.preferences.tracer_emission_strength = ti.emission_strength
             ui_state.preferences.tracer_sun_direction = list(ti.sun_direction)
             ui_state.preferences.tracer_sun_color = list(ti.sun_color)
             ui_state.preferences.tracer_sun_intensity = ti.sun_intensity

@@ -39,6 +39,7 @@ uniform int   u_debug_steps;
 // ---- medium params ----
 uniform vec3  u_extinction_rgb;
 uniform float u_density_scale;
+uniform float u_emission_strength;   // emission intensity multiplier (0 = off)
 
 // ---- sky params ----
 uniform vec3  u_sky_color;
@@ -232,6 +233,51 @@ vec3 sigma_t_at(vec3 p) {
         // Legacy: uniform extinction color
         return u_extinction_rgb * u_density_scale * physical_density;
     }
+}
+
+
+// ====================================================================
+// Emitted radiance L_e from local density.
+//
+// Returns a color (vec3) representing emission, NOT premultiplied by
+// sigma_a.  The sigma_a weighting is handled by the caller (via the
+// implicit absorption model's (1 - albedo) factor).
+//
+// Uses a soft-clamp curve: x/(1+x) to avoid blowup at high density
+// while responding smoothly at low density.
+// ====================================================================
+vec3 blackbody(float Temp) {
+    vec3 col = vec3(255.0);
+    
+    // Red approximation
+    col.x = 56100000.0 * pow(Temp, -1.5) + 148.0;
+    
+    // Green approximation
+    col.y = 100.04 * log(Temp) - 623.6;
+    if (Temp > 6500.0) {
+        col.y = 35200000.0 * pow(Temp, -1.5) + 184.0;
+    }
+    
+    // Blue approximation
+    col.z = 194.18 * log(Temp) - 1448.6;
+    
+    // Clamp to sRGB range [0, 255] and normalize to [0.0, 1.0]
+    col = clamp(col, 0.0, 255.0) / 255.0;
+    
+    // Fade to black at very low temperatures
+    if (Temp < 1000.0) {
+        col *= Temp / 1000.0;
+    }
+    
+    return col;
+}
+vec3 calc_emission(float density) {
+    if (u_emission_strength <= 0.0) return vec3(0.0);
+    float x = .00001*density * u_emission_strength;
+
+    //x-=0;
+    //float luminance = ;//x / (1.0 + x);
+    return 15*vec3(blackbody(max(x*x*x-99.5,0)));
 }
 
 
@@ -708,13 +754,29 @@ void main() {
 
         if (!surface_interaction) {
             // ---- Media scatter ----
+
+            // Compute albedo for this collision (needed for both
+            // emission weighting and the scattering throughput update)
+            vec3 albedo_here;
             if (u_colored_extinction) {
-                // Colored extinction mode: u_extinction_rgb is the albedo
-                throughput *= u_extinction_rgb;
+                albedo_here = u_extinction_rgb;
             } else {
-                // Legacy mode: albedo from per-voxel hue
-                throughput *= get_albedo(hit_pos);
+                albedo_here = get_albedo(hit_pos);
             }
+
+            // ---- Emission (Kirchhoff: tied to absorption) ----
+            // Case (b): implicit absorption — weight by (1 - albedo)
+            // which equals sigma_a / sigma_t at this collision.
+            if (u_emission_strength > 0.0) {
+                vec3 uvw = (hit_pos - u_bounds_min) / (u_bounds_max - u_bounds_min);
+                float raw_density = texture(u_density, uvw).r;
+                float physical_density = raw_density / u_voxel_volume;
+                vec3 Le = calc_emission(physical_density);
+                radiance += throughput * (vec3(1.0) - albedo_here) * Le;
+            }
+
+            // Apply albedo (scattering probability)
+            throughput *= albedo_here;
 
             // Sun NEE: HG phase function toward sun
             if (u_sun_sampling) {

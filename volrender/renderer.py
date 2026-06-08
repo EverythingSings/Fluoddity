@@ -190,6 +190,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_albedo_brightness',
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
+        _tryset(prog, 'u_emission_strength', 0.0)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -268,6 +269,7 @@ class VolumeRenderer:
         _tryset(prog, 'u_albedo_brightness',
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
+        _tryset(prog, 'u_emission_strength', 0.0)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -358,6 +360,7 @@ class VolumeRenderer:
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
         _tryset(prog, 'u_hg_g', medium.hg_g)
+        _tryset(prog, 'u_emission_strength', medium.emission_strength)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -488,6 +491,7 @@ class VolumeRenderer:
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
         _tryset(prog, 'u_hg_g', medium.hg_g)
+        _tryset(prog, 'u_emission_strength', medium.emission_strength)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)

@@ -36,6 +36,7 @@ class MediumParams:
     density_scale:       float = 1.0
     colored_extinction:  bool = False  # true = hue→extinction, false = hue→albedo
     hg_g:                float = 0.0   # HG asymmetry [-1,1]: >0 fwd, <0 back, 0 iso
+    emission_strength:   float = 0.0   # emission intensity multiplier (0 = off)
 
 
 @dataclass
