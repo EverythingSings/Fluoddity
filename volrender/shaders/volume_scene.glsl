@@ -64,13 +64,16 @@ vec2 sdf_intersect(vec2 a, vec2 b) {
 // ====================================================================
 
 vec2 scene(vec3 p) {
-    p*=2.;
-    p.xz = abs(p.xz);
-    float dts = sd_box(p,vec3(0),vec3(.5));
-    p-=.5;
-    dts = min(dts, (length(p)-.25));
-    dts = min(dts, sd_box(p,vec3(0),vec3(.1,.6,.1)));
-    return vec2(dts/2.,MAT_DIFFUSE);
+    //p*=2.;
+    //p.xz = abs(p.xz);
+    //float dts = sd_box(p,vec3(0),vec3(.5));
+    //p-=.5;
+    //dts = min(dts, (length(p)-.25));
+    //dts = min(dts, sd_box(p,vec3(0),vec3(.1,.6,.1)));
+    float dts = sd_box(p,vec3(0),vec3(1));
+    dts = max(p.y+.725,-dts);
+    dts = max(dts,sd_box(p,vec3(0),vec3(2)));
+    return vec2(dts,MAT_DIFFUSE);
 
 
     // Dark diffuse ground plane at y = -1
@@ -95,12 +98,13 @@ vec2 scene(vec3 p) {
 // Use fract(mat.y) to distinguish objects sharing the same BRDF class.
 // ====================================================================
 
-vec3 sdf_get_albedo(vec2 mat) {
+vec3 sdf_get_albedo(vec2 mat,vec3 p) {
     float id = floor(mat.y);
     if (id == MAT_DIFFUSE) {
     float fm = fract(mat.y);
     if(fm == 0){
-    return vec3(0.2);   // dark ground
+        p.xz*=4;
+    return vec3(0.02)+.6*mod(floor(p.x)+floor(p.z),2);   // dark ground
     }
     else if(fm ==.2){
         return vec3(0.34,.02,.02);
@@ -235,9 +239,9 @@ float schlick_fresnel(float cos_theta, float R0) {
 // Glossy:   Schlick Fresnel decides mirror vs diffuse, weight = albedo
 // ====================================================================
 
-vec3 sample_brdf(vec3 incident, vec3 normal, vec2 mat, out vec3 out_dir) {
+vec3 sample_brdf(vec3 incident, vec3 normal, vec2 mat,vec3 p, out vec3 out_dir) {
     float mat_id = floor(mat.y);
-    vec3 albedo = sdf_get_albedo(mat);
+    vec3 albedo = sdf_get_albedo(mat,p);
 
     if (mat_id == MAT_MIRROR) {
         out_dir = reflect(incident, normal);
@@ -271,9 +275,9 @@ vec3 sample_brdf(vec3 incident, vec3 normal, vec2 mat, out vec3 out_dir) {
 // zero probability of being hit by a delta BRDF.
 // ====================================================================
 
-vec3 eval_brdf_cos(vec3 incident, vec3 light_dir, vec3 normal, vec2 mat) {
+vec3 eval_brdf_cos(vec3 incident, vec3 light_dir, vec3 normal, vec2 mat,vec3 p) {
     float mat_id = floor(mat.y);
-    vec3 albedo = sdf_get_albedo(mat);
+    vec3 albedo = sdf_get_albedo(mat,p);
     float NdotL = max(dot(normal, light_dir), 0.0);
 
     if (mat_id == MAT_MIRROR) {

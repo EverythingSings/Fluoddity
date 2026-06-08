@@ -290,7 +290,7 @@ vec3 sdf_preview_shade(vec3 ro, vec3 rd) {
 
     vec3 pos = ro + hit_t * rd;
     vec3 nor = sdf_normal(pos);
-    vec3 albedo = sdf_get_albedo(hit_mat);
+    vec3 albedo = sdf_get_albedo(hit_mat,pos);
 
     // Direct sun lighting
     float NdotL = max(dot(nor, u_sdf_sun_dir), 0.0);

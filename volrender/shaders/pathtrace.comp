@@ -276,8 +276,9 @@ vec3 calc_emission(float density) {
     float x = .00001*density * u_emission_strength;
 
     //x-=0;
-    //float luminance = ;//x / (1.0 + x);
-    return 15*vec3(blackbody(max(x*x*x-99.5,0)));
+    float luminance = .01*x*x*x*x*x;//x / (1.0 + x);
+    return vec3(luminance);
+    //return 25*vec3(blackbody(max(x*x*x-300,0)));
 }
 
 
@@ -817,7 +818,7 @@ void main() {
                 vec3 shadow_origin = hit_pos + N * SDF_SURFACE_EPS * 4.0;
                 vec3 T_sun = transmittance_to_sun(shadow_origin);
                 vec3 brdf_cos = eval_brdf_cos(walk_dir, u_sun_direction,
-                                               N, sdf_mat);
+                                               N, sdf_mat,hit_pos);
                 radiance += throughput * brdf_cos * T_sun
                             * u_sun_color * u_sun_intensity;
             }
@@ -836,7 +837,7 @@ void main() {
 
             // Sample BRDF for next bounce direction
             vec3 bounce_dir;
-            vec3 brdf_weight = sample_brdf(walk_dir, N, sdf_mat, bounce_dir);
+            vec3 brdf_weight = sample_brdf(walk_dir, N, sdf_mat,hit_pos, bounce_dir);
             throughput *= brdf_weight;
             walk_dir = bounce_dir;
             // Offset origin along normal to prevent self-intersection
