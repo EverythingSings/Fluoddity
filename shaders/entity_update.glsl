@@ -800,7 +800,8 @@ void main() {
     //Set entity hue (saturation/brightness/alpha are computed in vertex shaders)
     e.hue = get_particle_hue_sensitivity()*col_params.x;
     e.size = 0.00015;
-    if(!(abs(col_params.x-generic03.x*15)<generic03.y*5)){e.size=.0;}
+    //INVISIBILITY RADIO FEATURE
+    //if(!(abs(col_params.x-generic03.x*15)<generic03.y*5)){e.size=.0;}
     if(get_particle_color_by_cohort()) {e.hue = hash(vec2(floor(cohort)));}
 
     //Accelerate: Apply drag and add force to e.vel (now 3D)
