@@ -89,6 +89,9 @@ class PreferencesState:
     generic6: float = 0.0
     generic7: float = 0.0
 
+    # Radio window (visibility filter by frequency band)
+    show_radio_window: bool = False
+
     # Plotting (GPU histogram reports)
     show_plotting_window: bool = False
 

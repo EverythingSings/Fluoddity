@@ -75,6 +75,11 @@ uniform bool WRITE_RULES; // Set true for one frame when rule buffer readback is
 uniform vec4 generic03;
 uniform vec4 generic47;
 
+// Radio feature uniforms
+uniform int RADIO_ENABLED;        // 0=Off, >0 = enabled mode
+uniform float RADIO_TARGET_FREQ;  // Target frequency
+uniform float RADIO_BANDWIDTH;    // Bandwidth
+
 // Multi-load control uniforms (small, stay as uniforms)
 uniform int MULTILOAD_COUNT; // Number of loaded configs (0 = normal mode)
 uniform float MULTI_LOAD_CURRENT_PROGRESS; // Current position in config ring (0-1)
@@ -801,7 +806,9 @@ void main() {
     e.hue = get_particle_hue_sensitivity()*col_params.x;
     e.size = 0.00015;
     //INVISIBILITY RADIO FEATURE
-    //if(!(abs(col_params.x-generic03.x*15)<generic03.y*5)){e.size=.0;}
+    if(RADIO_ENABLED>0){
+        if(!(abs(col_params.x-RADIO_TARGET_FREQ)<RADIO_BANDWIDTH)){e.size=.0;}
+    }
     if(get_particle_color_by_cohort()) {e.hue = hash(vec2(floor(cohort)));}
 
     //Accelerate: Apply drag and add force to e.vel (now 3D)

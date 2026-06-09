@@ -213,6 +213,11 @@ class Sim:
         self._assign_physics_setting('HAZARD_RATE_SETTING', self._state.HAZARD_RATE, 'Hazard Rate', 'HAZARD_RATE', 0.0, 0.05)
         self._assign_physics_setting('TRAIL_PERSISTENCE_SETTING', self._state.TRAIL_PERSISTENCE, 'Trail Persistence', 'TRAIL_PERSISTENCE', 0.0, 1.0)
 
+        # Radio feature uniforms
+        tryset(self.entity_update_program, 'RADIO_ENABLED', self._state.RADIO_ENABLED)
+        tryset(self.entity_update_program, 'RADIO_TARGET_FREQ', self._state.RADIO_TARGET_FREQ)
+        tryset(self.entity_update_program, 'RADIO_BANDWIDTH', self._state.RADIO_BANDWIDTH)
+
         # 3D physics uniforms
         tryset(self.entity_update_program, 'PLANE_SAMPLES', self._state.PLANE_SAMPLES)
         tryset(self.entity_update_program, 'TESTING_MODE', self._state.TESTING_MODE)

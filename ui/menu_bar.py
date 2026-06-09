@@ -407,6 +407,13 @@ class MenuBarMixin:
                 )
                 self._delayed_tooltip("Volumetric path tracer.\nSplats entities into a voxel grid and\npath-traces with adjustable medium/lighting.")
 
+                # Radio window toggle
+                _, self.state.preferences.show_radio_window = imgui.checkbox(
+                    "Radio",
+                    self.state.preferences.show_radio_window
+                )
+                self._delayed_tooltip("Filter particle visibility by frequency band.\nOnly particles within the target frequency\n+/- bandwidth are visible.")
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

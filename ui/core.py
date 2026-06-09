@@ -30,6 +30,7 @@ from .generics_window import GenericsWindowMixin
 from .plotting import PlottingWindowMixin
 from .three_d_window import ThreeDWindowMixin
 from .tracer_window import TracerWindowMixin
+from .radio_window import RadioWindowMixin
 
 
 @dataclass
@@ -54,6 +55,7 @@ class UI(
     PlottingWindowMixin,
     ThreeDWindowMixin,
     TracerWindowMixin,
+    RadioWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -711,6 +713,10 @@ class UI(
         # Render Tracer window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.show_tracer_window:
             self.render_tracer_window()
+
+        # Render Radio window if enabled (hidden when windows toggled off)
+        if self.show_sidebar and self.state.preferences.show_radio_window:
+            self.render_radio_window()
 
         # Render field loader window (transient, not gated by sidebar)
         self.render_field_loader_window()

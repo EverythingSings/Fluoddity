@@ -26,6 +26,11 @@ class SimState:
     ABSOLUTE_ORIENTATION: int = 0  # 0=Off, 1=Y axis, 2=Radial
     ORIENTATION_MIX: float = 1.0
 
+    # Radio feature (visibility filter by frequency band)
+    RADIO_ENABLED: int = 0         # 0=Off, >0 = mode (int for future modes)
+    RADIO_TARGET_FREQ: float = 0.0 # Target frequency [-15, 15]
+    RADIO_BANDWIDTH: float = 0.5   # Bandwidth [0, 2]
+
     # Simulation settings (defaults ensure backward compatibility with old configs)
     boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap (default: Bounce)
     initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring (default: Grid)
