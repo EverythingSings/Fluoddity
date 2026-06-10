@@ -73,6 +73,11 @@ def get_videos_dir() -> Path:
     return get_user_data_dir() / "Videos"
 
 
+def get_render_specs_dir() -> Path:
+    """Get path to RenderSpecs directory for scheduled render specifications."""
+    return get_user_data_dir() / "RenderSpecs"
+
+
 def get_default_keyboard_controls_path() -> Path:
     """Get path to bundled default_keyboard_controls.json."""
     return get_app_dir() / "default_keyboard_controls.json"
@@ -96,6 +101,7 @@ def initialize_user_data():
     get_user_physics_configs_dir().mkdir(exist_ok=True)
     get_screenshots_dir().mkdir(exist_ok=True)
     get_videos_dir().mkdir(exist_ok=True)
+    get_render_specs_dir().mkdir(exist_ok=True)
 
     # Copy default keyboard controls if user's doesn't exist
     user_keyboard = get_user_keyboard_controls_path()
