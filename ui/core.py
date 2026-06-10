@@ -560,9 +560,8 @@ class UI(
         self._request_import_clipboard_to_multiload = False
         self._clipboard_config_index = -1
 
-        # Reset render spec flags
+        # Reset render spec flag (keep _save_render_spec_name — it's widget state)
         self._request_save_render_spec = False
-        self._save_render_spec_name = ""
 
         return self.state
 

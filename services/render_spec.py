@@ -15,6 +15,7 @@ File format:
             field.npz               # Compressed field texture (optional)
 """
 import json
+from datetime import datetime
 import numpy as np
 from dataclasses import dataclass, field
 from dataclasses import asdict
@@ -159,7 +160,8 @@ class RenderSpecService:
             Path to the saved .frs directory
         """
         if dir_path is None:
-            dir_path = get_render_specs_dir() / f"{spec.display_name}.frs"
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            dir_path = get_render_specs_dir() / f"{spec.display_name}_{timestamp}.frs"
 
         dir_path.mkdir(parents=True, exist_ok=True)
 
