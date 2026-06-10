@@ -95,3 +95,8 @@ class UIState:
     # Render spec preview (destructive apply from Scheduled Renders window)
     request_preview_render_spec: bool = False
     preview_render_spec_path: str = ""  # Path to .frs directory to preview
+
+    # Render queue execution
+    request_execute_render_queue: bool = False
+    render_queue_paths: list = field(default_factory=list)
+    render_queue_names: list = field(default_factory=list)

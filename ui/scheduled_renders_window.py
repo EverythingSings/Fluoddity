@@ -21,6 +21,11 @@ class ScheduledRendersWindowMixin:
         self._request_preview_render_spec = False
         self._preview_render_spec_path = ""
 
+        # One-shot flags for render queue execution
+        self._request_execute_render_queue = False
+        self._render_queue_paths = []
+        self._render_queue_names = []
+
     def _refresh_render_spec_files(self):
         """Scan disk for available .frs directories."""
         if self.render_spec_service is not None:
@@ -144,12 +149,18 @@ class ScheduledRendersWindowMixin:
 
         imgui.separator()
 
-        # --- Execute button (greyed out — wired in Step 4) ---
-        imgui.begin_disabled()
-        imgui.button("Execute All Renders")
-        imgui.end_disabled()
-        if imgui.is_item_hovered(imgui.HoveredFlags_.allow_when_disabled):
-            imgui.set_tooltip("Coming soon: batch render all queued specs")
+        # --- Execute All Renders button ---
+        queue_empty = len(self._render_queue) == 0
+        if queue_empty:
+            imgui.begin_disabled()
+        if imgui.button("Execute All Renders"):
+            self._request_execute_render_queue = True
+            self._render_queue_paths = [str(dir_path) for (_, _, dir_path) in self._render_queue]
+            self._render_queue_names = [display_name for (_, display_name, _) in self._render_queue]
+        if queue_empty:
+            imgui.end_disabled()
+        if queue_empty and imgui.is_item_hovered(imgui.HoveredFlags_.allow_when_disabled):
+            imgui.set_tooltip("Add render specs to the queue first")
 
         # --- Delete All Specs from disk ---
         imgui.spacing()

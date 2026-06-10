@@ -152,6 +152,13 @@ class App:
         self._prev_camera_position = np.array([0.0, 0.0])
         self._prev_camera_zoom = 1.0
 
+        # Render queue execution state machine
+        self.render_queue_executing = False
+        self.render_queue_index = 0
+        self.render_queue_phase = 'idle'  # idle / loading / start_recording / recording / done
+        self.render_queue = []            # list of path strings
+        self.render_queue_names = []      # display names (parallel list)
+
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
         self._load_default_config()
@@ -201,6 +208,20 @@ class App:
         result = self.command_handler.process_commands(ui_state, tiling_mode)
         if result == 'screenshot_pending' and not self.screenshot_pending and not self.screenshot_in_progress:
             self.screenshot_pending = True
+
+        # 2.5. Check for render queue execution request
+        if ui_state.request_execute_render_queue and not self.render_queue_executing:
+            if ui_state.render_queue_paths:
+                self.render_queue_executing = True
+                self.render_queue_index = 0
+                self.render_queue_phase = 'loading'
+                self.render_queue = list(ui_state.render_queue_paths)
+                self.render_queue_names = list(ui_state.render_queue_names)
+                print(f"[RenderQueue] Starting batch render of {len(self.render_queue)} specs")
+
+        # 2.6. Advance render pipeline state machine
+        if self.render_queue_executing:
+            self._advance_render_pipeline(ui_state)
 
         # 3. Process continuous input (camera movement)
         current_time = time.time()
@@ -260,7 +281,11 @@ class App:
             ui_state.preferences.blur_quality = self.user_blur_quality
             # Pause simulation when recording ended by reaching max_frames
             if self.video_service.finished_naturally():
-                ui_state.sim.going = False
+                if self.render_queue_executing:
+                    # Batch render mode: advance to next spec instead of pausing
+                    self._on_render_spec_complete()
+                else:
+                    ui_state.sim.going = False
 
         if is_recording:
             if tracer_video_active:
@@ -582,6 +607,86 @@ class App:
         ui_state.sim.going = self.screenshot_saved_settings['going']
         self.screenshot_in_progress = False
         self.screenshot_saved_settings = {}
+
+    def _advance_render_pipeline(self, ui_state):
+        """State machine for sequential batch rendering.
+
+        Called every frame from orchestrate_frame() when render_queue_executing is True.
+        Phases: loading -> start_recording -> recording -> (next spec or done)
+        """
+        phase = self.render_queue_phase
+
+        if phase == 'loading':
+            from pathlib import Path
+            idx = self.render_queue_index
+            dir_path = Path(self.render_queue[idx])
+            display_name = self.render_queue_names[idx]
+
+            print(f"[RenderQueue] Loading spec {idx + 1}/{len(self.render_queue)}: {display_name}")
+
+            spec = self.render_spec_service.load_metadata(dir_path)
+            if spec is None:
+                print(f"[RenderQueue] Failed to load metadata for {display_name}, skipping")
+                self._render_queue_advance_or_finish()
+                return
+
+            gpu_buffers = self.render_spec_service.load_gpu_buffers(dir_path)
+            if gpu_buffers is None:
+                print(f"[RenderQueue] Failed to load GPU buffers for {display_name}, skipping")
+                self._render_queue_advance_or_finish()
+                return
+
+            self.render_spec_service.apply_state(
+                spec, gpu_buffers,
+                self.sim, self.camera, self.controller_cam, ui_state,
+                self.config_saver, self.rule_manager,
+                self.field_handler.adv_draw if self.field_handler else None
+            )
+
+            # Re-sync tracer interface if it exists
+            if self.ui._tracer_interface is not None:
+                self.ui._apply_tracer_preferences(self.ui._tracer_interface)
+
+            # Set filename_prefix so VidSaver uses the display name
+            ui_state.preferences.filename_prefix = display_name
+
+            # Unpause simulation (recording requires going = True)
+            ui_state.sim.going = True
+
+            self.render_queue_phase = 'start_recording'
+
+        elif phase == 'start_recording':
+            # GPU state has settled for one frame. Start recording.
+            ui_state.sim.going = True
+            self.video_service.start()
+            self.render_queue_phase = 'recording'
+            display_name = self.render_queue_names[self.render_queue_index]
+            print(f"[RenderQueue] Recording started for: {display_name}")
+
+        elif phase == 'recording':
+            # Normal frame execution handles physics + recording.
+            # Completion detected by the modified recording lifecycle block.
+            pass
+
+        elif phase == 'done':
+            print(f"[RenderQueue] All {len(self.render_queue)} renders complete. Closing app.")
+            self.render_queue_executing = False
+            glfw.set_window_should_close(self.window, True)
+
+    def _on_render_spec_complete(self):
+        """Called when a recording finishes naturally during batch execution."""
+        idx = self.render_queue_index
+        display_name = self.render_queue_names[idx]
+        print(f"[RenderQueue] Recording complete for: {display_name} ({idx + 1}/{len(self.render_queue)})")
+        self._render_queue_advance_or_finish()
+
+    def _render_queue_advance_or_finish(self):
+        """Move to the next spec in the queue, or finish if all done."""
+        self.render_queue_index += 1
+        if self.render_queue_index < len(self.render_queue):
+            self.render_queue_phase = 'loading'
+        else:
+            self.render_queue_phase = 'done'
 
     def cleanup(self):
         # Save preferences before cleanup

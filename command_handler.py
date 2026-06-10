@@ -627,12 +627,49 @@ class CommandHandler:
 
         print(f"Imported {len(self.ui.config_clipboard)} configs from clipboard to multi-load")
 
+    def _sync_tracer_to_preferences(self, ui_state):
+        """Sync live TracerInterface values into PreferencesState.
+
+        The tracer UI modifies TracerInterface directly, so PreferencesState
+        fields are stale until this is called. Needed before any snapshot that
+        reads preferences (render spec save, preferences save, etc.).
+        """
+        ti = self.ui._tracer_interface
+        if ti is None:
+            return
+        p = ui_state.preferences
+        p.tracer_sdf_enabled = ti.sdf_enabled
+        p.tracer_colored_extinction = ti.colored_extinction
+        p.tracer_extinction_rgb = list(ti.extinction_rgb)
+        p.tracer_albedo_saturation = ti.albedo_saturation
+        p.tracer_albedo_brightness = ti.albedo_brightness
+        p.tracer_density_scale = ti.density_scale
+        p.tracer_hg_g = ti.hg_g
+        p.tracer_emission_strength = ti.emission_strength
+        p.tracer_sun_direction = list(ti.sun_direction)
+        p.tracer_sun_color = list(ti.sun_color)
+        p.tracer_sun_intensity = ti.sun_intensity
+        p.tracer_sky_color = list(ti.sky_color)
+        p.tracer_sky_intensity = ti.sky_intensity
+        p.tracer_num_samples = ti.num_samples
+        p.tracer_exposure = ti.exposure
+        p.tracer_realtime_mode = ti.realtime_mode
+        p.tracer_max_bounces = ti.max_bounces
+        p.tracer_resolution_scale = ti.resolution_scale
+        p.tracer_density_resolution_log2 = ti.density_resolution_log2
+        p.tracer_color_resolution_log2 = ti.color_resolution_log2
+        p.tracer_majorant_resolution_log2 = ti.majorant_resolution_log2
+        p.tracer_sun_sampling = ti.sun_sampling
+        p.tracer_photosphere = ti.photosphere
+
     def _handle_save_render_spec(self, ui_state):
         """Capture current state and save as a render spec to disk."""
         if not self.render_spec_service:
             print("RenderSpecService not available")
             return
         name = ui_state.save_render_spec_name or "render"
+        # Sync tracer settings into preferences before capturing
+        self._sync_tracer_to_preferences(ui_state)
         try:
             spec, gpu_buffers = self.render_spec_service.capture_current_state(
                 self.sim, self.camera, self.controller_cam, ui_state,

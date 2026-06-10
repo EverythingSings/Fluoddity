@@ -513,6 +513,11 @@ class UI(
         self.state.request_preview_render_spec = self._request_preview_render_spec
         self.state.preview_render_spec_path = self._preview_render_spec_path
 
+        # Transfer render queue execution flags
+        self.state.request_execute_render_queue = self._request_execute_render_queue
+        self.state.render_queue_paths = self._render_queue_paths
+        self.state.render_queue_names = self._render_queue_names
+
         # Read clipboard content if load is requested
         if self._request_load_config:
             clipboard = glfw.get_clipboard_string(self.window)
@@ -572,6 +577,11 @@ class UI(
         self._request_save_render_spec = False
         self._request_preview_render_spec = False
         self._preview_render_spec_path = ""
+
+        # Reset render queue execution flags
+        self._request_execute_render_queue = False
+        self._render_queue_paths = []
+        self._render_queue_names = []
 
         return self.state
 
