@@ -27,6 +27,7 @@ class ScheduledRendersWindowMixin:
         self._render_queue_paths = []
         self._render_queue_names = []
         self._request_cancel_render_queue = False
+        self._shutdown_after_render_queue = False  # Shut down PC after batch completes
 
     def _refresh_render_spec_files(self):
         """Scan disk for available .frs directories."""
@@ -190,6 +191,8 @@ class ScheduledRendersWindowMixin:
             imgui.end_disabled()
         if queue_empty and imgui.is_item_hovered(imgui.HoveredFlags_.allow_when_disabled):
             imgui.set_tooltip("Add render specs to the queue first")
+        _, self._shutdown_after_render_queue = imgui.checkbox(
+            "Shut down PC when finished", self._shutdown_after_render_queue)
 
         # --- Delete All Specs from disk ---
         imgui.spacing()

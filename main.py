@@ -702,6 +702,10 @@ class App:
 
         elif phase == 'done':
             print(f"[RenderQueue] All {len(self.render_queue)} renders complete. Closing app.")
+            if self.ui._shutdown_after_render_queue:
+                import os
+                print("[RenderQueue] PC shutdown scheduled in 60 seconds (cancel with 'shutdown /a')")
+                os.system('shutdown /s /t 60')
             self.render_queue_executing = False
             glfw.set_window_should_close(self.window, True)
 
