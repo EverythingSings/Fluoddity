@@ -85,6 +85,7 @@ class App:
         self.ui.multi_load_service = self.multi_load_service
         self.ui.advanced_drawing_processor = self.advanced_drawing_processor
         self.ui.plotting_manager = self.plotting_manager
+        self.ui.render_spec_service = self.render_spec_service
 
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()

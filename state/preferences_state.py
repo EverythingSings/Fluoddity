@@ -101,6 +101,9 @@ class PreferencesState:
     # 3D Controls window
     show_three_d_window: bool = False
 
+    # Scheduled Renders window
+    show_scheduled_renders_window: bool = False
+
     # Tracer window (volumetric path tracer)
     show_tracer_window: bool = False
     tracer_sdf_enabled: bool = True

@@ -414,6 +414,13 @@ class MenuBarMixin:
                 )
                 self._delayed_tooltip("Filter particle visibility by frequency band.\nOnly particles within the target frequency\n+/- bandwidth are visible.")
 
+                # Scheduled Renders window toggle
+                _, self.state.preferences.show_scheduled_renders_window = imgui.checkbox(
+                    "Scheduled Renders",
+                    self.state.preferences.show_scheduled_renders_window
+                )
+                self._delayed_tooltip("Queue multiple render specs for\nunattended batch video rendering.")
+
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles

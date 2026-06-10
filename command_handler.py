@@ -163,6 +163,10 @@ class CommandHandler:
         if ui_state.request_save_render_spec:
             self._handle_save_render_spec(ui_state)
 
+        # Preview render spec (destructive apply)
+        if ui_state.request_preview_render_spec:
+            self._handle_preview_render_spec(ui_state)
+
         # Handle preview commands (file browser)
         self._handle_preview_commands(ui_state)
 
@@ -641,3 +645,32 @@ class CommandHandler:
             self.ui._render_spec_saved_time = time.time()
         except Exception as e:
             print(f"Failed to save render spec: {e}")
+
+    def _handle_preview_render_spec(self, ui_state):
+        """Load a render spec from disk and destructively apply it."""
+        if not self.render_spec_service:
+            print("RenderSpecService not available")
+            return
+        from pathlib import Path
+        dir_path = Path(ui_state.preview_render_spec_path)
+        if not dir_path.exists():
+            print(f"Render spec not found: {dir_path}")
+            return
+        try:
+            spec = self.render_spec_service.load_metadata(dir_path)
+            if spec is None:
+                return
+            gpu_buffers = self.render_spec_service.load_gpu_buffers(dir_path)
+            if gpu_buffers is None:
+                return
+            self.render_spec_service.apply_state(
+                spec, gpu_buffers,
+                self.sim, self.camera, self.controller_cam, ui_state,
+                self.config_saver, self.rule_manager,
+                self.field_handler.adv_draw if self.field_handler else None
+            )
+            # Pause simulation after preview
+            ui_state.sim.going = False
+            print(f"Previewing render spec: {spec.display_name}")
+        except Exception as e:
+            print(f"Failed to preview render spec: {e}")

@@ -91,3 +91,7 @@ class UIState:
     # Render spec save
     request_save_render_spec: bool = False
     save_render_spec_name: str = ""
+
+    # Render spec preview (destructive apply from Scheduled Renders window)
+    request_preview_render_spec: bool = False
+    preview_render_spec_path: str = ""  # Path to .frs directory to preview

@@ -31,6 +31,7 @@ from .plotting import PlottingWindowMixin
 from .three_d_window import ThreeDWindowMixin
 from .tracer_window import TracerWindowMixin
 from .radio_window import RadioWindowMixin
+from .scheduled_renders_window import ScheduledRendersWindowMixin
 
 
 @dataclass
@@ -56,6 +57,7 @@ class UI(
     ThreeDWindowMixin,
     TracerWindowMixin,
     RadioWindowMixin,
+    ScheduledRendersWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -240,6 +242,10 @@ class UI(
         self._request_load_strafe_field_image = False
         self._field_load_image_path = ""
         self._init_field_loader_state()
+
+        # Scheduled renders
+        self.render_spec_service = None  # Set by App after construction
+        self._init_scheduled_renders_state()
 
         # Display info (received from Orchestrator)
         self._display_info = {
@@ -504,6 +510,8 @@ class UI(
         # Transfer render spec flags
         self.state.request_save_render_spec = self._request_save_render_spec
         self.state.save_render_spec_name = self._save_render_spec_name
+        self.state.request_preview_render_spec = self._request_preview_render_spec
+        self.state.preview_render_spec_path = self._preview_render_spec_path
 
         # Read clipboard content if load is requested
         if self._request_load_config:
@@ -560,8 +568,10 @@ class UI(
         self._request_import_clipboard_to_multiload = False
         self._clipboard_config_index = -1
 
-        # Reset render spec flag (keep _save_render_spec_name — it's widget state)
+        # Reset render spec flags (keep _save_render_spec_name — it's widget state)
         self._request_save_render_spec = False
+        self._request_preview_render_spec = False
+        self._preview_render_spec_path = ""
 
         return self.state
 
@@ -728,6 +738,10 @@ class UI(
         # Render Radio window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.show_radio_window:
             self.render_radio_window()
+
+        # Render Scheduled Renders window if enabled (hidden when windows toggled off)
+        if self.show_sidebar and self.state.preferences.show_scheduled_renders_window:
+            self.render_scheduled_renders_window()
 
         # Render field loader window (transient, not gated by sidebar)
         self.render_field_loader_window()
