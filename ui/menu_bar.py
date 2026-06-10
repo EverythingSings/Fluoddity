@@ -317,9 +317,9 @@ class MenuBarMixin:
                 self._delayed_tooltip("Set restorable checkpoints with Ctrl-C")
 
                 # Screen Recording Controls
-                _, self.show_video_recording_window = imgui.checkbox(
+                _, self.state.preferences.show_video_recording_window = imgui.checkbox(
                     "Screen Recording Controls",
-                    self.show_video_recording_window
+                    self.state.preferences.show_video_recording_window
                 )
 
                 # Load Field submenu

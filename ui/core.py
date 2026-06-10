@@ -100,7 +100,6 @@ class UI(
         # UI-only state
         self.show_demo_window = False
         self.show_physics_settings_window = True  # Physics settings window (always visible, but can be hidden with sidebar)
-        self.show_video_recording_window = False  # Video recording controls window
         self.show_sidebar = True  # Controls visibility of Physics Settings and Preferences windows
 
         # Config clipboard state
@@ -687,7 +686,7 @@ class UI(
             self.render_performance_window()
 
         # Render Screen Recording window if visible (hidden when windows toggled off)
-        if self.show_sidebar and self.show_video_recording_window:
+        if self.show_sidebar and self.state.preferences.show_video_recording_window:
             self.render_video_recording_window()
 
         # Render history window if visible (hidden when windows toggled off)

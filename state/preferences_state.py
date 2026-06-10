@@ -95,6 +95,9 @@ class PreferencesState:
     # Plotting (GPU histogram reports)
     show_plotting_window: bool = False
 
+    # Screen Recording controls window
+    show_video_recording_window: bool = False
+
     # 3D Controls window
     show_three_d_window: bool = False
 

@@ -11,9 +11,14 @@ class VideoRecorderService:
         """Check if recording is active."""
         return self.recorder.active
 
+    def finished_naturally(self) -> bool:
+        """Check if recording ended by reaching max_frames (not manual stop)."""
+        return self.recorder.finished_naturally
+
     def start(self) -> None:
         """Start recording."""
         if not self.recorder.active:
+            self.recorder.finished_naturally = False
             self.recorder.active = True
 
     def stop(self) -> None:
@@ -28,7 +33,8 @@ class VideoRecorderService:
         else:
             self.start()
 
-    def process_frame(self, ctx, texture, max_frames: int, ssk_w: int, filename_prefix: str = "") -> None:
+    def process_frame(self, ctx, texture, max_frames: int, ssk_w: int,
+                      filename_prefix: str = "", flip_y: bool = True) -> None:
         """Process a frame if recording is active.
 
         Args:
@@ -36,8 +42,9 @@ class VideoRecorderService:
             max_frames: Maximum frames to record
             ssk_w: Spatial supersample kernel width
             filename_prefix: Custom filename prefix (empty = use "animation")
+            flip_y: Whether to flip vertically (False for 3D view mode)
         """
-        self.recorder.frame(ctx, texture, max_frames, ssk_w, filename_prefix)
+        self.recorder.frame(ctx, texture, max_frames, ssk_w, filename_prefix, flip_y=flip_y)
 
     def cleanup(self) -> None:
         """Cleanup resources."""

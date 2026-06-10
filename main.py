@@ -254,6 +254,9 @@ class App:
             ui_state.preferences.speedmult = self.user_speedmult
             ui_state.preferences.motion_blur = self.user_motion_blur
             ui_state.preferences.blur_quality = self.user_blur_quality
+            # Pause simulation when recording ended by reaching max_frames
+            if self.video_service.finished_naturally():
+                ui_state.sim.going = False
 
         if is_recording:
             if tracer_video_active:
@@ -553,11 +556,13 @@ class App:
             import os
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             prefix = ui_state.preferences.filename_prefix or "screenshot"
+            flip_y = not ui_state.camera.render_3d
             filename = save_frame_gpu(
                 self.camera.assembled_texture,
                 self.ctx,
                 supersample_k=ui_state.preferences.supersample_k,
-                return_array=False
+                return_array=False,
+                flip_y=flip_y
             )
             if filename and os.path.exists(filename):
                 screenshots_dir = get_screenshots_dir()

@@ -107,7 +107,7 @@ def setup_gpu_supersampling(ctx, input_width, input_height, supersample_k):
     }
 
 
-def save_frame_gpu(frame_data, ctx, supersample_k=1, return_array=False):
+def save_frame_gpu(frame_data, ctx, supersample_k=1, return_array=False, flip_y=True):
     """
     Save a moderngl texture using GPU-accelerated spatial supersampling.
 
@@ -116,6 +116,8 @@ def save_frame_gpu(frame_data, ctx, supersample_k=1, return_array=False):
         ctx: moderngl.Context
         supersample_k: Spatial supersampling factor (1 = no supersampling)
         return_array: If True, return numpy array instead of saving to file
+        flip_y: If True, flip vertically (standard OpenGL convention). Set False for
+                3D view mode where the FBO already has image-space Y orientation.
 
     Returns:
         If return_array=True: numpy array (height, width, 3) of uint8 RGB data
@@ -179,8 +181,9 @@ def save_frame_gpu(frame_data, ctx, supersample_k=1, return_array=False):
     pixels = pixels[:, :, :3]
     pixels = np.clip(pixels * 255, 0, 255).astype(np.uint8)
 
-    # Flip vertically (OpenGL convention)
-    pixels = np.flipud(pixels)
+    # Flip vertically (OpenGL convention) unless caller opts out
+    if flip_y:
+        pixels = np.flipud(pixels)
 
     # Return array directly if requested
     if return_array:

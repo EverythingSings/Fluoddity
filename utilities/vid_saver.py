@@ -9,8 +9,9 @@ class VidSaver:
         self.current_frame = 0
         self.recorder = None
         self.ssk_w = 2
+        self.finished_naturally = False  # True when recording ended by reaching max_frames
 
-    def frame(self, ctx, tex, max_frames=-1, ssk_w=2, filename_prefix=""):
+    def frame(self, ctx, tex, max_frames=-1, ssk_w=2, filename_prefix="", flip_y=True):
         if not self.active:
             return
 
@@ -54,13 +55,14 @@ class VidSaver:
         # Process frame with GPU (spatial supersampling only)
         # Temporal accumulation and gamma correction happen in FrameAssembler before this
         # Use return_array=True to get numpy array instead of saving PNG
-        frame_array = save_frame_gpu(tex, ctx, supersample_k=ssk_w, return_array=True)
+        frame_array = save_frame_gpu(tex, ctx, supersample_k=ssk_w, return_array=True, flip_y=flip_y)
 
         # frame_array is always returned (no accumulation delay)
         self.recorder.write_frame_from_array(frame_array)
         self.current_frame += 1
 
         if max_frames > 0 and self.current_frame >= max_frames:
+            self.finished_naturally = True
             self.finish()
 
     def finish(self):

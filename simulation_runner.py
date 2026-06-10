@@ -352,12 +352,16 @@ class SimulationRunner:
             )
         self.camera.assembled_texture = assembled_tex
         if self.video_service.is_active():
+            # 3D view has opposite Y orientation in the FBO compared to 2D;
+            # skip the vertical flip so the video comes out right-side-up.
+            flip_y = not self.camera.render_3d
             self.video_service.process_frame(
                 self.camera.ctx,
                 assembled_tex,
                 ui_state.preferences.max_frames,
                 ui_state.preferences.supersample_k,
-                ui_state.preferences.filename_prefix
+                ui_state.preferences.filename_prefix,
+                flip_y=flip_y
             )
 
     def _run_with_motion_blur(self, ui_state, speedmult, draw_mode,
