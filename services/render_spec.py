@@ -350,12 +350,14 @@ class RenderSpecService:
             controller_cam.fov = ccam_data.get('fov', 50.0)
             controller_cam._update_vectors()
 
-        # 4. Apply preferences
+        # 4. Apply preferences (skip window visibility flags — don't close/open windows)
         prefs_data = spec.preferences
         if prefs_data:
             from state.preferences_state import PreferencesState
             valid_fields = set(PreferencesState.__dataclass_fields__.keys())
             for key, value in prefs_data.items():
+                if key.startswith('show_') and key.endswith('_window'):
+                    continue  # Don't override which windows are open
                 if key in valid_fields and hasattr(ui_state.preferences, key):
                     setattr(ui_state.preferences, key, value)
 

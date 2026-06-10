@@ -669,6 +669,10 @@ class CommandHandler:
                 self.config_saver, self.rule_manager,
                 self.field_handler.adv_draw if self.field_handler else None
             )
+            # Re-sync tracer interface if it exists (preferences were updated
+            # but the live TracerInterface still has stale values)
+            if self.ui._tracer_interface is not None:
+                self.ui._apply_tracer_preferences(self.ui._tracer_interface)
             # Pause simulation after preview
             ui_state.sim.going = False
             print(f"Previewing render spec: {spec.display_name}")
