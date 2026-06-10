@@ -5,7 +5,7 @@ import numpy as np
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService, RenderSpecService
 from services.field_handler import FieldHandler
 from services.parameter_lock_service import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
@@ -81,6 +81,7 @@ class App:
         self.multi_load_service = MultiLoadService()
         self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
         self.plotting_manager = PlottingManager(self.ctx)
+        self.render_spec_service = RenderSpecService()
         self.ui.multi_load_service = self.multi_load_service
         self.ui.advanced_drawing_processor = self.advanced_drawing_processor
         self.ui.plotting_manager = self.plotting_manager
@@ -101,13 +102,15 @@ class App:
             self.entity_picker, self.video_service, self.config_saver,
             self.multi_load_service, self.user_configs_dir,
             field_handler=self.field_handler,
-            param_lock_service=self.param_lock_service
+            param_lock_service=self.param_lock_service,
+            render_spec_service=self.render_spec_service
         )
         # Xbox controller (FPS camera for 3D view and shader-driven field)
         self.controller_cam = ControllerCam()
         self.camera.controller_cam = self.controller_cam
         self.joystick_state = {'joystick_id': find_joystick(), 'prev_buttons': []}
 
+        self.command_handler.controller_cam = self.controller_cam
         self.command_handler.plotting_manager = self.plotting_manager
 
         # Tracer references (for entity buffer and camera access)

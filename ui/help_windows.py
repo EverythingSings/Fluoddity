@@ -1,4 +1,5 @@
 """Help and informational windows: Controls, Tutorial, Parameter Sweeps, Performance, Video Recording."""
+import time
 from imgui_bundle import imgui
 
 
@@ -364,6 +365,32 @@ class HelpWindowsMixin:
                 "of normal frame assembly. Physics steps are interleaved\n"
                 "with path-traced samples for motion blur."
             )
+
+            # Save Render Spec
+            imgui.spacing()
+            imgui.separator()
+            imgui.spacing()
+            imgui.text("Render Specs")
+            _, self._save_render_spec_name = imgui.input_text(
+                'Spec Name',
+                self._save_render_spec_name,
+                256
+            )
+            if imgui.button("Save Render Spec"):
+                name = self._save_render_spec_name.strip()
+                if not name:
+                    name = self.state.preferences.filename_prefix or "render"
+                self._request_save_render_spec = True
+                self._save_render_spec_name = name
+
+            # Brief "Saved!" feedback
+            if self._render_spec_saved_time > 0:
+                elapsed = time.time() - self._render_spec_saved_time
+                if elapsed < 2.0:
+                    imgui.same_line()
+                    imgui.text("Saved!")
+                else:
+                    self._render_spec_saved_time = 0
 
             # Downsample Resolution Factor (was Supersample Kernel Width)
             _, self.state.preferences.supersample_k = imgui.input_int('Downsample Resolution Factor', self.state.preferences.supersample_k)

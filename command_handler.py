@@ -1,5 +1,6 @@
 """Command handler: processes one-shot UI commands each frame."""
 import random
+import time
 import numpy as np
 from utilities.gl_helpers import readback_rule
 from camera_input import sync_orbit_angles_from_camera
@@ -14,7 +15,7 @@ class CommandHandler:
 
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, multi_load_service, user_configs_dir,
-                 field_handler=None, param_lock_service=None):
+                 field_handler=None, param_lock_service=None, render_spec_service=None):
         self.sim = sim
         self.camera = camera
         self.ui = ui
@@ -26,7 +27,9 @@ class CommandHandler:
         self.user_configs_dir = user_configs_dir
         self.field_handler = field_handler
         self.param_lock_service = param_lock_service
+        self.render_spec_service = render_spec_service
 
+        self.controller_cam = None  # Set by App after construction
         self.plotting_manager = None  # Set by App after construction
 
         # Preview state
@@ -155,6 +158,10 @@ class CommandHandler:
         if ui_state.request_load_strafe_field_image and ui_state.field_load_image_path:
             if self.field_handler:
                 self.field_handler.load_field_from_image(ui_state.field_load_image_path, "strafe")
+
+        # Save render spec
+        if ui_state.request_save_render_spec:
+            self._handle_save_render_spec(ui_state)
 
         # Handle preview commands (file browser)
         self._handle_preview_commands(ui_state)
@@ -615,3 +622,22 @@ class CommandHandler:
             self.multi_load_service.add_config(config, label)
 
         print(f"Imported {len(self.ui.config_clipboard)} configs from clipboard to multi-load")
+
+    def _handle_save_render_spec(self, ui_state):
+        """Capture current state and save as a render spec to disk."""
+        if not self.render_spec_service:
+            print("RenderSpecService not available")
+            return
+        name = ui_state.save_render_spec_name or "render"
+        try:
+            spec, gpu_buffers = self.render_spec_service.capture_current_state(
+                self.sim, self.camera, self.controller_cam, ui_state,
+                self.config_saver, self.rule_manager,
+                self.field_handler.adv_draw if self.field_handler else None,
+                name
+            )
+            saved_path = self.render_spec_service.save_to_disk(spec, gpu_buffers)
+            print(f"Render spec saved: {saved_path}")
+            self.ui._render_spec_saved_time = time.time()
+        except Exception as e:
+            print(f"Failed to save render spec: {e}")

@@ -222,6 +222,11 @@ class UI(
         self._request_import_clipboard_to_multiload = False
         self._clipboard_config_index = -1
 
+        # Render spec flags
+        self._request_save_render_spec = False
+        self._save_render_spec_name = ""
+        self._render_spec_saved_time = 0  # timestamp for "Saved!" feedback
+
         self._save_filename = ""
         self._load_filename = ""
         self._load_category = ""  # Category for load operation
@@ -496,6 +501,10 @@ class UI(
         self.state.request_import_clipboard_to_multiload = self._request_import_clipboard_to_multiload
         self.state.clipboard_config_index = self._clipboard_config_index
 
+        # Transfer render spec flags
+        self.state.request_save_render_spec = self._request_save_render_spec
+        self.state.save_render_spec_name = self._save_render_spec_name
+
         # Read clipboard content if load is requested
         if self._request_load_config:
             clipboard = glfw.get_clipboard_string(self.window)
@@ -550,6 +559,10 @@ class UI(
         self._request_delete_clipboard_config = False
         self._request_import_clipboard_to_multiload = False
         self._clipboard_config_index = -1
+
+        # Reset render spec flags
+        self._request_save_render_spec = False
+        self._save_render_spec_name = ""
 
         return self.state
 

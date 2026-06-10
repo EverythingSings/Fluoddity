@@ -87,3 +87,7 @@ class UIState:
     request_delete_clipboard_config: bool = False
     request_import_clipboard_to_multiload: bool = False
     clipboard_config_index: int = -1
+
+    # Render spec save
+    request_save_render_spec: bool = False
+    save_render_spec_name: str = ""
