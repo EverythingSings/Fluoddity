@@ -212,12 +212,37 @@ class App:
         # 2.5. Check for render queue execution request
         if ui_state.request_execute_render_queue and not self.render_queue_executing:
             if ui_state.render_queue_paths:
-                self.render_queue_executing = True
-                self.render_queue_index = 0
-                self.render_queue_phase = 'loading'
-                self.render_queue = list(ui_state.render_queue_paths)
-                self.render_queue_names = list(ui_state.render_queue_names)
-                print(f"[RenderQueue] Starting batch render of {len(self.render_queue)} specs")
+                # Validate all spec paths exist on disk
+                from pathlib import Path
+                valid_paths = []
+                valid_names = []
+                for p, n in zip(ui_state.render_queue_paths, ui_state.render_queue_names):
+                    if Path(p).exists():
+                        valid_paths.append(p)
+                        valid_names.append(n)
+                    else:
+                        print(f"[RenderQueue] Spec not found, skipping: {p}")
+                if valid_paths:
+                    # Save preferences before execution (in case app auto-closes)
+                    self.command_handler._sync_tracer_to_preferences(ui_state)
+                    save_preferences(ui_state.preferences)
+                    self.render_queue_executing = True
+                    self.render_queue_index = 0
+                    self.render_queue_phase = 'loading'
+                    self.render_queue = valid_paths
+                    self.render_queue_names = valid_names
+                    print(f"[RenderQueue] Starting batch render of {len(self.render_queue)} specs")
+                else:
+                    print("[RenderQueue] No valid specs to render")
+
+        # 2.5.1. Check for render queue cancel request
+        if ui_state.request_cancel_render_queue and self.render_queue_executing:
+            if self.video_service.is_active():
+                self.video_service.stop()
+            self.render_queue_executing = False
+            self.render_queue_phase = 'idle'
+            ui_state.sim.going = False
+            print("[RenderQueue] Batch render cancelled")
 
         # 2.6. Advance render pipeline state machine
         if self.render_queue_executing:
@@ -474,6 +499,13 @@ class App:
             'recording_active': self.video_service.is_active(),
             'video_pending': cmd.video_pending,
             'video_scheduled_start_frame': cmd.video_scheduled_start_frame,
+            'render_queue_executing': self.render_queue_executing,
+            'render_queue_index': self.render_queue_index,
+            'render_queue_total': len(self.render_queue),
+            'render_queue_phase': self.render_queue_phase,
+            'render_queue_current_name': self.render_queue_names[self.render_queue_index] if self.render_queue_executing and self.render_queue_names else '',
+            'video_current_frame': self.video_service.current_frame,
+            'video_max_frames': ui_state.preferences.max_frames,
         })
         self.ui.render()
 

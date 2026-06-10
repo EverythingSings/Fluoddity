@@ -100,3 +100,4 @@ class UIState:
     request_execute_render_queue: bool = False
     render_queue_paths: list = field(default_factory=list)
     render_queue_names: list = field(default_factory=list)
+    request_cancel_render_queue: bool = False

@@ -16,6 +16,7 @@ class ScheduledRendersWindowMixin:
         self._queue_renaming_index = None  # which queue item is being renamed
         self._queue_rename_buffer = ""  # text buffer for rename popup
         self._delete_all_specs_confirm = False  # "are you sure?" guard
+        self._delete_spec_confirm = False  # per-spec delete confirmation
 
         # One-shot flags for preview
         self._request_preview_render_spec = False
@@ -25,6 +26,7 @@ class ScheduledRendersWindowMixin:
         self._request_execute_render_queue = False
         self._render_queue_paths = []
         self._render_queue_names = []
+        self._request_cancel_render_queue = False
 
     def _refresh_render_spec_files(self):
         """Scan disk for available .frs directories."""
@@ -50,7 +52,15 @@ class ScheduledRendersWindowMixin:
             self._refresh_render_spec_files()
             self._render_specs_scanned = True
 
-        # --- Available specs dropdown + Load / Load All buttons ---
+        executing = self._display_info.get('render_queue_executing', False)
+
+        # --- Execution progress panel (shown during batch render) ---
+        if executing:
+            self._render_execution_progress()
+            imgui.separator()
+            imgui.begin_disabled()
+
+        # --- Available specs dropdown + Load / Load All / Del buttons ---
         imgui.text("Available:")
         imgui.same_line()
 
@@ -83,6 +93,25 @@ class ScheduledRendersWindowMixin:
         if imgui.button("Load All"):
             for spec_path in self._render_spec_files:
                 self._load_spec_into_queue(spec_path)
+        imgui.same_line()
+
+        # Per-spec delete from disk
+        if not self._delete_spec_confirm:
+            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.5, 0.15, 0.15, 1.0))
+            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.7, 0.2, 0.2, 1.0))
+            if imgui.button("Del"):
+                self._delete_spec_confirm = True
+            imgui.pop_style_color(2)
+        else:
+            selected_name = spec_names[self._selected_spec_index]
+            imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), f"Delete '{selected_name}'?")
+            if imgui.button("Yes"):
+                self._delete_selected_spec_from_disk()
+                self._delete_spec_confirm = False
+            imgui.same_line()
+            if imgui.button("No"):
+                self._delete_spec_confirm = False
+
         if load_disabled:
             imgui.end_disabled()
 
@@ -179,7 +208,53 @@ class ScheduledRendersWindowMixin:
             if imgui.button("Cancel"):
                 self._delete_all_specs_confirm = False
 
+        # Close disabled section if executing
+        if executing:
+            imgui.end_disabled()
+
         imgui.end()
+
+    def _render_execution_progress(self):
+        """Render the batch execution progress panel."""
+        idx = self._display_info.get('render_queue_index', 0)
+        total = self._display_info.get('render_queue_total', 0)
+        name = self._display_info.get('render_queue_current_name', '')
+        phase = self._display_info.get('render_queue_phase', '')
+        current_frame = self._display_info.get('video_current_frame', 0)
+        max_frames = self._display_info.get('video_max_frames', 0)
+
+        # Header
+        imgui.text_colored(imgui.ImVec4(0.4, 1.0, 0.4, 1.0), "BATCH RENDER IN PROGRESS")
+
+        # Current spec info
+        imgui.text(f"Rendering {idx + 1} of {total}: {name}")
+
+        # Phase-specific display
+        if phase == 'loading':
+            imgui.text("Loading spec...")
+        elif phase == 'start_recording':
+            imgui.text("Starting recording...")
+        elif phase == 'recording' and max_frames > 0:
+            # Frame progress
+            imgui.text(f"Frame {current_frame} / {max_frames}")
+            fraction = current_frame / max_frames if max_frames > 0 else 0.0
+            imgui.progress_bar(fraction, imgui.ImVec2(-1, 0))
+        elif phase == 'recording':
+            imgui.text(f"Frame {current_frame} (unlimited)")
+
+        # Remaining specs
+        remaining = total - idx - 1
+        if remaining > 0:
+            imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), f"{remaining} spec(s) remaining after this")
+
+        imgui.spacing()
+
+        # Cancel button (always active, outside disabled section)
+        imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.7, 0.2, 0.2, 1.0))
+        imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(0.9, 0.3, 0.3, 1.0))
+        if imgui.button("Cancel Batch Render"):
+            self._request_cancel_render_queue = True
+        imgui.pop_style_color(2)
 
     def _load_spec_into_queue(self, dir_path: Path):
         """Load a render spec's metadata and add it to the queue."""
@@ -191,6 +266,24 @@ class ScheduledRendersWindowMixin:
             print(f"Loaded render spec into queue: {spec.display_name}")
         else:
             print(f"Failed to load render spec from: {dir_path}")
+
+    def _delete_selected_spec_from_disk(self):
+        """Delete the currently selected .frs directory from disk."""
+        if not self._render_spec_files:
+            return
+        if self._selected_spec_index >= len(self._render_spec_files):
+            return
+        spec_path = self._render_spec_files[self._selected_spec_index]
+        try:
+            shutil.rmtree(spec_path)
+            print(f"Deleted render spec from disk: {spec_path}")
+        except Exception as e:
+            print(f"Failed to delete {spec_path}: {e}")
+        # Remove from queue if present
+        self._render_queue = [
+            (s, n, p) for (s, n, p) in self._render_queue if p != spec_path
+        ]
+        self._refresh_render_spec_files()
 
     def _delete_all_specs_from_disk(self):
         """Delete all .frs directories from the RenderSpecs folder."""

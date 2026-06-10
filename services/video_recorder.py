@@ -15,6 +15,11 @@ class VideoRecorderService:
         """Check if recording ended by reaching max_frames (not manual stop)."""
         return self.recorder.finished_naturally
 
+    @property
+    def current_frame(self) -> int:
+        """Current recording frame count."""
+        return self.recorder.current_frame
+
     def start(self) -> None:
         """Start recording."""
         if not self.recorder.active:

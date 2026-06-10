@@ -198,9 +198,6 @@ Each spec's display_name becomes `filename_prefix` -> output file is `{display_n
 - Disable physics sliders, reset/load menus during execution
 - Only cancel button and window close work
 
-### 5e. Render spec file management
-- Option to delete `.frs` directories from disk (with confirmation dialog)
-
 ---
 
 ## Verification (End-to-End)

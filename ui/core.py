@@ -517,6 +517,7 @@ class UI(
         self.state.request_execute_render_queue = self._request_execute_render_queue
         self.state.render_queue_paths = self._render_queue_paths
         self.state.render_queue_names = self._render_queue_names
+        self.state.request_cancel_render_queue = self._request_cancel_render_queue
 
         # Read clipboard content if load is requested
         if self._request_load_config:
@@ -582,6 +583,7 @@ class UI(
         self._request_execute_render_queue = False
         self._render_queue_paths = []
         self._render_queue_names = []
+        self._request_cancel_render_queue = False
 
         return self.state
 
