@@ -453,12 +453,6 @@ void reset(uint index){
         int gz = slot / (grid_side * grid_side);
         // Grid cell center in [-0.9, 0.9]
         vec3 cell_center = 1.8 * ((vec3(gx, gy, gz) + 0.5) / float(grid_side) - 0.5);
-        //random grid locations
-        float r1=hash(vec2(slot,1));
-        float r2 = hash(vec2(slot,2));
-        float r3 = hash(vec2(slot,3));
-        cell_center = vec3(r1,r2,r3)*2.-1.;
-
         // Rejection-sample a sphere inscribed in the grid cell for isotropic distribution
         float cell_radius = 0.09 / float(grid_side);
         vec3 candidate;

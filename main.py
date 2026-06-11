@@ -767,12 +767,6 @@ class App:
             ui_state.preferences.tracer_majorant_resolution_log2 = ti.majorant_resolution_log2
             ui_state.preferences.tracer_sun_sampling = ti.sun_sampling
             ui_state.preferences.tracer_photosphere = ti.photosphere
-            # Base medium (fog sphere)
-            ui_state.preferences.tracer_fog_density = ti.fog_density
-            ui_state.preferences.tracer_fog_extinction_rgb = list(ti.fog_extinction_rgb)
-            ui_state.preferences.tracer_fog_albedo_rgb = list(ti.fog_albedo_rgb)
-            ui_state.preferences.tracer_fog_radius = ti.fog_radius
-            ui_state.preferences.tracer_fog_hg_g = ti.fog_hg_g
 
         save_preferences(ui_state.preferences)
 

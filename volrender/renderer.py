@@ -191,12 +191,6 @@ class VolumeRenderer:
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
         _tryset(prog, 'u_emission_strength', 0.0)
-        # Base medium (fog sphere)
-        _tryset(prog, 'u_fog_density', medium.fog_density)
-        _tryset(prog, 'u_fog_extinction_rgb', medium.fog_extinction_rgb)
-        _tryset(prog, 'u_fog_albedo_rgb', medium.fog_albedo_rgb)
-        _tryset(prog, 'u_fog_radius', medium.fog_radius)
-        _tryset(prog, 'u_fog_hg_g', medium.fog_hg_g)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -276,12 +270,6 @@ class VolumeRenderer:
                 min(medium.albedo_brightness, 1.0) if medium.colored_extinction
                 else medium.albedo_brightness)
         _tryset(prog, 'u_emission_strength', 0.0)
-        # Base medium (fog sphere)
-        _tryset(prog, 'u_fog_density', medium.fog_density)
-        _tryset(prog, 'u_fog_extinction_rgb', medium.fog_extinction_rgb)
-        _tryset(prog, 'u_fog_albedo_rgb', medium.fog_albedo_rgb)
-        _tryset(prog, 'u_fog_radius', medium.fog_radius)
-        _tryset(prog, 'u_fog_hg_g', medium.fog_hg_g)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -373,12 +361,6 @@ class VolumeRenderer:
                 else medium.albedo_brightness)
         _tryset(prog, 'u_hg_g', medium.hg_g)
         _tryset(prog, 'u_emission_strength', medium.emission_strength)
-        # Base medium (fog sphere)
-        _tryset(prog, 'u_fog_density', medium.fog_density)
-        _tryset(prog, 'u_fog_extinction_rgb', medium.fog_extinction_rgb)
-        _tryset(prog, 'u_fog_albedo_rgb', medium.fog_albedo_rgb)
-        _tryset(prog, 'u_fog_radius', medium.fog_radius)
-        _tryset(prog, 'u_fog_hg_g', medium.fog_hg_g)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)
@@ -512,12 +494,6 @@ class VolumeRenderer:
                 else medium.albedo_brightness)
         _tryset(prog, 'u_hg_g', medium.hg_g)
         _tryset(prog, 'u_emission_strength', medium.emission_strength)
-        # Base medium (fog sphere)
-        _tryset(prog, 'u_fog_density', medium.fog_density)
-        _tryset(prog, 'u_fog_extinction_rgb', medium.fog_extinction_rgb)
-        _tryset(prog, 'u_fog_albedo_rgb', medium.fog_albedo_rgb)
-        _tryset(prog, 'u_fog_radius', medium.fog_radius)
-        _tryset(prog, 'u_fog_hg_g', medium.fog_hg_g)
 
         # Sky
         _tryset(prog, 'u_sky_color', sky.color_rgb)

@@ -70,13 +70,6 @@ uniform bool  u_sun_sampling;      // false = skip NEE shadow rays
 uniform bool      u_use_photosphere;  // true = sample skybox texture
 uniform sampler2D u_skybox;           // equirectangular skybox (texture unit 4)
 
-// ---- base medium (uniform fog sphere) ----
-uniform float u_fog_density;         // sigma_t scalar multiplier (0 = disabled)
-uniform vec3  u_fog_extinction_rgb;  // extinction color tint
-uniform vec3  u_fog_albedo_rgb;      // single-scatter albedo color
-uniform float u_fog_radius;          // sphere radius in world units
-uniform float u_fog_hg_g;           // HG asymmetry for fog scattering
-
 // ---- depth of field ----
 uniform float u_aperture;            // lens radius (0 = pinhole)
 uniform float u_focal_plane_depth;   // distance to focal plane
@@ -248,46 +241,6 @@ vec3 sigma_t_at(vec3 p) {
 
 
 // ====================================================================
-// Ray-sphere intersection.
-// Returns true if the ray hits the sphere; t_near/t_far give the
-// parametric interval (t_near < 0 if origin is inside).
-// ====================================================================
-bool intersect_sphere(vec3 origin, vec3 dir, vec3 center, float radius,
-                      out float t_near, out float t_far) {
-    vec3 oc = origin - center;
-    float b = dot(oc, dir);
-    float c = dot(oc, oc) - radius * radius;
-    float disc = b * b - c;
-    if (disc < 0.0) return false;
-    float sq = sqrt(disc);
-    t_near = -b - sq;
-    t_far  = -b + sq;
-    return t_far >= max(t_near, 0.0);
-}
-
-
-// ====================================================================
-// Base-medium (uniform fog sphere) extinction at a world-space point.
-// Returns vec3(0) when outside the sphere or when fog is disabled.
-// ====================================================================
-vec3 fog_sigma_t(vec3 p) {
-    if (u_fog_density <= 0.0) return vec3(0.0);
-    vec3 fog_center = (u_bounds_min + u_bounds_max) * 0.5;
-    float dist = length(p - fog_center);
-    if (dist > u_fog_radius) return vec3(0.0);
-    return u_fog_extinction_rgb * u_fog_density;
-}
-
-
-// ====================================================================
-// Combined extinction: voxel medium + base fog medium.
-// ====================================================================
-vec3 total_sigma_t_at(vec3 p) {
-    return sigma_t_at(p) + fog_sigma_t(p);
-}
-
-
-// ====================================================================
 // Emitted radiance L_e from local density.
 //
 // Returns a color (vec3) representing emission, NOT premultiplied by
@@ -370,21 +323,8 @@ bool sample_free_flight(vec3 origin, vec3 dir,
         ? 1.0
         : max(u_extinction_rgb.r, max(u_extinction_rgb.g, u_extinction_rgb.b));
 
-    // Precompute fog majorant (constant for entire ray, 0 when disabled)
-    float fog_mu_bar = 0.0;
-    if (u_fog_density > 0.0) {
-        fog_mu_bar = max(u_fog_extinction_rgb.r,
-                         max(u_fog_extinction_rgb.g, u_fog_extinction_rgb.b))
-                     * u_fog_density;
-    }
-
     // Precompute inverse direction for slab math
     vec3 inv_dir = 1.0 / dir;
-
-    // Intersect ray with AABB to know when we're inside the grid
-    float aabb_t_near, aabb_t_far;
-    bool in_aabb_range = intersect_aabb(origin, dir, u_bounds_min, u_bounds_max,
-                                         aabb_t_near, aabb_t_far);
 
     // COMMENT FLAG: MAX_DT_ITERS — safety cap on total delta-tracking
     // iterations.  Should never be reached in practice; increase if
@@ -400,53 +340,39 @@ bool sample_free_flight(vec3 origin, vec3 dir,
         // ---- Current position on the ray ----
         vec3 p = origin + t * dir;
 
-        // ---- Determine if we're inside the voxel AABB ----
-        bool inside_aabb = in_aabb_range && t >= aabb_t_near && t < aabb_t_far;
+        // ---- Identify the coarse cell containing p ----
+        vec3 coarse_gc = (p - u_bounds_min) / cell_size;
+        ivec3 cell = ivec3(floor(coarse_gc));
+        cell = clamp(cell, ivec3(0), u_majorant_resolution - 1);
 
-        // ---- Compute majorant and cell exit for this segment ----
-        float mu_bar;
-        float t_cell_exit;
+        // ---- Parametric t at which the ray exits this cell ----
+        vec3 cell_world_min = u_bounds_min + vec3(cell) * cell_size;
+        vec3 cell_world_max = cell_world_min + cell_size;
 
-        if (inside_aabb) {
-            // Inside voxel grid: use coarse majorant grid + fog
-            vec3 coarse_gc = (p - u_bounds_min) / cell_size;
-            ivec3 cell = ivec3(floor(coarse_gc));
-            cell = clamp(cell, ivec3(0), u_majorant_resolution - 1);
+        vec3 t_to_min = (cell_world_min - origin) * inv_dir;
+        vec3 t_to_max = (cell_world_max - origin) * inv_dir;
+        vec3 t_exit_planes = max(t_to_min, t_to_max);
 
-            vec3 cell_world_min = u_bounds_min + vec3(cell) * cell_size;
-            vec3 cell_world_max = cell_world_min + cell_size;
+        float t_cell_exit = min(t_exit_planes.x,
+                            min(t_exit_planes.y, t_exit_planes.z));
+        t_cell_exit = min(t_cell_exit, t_exit);
+        // Guarantee forward progress: cell exit must be strictly ahead of t.
+        // Prevents infinite loops when ray is near-parallel to cell boundaries.
+        t_cell_exit = max(t_cell_exit, t + 1e-5);
 
-            vec3 t_to_min = (cell_world_min - origin) * inv_dir;
-            vec3 t_to_max = (cell_world_max - origin) * inv_dir;
-            vec3 t_exit_planes = max(t_to_min, t_to_max);
+        // ---- Look up majorant for this cell ----
+        // Sample at cell center — nearest filtering reads the stored max.
+        vec3 cell_center_uvw = (vec3(cell) + 0.5) / vec3(u_majorant_resolution);
+        float majorant_density = texture(u_majorant, cell_center_uvw).r;
+        float mu_bar = max_ext * u_density_scale * majorant_density;
 
-            t_cell_exit = min(t_exit_planes.x,
-                          min(t_exit_planes.y, t_exit_planes.z));
-            t_cell_exit = min(t_cell_exit, t_exit);
-            t_cell_exit = max(t_cell_exit, t + 1e-5);
-
-            vec3 cell_center_uvw = (vec3(cell) + 0.5) / vec3(u_majorant_resolution);
-            float majorant_density = texture(u_majorant, cell_center_uvw).r;
-            mu_bar = max_ext * u_density_scale * majorant_density + fog_mu_bar;
-        } else {
-            // Outside voxel grid (fog-only region)
-            // Advance to whichever comes first: AABB entry or volume exit
-            if (in_aabb_range && aabb_t_near > t) {
-                t_cell_exit = min(aabb_t_near, t_exit);
-            } else {
-                t_cell_exit = t_exit;
-            }
-            t_cell_exit = max(t_cell_exit, t + 1e-5);
-            mu_bar = fog_mu_bar;  // fog only (0 if fog disabled)
-        }
-
-        // ---- Empty segment: skip straight to boundary ----
+        // ---- Empty cell: skip straight to boundary ----
         if (mu_bar <= 0.0) {
             t = t_cell_exit + 1e-5;
             continue;
         }
 
-        // ---- Delta tracking within this segment ----
+        // ---- Delta tracking within this cell ----
         bool left_cell = false;
         while (!left_cell) {
             // Sample exponential free-flight distance
@@ -468,7 +394,7 @@ bool sample_free_flight(vec3 origin, vec3 dir,
 
             // ---- Tentative event at this position ----
             vec3 event_pos = origin + t * dir;
-            vec3 sigma_t   = total_sigma_t_at(event_pos);
+            vec3 sigma_t   = sigma_t_at(event_pos);
 
             // Scalar real-collision probability
             float sigma_max = max(sigma_t.r, max(sigma_t.g, sigma_t.b));
@@ -525,41 +451,15 @@ vec3 transmittance_to_sun(vec3 x) {
     }
 
     // Intersect the shadow ray with the grid AABB
-    float aabb_t_near, aabb_t_far;
-    bool aabb_hit = intersect_aabb(x, dir, u_bounds_min, u_bounds_max,
-                                    aabb_t_near, aabb_t_far);
+    float t_near, t_far;
+    bool hit = intersect_aabb(x, dir, u_bounds_min, u_bounds_max,
+                              t_near, t_far);
+    if (!hit)
+        return vec3(1.0);   // outside grid entirely
 
-    // Intersect with fog sphere
-    float sphere_t_near, sphere_t_far;
-    bool sphere_hit = false;
-    float fog_mu_bar = 0.0;
-    if (u_fog_density > 0.0) {
-        vec3 fog_center = (u_bounds_min + u_bounds_max) * 0.5;
-        sphere_hit = intersect_sphere(x, dir, fog_center, u_fog_radius,
-                                       sphere_t_near, sphere_t_far);
-        fog_mu_bar = max(u_fog_extinction_rgb.r,
-                         max(u_fog_extinction_rgb.g, u_fog_extinction_rgb.b))
-                     * u_fog_density;
-    }
-
-    if (!aabb_hit && !sphere_hit)
-        return vec3(1.0);   // outside both volumes entirely
-
-    // Combined interval
-    float t_near_combined, t_far_combined;
-    if (aabb_hit && sphere_hit) {
-        t_near_combined = min(aabb_t_near, sphere_t_near);
-        t_far_combined  = max(aabb_t_far,  sphere_t_far);
-    } else if (aabb_hit) {
-        t_near_combined = aabb_t_near;
-        t_far_combined  = aabb_t_far;
-    } else {
-        t_near_combined = sphere_t_near;
-        t_far_combined  = sphere_t_far;
-    }
-
+    // Origin is inside the grid, so t_near <= 0.
     // Start slightly ahead to avoid self-intersection.
-    float t = max(t_near_combined, 1e-5);
+    float t = max(t_near, 1e-5);
 
     vec3 T = vec3(1.0);
 
@@ -583,57 +483,43 @@ vec3 transmittance_to_sun(vec3 x) {
     for (int iter = 0; iter < MAX_SHADOW_ITERS; iter++) {
 
         // ---- Have we left the volume? ----
-        if (t >= t_far_combined)
+        if (t >= t_far)
             return T;
 
         // ---- Current position on the ray ----
         vec3 p = x + t * dir;
 
-        // ---- Determine if we're inside the voxel AABB ----
-        bool inside_aabb = aabb_hit && t >= aabb_t_near && t < aabb_t_far;
+        // ---- Identify the coarse cell containing p ----
+        vec3 coarse_gc = (p - u_bounds_min) / cell_size;
+        ivec3 cell = ivec3(floor(coarse_gc));
+        cell = clamp(cell, ivec3(0), u_majorant_resolution - 1);
 
-        // ---- Compute majorant and cell exit for this segment ----
-        float mu_bar;
-        float t_cell_exit;
+        // ---- Parametric t at which the ray exits this cell ----
+        vec3 cell_world_min = u_bounds_min + vec3(cell) * cell_size;
+        vec3 cell_world_max = cell_world_min + cell_size;
 
-        if (inside_aabb) {
-            vec3 coarse_gc = (p - u_bounds_min) / cell_size;
-            ivec3 cell = ivec3(floor(coarse_gc));
-            cell = clamp(cell, ivec3(0), u_majorant_resolution - 1);
+        vec3 t_to_min = (cell_world_min - x) * inv_dir;
+        vec3 t_to_max = (cell_world_max - x) * inv_dir;
+        vec3 t_exit_planes = max(t_to_min, t_to_max);
 
-            vec3 cell_world_min = u_bounds_min + vec3(cell) * cell_size;
-            vec3 cell_world_max = cell_world_min + cell_size;
+        float t_cell_exit = min(t_exit_planes.x,
+                            min(t_exit_planes.y, t_exit_planes.z));
+        t_cell_exit = min(t_cell_exit, t_far);
+        // Guarantee forward progress (same fix as sample_free_flight)
+        t_cell_exit = max(t_cell_exit, t + 1e-5);
 
-            vec3 t_to_min = (cell_world_min - x) * inv_dir;
-            vec3 t_to_max = (cell_world_max - x) * inv_dir;
-            vec3 t_exit_planes = max(t_to_min, t_to_max);
+        // ---- Look up majorant for this cell ----
+        vec3 cell_center_uvw = (vec3(cell) + 0.5) / vec3(u_majorant_resolution);
+        float majorant_density = texture(u_majorant, cell_center_uvw).r;
+        float mu_bar = max_ext * u_density_scale * majorant_density;
 
-            t_cell_exit = min(t_exit_planes.x,
-                          min(t_exit_planes.y, t_exit_planes.z));
-            t_cell_exit = min(t_cell_exit, t_far_combined);
-            t_cell_exit = max(t_cell_exit, t + 1e-5);
-
-            vec3 cell_center_uvw = (vec3(cell) + 0.5) / vec3(u_majorant_resolution);
-            float majorant_density = texture(u_majorant, cell_center_uvw).r;
-            mu_bar = max_ext * u_density_scale * majorant_density + fog_mu_bar;
-        } else {
-            // Outside voxel grid (fog-only region)
-            if (aabb_hit && aabb_t_near > t) {
-                t_cell_exit = min(aabb_t_near, t_far_combined);
-            } else {
-                t_cell_exit = t_far_combined;
-            }
-            t_cell_exit = max(t_cell_exit, t + 1e-5);
-            mu_bar = fog_mu_bar;
-        }
-
-        // ---- Empty segment: skip straight to boundary ----
+        // ---- Empty cell: skip straight to boundary ----
         if (mu_bar <= 0.0) {
             t = t_cell_exit + 1e-5;
             continue;
         }
 
-        // ---- Ratio tracking within this segment ----
+        // ---- Ratio tracking within this cell ----
         bool left_cell = false;
         while (!left_cell) {
             // Sample exponential free-flight distance
@@ -650,12 +536,14 @@ vec3 transmittance_to_sun(vec3 x) {
             }
 
             // Overshot volume → done
-            if (t >= t_far_combined)
+            if (t >= t_far)
                 return T;
 
             // ---- Tentative event: ratio-tracking weight update ----
+            // T *= (mu_bar - sigma_t) / mu_bar   (per channel)
+            // No real/null decision — every event contributes.
             vec3 event_pos = x + t * dir;
-            vec3 sigma_t   = total_sigma_t_at(event_pos);
+            vec3 sigma_t   = sigma_t_at(event_pos);
             T *= clamp((mu_bar - sigma_t) / mu_bar, vec3(0.0), vec3(1.0));
 
             // Early termination: if T is negligibly small, stop
@@ -728,16 +616,7 @@ void main() {
                                      primary_sdf_t, primary_sdf_mat);
     }
 
-    // ---- Fog sphere intersection (primary ray) ----
-    float primary_fog_t_near, primary_fog_t_far;
-    bool primary_fog_hit = false;
-    if (u_fog_density > 0.0) {
-        vec3 fog_center = (u_bounds_min + u_bounds_max) * 0.5;
-        primary_fog_hit = intersect_sphere(ray_origin, ray_dir, fog_center, u_fog_radius,
-                                            primary_fog_t_near, primary_fog_t_far);
-    }
-
-    if (!hit && !primary_sdf_hit && !primary_fog_hit) {
+    if (!hit && !primary_sdf_hit) {
         write_output(pixel, vec4(get_sky_col(ray_dir), 1.0));
         return;
     }
@@ -759,7 +638,7 @@ void main() {
             float t = t_near + (float(i) + 0.5) * step_size;
             vec3 p = ray_origin + t * ray_dir;
 
-            vec3 sigma_t = total_sigma_t_at(p);
+            vec3 sigma_t = sigma_t_at(p);
             tau += sigma_t * step_size;
         }
 
@@ -829,36 +708,8 @@ void main() {
         if (aabb_hit)
             aabb_t_near = max(aabb_t_near, 1e-5);
 
-        // 3. Fog sphere intersection
-        float fog_t_near, fog_t_far;
-        bool  fog_hit = false;
-        if (u_fog_density > 0.0) {
-            vec3 fog_center = (u_bounds_min + u_bounds_max) * 0.5;
-            fog_hit = intersect_sphere(walk_origin, walk_dir, fog_center, u_fog_radius,
-                                        fog_t_near, fog_t_far);
-            if (fog_hit)
-                fog_t_near = max(fog_t_near, 1e-5);
-        }
-
-        // Combined volume = union of AABB and fog sphere
-        bool  vol_hit = aabb_hit || fog_hit;
-        float vol_t_near, vol_t_far;
-        if (aabb_hit && fog_hit) {
-            vol_t_near = min(aabb_t_near, fog_t_near);
-            vol_t_far  = max(aabb_t_far,  fog_t_far);
-        } else if (aabb_hit) {
-            vol_t_near = aabb_t_near;
-            vol_t_far  = aabb_t_far;
-        } else if (fog_hit) {
-            vol_t_near = fog_t_near;
-            vol_t_far  = fog_t_far;
-        } else {
-            vol_t_near = 0.0;  // unused, but avoids uninitialized warning
-            vol_t_far  = 0.0;
-        }
-
         // ---- No intersection at all → sky escape ----
-        if (!sdf_hit && !vol_hit) {
+        if (!sdf_hit && !aabb_hit) {
             radiance += throughput * get_sky_col(walk_dir);
             break;
         }
@@ -868,20 +719,20 @@ void main() {
         bool surface_interaction = false;
         vec3 hit_pos;
 
-        bool try_media = vol_hit && (!sdf_hit || vol_t_near < sdf_t);
+        bool try_media = aabb_hit && (!sdf_hit || aabb_t_near < sdf_t);
 
         if (try_media) {
-            // Volume (AABB + fog sphere) is the closer candidate (or SDF not hit).
+            // Media AABB is the closer candidate (or SDF not hit).
             // Delta-track through media, but clip t_far at SDF hit distance
             // so that tracking stops if the ray reaches the SDF surface
             // without a media collision.
-            float effective_t_far = vol_t_far;
+            float effective_t_far = aabb_t_far;
             if (sdf_hit)
                 effective_t_far = min(effective_t_far, sdf_t);
 
             vec3 dt_throughput = vec3(1.0);
             bool collided = sample_free_flight(walk_origin, walk_dir,
-                                               vol_t_near, effective_t_far,
+                                               aabb_t_near, effective_t_far,
                                                dt_throughput, hit_pos);
             throughput *= dt_throughput;
 
@@ -894,12 +745,12 @@ void main() {
                 hit_pos = walk_origin + sdf_t * walk_dir;
                 sdf_mat = scene(hit_pos);
             } else {
-                // Escaped volume, no SDF beyond → sky
+                // Escaped AABB, no SDF beyond → sky
                 radiance += throughput * get_sky_col(walk_dir);
                 break;
             }
         } else {
-            // SDF is closer than volume entry (or no volume hit)
+            // SDF is closer than media entry (or no media hit)
             surface_interaction = true;
             hit_pos = walk_origin + sdf_t * walk_dir;
         }
@@ -909,32 +760,19 @@ void main() {
         if (!surface_interaction) {
             // ---- Media scatter ----
 
-            // Determine if this collision is in the fog or voxel medium.
-            // Probability proportional to each medium's extinction.
-            vec3 voxel_st = sigma_t_at(hit_pos);
-            vec3 fog_st   = fog_sigma_t(hit_pos);
-            vec3 total_st = voxel_st + fog_st;
-            float total_max = max(total_st.r, max(total_st.g, total_st.b));
-            float fog_max   = max(fog_st.r, max(fog_st.g, fog_st.b));
-            float p_fog = (total_max > 1e-10) ? fog_max / total_max : 0.0;
-            bool is_fog_scatter = (next_float() < p_fog);
-
-            // HG asymmetry for this scatter event
-            float scatter_g = is_fog_scatter ? u_fog_hg_g : u_hg_g;
-
-            // Compute albedo for this collision
+            // Compute albedo for this collision (needed for both
+            // emission weighting and the scattering throughput update)
             vec3 albedo_here;
-            if (is_fog_scatter) {
-                albedo_here = u_fog_albedo_rgb;
-            } else if (u_colored_extinction) {
+            if (u_colored_extinction) {
                 albedo_here = u_extinction_rgb;
             } else {
                 albedo_here = get_albedo(hit_pos);
             }
 
             // ---- Emission (Kirchhoff: tied to absorption) ----
-            // Only voxel medium emits; fog does not.
-            if (!is_fog_scatter && u_emission_strength > 0.0) {
+            // Case (b): implicit absorption — weight by (1 - albedo)
+            // which equals sigma_a / sigma_t at this collision.
+            if (u_emission_strength > 0.0) {
                 vec3 uvw = (hit_pos - u_bounds_min) / (u_bounds_max - u_bounds_min);
                 float raw_density = texture(u_density, uvw).r;
                 float physical_density = raw_density / u_voxel_volume;
@@ -949,7 +787,7 @@ void main() {
             if (u_sun_sampling) {
                 vec3 T_sun = transmittance_to_sun(hit_pos);
                 float cos_theta = dot(walk_dir, u_sun_direction);
-                float phase = hg_phase(cos_theta, scatter_g);
+                float phase = hg_phase(cos_theta, u_hg_g);
                 radiance += throughput * phase * T_sun
                             * u_sun_color * u_sun_intensity;
             }
@@ -969,7 +807,7 @@ void main() {
             }
 
             // HG scatter (importance-sampled; isotropic when g=0)
-            walk_dir = sample_hg(walk_dir, scatter_g);
+            walk_dir = sample_hg(walk_dir, u_hg_g);
             walk_origin = hit_pos;
 
         } else {

@@ -131,12 +131,6 @@ class PreferencesState:
     tracer_majorant_resolution_log2: int = 7  # 2^7 = 128
     tracer_sun_sampling: bool = True  # NEE sun shadow rays
     tracer_photosphere: bool = False  # skybox texture mode
-    # Base medium (fog sphere)
-    tracer_fog_density: float = 0.0
-    tracer_fog_extinction_rgb: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
-    tracer_fog_albedo_rgb: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
-    tracer_fog_radius: float = 5.0
-    tracer_fog_hg_g: float = 0.0
 
     # 3D camera settings
     three_d_render_3d: bool = True

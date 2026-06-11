@@ -88,23 +88,6 @@ class TracerWindowMixin:
             if imgui.is_item_hovered():
                 imgui.set_tooltip("Self-emission intensity (0 = off)")
 
-        # ---- Base Medium (uniform fog sphere) ----
-        if imgui.collapsing_header("Base Medium"):
-            _, ti.fog_extinction_rgb = imgui.color_edit3(
-                "Fog Extinction", ti.fog_extinction_rgb)
-            _, ti.fog_albedo_rgb = imgui.color_edit3(
-                "Fog Albedo", ti.fog_albedo_rgb)
-            _, ti.fog_density = imgui.drag_float(
-                "Fog Density", ti.fog_density, 0.001, 0.0, 100.0, "%.4f")
-            _, ti.fog_radius = imgui.drag_float(
-                "Fog Radius", ti.fog_radius, 0.1, 0.1, 100.0, "%.1f")
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("Sphere radius centered on voxel grid origin")
-            _, ti.fog_hg_g = imgui.slider_float(
-                "Fog Scattering (g)", ti.fog_hg_g, -1.0, 1.0)
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("HG phase: -1 back, 0 isotropic, +1 forward")
-
         # ---- Sun ----
         if imgui.collapsing_header("Sun", imgui.TreeNodeFlags_.default_open.value):
             _, ti.sun_direction = imgui.drag_float3(
@@ -237,12 +220,6 @@ class TracerWindowMixin:
         ti.density_resolution_log2 = p.tracer_density_resolution_log2
         ti.color_resolution_log2 = p.tracer_color_resolution_log2
         ti.majorant_resolution_log2 = p.tracer_majorant_resolution_log2
-        # Base medium (fog sphere)
-        ti.fog_density = p.tracer_fog_density
-        ti.fog_extinction_rgb = list(p.tracer_fog_extinction_rgb)
-        ti.fog_albedo_rgb = list(p.tracer_fog_albedo_rgb)
-        ti.fog_radius = p.tracer_fog_radius
-        ti.fog_hg_g = p.tracer_fog_hg_g
 
     def _do_tracer_render(self, ti):
         """Start a progressive tracer render using the current entity buffer and camera."""

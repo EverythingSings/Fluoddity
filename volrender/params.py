@@ -37,12 +37,6 @@ class MediumParams:
     colored_extinction:  bool = False  # true = hue→extinction, false = hue→albedo
     hg_g:                float = 0.0   # HG asymmetry [-1,1]: >0 fwd, <0 back, 0 iso
     emission_strength:   float = 0.0   # emission intensity multiplier (0 = off)
-    # Base medium (uniform fog sphere)
-    fog_density:         float = 0.0   # fog sigma_t multiplier (0 = disabled)
-    fog_extinction_rgb:  tuple[float, float, float] = (1.0, 1.0, 1.0)
-    fog_albedo_rgb:      tuple[float, float, float] = (1.0, 1.0, 1.0)
-    fog_radius:          float = 5.0   # sphere radius in world units
-    fog_hg_g:            float = 0.0   # HG asymmetry for fog scattering
 
 
 @dataclass

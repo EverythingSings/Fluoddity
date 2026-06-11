@@ -69,12 +69,6 @@ class TracerInterface:
         self.density_scale = 0.0001
         self.hg_g = 0.0  # HG asymmetry: >0 forward, <0 back, 0 isotropic
         self.emission_strength = 0.0  # emission intensity (0 = off)
-        # Base medium (uniform fog sphere)
-        self.fog_density = 0.0  # sigma_t multiplier (0 = disabled)
-        self.fog_extinction_rgb = [1.0, 1.0, 1.0]
-        self.fog_albedo_rgb = [1.0, 1.0, 1.0]
-        self.fog_radius = 5.0  # world-space sphere radius
-        self.fog_hg_g = 0.0  # HG asymmetry for fog
         self.sun_direction = [0.577, 0.577, 0.577]
         self.sun_color = [1.0, 0.95, 0.9]
         self.sun_intensity = 3.0
@@ -395,11 +389,6 @@ class TracerInterface:
             colored_extinction=self.colored_extinction,
             hg_g=self.hg_g,
             emission_strength=self.emission_strength,
-            fog_density=self.fog_density,
-            fog_extinction_rgb=tuple(self.fog_extinction_rgb),
-            fog_albedo_rgb=tuple(self.fog_albedo_rgb),
-            fog_radius=self.fog_radius,
-            fog_hg_g=self.fog_hg_g,
         )
         sun = SunParams(
             direction=tuple(sd),

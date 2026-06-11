@@ -663,12 +663,6 @@ class CommandHandler:
         p.tracer_majorant_resolution_log2 = ti.majorant_resolution_log2
         p.tracer_sun_sampling = ti.sun_sampling
         p.tracer_photosphere = ti.photosphere
-        # Base medium (fog sphere)
-        p.tracer_fog_density = ti.fog_density
-        p.tracer_fog_extinction_rgb = list(ti.fog_extinction_rgb)
-        p.tracer_fog_albedo_rgb = list(ti.fog_albedo_rgb)
-        p.tracer_fog_radius = ti.fog_radius
-        p.tracer_fog_hg_g = ti.fog_hg_g
 
     def _handle_save_render_spec(self, ui_state):
         """Capture current state and save as a render spec to disk."""
