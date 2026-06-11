@@ -503,7 +503,7 @@ class App:
             'render_queue_index': self.render_queue_index,
             'render_queue_total': len(self.render_queue),
             'render_queue_phase': self.render_queue_phase,
-            'render_queue_current_name': self.render_queue_names[self.render_queue_index] if self.render_queue_executing and self.render_queue_names else '',
+            'render_queue_current_name': self.render_queue_names[self.render_queue_index] if self.render_queue_executing and self.render_queue_index < len(self.render_queue_names) else '',
             'video_current_frame': self.video_service.current_frame,
             'video_max_frames': ui_state.preferences.max_frames,
         })
