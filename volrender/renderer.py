@@ -406,6 +406,8 @@ class VolumeRenderer:
         # Bounce loop control
         _tryset(prog, 'u_max_bounces', render.max_bounces)
         _tryset(prog, 'u_rr_start_depth', render.rr_start_depth)
+        _tryset(prog, 'u_firefly_clamp', render.firefly_clamp)
+        _tryset(prog, 'u_firefly_clamp_max', render.firefly_clamp_max)
         _tryset(prog, 'u_sample_index', self._dispatch_count)
 
         # Grid uniforms
@@ -539,6 +541,8 @@ class VolumeRenderer:
         _tryset(prog, 'u_max_bounces', render.max_bounces)
         # COMMENT FLAG: rr_start_depth — Russian roulette onset
         _tryset(prog, 'u_rr_start_depth', render.rr_start_depth)
+        _tryset(prog, 'u_firefly_clamp', render.firefly_clamp)
+        _tryset(prog, 'u_firefly_clamp_max', render.firefly_clamp_max)
 
         # Grid uniforms
         _tryset(prog, 'u_bounds_min', tuple(self.grid._bounds_min))

@@ -86,6 +86,8 @@ class TracerInterface:
         self.num_samples = 64
         self.exposure = 1.5
         self.max_bounces = 0  # 0=unbounded (RR only)
+        self.firefly_clamp = False  # per-sample radiance clamping
+        self.firefly_clamp_max = 10.0  # max luminance per sample
         self.resolution_scale = 1.0  # multiplier on render resolution
 
         # Grid resolution controls (log2 values; actual resolution = 2^n cubed)
@@ -415,6 +417,8 @@ class TracerInterface:
             max_bounces=self.max_bounces,
             rr_start_depth=4,
             seed=0,
+            firefly_clamp=self.firefly_clamp,
+            firefly_clamp_max=self.firefly_clamp_max,
         )
         return medium, sun, sky, render, self.sdf_enabled
 

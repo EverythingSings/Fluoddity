@@ -94,6 +94,10 @@ uniform ivec3     u_majorant_resolution;  // e.g. (32, 32, 32)
 uniform sampler3D u_color_x;              // accumulated cos(2*pi*hue) * weight
 uniform sampler3D u_color_y;              // accumulated sin(2*pi*hue) * weight
 
+// ---- firefly clamp ----
+uniform bool  u_firefly_clamp;       // true = clamp per-sample radiance
+uniform float u_firefly_clamp_max;   // max allowed luminance per sample
+
 // ---- output image ----
 layout(rgba16f, binding = 0) writeonly uniform image2D img_output;
 
@@ -1004,6 +1008,14 @@ void main() {
             walk_dir = bounce_dir;
             // Offset origin along normal to prevent self-intersection
             walk_origin = hit_pos + N * SDF_SURFACE_EPS * 2.0;
+        }
+    }
+
+    // Per-sample firefly clamp: cap radiance magnitude to reduce outliers
+    if (u_firefly_clamp) {
+        float lum = max(radiance.r, max(radiance.g, radiance.b));
+        if (lum > u_firefly_clamp_max) {
+            radiance *= u_firefly_clamp_max / lum;
         }
     }
 

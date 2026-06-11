@@ -146,6 +146,14 @@ class TracerWindowMixin:
             if imgui.is_item_hovered():
                 imgui.set_tooltip("0 = unbounded (Russian roulette only)")
 
+            _, ti.firefly_clamp = imgui.checkbox(
+                "Firefly Clamp", ti.firefly_clamp)
+            if ti.firefly_clamp:
+                imgui.same_line()
+                imgui.set_next_item_width(imgui.get_content_region_avail().x)
+                _, ti.firefly_clamp_max = imgui.drag_float(
+                    "##clamp_max", ti.firefly_clamp_max, 0.1, 0.1, 1000.0, "Max: %.1f")
+
             # Resolution scale (applied on Enter key)
             imgui.set_next_item_width(100)
             changed, new_scale = imgui.input_float(
@@ -223,6 +231,8 @@ class TracerWindowMixin:
         ti.exposure = p.tracer_exposure
         ti.realtime_mode = p.tracer_realtime_mode
         ti.max_bounces = p.tracer_max_bounces
+        ti.firefly_clamp = p.tracer_firefly_clamp
+        ti.firefly_clamp_max = p.tracer_firefly_clamp_max
         ti.resolution_scale = p.tracer_resolution_scale
         ti.density_resolution_log2 = p.tracer_density_resolution_log2
         ti.color_resolution_log2 = p.tracer_color_resolution_log2

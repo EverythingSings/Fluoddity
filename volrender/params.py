@@ -78,3 +78,5 @@ class RenderParams:
     max_bounces:    int = 0        # COMMENT FLAG: 0 = unbounded (RR only)
     rr_start_depth: int = 4        # COMMENT FLAG: Russian roulette onset
     seed:           int = 0        # COMMENT FLAG: seed — deterministic RNG base
+    firefly_clamp:      bool = False   # clamp per-sample radiance
+    firefly_clamp_max:  float = 10.0   # max luminance per sample

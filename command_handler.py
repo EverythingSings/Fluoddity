@@ -655,6 +655,8 @@ class CommandHandler:
         p.tracer_exposure = ti.exposure
         p.tracer_realtime_mode = ti.realtime_mode
         p.tracer_max_bounces = ti.max_bounces
+        p.tracer_firefly_clamp = ti.firefly_clamp
+        p.tracer_firefly_clamp_max = ti.firefly_clamp_max
         p.tracer_resolution_scale = ti.resolution_scale
         p.tracer_density_resolution_log2 = ti.density_resolution_log2
         p.tracer_color_resolution_log2 = ti.color_resolution_log2

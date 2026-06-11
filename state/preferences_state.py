@@ -123,6 +123,8 @@ class PreferencesState:
     tracer_exposure: float = 1.5
     tracer_realtime_mode: int = 0  # 0=Off, 1=1spp, 2=Accumulate
     tracer_max_bounces: int = 0  # 0=unbounded (RR only)
+    tracer_firefly_clamp: bool = False
+    tracer_firefly_clamp_max: float = 10.0
     tracer_resolution_scale: float = 1.0  # multiplier on render resolution
     tracer_density_resolution_log2: int = 9   # 2^9 = 512
     tracer_color_resolution_log2: int = 9     # 2^9 = 512
