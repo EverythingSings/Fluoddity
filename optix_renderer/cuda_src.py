@@ -130,7 +130,8 @@ extern "C" __global__ void __raygen__rg()
         0,          // miss index: radiance
         p0, p1, p2);
 
-    params.image[idx.y * params.width + idx.x] = make_uchar4(
+    const unsigned int out_y = params.height - 1u - idx.y;  // flip for OpenGL
+    params.image[out_y * params.width + idx.x] = make_uchar4(
         to_srgb(__uint_as_float(p0)),
         to_srgb(__uint_as_float(p1)),
         to_srgb(__uint_as_float(p2)),

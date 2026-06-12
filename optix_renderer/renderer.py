@@ -333,10 +333,11 @@ class OptiXSphereRenderer:
     # Acceleration structure (GAS)
     # ------------------------------------------------------------------
 
-    def _compute_aabbs(self, d_entities_ptr):
+    def _compute_aabbs(self, d_entities_ptr, radius_scale=1.0):
         """Compute float6 AABBs from the mapped entity buffer via CuPy.
 
         Handles Fluoddity's 8-float stride by reshaping and indexing columns.
+        radius_scale is applied so AABBs match the intersection shader.
         """
         nbytes = self._entity_count * self._entity_stride * 4
         mem = cp.cuda.UnownedMemory(d_entities_ptr, nbytes, owner=None)
@@ -349,7 +350,7 @@ class OptiXSphereRenderer:
 
         # Extract position (cols 0,1,2) and radius (col 7)
         pos = entities[:, 0:3]  # (N, 3)
-        rad = entities[:, 7:8]  # (N, 1)
+        rad = entities[:, 7:8] * radius_scale  # (N, 1)
 
         if self._d_aabbs is None or self._d_aabbs.shape[0] != self._entity_count:
             self._d_aabbs = cp.empty(
@@ -360,17 +361,20 @@ class OptiXSphereRenderer:
         self._d_aabbs[:, 3:6] = pos + rad
         cp.cuda.Device().synchronize()
 
-    def build_accel(self):
+    def build_accel(self, radius_scale=1.0):
         """Full GAS build. Maps entity buffer, computes AABBs, builds BVH.
 
         Must be called at least once before render(). Call again periodically
         to maintain BVH quality as entities move.
+
+        Args:
+            radius_scale: Multiplier on entity size for AABB computation.
         """
         self._ctx.finish()  # ensure GL writes are complete
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr)
+            self._compute_aabbs(entities_ptr, radius_scale)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],
@@ -408,21 +412,24 @@ class OptiXSphereRenderer:
         finally:
             unmap_resource(self._entity_res)
 
-    def refit_accel(self):
+    def refit_accel(self, radius_scale=1.0):
         """Refit existing GAS with updated AABBs (faster, lower BVH quality).
 
         Requires a prior build_accel() call. The GAS is updated in-place
         without reallocation.
+
+        Args:
+            radius_scale: Multiplier on entity size for AABB computation.
         """
         if self._gas_handle is None:
-            self.build_accel()
+            self.build_accel(radius_scale)
             return
 
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr)
+            self._compute_aabbs(entities_ptr, radius_scale)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],

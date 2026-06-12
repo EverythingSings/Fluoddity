@@ -92,19 +92,19 @@ class OptiXInterface:
             self._gas_exists = False
             self._frame_counter = 0
 
-        # 3. GAS scheduling
+        # 3. GAS scheduling (radius_scale must match intersection shader)
         if not self._gas_exists:
             # First frame or after buffer change: full build required
-            self._renderer.build_accel()
+            self._renderer.build_accel(self.radius_scale)
             self._gas_exists = True
             self._frame_counter = 0
         elif self._frame_counter >= self.gas_rebuild_interval:
             # Periodic full rebuild for BVH quality
-            self._renderer.build_accel()
+            self._renderer.build_accel(self.radius_scale)
             self._frame_counter = 0
         else:
             # Fast in-place refit
-            self._renderer.refit_accel()
+            self._renderer.refit_accel(self.radius_scale)
 
         self._frame_counter += 1
 
