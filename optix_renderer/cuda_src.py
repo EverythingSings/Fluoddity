@@ -27,6 +27,10 @@ struct Params
     float  ambient;                             // ambient light intensity
     float  radius_scale;                        // multiplier on entity size
     int    shadows_enabled;                     // 0 or 1
+    float3 light_color;                         // RGB light color (default white)
+    float  light_intensity;                     // light intensity multiplier
+    float3 sky_color_top;                       // sky gradient top color
+    float3 sky_color_bottom;                    // sky gradient bottom color
 };
 __constant__ Params params;
 }
@@ -138,8 +142,8 @@ extern "C" __global__ void __miss__radiance()
 {
     const float3 dir = optixGetWorldRayDirection();
     const float t = 0.5f * (dir.y + 1.0f);
-    const float3 c = (1.0f - t) * mk3(0.08f, 0.08f, 0.10f)
-                   + t * mk3(0.45f, 0.62f, 0.85f);
+    const float3 c = (1.0f - t) * params.sky_color_bottom
+                   + t * params.sky_color_top;
     optixSetPayload_0(__float_as_uint(c.x));
     optixSetPayload_1(__float_as_uint(c.y));
     optixSetPayload_2(__float_as_uint(c.z));
@@ -213,7 +217,8 @@ extern "C" __global__ void __closesthit__ch()
     }
 
     const float ndl = fmaxf(dot3(N, L), 0.0f);
-    const float3 c = albedo * (params.ambient + (1.0f - params.ambient) * ndl * vis);
+    const float3 lit = params.light_color * params.light_intensity;
+    const float3 c = albedo * (params.ambient + (1.0f - params.ambient) * ndl * vis * lit);
 
     optixSetPayload_0(__float_as_uint(c.x));
     optixSetPayload_1(__float_as_uint(c.y));

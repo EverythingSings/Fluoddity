@@ -42,6 +42,43 @@ class ThreeDWindowMixin:
                     0.1, 10.0, format="%.1fx"
                 )
 
+                # Lighting controls
+                if imgui.collapsing_header("Lighting", imgui.TreeNodeFlags_.default_open.value):
+                    changed, vals = imgui.drag_float3(
+                        "Light Dir", list(self.state.preferences.three_d_optix_light_direction),
+                        0.01, -1.0, 1.0
+                    )
+                    if changed:
+                        self.state.preferences.three_d_optix_light_direction = list(vals)
+
+                    _, self.state.preferences.three_d_optix_light_color = imgui.color_edit3(
+                        "Light Color", self.state.preferences.three_d_optix_light_color
+                    )
+
+                    _, self.state.preferences.three_d_optix_light_intensity = imgui.slider_float(
+                        "Intensity", self.state.preferences.three_d_optix_light_intensity,
+                        0.0, 5.0
+                    )
+
+                    _, self.state.preferences.three_d_optix_shadows_enabled = imgui.checkbox(
+                        "Shadows", self.state.preferences.three_d_optix_shadows_enabled
+                    )
+
+                    _, self.state.preferences.three_d_optix_ambient = imgui.slider_float(
+                        "Ambient", self.state.preferences.three_d_optix_ambient,
+                        0.0, 1.0
+                    )
+
+                # Sky controls
+                if imgui.collapsing_header("Sky", imgui.TreeNodeFlags_.default_open.value):
+                    _, self.state.preferences.three_d_optix_sky_color_top = imgui.color_edit3(
+                        "Sky Top", self.state.preferences.three_d_optix_sky_color_top
+                    )
+
+                    _, self.state.preferences.three_d_optix_sky_color_bottom = imgui.color_edit3(
+                        "Sky Bottom", self.state.preferences.three_d_optix_sky_color_bottom
+                    )
+
             imgui.separator()
             imgui.text("Camera")
 

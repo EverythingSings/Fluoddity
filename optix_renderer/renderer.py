@@ -59,6 +59,10 @@ PARAMS_DTYPE = np.dtype({
         "w_x", "w_y", "w_z",
         "l_x", "l_y", "l_z",
         "ambient", "radius_scale", "shadows_enabled",
+        "lc_r", "lc_g", "lc_b",
+        "light_intensity",
+        "sky_top_r", "sky_top_g", "sky_top_b",
+        "sky_bot_r", "sky_bot_g", "sky_bot_b",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -69,6 +73,10 @@ PARAMS_DTYPE = np.dtype({
         "f4", "f4", "f4",
         "f4", "f4", "f4",
         "f4", "f4", "i4",
+        "f4", "f4", "f4",
+        "f4",
+        "f4", "f4", "f4",
+        "f4", "f4", "f4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -79,8 +87,12 @@ PARAMS_DTYPE = np.dtype({
         76, 80, 84,
         88, 92, 96,
         100, 104, 108,
+        112, 116, 120,
+        124,
+        128, 132, 136,
+        140, 144, 148,
     ],
-    "itemsize": 112,
+    "itemsize": 152,
 })
 
 
@@ -445,7 +457,10 @@ class OptiXSphereRenderer:
     # ------------------------------------------------------------------
 
     def render(self, width, height, eye, U, V, W, light_dir,
-               ambient=0.12, radius_scale=1.0, shadows_enabled=True):
+               ambient=0.12, radius_scale=1.0, shadows_enabled=True,
+               light_color=(1.0, 1.0, 1.0), light_intensity=1.0,
+               sky_color_top=(0.45, 0.62, 0.85),
+               sky_color_bottom=(0.08, 0.08, 0.10)):
         """Render one frame of raytraced spheres.
 
         The entity buffer must NOT be mapped by the caller. This method
@@ -461,6 +476,10 @@ class OptiXSphereRenderer:
             ambient: Ambient light intensity (0-1).
             radius_scale: Multiplier on entity size field.
             shadows_enabled: Whether to cast shadow rays.
+            light_color: RGB light color (3-tuple, default white).
+            light_intensity: Light intensity multiplier.
+            sky_color_top: Sky gradient top color (3-tuple).
+            sky_color_bottom: Sky gradient bottom color (3-tuple).
 
         Returns:
             moderngl.Texture (rgba8) with the rendered image.
@@ -515,6 +534,20 @@ class OptiXSphereRenderer:
                 h_params["radius_scale"] = radius_scale
                 h_params["shadows_enabled"] = 1 if shadows_enabled else 0
 
+                light_color = np.asarray(light_color, dtype=np.float32)
+                sky_color_top = np.asarray(sky_color_top, dtype=np.float32)
+                sky_color_bottom = np.asarray(sky_color_bottom, dtype=np.float32)
+                h_params["lc_r"] = light_color[0]
+                h_params["lc_g"] = light_color[1]
+                h_params["lc_b"] = light_color[2]
+                h_params["light_intensity"] = light_intensity
+                h_params["sky_top_r"] = sky_color_top[0]
+                h_params["sky_top_g"] = sky_color_top[1]
+                h_params["sky_top_b"] = sky_color_top[2]
+                h_params["sky_bot_r"] = sky_color_bottom[0]
+                h_params["sky_bot_g"] = sky_color_bottom[1]
+                h_params["sky_bot_b"] = sky_color_bottom[2]
+
                 self._d_params.set(
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
                 )
@@ -542,7 +575,11 @@ class OptiXSphereRenderer:
     def render_from_camera(self, width, height, cam_pos, cam_dir, cam_up,
                            fov_deg, light_dir=(0.577, 0.577, 0.577),
                            ambient=0.12, radius_scale=1.0,
-                           shadows_enabled=True):
+                           shadows_enabled=True,
+                           light_color=(1.0, 1.0, 1.0),
+                           light_intensity=1.0,
+                           sky_color_top=(0.45, 0.62, 0.85),
+                           sky_color_bottom=(0.08, 0.08, 0.10)):
         """Convenience: render from FPS camera vectors.
 
         Converts Fluoddity's ControllerCam-style vectors to OptiX pinhole
@@ -557,6 +594,10 @@ class OptiXSphereRenderer:
             ambient: Ambient light intensity.
             radius_scale: Multiplier on entity size field.
             shadows_enabled: Whether to cast shadow rays.
+            light_color: RGB light color (3-tuple, default white).
+            light_intensity: Light intensity multiplier.
+            sky_color_top: Sky gradient top color (3-tuple).
+            sky_color_bottom: Sky gradient bottom color (3-tuple).
 
         Returns:
             moderngl.Texture (rgba8).
@@ -570,6 +611,10 @@ class OptiXSphereRenderer:
             ambient=ambient,
             radius_scale=radius_scale,
             shadows_enabled=shadows_enabled,
+            light_color=light_color,
+            light_intensity=light_intensity,
+            sky_color_top=sky_color_top,
+            sky_color_bottom=sky_color_bottom,
         )
 
     # ------------------------------------------------------------------

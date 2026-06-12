@@ -136,6 +136,13 @@ class PreferencesState:
     three_d_optix_enabled: bool = False
     three_d_optix_gas_rebuild_interval: int = 30
     three_d_optix_sphere_radius_scale: float = 1.0
+    three_d_optix_light_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
+    three_d_optix_light_color: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
+    three_d_optix_light_intensity: float = 1.0
+    three_d_optix_shadows_enabled: bool = True
+    three_d_optix_ambient: float = 0.12
+    three_d_optix_sky_color_top: list = field(default_factory=lambda: [0.45, 0.62, 0.85])
+    three_d_optix_sky_color_bottom: list = field(default_factory=lambda: [0.08, 0.08, 0.10])
 
     # 3D camera settings
     three_d_render_3d: bool = True

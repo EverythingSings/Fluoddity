@@ -363,6 +363,13 @@ class App:
         if self._optix_interface is not None:
             self._optix_interface.gas_rebuild_interval = ui_state.preferences.three_d_optix_gas_rebuild_interval
             self._optix_interface.radius_scale = ui_state.preferences.three_d_optix_sphere_radius_scale
+            self._optix_interface.light_dir = tuple(ui_state.preferences.three_d_optix_light_direction)
+            self._optix_interface.light_color = tuple(ui_state.preferences.three_d_optix_light_color)
+            self._optix_interface.light_intensity = ui_state.preferences.three_d_optix_light_intensity
+            self._optix_interface.shadows_enabled = ui_state.preferences.three_d_optix_shadows_enabled
+            self._optix_interface.ambient = ui_state.preferences.three_d_optix_ambient
+            self._optix_interface.sky_color_top = tuple(ui_state.preferences.three_d_optix_sky_color_top)
+            self._optix_interface.sky_color_bottom = tuple(ui_state.preferences.three_d_optix_sky_color_bottom)
         self.camera.optix_interface = self._optix_interface
 
         # Sync tracer SDF toggle to preferences for 3D preview

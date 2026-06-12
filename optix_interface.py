@@ -31,12 +31,16 @@ class OptiXInterface:
         self._frame_counter: int = 0
         self._gas_exists: bool = False
 
-        # --- Public attributes (wired to UI in Steps 3/4) ---
+        # --- Public attributes (wired to UI via preferences) ---
         self.gas_rebuild_interval: int = 30
         self.light_dir: tuple[float, float, float] = (0.577, 0.577, 0.577)
         self.ambient: float = 0.12
         self.radius_scale: float = 1.0
         self.shadows_enabled: bool = True
+        self.light_color: tuple[float, float, float] = (1.0, 1.0, 1.0)
+        self.light_intensity: float = 1.0
+        self.sky_color_top: tuple[float, float, float] = (0.45, 0.62, 0.85)
+        self.sky_color_bottom: tuple[float, float, float] = (0.08, 0.08, 0.10)
 
     # ------------------------------------------------------------------ core API
 
@@ -105,12 +109,21 @@ class OptiXInterface:
         self._frame_counter += 1
 
         # 4. Render (delegates camera basis conversion to renderer)
+        # Normalize light direction (UI drag_float3 can produce non-unit vectors)
+        ld = np.array(self.light_dir, dtype=np.float64)
+        length = max(np.linalg.norm(ld), 1e-8)
+        light_dir_norm = tuple((ld / length).astype(np.float32))
+
         self._display_tex = self._renderer.render_from_camera(
             width, height, cam_pos, cam_dir, cam_up, fov,
-            light_dir=self.light_dir,
+            light_dir=light_dir_norm,
             ambient=self.ambient,
             radius_scale=self.radius_scale,
             shadows_enabled=self.shadows_enabled,
+            light_color=self.light_color,
+            light_intensity=self.light_intensity,
+            sky_color_top=self.sky_color_top,
+            sky_color_bottom=self.sky_color_bottom,
         )
 
         return self._display_tex
