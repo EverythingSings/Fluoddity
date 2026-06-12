@@ -146,8 +146,8 @@ vec3 get_sky_col(vec3 dir) {
     // Procedural: base sky + soft brightening toward sun direction
     vec3 base = u_sky_color * u_sky_intensity;
     float sun_dot = dot(dir, u_sun_direction);
-    float sun_glow = pow(clamp(sun_dot * 0.5 + 0.5, 0.0, 1.0), 4.0);
-    return base * (1.0 + sun_glow * 2.0);
+    float sun_glow = pow(clamp(sun_dot * 0.5 + 0.5, 0.0, 1.0), 900.0);
+    return base * (1.0 + sun_glow * 200.0);
 }
 
 
