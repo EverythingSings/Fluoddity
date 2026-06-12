@@ -218,7 +218,8 @@ extern "C" __global__ void __closesthit__ch()
 
     const float ndl = fmaxf(dot3(N, L), 0.0f);
     const float3 lit = params.light_color * params.light_intensity;
-    const float3 c = albedo * (params.ambient + (1.0f - params.ambient) * ndl * vis * lit);
+    const float a = params.ambient;
+    const float3 c = albedo * (mk3(a, a, a) + (1.0f - a) * ndl * vis * lit);
 
     optixSetPayload_0(__float_as_uint(c.x));
     optixSetPayload_1(__float_as_uint(c.y));
