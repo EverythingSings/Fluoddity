@@ -24,6 +24,8 @@ class Camera:
         self.render_3d = False
         self.fov_3d = 50.0
         self.controller_cam = None  # Set by orchestrator for 3D FPS rendering
+        self.optix_interface = None  # Set by orchestrator for OptiX sphere rendering
+        self.optix_enabled = False   # Toggle between GL_POINTS and OptiX
 
         self.setup_rendering()
 
@@ -204,9 +206,40 @@ class Camera:
             return self.sim.view_tex
 
     def _generate_3d_view_texture(self):
-        """Render particles as GL_POINTS in 3D to cam_brush_target."""
-        self.cam_brush_fbo.use()
+        """Render particles in 3D using OptiX (if enabled) or GL_POINTS."""
         width, height = glfw.get_framebuffer_size(self.window)
+
+        # OptiX path: raytrace spheres via RT cores
+        if (self.optix_enabled
+                and self.optix_interface is not None
+                and self.controller_cam is not None):
+            cam = self.controller_cam
+            tex = self.optix_interface.render_frame(
+                entity_buffer=self.sim.get_entity_buffer(),
+                entity_count=self.sim.entity_count,
+                cam_pos=cam.pos,
+                cam_dir=cam.dir,
+                cam_up=cam.up,
+                fov=self.fov_3d,
+                width=width,
+                height=height,
+            )
+            if tex is not None:
+                # Blit OptiX result into cam_brush_target via FBO
+                self.cam_brush_fbo.use()
+                self.ctx.viewport = (0, 0, width, height)
+                self.ctx.clear(0, 0, 0, 1)
+                tex.use(location=0)
+                self.program['cam_pos'].value = (0, 0)
+                self.program['cam_zoom'].value = 1.0
+                self.program['tex_size'].value = (float(width), float(height))
+                self.program['window_size'].value = (width, height)
+                self.program['view_tex'].value = 0
+                self.vao.render()
+                return self.cam_brush_target
+
+        # GL_POINTS fallback path
+        self.cam_brush_fbo.use()
         self.ctx.viewport = (0, 0, width, height)
         self.ctx.clear(0, 0, 0, 1)
 
@@ -240,6 +273,7 @@ class Camera:
         # 3D camera state
         self.render_3d = state.render_3d
         self.fov_3d = state.fov
+        self.optix_enabled = state.optix_enabled
 
     def compute_tiling_view_bounds(self):
         """Compute entity-space view bounds for tiling mode.

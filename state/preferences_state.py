@@ -132,6 +132,11 @@ class PreferencesState:
     tracer_sun_sampling: bool = True  # NEE sun shadow rays
     tracer_photosphere: bool = False  # skybox texture mode
 
+    # OptiX raytracer settings
+    three_d_optix_enabled: bool = False
+    three_d_optix_gas_rebuild_interval: int = 30
+    three_d_optix_sphere_radius_scale: float = 1.0
+
     # 3D camera settings
     three_d_render_3d: bool = True
     three_d_fov: float = 50.0

@@ -70,6 +70,7 @@ class App:
         cam.rotate_speed = loaded_prefs.three_d_rotate_speed
         cam.orbit_center[:] = loaded_prefs.three_d_orbit_center
         cam.orbit_rate = loaded_prefs.three_d_orbit_rate
+        cam.optix_enabled = loaded_prefs.three_d_optix_enabled
 
         # Create services (Orchestrator owns these)
         self.rule_manager = RuleManager()
@@ -113,6 +114,9 @@ class App:
 
         self.command_handler.controller_cam = self.controller_cam
         self.command_handler.plotting_manager = self.plotting_manager
+
+        # OptiX sphere renderer (lazy — created on first use when toggled on)
+        self._optix_interface = None
 
         # Tracer references (for entity buffer and camera access)
         self.ui.tracer_sim = self.sim
@@ -340,6 +344,26 @@ class App:
         self.camera.apply_state(ui_state.camera)
         self.multi_load_service.apply_state(ui_state.multi_load)
         self.camera.BRIGHTNESS = ui_state.preferences.brightness
+
+        # OptiX interface lifecycle: lazy creation when toggled on
+        if ui_state.camera.optix_enabled and self._optix_interface is None:
+            try:
+                from optix_interface import OptiXInterface
+                if OptiXInterface.is_available():
+                    self._optix_interface = OptiXInterface(self.ctx)
+                    print("OptiX sphere renderer initialized")
+                else:
+                    ui_state.camera.optix_enabled = False
+                    print("OptiX not available — disabling")
+            except Exception as e:
+                ui_state.camera.optix_enabled = False
+                print(f"OptiX init failed: {e}")
+
+        # Sync OptiX settings from preferences
+        if self._optix_interface is not None:
+            self._optix_interface.gas_rebuild_interval = ui_state.preferences.three_d_optix_gas_rebuild_interval
+            self._optix_interface.radius_scale = ui_state.preferences.three_d_optix_sphere_radius_scale
+        self.camera.optix_interface = self._optix_interface
 
         # Sync tracer SDF toggle to preferences for 3D preview
         ti = self.ui._tracer_interface
@@ -738,6 +762,7 @@ class App:
         ui_state.preferences.three_d_rotate_speed = cam.rotate_speed
         ui_state.preferences.three_d_orbit_center = list(cam.orbit_center)
         ui_state.preferences.three_d_orbit_rate = cam.orbit_rate
+        ui_state.preferences.three_d_optix_enabled = cam.optix_enabled
 
         # Sync tracer settings into preferences
         ti = self.ui._tracer_interface
@@ -770,6 +795,9 @@ class App:
 
         save_preferences(ui_state.preferences)
 
+        if self._optix_interface is not None:
+            self._optix_interface.cleanup()
+            self._optix_interface = None
         self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()
         self.ui.cleanup()

@@ -21,3 +21,4 @@ class CameraState:
     focal_plane_depth: float = 5.0 # DOF focal plane distance
     move_speed: float = 2.0        # Joystick movement speed
     rotate_speed: float = 2.0      # Joystick rotation speed
+    optix_enabled: bool = False    # Use OptiX sphere raytracer instead of GL_POINTS

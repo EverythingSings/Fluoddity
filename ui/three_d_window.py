@@ -1,6 +1,7 @@
 """3D Controls window: FPS camera settings and 3D simulation parameters."""
 from imgui_bundle import imgui
 from camera_input import sync_orbit_angles_from_camera
+from optix_interface import OptiXInterface
 
 
 class ThreeDWindowMixin:
@@ -17,6 +18,29 @@ class ThreeDWindowMixin:
             _, self.state.camera.render_3d = imgui.checkbox(
                 "3D View", self.state.camera.render_3d
             )
+
+            # OptiX Spheres toggle
+            optix_available = OptiXInterface.is_available()
+            if not optix_available:
+                imgui.begin_disabled()
+            _, self.state.camera.optix_enabled = imgui.checkbox(
+                "OptiX Spheres (RTX)", self.state.camera.optix_enabled
+            )
+            if not optix_available:
+                imgui.end_disabled()
+                if imgui.is_item_hovered(imgui.HoveredFlags_.allow_when_disabled):
+                    imgui.set_tooltip("Requires NVIDIA RTX GPU with OptiX/CUDA installed")
+
+            # OptiX settings (only shown when enabled)
+            if self.state.camera.optix_enabled and optix_available:
+                _, self.state.preferences.three_d_optix_gas_rebuild_interval = imgui.slider_int(
+                    "GAS Rebuild", self.state.preferences.three_d_optix_gas_rebuild_interval,
+                    1, 120
+                )
+                _, self.state.preferences.three_d_optix_sphere_radius_scale = imgui.slider_float(
+                    "Sphere Scale", self.state.preferences.three_d_optix_sphere_radius_scale,
+                    0.1, 10.0, format="%.1fx"
+                )
 
             imgui.separator()
             imgui.text("Camera")
