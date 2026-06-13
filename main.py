@@ -213,8 +213,13 @@ class App:
         if result == 'screenshot_pending' and not self.screenshot_pending and not self.screenshot_in_progress:
             self.screenshot_pending = True
 
-        # Force full GAS rebuild after sim reset (refit is too slow on scrambled data)
-        if (ui_state.request_reset or ui_state.request_full_reset) and self._optix_interface is not None:
+        # Force full GAS rebuild after sim reset or config change
+        # (refit is too slow when all entities move at once)
+        if self._optix_interface is not None and (
+            ui_state.request_reset
+            or ui_state.request_full_reset
+            or self.command_handler.config_applied_this_frame
+        ):
             self._optix_interface.force_rebuild()
 
         # 2.5. Check for render queue execution request

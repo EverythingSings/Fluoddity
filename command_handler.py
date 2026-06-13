@@ -53,6 +53,7 @@ class CommandHandler:
         rule = self.config_saver.apply_config(config, ui_state.sim, watercolor_override)
         if pls:
             pls.restore_locked(ui_state.sim, ui_state.preferences, snapshot)
+        self.config_applied_this_frame = True
         return rule
 
     def _push_and_apply_rule(self, rule, ui_state):
@@ -94,6 +95,7 @@ class CommandHandler:
 
     def process_commands(self, ui_state, tiling_mode):
         """Handle one-shot commands from UI state."""
+        self.config_applied_this_frame = False
 
         # Pick focal entity (N key) — set focal plane to nearest entity depth
         if ui_state.request_pick_focal:
