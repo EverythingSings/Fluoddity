@@ -18,9 +18,9 @@ if ($NoFfmpeg) {
 
 # Step 1: Check if virtual environment is already activated, if not activate it
 if ($env:VIRTUAL_ENV) {
-    Write-Host "[1/5] Virtual environment already activated: $env:VIRTUAL_ENV" -ForegroundColor Green
+    Write-Host "[1/6] Virtual environment already activated: $env:VIRTUAL_ENV" -ForegroundColor Green
 } else {
-    Write-Host "[1/5] Activating virtual environment..." -ForegroundColor Yellow
+    Write-Host "[1/6] Activating virtual environment..." -ForegroundColor Yellow
     & ".\Scratch.venv\Scripts\Activate.ps1"
     if (-not $env:VIRTUAL_ENV) {
         Write-Host "Error: Failed to activate virtual environment" -ForegroundColor Red
@@ -28,16 +28,25 @@ if ($env:VIRTUAL_ENV) {
     }
 }
 
-# Step 2: Run PyInstaller
-Write-Host "[2/5] Running PyInstaller..." -ForegroundColor Yellow
+# Step 2: Pre-compile OptiX PTX (optional — skipped if CUDA/OptiX not available)
+Write-Host "[2/6] Pre-compiling OptiX PTX..." -ForegroundColor Yellow
+python compile_ptx.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  OptiX PTX compilation skipped (CUDA/OptiX not available)" -ForegroundColor Yellow
+} else {
+    Write-Host "  PTX compiled successfully" -ForegroundColor Green
+}
+
+# Step 3: Run PyInstaller
+Write-Host "[3/6] Running PyInstaller..." -ForegroundColor Yellow
 python -m PyInstaller --clean --noconfirm Fluoddity.spec
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: PyInstaller build failed" -ForegroundColor Red
     exit 1
 }
 
-# Step 3: Move shaders folder to correct location
-Write-Host "[3/5] Moving shaders folder..." -ForegroundColor Yellow
+# Step 4: Move shaders folder to correct location
+Write-Host "[4/6] Moving shaders folder..." -ForegroundColor Yellow
 $shadersSource = "dist\Fluoddity\_internal\shaders"
 $shadersDestination = "dist\Fluoddity\shaders"
 
@@ -53,8 +62,8 @@ if (Test-Path $shadersSource) {
     Write-Host "Warning: Shaders folder not found at $shadersSource" -ForegroundColor Yellow
 }
 
-# Step 4: Copy default configuration files
-Write-Host "[4/5] Copying default configuration files..." -ForegroundColor Yellow
+# Step 5: Copy default configuration files
+Write-Host "[5/6] Copying default configuration files..." -ForegroundColor Yellow
 
 # Copy default_keyboard_controls.json
 $keyboardSource = "default_keyboard_controls.json"
@@ -76,8 +85,8 @@ if (Test-Path $imguiSource) {
     Write-Host "  Warning: default_imgui.ini not found" -ForegroundColor Yellow
 }
 
-# Step 5: Copy physics_configs (Core and Advanced folders only - user configs stay in Documents)
-Write-Host "[5/5] Copying bundled physics_configs..." -ForegroundColor Yellow
+# Step 6: Copy physics_configs (Core and Advanced folders only - user configs stay in Documents)
+Write-Host "[6/6] Copying bundled physics_configs..." -ForegroundColor Yellow
 
 $physicsSource = "physics_configs"
 $physicsDest = "dist\Fluoddity\physics_configs"

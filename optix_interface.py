@@ -1,7 +1,7 @@
 """OptiX interface: bridges Fluoddity's entity buffer and camera to the OptiX sphere renderer.
 
 Manages OptiXSphereRenderer lifecycle (lazy creation, cleanup), GAS rebuild/refit
-scheduling, and entity buffer change detection.
+scheduling, entity buffer change detection, and per-frame error recovery.
 """
 from __future__ import annotations
 
@@ -15,7 +15,9 @@ class OptiXInterface:
     """Manages the OptiXSphereRenderer for the 3D camera view.
 
     Created lazily on first render request. All GPU resources are allocated
-    through the shared ModernGL context.
+    through the shared ModernGL context. If an OptiX error occurs during
+    rendering, the interface auto-disables and reports failure via the
+    ``failed`` property.
     """
 
     def __init__(self, ctx: moderngl.Context):
@@ -30,6 +32,14 @@ class OptiXInterface:
         # GAS scheduling state
         self._frame_counter: int = 0
         self._gas_exists: bool = False
+
+        # Error recovery state
+        self._failed: bool = False
+        self._fail_reason: str = ""
+
+        # Timing (updated each frame from renderer)
+        self._gas_time_ms: float = 0.0
+        self._render_time_ms: float = 0.0
 
         # --- Public attributes (wired to UI via preferences) ---
         self.gas_rebuild_interval: int = 30
@@ -57,7 +67,8 @@ class OptiXInterface:
     ) -> moderngl.Texture | None:
         """Render one frame of OptiX raytraced spheres.
 
-        Handles lazy init, entity buffer change detection, and GAS scheduling.
+        Handles lazy init, entity buffer change detection, GAS scheduling,
+        and per-frame error recovery. On failure, cleans up and returns None.
 
         Args:
             entity_buffer: ModernGL buffer (SSBO binding 0, 8-float stride).
@@ -70,8 +81,31 @@ class OptiXInterface:
             height: Output image height.
 
         Returns:
-            moderngl.Texture (rgba8) or None if OptiX unavailable.
+            moderngl.Texture (rgba8) or None if OptiX unavailable/failed.
         """
+        if self._failed:
+            return None
+
+        try:
+            return self._render_frame_inner(
+                entity_buffer, entity_count,
+                cam_pos, cam_dir, cam_up, fov,
+                width, height,
+            )
+        except Exception as e:
+            self._failed = True
+            self._fail_reason = str(e)
+            print(f"OptiX render error (auto-disabling): {e}")
+            self.cleanup()
+            return None
+
+    def _render_frame_inner(
+        self,
+        entity_buffer, entity_count,
+        cam_pos, cam_dir, cam_up, fov,
+        width, height,
+    ):
+        """Inner render logic, called from render_frame() with error wrapping."""
         # 1. Lazy initialization
         if self._renderer is None:
             self._renderer = OptiXSphereRenderer(
@@ -126,6 +160,10 @@ class OptiXInterface:
             sky_color_bottom=self.sky_color_bottom,
         )
 
+        # 5. Read timing from renderer
+        self._gas_time_ms = self._renderer.last_gas_ms
+        self._render_time_ms = self._renderer.last_render_ms
+
         return self._display_tex
 
     # ---------------------------------------------------------------- properties
@@ -135,12 +173,35 @@ class OptiXInterface:
         """The rgba8 rendered texture for display, or None if no render yet."""
         return self._display_tex
 
+    @property
+    def gas_time_ms(self) -> float:
+        """Time in ms for the most recent GAS build/refit."""
+        return self._gas_time_ms
+
+    @property
+    def render_time_ms(self) -> float:
+        """Time in ms for the most recent OptiX render launch."""
+        return self._render_time_ms
+
+    @property
+    def failed(self) -> bool:
+        """True if OptiX encountered a fatal error and auto-disabled."""
+        return self._failed
+
+    @property
+    def fail_reason(self) -> str:
+        """Human-readable reason for the failure, or empty string."""
+        return self._fail_reason
+
     # ---------------------------------------------------------------- lifecycle
 
     def cleanup(self):
         """Release all OptiX/CUDA resources."""
         if self._renderer is not None:
-            self._renderer.cleanup()
+            try:
+                self._renderer.cleanup()
+            except Exception:
+                pass
             self._renderer = None
         self._display_tex = None
         self._gas_exists = False

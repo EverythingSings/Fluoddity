@@ -189,13 +189,53 @@ class OptiXSphereRenderer:
         )
         self._octx = optix.deviceContextCreate(0, opts)
 
-        # Compile PTX and build pipeline
-        ptx = compile_ptx(SPHERE_CUDA_SRC)
+        # Load pre-compiled PTX if available, otherwise compile via NVRTC
+        ptx = self._load_ptx()
         self._pipeline, self._groups = self._build_pipeline(ptx)
         self._sbt, self._sbt_mem = self._build_sbt()
 
         # Device-side launch params buffer
         self._d_params = cp.empty(PARAMS_DTYPE.itemsize, dtype=cp.uint8)
+
+        # Dedicated CUDA stream for OptiX launches
+        self._stream_obj = check_cuda(cudart.cudaStreamCreate())
+        self._stream = int(self._stream_obj)  # raw handle for OptiX/CUDA APIs
+
+        # CUDA events for timing instrumentation
+        self._evt_gas_start = check_cuda(cudart.cudaEventCreate())
+        self._evt_gas_end = check_cuda(cudart.cudaEventCreate())
+        self._evt_render_start = check_cuda(cudart.cudaEventCreate())
+        self._evt_render_end = check_cuda(cudart.cudaEventCreate())
+        self.last_gas_ms = 0.0
+        self.last_render_ms = 0.0
+
+        # Log device info
+        err, props = cudart.cudaGetDeviceProperties(0)
+        if err == cudart.cudaError_t.cudaSuccess:
+            name = props.name
+            if isinstance(name, bytes):
+                name = name.decode().rstrip('\x00')
+            print(f"OptiX: CUDA device: {name}")
+
+    # ------------------------------------------------------------------
+    # PTX loading
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _load_ptx():
+        """Load pre-compiled PTX if available, otherwise compile via NVRTC."""
+        import os
+        ptx_path = os.path.join(
+            os.path.dirname(__file__), "spheres.ptx"
+        )
+        if os.path.isfile(ptx_path):
+            with open(ptx_path, "rb") as f:
+                ptx = f.read()
+            print(f"OptiX: loaded pre-compiled PTX ({len(ptx)} bytes)")
+            return ptx
+
+        print("OptiX: compiling PTX via NVRTC (no pre-compiled PTX found)...")
+        return compile_ptx(SPHERE_CUDA_SRC)
 
     # ------------------------------------------------------------------
     # Pipeline / SBT construction
@@ -359,7 +399,7 @@ class OptiXSphereRenderer:
 
         self._d_aabbs[:, 0:3] = pos - rad
         self._d_aabbs[:, 3:6] = pos + rad
-        cp.cuda.Device().synchronize()
+        cp.cuda.Device().synchronize()  # sync CuPy's default stream
 
     def build_accel(self, radius_scale=1.0):
         """Full GAS build. Maps entity buffer, computes AABBs, builds BVH.
@@ -398,8 +438,9 @@ class OptiXSphereRenderer:
             self._temp_size = sizes.tempSizeInBytes
             self._gas_size = sizes.outputSizeInBytes
 
+            check_cuda(cudart.cudaEventRecord(self._evt_gas_start, self._stream_obj))
             self._gas_handle = self._octx.accelBuild(
-                0,
+                self._stream,
                 [accel_opts],
                 [build_input],
                 self._d_temp.ptr,
@@ -408,7 +449,11 @@ class OptiXSphereRenderer:
                 self._gas_size,
                 [],
             )
-            cp.cuda.Device().synchronize()
+            check_cuda(cudart.cudaEventRecord(self._evt_gas_end, self._stream_obj))
+            check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
+            self.last_gas_ms = check_cuda(
+                cudart.cudaEventElapsedTime(self._evt_gas_start, self._evt_gas_end)
+            )
         finally:
             unmap_resource(self._entity_res)
 
@@ -445,8 +490,9 @@ class OptiXSphereRenderer:
                 operation=optix.BUILD_OPERATION_UPDATE,
             )
 
+            check_cuda(cudart.cudaEventRecord(self._evt_gas_start, self._stream_obj))
             self._gas_handle = self._octx.accelBuild(
-                0,
+                self._stream,
                 [accel_opts],
                 [build_input],
                 self._d_temp.ptr,
@@ -455,7 +501,11 @@ class OptiXSphereRenderer:
                 self._gas_size,
                 [],
             )
-            cp.cuda.Device().synchronize()
+            check_cuda(cudart.cudaEventRecord(self._evt_gas_end, self._stream_obj))
+            check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
+            self.last_gas_ms = check_cuda(
+                cudart.cudaEventElapsedTime(self._evt_gas_start, self._evt_gas_end)
+            )
         finally:
             unmap_resource(self._entity_res)
 
@@ -559,9 +609,10 @@ class OptiXSphereRenderer:
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
                 )
 
+                check_cuda(cudart.cudaEventRecord(self._evt_render_start, self._stream_obj))
                 optix.launch(
                     self._pipeline,
-                    0,  # CUDA stream 0
+                    self._stream,
                     self._d_params.data.ptr,
                     PARAMS_DTYPE.itemsize,
                     self._sbt,
@@ -569,7 +620,13 @@ class OptiXSphereRenderer:
                     height,
                     1,  # depth
                 )
-                check_cuda(cudart.cudaDeviceSynchronize())
+                check_cuda(cudart.cudaEventRecord(self._evt_render_end, self._stream_obj))
+                check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
+                self.last_render_ms = check_cuda(
+                    cudart.cudaEventElapsedTime(
+                        self._evt_render_start, self._evt_render_end
+                    )
+                )
             finally:
                 unmap_resource(self._pbo_res)
         finally:
@@ -678,6 +735,24 @@ class OptiXSphereRenderer:
                 pass
             self._entity_res = None
 
+        # Destroy CUDA stream and events
+        if hasattr(self, '_stream_obj') and self._stream_obj is not None:
+            try:
+                cudart.cudaStreamDestroy(self._stream_obj)
+            except RuntimeError:
+                pass
+            self._stream_obj = None
+            self._stream = None
+        for attr in ('_evt_gas_start', '_evt_gas_end',
+                     '_evt_render_start', '_evt_render_end'):
+            evt = getattr(self, attr, None)
+            if evt is not None:
+                try:
+                    cudart.cudaEventDestroy(evt)
+                except RuntimeError:
+                    pass
+                setattr(self, attr, None)
+
         self._gas_handle = None
         self._d_gas = None
         self._d_temp = None
@@ -694,16 +769,29 @@ class OptiXSphereRenderer:
         """Check if OptiX/CUDA/RTX hardware is available.
 
         Returns False gracefully on machines without the required
-        packages or hardware.
+        packages or hardware. Logs the specific reason on failure.
         """
         try:
             import optix as _optix  # noqa: F811
+        except ImportError:
+            print("OptiX unavailable: 'optix' package not installed")
+            return False
+        try:
             import cupy as _cp  # noqa: F811
+        except ImportError:
+            print("OptiX unavailable: 'cupy' package not installed")
+            return False
+        try:
             from cuda.bindings import runtime as _cudart  # noqa: F811
-
+        except ImportError:
+            print("OptiX unavailable: 'cuda-python' package not installed")
+            return False
+        try:
             err, count = _cudart.cudaGetDeviceCount()
             if err != _cudart.cudaError_t.cudaSuccess or count == 0:
+                print("OptiX unavailable: no CUDA-capable GPU detected")
                 return False
             return True
-        except (ImportError, RuntimeError, Exception):
+        except Exception as e:
+            print(f"OptiX unavailable: {e}")
             return False

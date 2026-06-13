@@ -79,6 +79,14 @@ class ThreeDWindowMixin:
                         "Sky Bottom", self.state.preferences.three_d_optix_sky_color_bottom
                     )
 
+                # Timing display
+                gas_ms = self.state.camera.optix_gas_time_ms
+                render_ms = self.state.camera.optix_render_time_ms
+                imgui.text_colored(
+                    imgui.ImVec4(0.6, 0.6, 0.6, 1.0),
+                    f"GAS {gas_ms:.1f}ms  Render {render_ms:.1f}ms"
+                )
+
             imgui.separator()
             imgui.text("Camera")
 

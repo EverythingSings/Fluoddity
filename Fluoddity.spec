@@ -65,8 +65,14 @@ if shader_dir.exists():
         if shader_file.is_file():
             shader_files.append((str(shader_file), 'shaders'))
 
+# Pre-compiled OptiX PTX (if available from compile_ptx.py)
+ptx_path = Path(project_root) / 'optix_renderer' / 'spheres.ptx'
+ptx_files = [(str(ptx_path), 'optix_renderer')] if ptx_path.exists() else []
+if ptx_files:
+    print("Found pre-compiled OptiX PTX")
+
 # Additional data files
-datas = shader_files + [
+datas = shader_files + ptx_files + [
     # Add any other data files here if needed
 ]
 
@@ -85,6 +91,26 @@ hiddenimports = [
     'imgui_bundle.python_backends',
     'imgui_bundle.python_backends.glfw_backend',
 ]
+
+# OptiX optional hidden imports (only added if packages are installed)
+try:
+    import cupy
+    hiddenimports += ['cupy', 'cupy._core', 'cupy.cuda']
+    print("Added CuPy hidden imports")
+except ImportError:
+    pass
+try:
+    import cuda.bindings
+    hiddenimports += ['cuda', 'cuda.bindings', 'cuda.bindings.runtime', 'cuda.bindings.nvrtc']
+    print("Added cuda-python hidden imports")
+except ImportError:
+    pass
+try:
+    import optix
+    hiddenimports += ['optix']
+    print("Added OptiX hidden imports")
+except ImportError:
+    pass
 
 a = Analysis(
     ['launcher_debug.py'],  # Use debug launcher to catch startup errors
