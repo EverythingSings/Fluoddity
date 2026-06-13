@@ -166,6 +166,16 @@ class OptiXInterface:
 
         return self._display_tex
 
+    # --------------------------------------------------------------- scheduling
+
+    def force_rebuild(self):
+        """Force a full GAS rebuild on the next frame.
+
+        Call after sim reset or any event that moves all entities at once.
+        Avoids the slow refit path on scrambled BVH data.
+        """
+        self._gas_exists = False
+
     # ---------------------------------------------------------------- properties
 
     @property
