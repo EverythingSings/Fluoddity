@@ -84,7 +84,9 @@ struct Params
     // Albedo color controls
     float          albedo_saturation;  // offset 248: HSV saturation (0-1, default 0.8)
     float          albedo_brightness;  // offset 252: HSV value/brightness (0-1, default 1.0)
-    // Total: 256 bytes
+    // Sphere size jitter
+    float          sphere_size_jitter; // offset 256: per-sphere radius jitter magnitude (0-1)
+    // Total: 260 bytes (padded to 264 for 8-byte alignment)
 };
 __constant__ Params params;
 }
@@ -150,7 +152,13 @@ static __forceinline__ __device__ float3 entity_center(unsigned int prim)
 static __forceinline__ __device__ float entity_radius(unsigned int prim)
 {
     unsigned int base = prim * params.entity_stride;
-    return params.entities[base + 7] * params.radius_scale;
+    float r = params.entities[base + 7] * params.radius_scale;
+    if (params.sphere_size_jitter > 0.0f) {
+        unsigned int h = prim * 2654435761u;
+        float jitter = ((float)(h & 0xFFFFu) / 32767.5f) - 1.0f;
+        r *= (1.0f + params.sphere_size_jitter * jitter);
+    }
+    return r;
 }
 
 static __forceinline__ __device__ float entity_hue(unsigned int prim)

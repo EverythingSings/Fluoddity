@@ -105,6 +105,8 @@ PARAMS_DTYPE = np.dtype({
         "albedo_buffer", "normal_buffer",
         # Albedo controls
         "albedo_saturation", "albedo_brightness",
+        # Sphere size jitter
+        "sphere_size_jitter",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -135,6 +137,8 @@ PARAMS_DTYPE = np.dtype({
         "u8", "u8",
         # Albedo controls
         "f4", "f4",
+        # Sphere size jitter
+        "f4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -165,8 +169,10 @@ PARAMS_DTYPE = np.dtype({
         232, 240,
         # Albedo controls
         248, 252,
+        # Sphere size jitter
+        256,
     ],
-    "itemsize": 256,
+    "itemsize": 264,
 })
 
 
@@ -628,7 +634,8 @@ class PathTracerRenderer:
     # Acceleration structure (GAS)
     # ------------------------------------------------------------------
 
-    def _compute_aabbs(self, d_entities_ptr, radius_scale=1.0):
+    def _compute_aabbs(self, d_entities_ptr, radius_scale=1.0,
+                       sphere_size_jitter=0.0):
         """Compute float6 AABBs from the mapped entity buffer via CuPy."""
         nbytes = self._entity_count * self._entity_stride * 4
         mem = cp.cuda.UnownedMemory(d_entities_ptr, nbytes, owner=None)
@@ -642,6 +649,12 @@ class PathTracerRenderer:
         pos = entities[:, 0:3]
         rad = entities[:, 7:8] * radius_scale
 
+        # Apply per-sphere jitter matching the CUDA intersection shader
+        if sphere_size_jitter > 0.0:
+            h = (cp.arange(self._entity_count, dtype=cp.uint32) * 2654435761) & 0xFFFF
+            jitter = h.astype(cp.float32) / 32767.5 - 1.0
+            rad = rad * (1.0 + sphere_size_jitter * jitter.reshape(-1, 1))
+
         if self._d_aabbs is None or self._d_aabbs.shape[0] != self._entity_count:
             self._d_aabbs = cp.empty(
                 (self._entity_count, 6), dtype=cp.float32
@@ -651,7 +664,7 @@ class PathTracerRenderer:
         self._d_aabbs[:, 3:6] = pos + rad
         cp.cuda.Device().synchronize()
 
-    def build_accel(self, radius_scale=1.0):
+    def build_accel(self, radius_scale=1.0, sphere_size_jitter=0.0):
         """Full GAS build. Maps entity buffer, computes AABBs, builds BVH.
 
         Must be called at least once before render(). Call again periodically
@@ -659,12 +672,13 @@ class PathTracerRenderer:
 
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
+            sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
         """
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale)
+            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],
@@ -707,7 +721,7 @@ class PathTracerRenderer:
         finally:
             unmap_resource(self._entity_res)
 
-    def refit_accel(self, radius_scale=1.0):
+    def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0):
         """Refit existing GAS with updated AABBs (faster, lower BVH quality).
 
         Requires a prior build_accel() call. The GAS is updated in-place
@@ -715,16 +729,17 @@ class PathTracerRenderer:
 
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
+            sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
         """
         if self._gas_handle is None:
-            self.build_accel(radius_scale)
+            self.build_accel(radius_scale, sphere_size_jitter)
             return
 
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale)
+            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],
@@ -776,7 +791,8 @@ class PathTracerRenderer:
                                 firefly_clamp=False, firefly_clamp_max=100.0,
                                 global_material=0, glossy_ior=1.5,
                                 sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
-                                albedo_saturation=0.8, albedo_brightness=1.0):
+                                albedo_saturation=0.8, albedo_brightness=1.0,
+                                sphere_size_jitter=0.0):
         """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
 
         The entity buffer must already be mapped (entities_ptr is the device
@@ -879,6 +895,9 @@ class PathTracerRenderer:
         h_params["albedo_saturation"] = albedo_saturation
         h_params["albedo_brightness"] = albedo_brightness
 
+        # Sphere size jitter
+        h_params["sphere_size_jitter"] = sphere_size_jitter
+
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
         )
@@ -954,7 +973,8 @@ class PathTracerRenderer:
                global_material=0, glossy_ior=1.5,
                sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
                denoise_enabled=False,
-               albedo_saturation=0.8, albedo_brightness=1.0):
+               albedo_saturation=0.8, albedo_brightness=1.0,
+               sphere_size_jitter=0.0):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1038,6 +1058,7 @@ class PathTracerRenderer:
                     sun_sampling=sun_sampling,
                     albedo_saturation=albedo_saturation,
                     albedo_brightness=albedo_brightness,
+                    sphere_size_jitter=sphere_size_jitter,
                 )
 
                 self._tonemap_accum_to_pbo(
@@ -1147,8 +1168,9 @@ class PathTracerRenderer:
 
     def render_realtime(self, width, height, eye, U, V, W,
                         radius_scale=1.0, gas_rebuild_interval=30,
-                        denoise_enabled=False, **render_kwargs):
-        """One-shot realtime render: reset, refit/rebuild GAS, trace 1 spp.
+                        denoise_enabled=False, reset=True,
+                        num_samples=1, **render_kwargs):
+        """Realtime render with configurable sample count and reset behavior.
 
         Manages GAS scheduling internally. The entity buffer must reflect
         the current particle positions before calling.
@@ -1160,30 +1182,83 @@ class PathTracerRenderer:
             gas_rebuild_interval: Full GAS rebuild every N frames (refit
                 between). Set to 1 to rebuild every frame.
             denoise_enabled: Run AI denoiser on this frame.
+            reset: If True, reset accumulation each frame (default).
+                Set False for accumulate mode.
+            num_samples: Number of samples to trace this frame (default 1).
             **render_kwargs: All other render params (sun, sky, materials,
                 DOF, bounce control, etc.).
 
         Returns:
             moderngl.Texture (rgba8).
         """
-        # Reset accumulation each frame (realtime = single-frame renders)
-        self.reset_accumulation()
+        if reset:
+            self.reset_accumulation()
+
+        sphere_size_jitter = render_kwargs.get('sphere_size_jitter', 0.0)
 
         # GAS scheduling: periodic rebuild, refit between
         self._frame_counter += 1
         if (self._gas_handle is None
                 or self._frame_counter >= gas_rebuild_interval):
-            self.build_accel(radius_scale)
+            self.build_accel(radius_scale, sphere_size_jitter)
             self._frame_counter = 0
         else:
-            self.refit_accel(radius_scale)
+            self.refit_accel(radius_scale, sphere_size_jitter)
 
-        return self.render(
-            width, height, eye, U, V, W,
-            radius_scale=radius_scale,
-            denoise_enabled=denoise_enabled,
-            **render_kwargs,
-        )
+        # Single-sample fast path
+        if num_samples == 1:
+            return self.render(
+                width, height, eye, U, V, W,
+                radius_scale=radius_scale,
+                denoise_enabled=denoise_enabled,
+                **render_kwargs,
+            )
+
+        # Multi-sample or denoise-only (num_samples=0) path
+        self._ensure_display(width, height)
+        self._ensure_accum_buffers(width, height)
+        if denoise_enabled:
+            self._setup_denoiser(width, height)
+
+        self._ctx.finish()
+        entities_ptr, _ = map_resource(self._entity_res)
+
+        try:
+            image_ptr, _ = map_resource(self._pbo_res)
+            try:
+                check_cuda(cudart.cudaEventRecord(
+                    self._evt_render_start, self._stream_obj))
+
+                for i in range(num_samples):
+                    self._fill_params_and_launch(
+                        entities_ptr, width, height, eye, U, V, W,
+                        write_guides=(denoise_enabled and i == 0
+                                      and self._sample_count == 0),
+                        radius_scale=radius_scale,
+                        **render_kwargs,
+                    )
+
+                self._tonemap_accum_to_pbo(
+                    image_ptr, width, height,
+                    denoise_enabled=denoise_enabled,
+                    exposure=render_kwargs.get('exposure', 1.0),
+                )
+
+                check_cuda(cudart.cudaEventRecord(
+                    self._evt_render_end, self._stream_obj))
+                check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
+                self.last_render_ms = check_cuda(
+                    cudart.cudaEventElapsedTime(
+                        self._evt_render_start, self._evt_render_end
+                    )
+                )
+            finally:
+                unmap_resource(self._pbo_res)
+        finally:
+            unmap_resource(self._entity_res)
+
+        self._tex.write(self._pbo)
+        return self._tex
 
     def render_offline_begin(self, width, height, total_substeps,
                              spp_per_substep, denoise_enabled=False):
@@ -1245,12 +1320,13 @@ class PathTracerRenderer:
         h = self._offline_height
 
         # GAS update: refit or periodic rebuild
+        sphere_size_jitter = render_kwargs.get('sphere_size_jitter', 0.0)
         if (gas_rebuild_interval > 0
                 and self._offline_substeps_done > 0
                 and self._offline_substeps_done % gas_rebuild_interval == 0):
-            self.build_accel(radius_scale)
+            self.build_accel(radius_scale, sphere_size_jitter)
         else:
-            self.refit_accel(radius_scale)
+            self.refit_accel(radius_scale, sphere_size_jitter)
 
         # Map entity buffer for all SPP in this substep
         self._ctx.finish()

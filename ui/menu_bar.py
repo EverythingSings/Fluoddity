@@ -400,6 +400,13 @@ class MenuBarMixin:
                 )
                 self._delayed_tooltip("FPS camera settings, orbit rate, and\n3D simulation parameters.")
 
+                # OptiX Controls window toggle
+                _, self.state.preferences.show_optix_window = imgui.checkbox(
+                    "OptiX Controls",
+                    self.state.preferences.show_optix_window
+                )
+                self._delayed_tooltip("OptiX sphere raytracing settings:\nRT mode, lighting, materials, and rendering.")
+
                 # Tracer window toggle
                 _, self.state.preferences.show_tracer_window = imgui.checkbox(
                     "Tracer",

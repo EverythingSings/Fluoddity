@@ -26,3 +26,4 @@ class CameraState:
     optix_render_time_ms: float = 0.0  # Last OptiX render time (for UI display)
     pathtracer_gas_time_ms: float = 0.0    # Path tracer GAS timing (for UI display)
     pathtracer_render_time_ms: float = 0.0 # Path tracer render timing (for UI display)
+    pathtracer_sample_count: int = 0       # Current accumulation sample count (for UI display)

@@ -32,6 +32,7 @@ from .three_d_window import ThreeDWindowMixin
 from .tracer_window import TracerWindowMixin
 from .radio_window import RadioWindowMixin
 from .scheduled_renders_window import ScheduledRendersWindowMixin
+from .optix_window import OptiXWindowMixin
 
 
 @dataclass
@@ -58,6 +59,7 @@ class UI(
     TracerWindowMixin,
     RadioWindowMixin,
     ScheduledRendersWindowMixin,
+    OptiXWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -742,6 +744,10 @@ class UI(
         # Render 3D Controls window if enabled
         if self.show_sidebar and self.state.preferences.show_three_d_window:
             self.render_three_d_window()
+
+        # Render OptiX Controls window if enabled
+        if self.show_sidebar and self.state.preferences.show_optix_window:
+            self.render_optix_window()
 
         # Render Tracer window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.show_tracer_window:

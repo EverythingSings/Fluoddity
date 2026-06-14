@@ -148,18 +148,13 @@ class PreferencesState:
     three_d_optix_ao_radius: float = 0.5
     three_d_optix_albedo_saturation: float = 0.8
     three_d_optix_albedo_brightness: float = 1.0
+    three_d_optix_sphere_size_jitter: float = 0.0  # Per-sphere radius jitter to reduce banding (0-1)
 
-    # OptiX path tracer toggle + settings
-    three_d_pathtracer_enabled: bool = False
-    three_d_pt_gas_rebuild_interval: int = 30
-    three_d_pt_sphere_radius_scale: float = 1.0
-    three_d_pt_sun_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
-    three_d_pt_sun_color: list = field(default_factory=lambda: [1.0, 0.95, 0.85])
-    three_d_pt_sun_intensity: float = 3.0
+    # OptiX RT mode and path tracer settings
+    three_d_rt_mode: int = 0  # 0=Rasterize, 1=X spp, 2=Accumulate
+    three_d_rt_realtime_samples: int = 1  # Samples/frame for RT: X spp mode (1-8)
+    three_d_rt_preview_spp: int = 64  # Target SPP for Re-render Preview
     three_d_pt_sun_sampling: bool = True
-    three_d_pt_sky_color_top: list = field(default_factory=lambda: [0.45, 0.62, 0.85])
-    three_d_pt_sky_color_bottom: list = field(default_factory=lambda: [0.08, 0.08, 0.10])
-    three_d_pt_exposure: float = 1.5
     three_d_pt_max_bounces: int = 8
     three_d_pt_rr_start_depth: int = 3
     three_d_pt_firefly_clamp: bool = True
@@ -167,6 +162,9 @@ class PreferencesState:
     three_d_pt_global_material: int = 0  # 0=Lambert, 1=Glossy, 2=Mirror
     three_d_pt_glossy_ior: float = 1.5
     three_d_pt_denoise_enabled: bool = False
+
+    # OptiX Controls window
+    show_optix_window: bool = False
 
     # 3D camera settings
     three_d_render_3d: bool = True

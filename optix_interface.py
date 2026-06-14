@@ -56,6 +56,7 @@ class OptiXInterface:
         self.ao_radius: float = 0.5
         self.albedo_saturation: float = 0.8
         self.albedo_brightness: float = 1.0
+        self.sphere_size_jitter: float = 0.0
 
         # AO frame counter for jitter (internal, incremented each frame)
         self._ao_frame_index: int = 0
@@ -138,16 +139,16 @@ class OptiXInterface:
         # 3. GAS scheduling (radius_scale must match intersection shader)
         if not self._gas_exists:
             # First frame or after buffer change: full build required
-            self._renderer.build_accel(self.radius_scale)
+            self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter)
             self._gas_exists = True
             self._frame_counter = 0
         elif self._frame_counter >= self.gas_rebuild_interval:
             # Periodic full rebuild for BVH quality
-            self._renderer.build_accel(self.radius_scale)
+            self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter)
             self._frame_counter = 0
         else:
             # Fast in-place refit
-            self._renderer.refit_accel(self.radius_scale)
+            self._renderer.refit_accel(self.radius_scale, self.sphere_size_jitter)
 
         self._frame_counter += 1
 
@@ -173,6 +174,7 @@ class OptiXInterface:
             ao_frame_index=self._ao_frame_index,
             albedo_saturation=self.albedo_saturation,
             albedo_brightness=self.albedo_brightness,
+            sphere_size_jitter=self.sphere_size_jitter,
         )
         self._ao_frame_index += 1
 
