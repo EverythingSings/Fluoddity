@@ -76,6 +76,10 @@ class PathTracerInterface:
         # Denoiser
         self.denoise_enabled: bool = False
 
+        # Albedo color controls
+        self.albedo_saturation: float = 0.8
+        self.albedo_brightness: float = 1.0
+
     # ------------------------------------------------------------------ core API
 
     def render_frame(
@@ -190,6 +194,8 @@ class PathTracerInterface:
             firefly_clamp_max=self.firefly_clamp_max,
             global_material=self.global_material,
             glossy_ior=self.glossy_ior,
+            albedo_saturation=self.albedo_saturation,
+            albedo_brightness=self.albedo_brightness,
         )
 
         # 6. Read timing from renderer
@@ -319,6 +325,8 @@ class PathTracerInterface:
             firefly_clamp_max=self.firefly_clamp_max,
             global_material=self.global_material,
             glossy_ior=self.glossy_ior,
+            albedo_saturation=self.albedo_saturation,
+            albedo_brightness=self.albedo_brightness,
         )
 
         # Read timing

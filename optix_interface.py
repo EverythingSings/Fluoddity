@@ -54,6 +54,8 @@ class OptiXInterface:
         self.ao_enabled: bool = False
         self.ao_num_rays: int = 2
         self.ao_radius: float = 0.5
+        self.albedo_saturation: float = 0.8
+        self.albedo_brightness: float = 1.0
 
         # AO frame counter for jitter (internal, incremented each frame)
         self._ao_frame_index: int = 0
@@ -169,6 +171,8 @@ class OptiXInterface:
             ao_num_rays=self.ao_num_rays,
             ao_radius=self.ao_radius,
             ao_frame_index=self._ao_frame_index,
+            albedo_saturation=self.albedo_saturation,
+            albedo_brightness=self.albedo_brightness,
         )
         self._ao_frame_index += 1
 

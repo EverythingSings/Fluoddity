@@ -36,6 +36,9 @@ struct Params
     int            ao_num_rays;                 // 1-4 AO rays per pixel
     float          ao_radius;                   // max distance for AO rays
     unsigned int   ao_frame_index;              // frame counter for RNG jitter
+    // Albedo color controls
+    float          albedo_saturation;           // HSV saturation (0-1, default 0.8)
+    float          albedo_brightness;           // HSV value/brightness (0-1, default 1.0)
 };
 __constant__ Params params;
 }
@@ -229,8 +232,8 @@ extern "C" __global__ void __closesthit__ch()
     const float3 N = normalize3(P - center);
     const float3 L = params.light_dir;
 
-    // HSV->RGB albedo (S=0.8, V=1.0 matching points_3d.frag)
-    const float3 albedo = hsv2rgb(hue, 0.8f, 1.0f);
+    // HSV->RGB albedo (saturation and brightness from params)
+    const float3 albedo = hsv2rgb(hue, params.albedo_saturation, params.albedo_brightness);
 
     // Shadow ray (optional)
     float vis = 1.0f;
@@ -268,7 +271,7 @@ extern "C" __global__ void __closesthit__ch()
             unsigned int ao_occluded = 1u;
             optixTrace(
                 (OptixTraversableHandle)params.handle,
-                P + 1e-3f * N, ao_dir,
+                P + 1e-4f * N, ao_dir,
                 0.0f, params.ao_radius, 0.0f,
                 OptixVisibilityMask(255),
                 OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT

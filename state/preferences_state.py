@@ -146,6 +146,8 @@ class PreferencesState:
     three_d_optix_ao_enabled: bool = False
     three_d_optix_ao_num_rays: int = 2
     three_d_optix_ao_radius: float = 0.5
+    three_d_optix_albedo_saturation: float = 0.8
+    three_d_optix_albedo_brightness: float = 1.0
 
     # OptiX path tracer toggle + settings
     three_d_pathtracer_enabled: bool = False

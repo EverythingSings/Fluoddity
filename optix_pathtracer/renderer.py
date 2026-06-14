@@ -103,6 +103,8 @@ PARAMS_DTYPE = np.dtype({
         "_pad4",
         # Step 5
         "albedo_buffer", "normal_buffer",
+        # Albedo controls
+        "albedo_saturation", "albedo_brightness",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -131,6 +133,8 @@ PARAMS_DTYPE = np.dtype({
         "u4",
         # Step 5
         "u8", "u8",
+        # Albedo controls
+        "f4", "f4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -159,8 +163,10 @@ PARAMS_DTYPE = np.dtype({
         228,
         # Step 5
         232, 240,
+        # Albedo controls
+        248, 252,
     ],
-    "itemsize": 248,
+    "itemsize": 256,
 })
 
 
@@ -769,7 +775,8 @@ class PathTracerRenderer:
                                 max_bounces=0, rr_start_depth=3,
                                 firefly_clamp=False, firefly_clamp_max=100.0,
                                 global_material=0, glossy_ior=1.5,
-                                sun_color=(1.0, 1.0, 1.0), sun_sampling=True):
+                                sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
+                                albedo_saturation=0.8, albedo_brightness=1.0):
         """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
 
         The entity buffer must already be mapped (entities_ptr is the device
@@ -868,6 +875,10 @@ class PathTracerRenderer:
             h_params["albedo_buffer"] = 0
             h_params["normal_buffer"] = 0
 
+        # Albedo color controls
+        h_params["albedo_saturation"] = albedo_saturation
+        h_params["albedo_brightness"] = albedo_brightness
+
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
         )
@@ -942,7 +953,8 @@ class PathTracerRenderer:
                firefly_clamp=False, firefly_clamp_max=100.0,
                global_material=0, glossy_ior=1.5,
                sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
-               denoise_enabled=False):
+               denoise_enabled=False,
+               albedo_saturation=0.8, albedo_brightness=1.0):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1024,6 +1036,8 @@ class PathTracerRenderer:
                     glossy_ior=glossy_ior,
                     sun_color=sun_color,
                     sun_sampling=sun_sampling,
+                    albedo_saturation=albedo_saturation,
+                    albedo_brightness=albedo_brightness,
                 )
 
                 self._tonemap_accum_to_pbo(

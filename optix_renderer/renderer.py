@@ -74,6 +74,8 @@ PARAMS_DTYPE = np.dtype({
         "sky_bot_r", "sky_bot_g", "sky_bot_b",
         # AO
         "ao_enabled", "ao_num_rays", "ao_radius", "ao_frame_index",
+        # Albedo controls
+        "albedo_saturation", "albedo_brightness",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -90,6 +92,8 @@ PARAMS_DTYPE = np.dtype({
         "f4", "f4", "f4",
         # AO
         "i4", "i4", "f4", "u4",
+        # Albedo controls
+        "f4", "f4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -106,8 +110,10 @@ PARAMS_DTYPE = np.dtype({
         140, 144, 148,
         # AO
         152, 156, 160, 164,
+        # Albedo controls
+        168, 172,
     ],
-    "itemsize": 168,
+    "itemsize": 176,
 })
 
 
@@ -534,7 +540,8 @@ class OptiXSphereRenderer:
                sky_color_top=(0.45, 0.62, 0.85),
                sky_color_bottom=(0.08, 0.08, 0.10),
                ao_enabled=False, ao_num_rays=2, ao_radius=0.5,
-               ao_frame_index=0):
+               ao_frame_index=0,
+               albedo_saturation=0.8, albedo_brightness=1.0):
         """Render one frame of raytraced spheres.
 
         The entity buffer must NOT be mapped by the caller. This method
@@ -626,6 +633,8 @@ class OptiXSphereRenderer:
                 h_params["ao_num_rays"] = ao_num_rays
                 h_params["ao_radius"] = ao_radius
                 h_params["ao_frame_index"] = ao_frame_index
+                h_params["albedo_saturation"] = albedo_saturation
+                h_params["albedo_brightness"] = albedo_brightness
 
                 self._d_params.set(
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
@@ -667,7 +676,8 @@ class OptiXSphereRenderer:
                            sky_color_top=(0.45, 0.62, 0.85),
                            sky_color_bottom=(0.08, 0.08, 0.10),
                            ao_enabled=False, ao_num_rays=2,
-                           ao_radius=0.5, ao_frame_index=0):
+                           ao_radius=0.5, ao_frame_index=0,
+                           albedo_saturation=0.8, albedo_brightness=1.0):
         """Convenience: render from FPS camera vectors.
 
         Converts Fluoddity's ControllerCam-style vectors to OptiX pinhole
@@ -707,6 +717,8 @@ class OptiXSphereRenderer:
             ao_num_rays=ao_num_rays,
             ao_radius=ao_radius,
             ao_frame_index=ao_frame_index,
+            albedo_saturation=albedo_saturation,
+            albedo_brightness=albedo_brightness,
         )
 
     # ------------------------------------------------------------------

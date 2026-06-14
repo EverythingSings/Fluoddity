@@ -394,6 +394,8 @@ class App:
                 self._optix_interface.ao_enabled = ui_state.preferences.three_d_optix_ao_enabled
                 self._optix_interface.ao_num_rays = ui_state.preferences.three_d_optix_ao_num_rays
                 self._optix_interface.ao_radius = ui_state.preferences.three_d_optix_ao_radius
+                self._optix_interface.albedo_saturation = ui_state.preferences.three_d_optix_albedo_saturation
+                self._optix_interface.albedo_brightness = ui_state.preferences.three_d_optix_albedo_brightness
                 # Copy timing for UI display
                 ui_state.camera.optix_gas_time_ms = self._optix_interface.gas_time_ms
                 ui_state.camera.optix_render_time_ms = self._optix_interface.render_time_ms
@@ -442,6 +444,8 @@ class App:
                 pt.global_material = ui_state.preferences.three_d_pt_global_material
                 pt.glossy_ior = ui_state.preferences.three_d_pt_glossy_ior
                 pt.denoise_enabled = ui_state.preferences.three_d_pt_denoise_enabled
+                pt.albedo_saturation = ui_state.preferences.three_d_optix_albedo_saturation
+                pt.albedo_brightness = ui_state.preferences.three_d_optix_albedo_brightness
                 pt.aperture = ui_state.camera.aperture
                 pt.focal_plane_depth = ui_state.camera.focal_plane_depth
                 # Copy timing for UI display

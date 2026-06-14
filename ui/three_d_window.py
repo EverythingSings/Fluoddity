@@ -58,6 +58,12 @@ class ThreeDWindowMixin:
                         "Sphere Scale", p.three_d_optix_sphere_radius_scale,
                         0.1, 10.0, format="%.1fx")
 
+                # Albedo color controls (shared across both modes)
+                _, p.three_d_optix_albedo_saturation = imgui.slider_float(
+                    "Albedo Saturation", p.three_d_optix_albedo_saturation, 0.0, 1.0)
+                _, p.three_d_optix_albedo_brightness = imgui.slider_float(
+                    "Albedo Brightness", p.three_d_optix_albedo_brightness, 0.0, 1.0)
+
                 if pt_mode:
                     # ---- Path Trace mode controls ----
 

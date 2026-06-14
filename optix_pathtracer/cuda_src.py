@@ -80,7 +80,11 @@ struct Params
     // Denoiser guide buffers (Step 5)
     float4*        albedo_buffer;      // offset 232: primary-hit albedo guide (null if disabled)
     float4*        normal_buffer;      // offset 240: primary-hit normal guide (null if disabled)
-    // Total: 248 bytes
+
+    // Albedo color controls
+    float          albedo_saturation;  // offset 248: HSV saturation (0-1, default 0.8)
+    float          albedo_brightness;  // offset 252: HSV value/brightness (0-1, default 1.0)
+    // Total: 256 bytes
 };
 __constant__ Params params;
 }
@@ -390,8 +394,8 @@ extern "C" __global__ void __raygen__rg()
         if (dot3(N, ray_dir) > 0.0f)
             N = neg3(N);
 
-        // HSV->RGB albedo (S=0.8, V=1.0 matching points_3d.frag)
-        float3 albedo = hsv2rgb(entity_hue(prim), 0.8f, 1.0f);
+        // HSV->RGB albedo (saturation and brightness from params)
+        float3 albedo = hsv2rgb(entity_hue(prim), params.albedo_saturation, params.albedo_brightness);
 
         // Guide buffers: primary hit -> surface albedo and normal
         if (depth == 0 && params.albedo_buffer) {
@@ -406,7 +410,7 @@ extern "C" __global__ void __raygen__rg()
 
         // 4d. Sun NEE: direct sun lighting via binary GAS shadow ray
         if (params.sun_sampling) {
-            float3 shadow_origin = P + 1e-3f * N;
+            float3 shadow_origin = P + 1e-4f * N;
 
             unsigned int occluded = 1u;
             optixTrace(
@@ -452,7 +456,7 @@ extern "C" __global__ void __raygen__rg()
         throughput = throughput * weight;
 
         // 4h. Self-intersection avoidance: offset origin along normal
-        ray_origin = P + 1e-3f * N;
+        ray_origin = P + 1e-4f * N;
         ray_dir = bounce_dir;
     }
 
