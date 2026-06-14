@@ -1,8 +1,9 @@
 """OptiX device code for path-traced sphere rendering.
 
 Contains the CUDA C++ source compiled at runtime via NVRTC.
-Single-bounce Lambert shading with HDR accumulation and progressive
-sample refinement.  Step 2 of the path tracer implementation plan.
+Multi-bounce path tracing with three materials (Lambert, Glossy, Mirror),
+Russian roulette, depth of field, firefly clamping, and HDR accumulation.
+Step 3 of the path tracer implementation plan.
 
 Entity layout (32 bytes, stride=8 floats):
     [0] px  [1] py  [2] pz    -- sphere center
@@ -14,10 +15,15 @@ Entity layout (32 bytes, stride=8 floats):
 PATHTRACER_CUDA_SRC = r"""
 #include <optix.h>
 
+// Material ID constants
+#define MAT_DIFFUSE  0
+#define MAT_GLOSSY   1
+#define MAT_MIRROR   2
+
 extern "C" {
 struct Params
 {
-    uchar4*            image;          // offset  0: mapped GL PBO (unused by OptiX programs, used by tonemap)
+    uchar4*            image;          // offset  0: mapped GL PBO (used by tonemap)
     float*             entities;       // offset  8: mapped GL entity buffer (raw floats)
     unsigned int       entity_stride;  // offset 16: floats per entity (8 for Fluoddity)
     // _pad0                           // offset 20: 4 bytes padding
@@ -31,7 +37,7 @@ struct Params
     float3 V;                          // offset 64
     float3 W;                          // offset 76
 
-    // Lighting
+    // Lighting (used by Step 4 NEE; unused in Step 3)
     float3 light_dir;                  // offset 88: unit vector TOWARD the light
     float  ambient;                    // offset 100
     float  radius_scale;               // offset 104
@@ -40,13 +46,31 @@ struct Params
     float3 sky_color_top;              // offset 108
     float3 sky_color_bottom;           // offset 120
 
-    // Accumulation (path tracer additions)
+    // Accumulation
     // _pad1                           // offset 132: 4 bytes padding for pointer alignment
     float4*        accum_buffer;       // offset 136: CUDA-side HDR accumulation
     unsigned int   sample_index;       // offset 144: current sample (RNG seed)
     unsigned int   samples_accumulated;// offset 148: total samples so far
     float          exposure;           // offset 152: tonemap exposure multiplier
-    // _pad2                           // offset 156: 4 bytes padding to 160 total
+
+    // DOF (Step 3)
+    float          aperture;           // offset 156: lens radius (0 = pinhole)
+    float          focal_plane_depth;  // offset 160: focal distance
+    float3         cam_right;          // offset 164: normalized camera right (DOF)
+    float3         cam_up;             // offset 176: normalized camera up (DOF)
+
+    // Bounce control (Step 3)
+    int            max_bounces;        // offset 188: 0 = unlimited (RR only)
+    int            rr_start_depth;     // offset 192: depth where RR begins
+
+    // Firefly clamp (Step 3)
+    int            firefly_clamp;      // offset 196: bool: enable clamping
+    float          firefly_clamp_max;  // offset 200: max luminance per sample
+
+    // Material (Step 3)
+    int            global_material;    // offset 204: 0=Lambert, 1=Glossy, 2=Mirror
+    float          glossy_ior;         // offset 208: IOR for Fresnel (default 1.5)
+    // _pad3                           // offset 212: 4 bytes padding to 216 total
 };
 __constant__ Params params;
 }
@@ -69,6 +93,9 @@ static __forceinline__ __device__ float3 operator*(float3 a, float s)
 
 static __forceinline__ __device__ float3 operator*(float3 a, float3 b)
 { return mk3(a.x*b.x, a.y*b.y, a.z*b.z); }
+
+static __forceinline__ __device__ float3 neg3(float3 a)
+{ return mk3(-a.x, -a.y, -a.z); }
 
 static __forceinline__ __device__ float dot3(float3 a, float3 b)
 { return a.x*b.x + a.y*b.y + a.z*b.z; }
@@ -162,7 +189,115 @@ static __forceinline__ __device__ float next_float(unsigned int& state)
     return (float)word / 4294967295.0f;
 }
 
-// --- ray generation ----------------------------------------------------------
+// --- sampling utilities (ported from volrender/shaders/common.glsl) -----------
+
+static __forceinline__ __device__ float3 sample_sphere(unsigned int& rng)
+{
+    float xi1 = next_float(rng);
+    float xi2 = next_float(rng);
+    float cos_theta = 1.0f - 2.0f * xi1;           // uniform in [-1, +1]
+    float sin_theta = sqrtf(fmaxf(0.0f, 1.0f - cos_theta * cos_theta));
+    float phi = 6.283185307f * xi2;                 // 2*pi
+    return mk3(sin_theta * cosf(phi),
+               sin_theta * sinf(phi),
+               cos_theta);
+}
+
+static __forceinline__ __device__ float2 sample_disk(unsigned int& rng)
+{
+    float r = sqrtf(next_float(rng));
+    float theta = 6.283185307f * next_float(rng);
+    return make_float2(r * cosf(theta), r * sinf(theta));
+}
+
+// --- cosine-weighted hemisphere sampling (Shirley trick) ---------------------
+// Ported from volrender/shaders/volume_scene.glsl
+
+static __forceinline__ __device__ float3 sample_cosine_hemisphere(float3 n, unsigned int& rng)
+{
+    return normalize3(n + sample_sphere(rng));
+}
+
+// --- reflection and Fresnel utilities ----------------------------------------
+
+static __forceinline__ __device__ float3 reflect3(float3 incident, float3 normal)
+{
+    return incident - 2.0f * dot3(incident, normal) * normal;
+}
+
+static __forceinline__ __device__ float ior_to_r0(float ior)
+{
+    float r = (ior - 1.0f) / (ior + 1.0f);
+    return r * r;
+}
+
+static __forceinline__ __device__ float schlick_fresnel(float cos_theta, float R0)
+{
+    float x = clamp_f(1.0f - cos_theta, 0.0f, 1.0f);
+    float x2 = x * x;
+    return R0 + (1.0f - R0) * x2 * x2 * x;   // x^5
+}
+
+// --- BRDF sampling (ported from volrender/shaders/volume_scene.glsl) ---------
+// Returns throughput weight = BRDF * cos(theta) / PDF.
+// out_dir receives the sampled bounce direction.
+
+static __forceinline__ __device__ float3 sample_brdf(
+    float3 incident, float3 normal,
+    int mat_id, float3 albedo, float ior,
+    float3& out_dir, unsigned int& rng)
+{
+    if (mat_id == MAT_MIRROR) {
+        out_dir = reflect3(incident, normal);
+        return albedo;
+    }
+
+    if (mat_id == MAT_GLOSSY) {
+        float cos_i = fabsf(dot3(neg3(incident), normal));
+        float R0 = ior_to_r0(ior);
+        float R = schlick_fresnel(cos_i, R0);
+        if (next_float(rng) < R) {
+            out_dir = reflect3(incident, normal);
+            return albedo;
+        } else {
+            out_dir = sample_cosine_hemisphere(normal, rng);
+            return albedo;
+        }
+    }
+
+    // MAT_DIFFUSE: Lambertian
+    out_dir = sample_cosine_hemisphere(normal, rng);
+    return albedo;
+}
+
+// --- BRDF evaluation for NEE (used in Step 4) --------------------------------
+// Returns BRDF * cos(theta) for a given light direction.
+// Delta lobes (mirror, glossy specular) return 0.
+
+static __forceinline__ __device__ float3 eval_brdf_cos(
+    float3 incident, float3 light_dir, float3 normal,
+    int mat_id, float3 albedo, float ior)
+{
+    float NdotL = fmaxf(dot3(normal, light_dir), 0.0f);
+
+    if (mat_id == MAT_MIRROR) {
+        return mk3(0.0f, 0.0f, 0.0f);   // delta BRDF, no NEE contribution
+    }
+
+    if (mat_id == MAT_GLOSSY) {
+        float cos_i = fabsf(dot3(neg3(incident), normal));
+        float R0 = ior_to_r0(ior);
+        float R = schlick_fresnel(cos_i, R0);
+        float inv_pi = 0.31830988618f;
+        return (1.0f - R) * albedo * NdotL * inv_pi;
+    }
+
+    // MAT_DIFFUSE
+    float inv_pi = 0.31830988618f;
+    return albedo * NdotL * inv_pi;
+}
+
+// --- ray generation (Step 3: full bounce loop) -------------------------------
 extern "C" __global__ void __raygen__rg()
 {
     const uint3 idx = optixGetLaunchIndex();
@@ -177,53 +312,116 @@ extern "C" __global__ void __raygen__rg()
     const float2 d = make_float2(
         2.0f * ((float)idx.x + jx) / (float)params.width  - 1.0f,
         2.0f * ((float)idx.y + jy) / (float)params.height - 1.0f);
-    const float3 dir = normalize3(d.x * params.U + d.y * params.V + params.W);
 
-    // 3. Trace primary ray (8 payloads)
-    unsigned int p0 = 0, p1 = 0, p2 = 0, p3 = 0;
-    unsigned int p4 = 0, p5 = 0, p6 = 0, p7 = 0;
-    optixTrace(
-        (OptixTraversableHandle)params.handle,
-        params.eye, dir,
-        0.0f, 1e16f, 0.0f,
-        OptixVisibilityMask(255),
-        OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-        0, 0,       // SBT offset, stride
-        0,          // miss index: radiance
-        p0, p1, p2, p3, p4, p5, p6, p7);
+    float3 ray_origin = params.eye;
+    float3 ray_dir = normalize3(d.x * params.U + d.y * params.V + params.W);
 
-    // 4. Shade
-    float3 color;
-    float hit_t = __uint_as_float(p0);
+    // 3. Depth of field: thin lens model
+    if (params.aperture > 0.0f) {
+        float3 focal_point = ray_origin + ray_dir * params.focal_plane_depth;
+        float2 lens = sample_disk(rng);
+        lens.x *= params.aperture;
+        lens.y *= params.aperture;
+        ray_origin = ray_origin
+                   + lens.x * params.cam_right
+                   + lens.y * params.cam_up;
+        ray_dir = normalize3(focal_point - ray_origin);
+    }
 
-    if (hit_t > 0.0f) {
-        // Hit: reconstruct normal and albedo from payloads
+    // 4. Bounce loop
+    float3 throughput = mk3(1.0f, 1.0f, 1.0f);
+    float3 radiance   = mk3(0.0f, 0.0f, 0.0f);
+    int    depth      = 0;
+
+    const int MAX_WALK_BOUNCES = 512;
+
+    for (int bounce = 0; bounce < MAX_WALK_BOUNCES; bounce++) {
+
+        // 4a. Trace ray (8 payloads)
+        unsigned int p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+        unsigned int p4 = 0, p5 = 0, p6 = 0, p7 = 0;
+        optixTrace(
+            (OptixTraversableHandle)params.handle,
+            ray_origin, ray_dir,
+            0.0f, 1e16f, 0.0f,
+            OptixVisibilityMask(255),
+            OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+            0, 0,       // SBT offset, stride
+            0,          // miss index: radiance
+            p0, p1, p2, p3, p4, p5, p6, p7);
+
+        float hit_t = __uint_as_float(p0);
+
+        // 4b. Miss: accumulate sky and exit
+        if (hit_t <= 0.0f) {
+            float3 sky = mk3(__uint_as_float(p5),
+                             __uint_as_float(p6),
+                             __uint_as_float(p7));
+            radiance = radiance + throughput * sky;
+            break;
+        }
+
+        // 4c. Hit: reconstruct P, N, albedo
         unsigned int prim = p1;
         float3 N = mk3(__uint_as_float(p2),
                         __uint_as_float(p3),
                         __uint_as_float(p4));
+        float3 P = ray_origin + hit_t * ray_dir;
+
+        // Flip normal to face incoming ray
+        if (dot3(N, ray_dir) > 0.0f)
+            N = neg3(N);
 
         // HSV->RGB albedo (S=0.8, V=1.0 matching points_3d.frag)
         float3 albedo = hsv2rgb(entity_hue(prim), 0.8f, 1.0f);
 
-        // Single-bounce Lambert: albedo * (ambient + (1-ambient) * NdotL)
-        float ndl = fmaxf(dot3(N, params.light_dir), 0.0f);
-        float a = params.ambient;
-        color = albedo * (mk3(a, a, a) + (1.0f - a) * ndl * mk3(1.0f, 1.0f, 1.0f));
-    } else {
-        // Miss: sky color from miss program
-        color = mk3(__uint_as_float(p5),
-                     __uint_as_float(p6),
-                     __uint_as_float(p7));
+        // Material (global for now; per-particle in future)
+        int   mat_id = params.global_material;
+        float ior    = params.glossy_ior;
+
+        // 4d. (NEE placeholder -- Step 4 will add shadow rays here)
+
+        // 4e. Depth and max_bounces check
+        depth++;
+        if (params.max_bounces > 0 && depth >= params.max_bounces)
+            break;
+
+        // 4f. Russian roulette
+        if (depth > params.rr_start_depth) {
+            float p_survive = fmaxf(throughput.x,
+                               fmaxf(throughput.y, throughput.z));
+            p_survive = clamp_f(p_survive, 0.05f, 1.0f);
+            if (next_float(rng) >= p_survive)
+                break;
+            throughput = throughput * (1.0f / p_survive);
+        }
+
+        // 4g. Sample BRDF for next bounce
+        float3 bounce_dir;
+        float3 weight = sample_brdf(ray_dir, N, mat_id, albedo, ior,
+                                     bounce_dir, rng);
+        throughput = throughput * weight;
+
+        // 4h. Self-intersection avoidance: offset origin along normal
+        ray_origin = P + 1e-3f * N;
+        ray_dir = bounce_dir;
     }
 
-    // 5. Accumulate into float4 HDR buffer (additive)
+    // 5. Firefly clamp: cap per-sample radiance to reduce outliers
+    if (params.firefly_clamp) {
+        float lum = fmaxf(radiance.x, fmaxf(radiance.y, radiance.z));
+        if (lum > params.firefly_clamp_max) {
+            radiance = radiance * (params.firefly_clamp_max / lum);
+        }
+    }
+
+    // 6. Accumulate into float4 HDR buffer (additive)
     const unsigned int pixel_idx = idx.y * params.width + idx.x;
     float4 prev = params.accum_buffer[pixel_idx];
     params.accum_buffer[pixel_idx] = make_float4(
-        prev.x + color.x,
-        prev.y + color.y,
-        prev.z + color.z,
+        prev.x + radiance.x,
+        prev.y + radiance.y,
+        prev.z + radiance.z,
         prev.w + 1.0f);
 }
 

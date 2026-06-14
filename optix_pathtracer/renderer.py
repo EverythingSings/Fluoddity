@@ -1,11 +1,11 @@
-"""OptiX path tracer: raytrace entities as Lambert-shaded spheres with HDR accumulation.
+"""OptiX path tracer: multi-bounce path tracing with three materials.
 
 This module provides the PathTracerRenderer class, a self-contained renderer
 that reads Fluoddity's entity SSBO via GL-CUDA interop and produces a
 path-traced image with progressive sample accumulation and tonemapping.
 
-Step 2 of the path tracer implementation plan: single-bounce Lambert,
-sky gradient miss, HDR accumulation buffer, Reinhard tonemap via PBO.
+Step 3 of the path tracer implementation plan: full bounce loop with
+Lambert/Glossy/Mirror materials, Russian roulette, DOF, firefly clamping.
 """
 
 import numpy as np
@@ -54,8 +54,19 @@ from .cuda_src import PATHTRACER_CUDA_SRC, TONEMAP_CUDA_SRC
 #   unsigned int sample_index;           // offset 144, u4
 #   unsigned int samples_accumulated;    // offset 148, u4
 #   float  exposure;                     // offset 152, f4
-#   <pad 4 bytes>                        // offset 156 (align total to 8)
-#   Total: 160 bytes
+#   --- Step 3 additions ---
+#   float  aperture;                     // offset 156, f4
+#   float  focal_plane_depth;            // offset 160, f4
+#   float3 cam_right;                    // offset 164, 3×f4
+#   float3 cam_up;                       // offset 176, 3×f4
+#   int    max_bounces;                  // offset 188, i4
+#   int    rr_start_depth;               // offset 192, i4
+#   int    firefly_clamp;                // offset 196, i4
+#   float  firefly_clamp_max;            // offset 200, f4
+#   int    global_material;              // offset 204, i4
+#   float  glossy_ior;                   // offset 208, f4
+#   <pad 4 bytes>                        // offset 212 (align total to 8)
+#   Total: 216 bytes
 # ---------------------------------------------------------------------------
 PARAMS_DTYPE = np.dtype({
     "names": [
@@ -71,7 +82,15 @@ PARAMS_DTYPE = np.dtype({
         "sky_bot_r", "sky_bot_g", "sky_bot_b",
         "_pad1", "accum_buffer",
         "sample_index", "samples_accumulated",
-        "exposure", "_pad2",
+        "exposure",
+        # Step 3 additions
+        "aperture", "focal_plane_depth",
+        "cam_right_x", "cam_right_y", "cam_right_z",
+        "cam_up_x", "cam_up_y", "cam_up_z",
+        "max_bounces", "rr_start_depth",
+        "firefly_clamp", "firefly_clamp_max",
+        "global_material", "glossy_ior",
+        "_pad3",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -86,7 +105,15 @@ PARAMS_DTYPE = np.dtype({
         "f4", "f4", "f4",
         "u4", "u8",
         "u4", "u4",
-        "f4", "u4",
+        "f4",
+        # Step 3
+        "f4", "f4",
+        "f4", "f4", "f4",
+        "f4", "f4", "f4",
+        "i4", "i4",
+        "i4", "f4",
+        "i4", "f4",
+        "u4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -101,9 +128,17 @@ PARAMS_DTYPE = np.dtype({
         120, 124, 128,
         132, 136,
         144, 148,
-        152, 156,
+        152,
+        # Step 3
+        156, 160,
+        164, 168, 172,
+        176, 180, 184,
+        188, 192,
+        196, 200,
+        204, 208,
+        212,
     ],
-    "itemsize": 160,
+    "itemsize": 216,
 })
 
 
@@ -551,7 +586,12 @@ class PathTracerRenderer:
     def render(self, width, height, eye, U, V, W, light_dir=(0.577, 0.577, 0.577),
                ambient=0.12, radius_scale=1.0, exposure=1.0,
                sky_color_top=(0.45, 0.62, 0.85),
-               sky_color_bottom=(0.08, 0.08, 0.10)):
+               sky_color_bottom=(0.08, 0.08, 0.10),
+               aperture=0.0, focal_plane_depth=10.0,
+               cam_right=None, cam_up=None,
+               max_bounces=0, rr_start_depth=3,
+               firefly_clamp=False, firefly_clamp_max=100.0,
+               global_material=0, glossy_ior=1.5):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -572,6 +612,16 @@ class PathTracerRenderer:
             exposure: Exposure multiplier for tonemapping.
             sky_color_top: Sky gradient top color (3-tuple).
             sky_color_bottom: Sky gradient bottom color (3-tuple).
+            aperture: DOF lens radius (0 = pinhole, no DOF).
+            focal_plane_depth: DOF focal distance.
+            cam_right: Normalized camera right vector (required if aperture > 0).
+            cam_up: Normalized camera up vector (required if aperture > 0).
+            max_bounces: Max bounce depth (0 = unlimited, RR only).
+            rr_start_depth: Depth at which Russian roulette begins.
+            firefly_clamp: Enable per-sample firefly clamping.
+            firefly_clamp_max: Max per-sample luminance.
+            global_material: Material type (0=Lambert, 1=Glossy, 2=Mirror).
+            glossy_ior: Index of refraction for glossy Fresnel.
 
         Returns:
             moderngl.Texture (rgba8) with the tonemapped image.
@@ -638,7 +688,27 @@ class PathTracerRenderer:
                 h_params["sample_index"] = self._sample_count
                 h_params["samples_accumulated"] = self._sample_count + 1
                 h_params["exposure"] = exposure
-                h_params["_pad2"] = 0
+
+                # Step 3: DOF, bounce control, materials
+                h_params["aperture"] = aperture
+                h_params["focal_plane_depth"] = focal_plane_depth
+                if cam_right is not None:
+                    cr = np.asarray(cam_right, dtype=np.float32)
+                    h_params["cam_right_x"] = cr[0]
+                    h_params["cam_right_y"] = cr[1]
+                    h_params["cam_right_z"] = cr[2]
+                if cam_up is not None:
+                    cu = np.asarray(cam_up, dtype=np.float32)
+                    h_params["cam_up_x"] = cu[0]
+                    h_params["cam_up_y"] = cu[1]
+                    h_params["cam_up_z"] = cu[2]
+                h_params["max_bounces"] = max_bounces
+                h_params["rr_start_depth"] = rr_start_depth
+                h_params["firefly_clamp"] = 1 if firefly_clamp else 0
+                h_params["firefly_clamp_max"] = firefly_clamp_max
+                h_params["global_material"] = global_material
+                h_params["glossy_ior"] = glossy_ior
+                h_params["_pad3"] = 0
 
                 self._d_params.set(
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
@@ -694,7 +764,11 @@ class PathTracerRenderer:
                            fov_deg, light_dir=(0.577, 0.577, 0.577),
                            ambient=0.12, radius_scale=1.0, exposure=1.0,
                            sky_color_top=(0.45, 0.62, 0.85),
-                           sky_color_bottom=(0.08, 0.08, 0.10)):
+                           sky_color_bottom=(0.08, 0.08, 0.10),
+                           aperture=0.0, focal_plane_depth=10.0,
+                           max_bounces=0, rr_start_depth=3,
+                           firefly_clamp=False, firefly_clamp_max=100.0,
+                           global_material=0, glossy_ior=1.5):
         """Convenience: render from FPS camera vectors.
 
         Converts Fluoddity's ControllerCam-style vectors to OptiX pinhole
@@ -711,6 +785,14 @@ class PathTracerRenderer:
             exposure: Exposure multiplier for tonemapping.
             sky_color_top: Sky gradient top color (3-tuple).
             sky_color_bottom: Sky gradient bottom color (3-tuple).
+            aperture: DOF lens radius (0 = pinhole, no DOF).
+            focal_plane_depth: DOF focal distance.
+            max_bounces: Max bounce depth (0 = unlimited, RR only).
+            rr_start_depth: Depth at which Russian roulette begins.
+            firefly_clamp: Enable per-sample firefly clamping.
+            firefly_clamp_max: Max per-sample luminance.
+            global_material: Material type (0=Lambert, 1=Glossy, 2=Mirror).
+            glossy_ior: Index of refraction for glossy Fresnel.
 
         Returns:
             moderngl.Texture (rgba8).
@@ -719,6 +801,15 @@ class PathTracerRenderer:
         eye, U, V, W = _camera_basis_from_vectors(
             cam_pos, cam_dir, cam_up, fov_deg, aspect
         )
+
+        # Compute normalized cam_right and cam_up for DOF lens sampling
+        cam_dir_arr = np.asarray(cam_dir, dtype=np.float32)
+        cam_up_arr = np.asarray(cam_up, dtype=np.float32)
+        cam_right_vec = np.cross(cam_dir_arr, cam_up_arr)
+        cam_right_vec = cam_right_vec / max(np.linalg.norm(cam_right_vec), 1e-8)
+        cam_up_vec = np.cross(cam_right_vec, cam_dir_arr)
+        cam_up_vec = cam_up_vec / max(np.linalg.norm(cam_up_vec), 1e-8)
+
         return self.render(
             width, height, eye, U, V, W, light_dir,
             ambient=ambient,
@@ -726,6 +817,16 @@ class PathTracerRenderer:
             exposure=exposure,
             sky_color_top=sky_color_top,
             sky_color_bottom=sky_color_bottom,
+            aperture=aperture,
+            focal_plane_depth=focal_plane_depth,
+            cam_right=cam_right_vec,
+            cam_up=cam_up_vec,
+            max_bounces=max_bounces,
+            rr_start_depth=rr_start_depth,
+            firefly_clamp=firefly_clamp,
+            firefly_clamp_max=firefly_clamp_max,
+            global_material=global_material,
+            glossy_ior=glossy_ior,
         )
 
     # ------------------------------------------------------------------
