@@ -75,7 +75,12 @@ struct Params
     // Sun NEE (Step 4)
     float3         sun_color;          // offset 212: sun color RGB
     int            sun_sampling;       // offset 224: bool: enable NEE shadow rays
-    // _pad4                           // offset 228: 4 bytes padding to 232 total
+    // _pad4                           // offset 228: 4 bytes padding for pointer alignment
+
+    // Denoiser guide buffers (Step 5)
+    float4*        albedo_buffer;      // offset 232: primary-hit albedo guide (null if disabled)
+    float4*        normal_buffer;      // offset 240: primary-hit normal guide (null if disabled)
+    // Total: 248 bytes
 };
 __constant__ Params params;
 }
@@ -363,6 +368,14 @@ extern "C" __global__ void __raygen__rg()
                              __uint_as_float(p6),
                              __uint_as_float(p7));
             radiance = radiance + throughput * sky;
+
+            // Guide buffers: primary miss -> sky albedo, neutral normal
+            if (depth == 0 && params.albedo_buffer) {
+                const unsigned int pidx = idx.y * params.width + idx.x;
+                params.albedo_buffer[pidx] = make_float4(sky.x, sky.y, sky.z, 1.0f);
+                params.normal_buffer[pidx] = make_float4(0.0f, 0.0f, 1.0f, 0.0f);
+            }
+
             break;
         }
 
@@ -379,6 +392,13 @@ extern "C" __global__ void __raygen__rg()
 
         // HSV->RGB albedo (S=0.8, V=1.0 matching points_3d.frag)
         float3 albedo = hsv2rgb(entity_hue(prim), 0.8f, 1.0f);
+
+        // Guide buffers: primary hit -> surface albedo and normal
+        if (depth == 0 && params.albedo_buffer) {
+            const unsigned int pidx = idx.y * params.width + idx.x;
+            params.albedo_buffer[pidx] = make_float4(albedo.x, albedo.y, albedo.z, 1.0f);
+            params.normal_buffer[pidx] = make_float4(N.x, N.y, N.z, 0.0f);
+        }
 
         // Material (global for now; per-particle in future)
         int   mat_id = params.global_material;
@@ -569,5 +589,30 @@ extern "C" __global__ void tonemap(
         (unsigned char)(g * 255.99f),
         (unsigned char)(b * 255.99f),
         255);
+}
+"""
+
+
+RESOLVE_CUDA_SRC = r"""
+extern "C" __global__ void resolve(
+    const float4* __restrict__ accum,
+    float4*       __restrict__ resolved,
+    unsigned int  width,
+    unsigned int  height,
+    unsigned int  samples)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+
+    const unsigned int idx = y * width + x;
+    float4 hdr = accum[idx];
+
+    float inv_n = 1.0f / fmaxf((float)samples, 1.0f);
+    resolved[idx] = make_float4(
+        hdr.x * inv_n,
+        hdr.y * inv_n,
+        hdr.z * inv_n,
+        1.0f);
 }
 """

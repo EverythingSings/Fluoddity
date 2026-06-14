@@ -27,7 +27,7 @@ from optix_renderer.interop import (
     aligned_dtype,
     to_device,
 )
-from .cuda_src import PATHTRACER_CUDA_SRC, TONEMAP_CUDA_SRC
+from .cuda_src import PATHTRACER_CUDA_SRC, TONEMAP_CUDA_SRC, RESOLVE_CUDA_SRC
 
 
 # ---------------------------------------------------------------------------
@@ -69,8 +69,11 @@ from .cuda_src import PATHTRACER_CUDA_SRC, TONEMAP_CUDA_SRC
 #   --- Step 4 additions ---
 #   float3 sun_color;                    // offset 212, 3×f4
 #   int    sun_sampling;                 // offset 224, i4
-#   <pad 4 bytes>                        // offset 228 (align total to 8)
-#   Total: 232 bytes
+#   <pad 4 bytes>                        // offset 228 (align ptr to 8)
+#   --- Step 5 additions ---
+#   float4* albedo_buffer;               // offset 232, ptr (8 bytes)
+#   float4* normal_buffer;               // offset 240, ptr (8 bytes)
+#   Total: 248 bytes
 # ---------------------------------------------------------------------------
 PARAMS_DTYPE = np.dtype({
     "names": [
@@ -98,6 +101,8 @@ PARAMS_DTYPE = np.dtype({
         "sun_color_r", "sun_color_g", "sun_color_b",
         "sun_sampling",
         "_pad4",
+        # Step 5
+        "albedo_buffer", "normal_buffer",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -124,6 +129,8 @@ PARAMS_DTYPE = np.dtype({
         "f4", "f4", "f4",
         "i4",
         "u4",
+        # Step 5
+        "u8", "u8",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -150,8 +157,10 @@ PARAMS_DTYPE = np.dtype({
         212, 216, 220,
         224,
         228,
+        # Step 5
+        232, 240,
     ],
-    "itemsize": 232,
+    "itemsize": 248,
 })
 
 
@@ -231,9 +240,22 @@ class PathTracerRenderer:
 
         # Accumulation resources
         self._d_accum = None
+        self._d_albedo = None
+        self._d_normal = None
         self._sample_count = 0
         self._accum_width = 0
         self._accum_height = 0
+
+        # Denoiser resources (lazily initialized)
+        self._denoiser = None
+        self._denoiser_width = 0
+        self._denoiser_height = 0
+        self._d_denoiser_state = None
+        self._d_denoiser_scratch = None
+        self._denoiser_state_size = 0
+        self._denoiser_scratch_size = 0
+        self._d_resolved = None
+        self._d_denoised = None
 
         # Initialize CuPy / CUDA primary context
         cp.zeros(1)
@@ -274,8 +296,9 @@ class PathTracerRenderer:
         self.last_gas_ms = 0.0
         self.last_render_ms = 0.0
 
-        # Compile tonemap kernel via CuPy RawKernel
+        # Compile tonemap and resolve kernels via CuPy RawKernel
         self._tonemap_kernel = cp.RawKernel(TONEMAP_CUDA_SRC, 'tonemap')
+        self._resolve_kernel = cp.RawKernel(RESOLVE_CUDA_SRC, 'resolve')
 
         # Log device info
         err, props = cudart.cudaGetDeviceProperties(0)
@@ -442,20 +465,147 @@ class PathTracerRenderer:
     # ------------------------------------------------------------------
 
     def _ensure_accum_buffers(self, width, height):
-        """Allocate or resize the CUDA-side float4 accumulation buffer."""
+        """Allocate or resize CUDA-side float4 accumulation and guide buffers."""
         if self._accum_width == width and self._accum_height == height:
             return
 
         self._d_accum = cp.zeros(width * height * 4, dtype=cp.float32)
+        self._d_albedo = cp.zeros(width * height * 4, dtype=cp.float32)
+        self._d_normal = cp.zeros(width * height * 4, dtype=cp.float32)
         self._accum_width = width
         self._accum_height = height
         self._sample_count = 0
 
     def reset_accumulation(self):
-        """Zero the accumulation buffer and reset the sample counter."""
+        """Zero the accumulation and guide buffers, reset the sample counter."""
         if self._d_accum is not None:
             self._d_accum.fill(0)
+        if self._d_albedo is not None:
+            self._d_albedo.fill(0)
+        if self._d_normal is not None:
+            self._d_normal.fill(0)
         self._sample_count = 0
+
+    # ------------------------------------------------------------------
+    # Denoiser (Step 5)
+    # ------------------------------------------------------------------
+
+    def _setup_denoiser(self, width, height):
+        """Create and setup the OptiX AI denoiser for the given resolution.
+
+        Lazily called on first denoise request. Re-created if resolution changes.
+        """
+        if (self._denoiser is not None
+                and self._denoiser_width == width
+                and self._denoiser_height == height):
+            return
+
+        # Destroy previous denoiser if resolution changed
+        self._denoiser = None
+        self._d_denoiser_state = None
+        self._d_denoiser_scratch = None
+
+        # Create denoiser with albedo + normal guides
+        opts = optix.DenoiserOptions()
+        opts.guideAlbedo = 1
+        opts.guideNormal = 1
+        self._denoiser = self._octx.denoiserCreate(
+            optix.DENOISER_MODEL_KIND_HDR, opts
+        )
+
+        # Compute memory requirements
+        sizes = self._denoiser.computeMemoryResources(width, height)
+        self._denoiser_state_size = sizes.stateSizeInBytes
+        self._denoiser_scratch_size = sizes.withoutOverlapScratchSizeInBytes
+
+        # Allocate state and scratch buffers
+        self._d_denoiser_state = cp.cuda.alloc(self._denoiser_state_size)
+        self._d_denoiser_scratch = cp.cuda.alloc(self._denoiser_scratch_size)
+
+        # Setup denoiser
+        self._denoiser.setup(
+            self._stream,
+            width, height,
+            self._d_denoiser_state.ptr, self._denoiser_state_size,
+            self._d_denoiser_scratch.ptr, self._denoiser_scratch_size,
+        )
+
+        # Allocate resolved (accum / N) and denoised output buffers
+        self._d_resolved = cp.zeros(width * height * 4, dtype=cp.float32)
+        self._d_denoised = cp.zeros(width * height * 4, dtype=cp.float32)
+
+        self._denoiser_width = width
+        self._denoiser_height = height
+        print(f"PathTracer: denoiser initialized ({width}x{height}, "
+              f"state={self._denoiser_state_size} bytes, "
+              f"scratch={self._denoiser_scratch_size} bytes)")
+
+    @staticmethod
+    def _make_image2d(ptr, width, height):
+        """Build an OptiX Image2D descriptor for a float4 buffer."""
+        img = optix.Image2D()
+        img.data = ptr
+        img.width = width
+        img.height = height
+        img.format = optix.PIXEL_FORMAT_FLOAT4
+        img.pixelStrideInBytes = 16      # float4 = 4 * 4 bytes
+        img.rowStrideInBytes = width * 16
+        return img
+
+    def _run_denoiser(self, width, height):
+        """Resolve accumulation buffer and run the OptiX denoiser.
+
+        Produces a denoised HDR image in self._d_denoised.
+        """
+        # 1. Resolve: divide accum by sample count
+        block = (16, 16, 1)
+        grid = ((width + 15) // 16, (height + 15) // 16, 1)
+        stream_wrapper = cp.cuda.ExternalStream(self._stream)
+        self._resolve_kernel(
+            grid, block,
+            (self._d_accum.data.ptr,
+             self._d_resolved.data.ptr,
+             np.uint32(width),
+             np.uint32(height),
+             np.uint32(self._sample_count)),
+            stream=stream_wrapper,
+        )
+
+        # 2. Build Image2D descriptors
+        input_img = self._make_image2d(
+            self._d_resolved.data.ptr, width, height)
+        output_img = self._make_image2d(
+            self._d_denoised.data.ptr, width, height)
+        albedo_img = self._make_image2d(
+            self._d_albedo.data.ptr, width, height)
+        normal_img = self._make_image2d(
+            self._d_normal.data.ptr, width, height)
+
+        # 3. Build guide and layer structs
+        guide = optix.DenoiserGuideLayer()
+        guide.albedo = albedo_img
+        guide.normal = normal_img
+
+        layer = optix.DenoiserLayer()
+        layer.input = input_img
+        layer.output = output_img
+
+        # 4. Denoiser params
+        dn_params = optix.DenoiserParams()
+        dn_params.blendFactor = 0.0   # full denoise
+        dn_params.hdrIntensity = 0    # skip intensity computation
+
+        # 5. Invoke denoiser
+        # C API order: stream, params, state, stateSize, guide, layer, numLayers,
+        #              offsetX, offsetY, scratch, scratchSize
+        self._denoiser.invoke(
+            self._stream,
+            dn_params,
+            self._d_denoiser_state.ptr, self._denoiser_state_size,
+            guide, layer, 1,
+            0, 0,
+            self._d_denoiser_scratch.ptr, self._denoiser_scratch_size,
+        )
 
     # ------------------------------------------------------------------
     # Acceleration structure (GAS)
@@ -606,12 +756,14 @@ class PathTracerRenderer:
                max_bounces=0, rr_start_depth=3,
                firefly_clamp=False, firefly_clamp_max=100.0,
                global_material=0, glossy_ior=1.5,
-               sun_color=(1.0, 1.0, 1.0), sun_sampling=True):
+               sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
+               denoise_enabled=False):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
-        running average of all accumulated samples, tonemapped and written
-        to the PBO.  Call reset_accumulation() to start a fresh render.
+        running average of all accumulated samples, optionally denoised,
+        tonemapped and written to the PBO.  Call reset_accumulation() to
+        start a fresh render.
 
         The entity buffer must NOT be mapped by the caller.
 
@@ -639,6 +791,7 @@ class PathTracerRenderer:
             glossy_ior: Index of refraction for glossy Fresnel.
             sun_color: Sun color RGB (3-tuple).
             sun_sampling: Enable NEE shadow rays for direct sun lighting.
+            denoise_enabled: Run OptiX AI denoiser after accumulation.
 
         Returns:
             moderngl.Texture (rgba8) with the tonemapped image.
@@ -650,6 +803,8 @@ class PathTracerRenderer:
 
         self._ensure_display(width, height)
         self._ensure_accum_buffers(width, height)
+        if denoise_enabled:
+            self._setup_denoiser(width, height)
 
         # Map entity buffer for the OptiX launch (intersection reads it)
         self._ctx.finish()
@@ -734,6 +889,14 @@ class PathTracerRenderer:
                 h_params["sun_sampling"] = 1 if sun_sampling else 0
                 h_params["_pad4"] = 0
 
+                # Step 5: Guide buffer pointers (0 = null if denoiser not active)
+                if denoise_enabled:
+                    h_params["albedo_buffer"] = self._d_albedo.data.ptr
+                    h_params["normal_buffer"] = self._d_normal.data.ptr
+                else:
+                    h_params["albedo_buffer"] = 0
+                    h_params["normal_buffer"] = 0
+
                 self._d_params.set(
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
                 )
@@ -753,20 +916,36 @@ class PathTracerRenderer:
 
                 self._sample_count += 1
 
-                # Tonemap kernel: read accum buffer, write PBO
+                # Tonemap kernel: read accum (or denoised) buffer, write PBO
                 block = (16, 16, 1)
                 grid = ((width + 15) // 16, (height + 15) // 16, 1)
                 stream_wrapper = cp.cuda.ExternalStream(self._stream)
-                self._tonemap_kernel(
-                    grid, block,
-                    (self._d_accum.data.ptr,
-                     image_ptr,
-                     np.uint32(width),
-                     np.uint32(height),
-                     np.uint32(self._sample_count),
-                     np.float32(exposure)),
-                    stream=stream_wrapper,
-                )
+
+                if denoise_enabled:
+                    # Resolve + denoise, then tonemap the denoised result
+                    self._run_denoiser(width, height)
+                    self._tonemap_kernel(
+                        grid, block,
+                        (self._d_denoised.data.ptr,
+                         image_ptr,
+                         np.uint32(width),
+                         np.uint32(height),
+                         np.uint32(1),  # already resolved to mean
+                         np.float32(exposure)),
+                        stream=stream_wrapper,
+                    )
+                else:
+                    # Tonemap directly from raw accum buffer
+                    self._tonemap_kernel(
+                        grid, block,
+                        (self._d_accum.data.ptr,
+                         image_ptr,
+                         np.uint32(width),
+                         np.uint32(height),
+                         np.uint32(self._sample_count),
+                         np.float32(exposure)),
+                        stream=stream_wrapper,
+                    )
 
                 check_cuda(cudart.cudaEventRecord(self._evt_render_end, self._stream_obj))
                 check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
@@ -793,7 +972,8 @@ class PathTracerRenderer:
                            max_bounces=0, rr_start_depth=3,
                            firefly_clamp=False, firefly_clamp_max=100.0,
                            global_material=0, glossy_ior=1.5,
-                           sun_color=(1.0, 1.0, 1.0), sun_sampling=True):
+                           sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
+                           denoise_enabled=False):
         """Convenience: render from FPS camera vectors.
 
         Converts Fluoddity's ControllerCam-style vectors to OptiX pinhole
@@ -820,6 +1000,7 @@ class PathTracerRenderer:
             glossy_ior: Index of refraction for glossy Fresnel.
             sun_color: Sun color RGB (3-tuple).
             sun_sampling: Enable NEE shadow rays for direct sun lighting.
+            denoise_enabled: Run OptiX AI denoiser after accumulation.
 
         Returns:
             moderngl.Texture (rgba8).
@@ -857,6 +1038,7 @@ class PathTracerRenderer:
             glossy_ior=glossy_ior,
             sun_color=sun_color,
             sun_sampling=sun_sampling,
+            denoise_enabled=denoise_enabled,
         )
 
     # ------------------------------------------------------------------
@@ -895,6 +1077,19 @@ class PathTracerRenderer:
         """Force recreation of PBO and output texture for a new resolution."""
         self._render_width = 0  # force _ensure_display to recreate
         self._render_height = 0
+
+    def get_guide_buffers(self):
+        """Return (albedo, normal) as numpy float32 arrays, shape (H, W, 4).
+
+        For diagnostic visualization of the denoiser guide buffers.
+        Returns (None, None) if buffers are not allocated.
+        """
+        if self._d_albedo is None or self._d_normal is None:
+            return None, None
+        w, h = self._accum_width, self._accum_height
+        albedo = cp.asnumpy(self._d_albedo).reshape(h, w, 4)
+        normal = cp.asnumpy(self._d_normal).reshape(h, w, 4)
+        return albedo, normal
 
     # ------------------------------------------------------------------
     # Cleanup
@@ -940,7 +1135,16 @@ class PathTracerRenderer:
         self._d_aabbs = None
         self._d_params = None
         self._d_accum = None
+        self._d_albedo = None
+        self._d_normal = None
         self._sbt_mem = None
+
+        # Denoiser resources
+        self._denoiser = None
+        self._d_denoiser_state = None
+        self._d_denoiser_scratch = None
+        self._d_resolved = None
+        self._d_denoised = None
 
     # ------------------------------------------------------------------
     # Availability check
