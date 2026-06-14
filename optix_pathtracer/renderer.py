@@ -4,9 +4,9 @@ This module provides the PathTracerRenderer class, a self-contained renderer
 that reads Fluoddity's entity SSBO via GL-CUDA interop and produces a
 path-traced image with progressive sample accumulation and tonemapping.
 
-Step 4 of the path tracer implementation plan: sun NEE with binary GAS
-shadow rays, enhanced sky with sun glow. Builds on Step 3's bounce loop
-with Lambert/Glossy/Mirror materials, Russian roulette, DOF, firefly clamping.
+Step 6: Motion blur + realtime/offline split. Adds render_realtime() for
+single-frame renders with GAS scheduling, and render_offline_begin/substep/
+finish for multi-substep motion-blur renders with temporal accumulation.
 """
 
 import numpy as np
@@ -256,6 +256,17 @@ class PathTracerRenderer:
         self._denoiser_scratch_size = 0
         self._d_resolved = None
         self._d_denoised = None
+
+        # GAS scheduling (for render_realtime)
+        self._frame_counter = 0
+
+        # Offline render state
+        self._offline_active = False
+        self._offline_width = 0
+        self._offline_height = 0
+        self._offline_denoise = False
+        self._offline_substeps_done = 0
+        self._offline_spp_per_substep = 0
 
         # Initialize CuPy / CUDA primary context
         cp.zeros(1)
@@ -743,6 +754,180 @@ class PathTracerRenderer:
             unmap_resource(self._entity_res)
 
     # ------------------------------------------------------------------
+    # Rendering helpers (Step 6: extracted for realtime/offline reuse)
+    # ------------------------------------------------------------------
+
+    def _fill_params_and_launch(self, entities_ptr, width, height,
+                                eye, U, V, W, write_guides=True,
+                                sun_direction=(0.577, 0.577, 0.577),
+                                sun_intensity=1.0, radius_scale=1.0,
+                                exposure=1.0,
+                                sky_color_top=(0.45, 0.62, 0.85),
+                                sky_color_bottom=(0.08, 0.08, 0.10),
+                                aperture=0.0, focal_plane_depth=10.0,
+                                cam_right=None, cam_up=None,
+                                max_bounces=0, rr_start_depth=3,
+                                firefly_clamp=False, firefly_clamp_max=100.0,
+                                global_material=0, glossy_ior=1.5,
+                                sun_color=(1.0, 1.0, 1.0), sun_sampling=True):
+        """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
+
+        The entity buffer must already be mapped (entities_ptr is the device
+        pointer). Accumulation buffers must already be allocated. Does NOT
+        map/unmap anything. Does NOT tonemap or denoise.
+
+        Increments self._sample_count after the launch.
+
+        Args:
+            entities_ptr: Device pointer to the mapped entity buffer.
+            width, height: Render dimensions.
+            eye, U, V, W: Camera basis vectors.
+            write_guides: If True, set albedo/normal buffer pointers so the
+                raygen writes denoiser guide data. If False, pass null
+                pointers so guide writes are skipped.
+            ... (all other render params forwarded to the Params struct)
+        """
+        eye = np.asarray(eye, dtype=np.float32)
+        U = np.asarray(U, dtype=np.float32)
+        V = np.asarray(V, dtype=np.float32)
+        W = np.asarray(W, dtype=np.float32)
+        sun_direction = np.asarray(sun_direction, dtype=np.float32)
+        sun_color = np.asarray(sun_color, dtype=np.float32)
+        sky_color_top = np.asarray(sky_color_top, dtype=np.float32)
+        sky_color_bottom = np.asarray(sky_color_bottom, dtype=np.float32)
+
+        h_params = np.zeros(1, dtype=PARAMS_DTYPE)
+        h_params["image"] = 0  # unused by raygen; tonemap uses its own arg
+        h_params["entities"] = entities_ptr
+        h_params["entity_stride"] = self._entity_stride
+        h_params["_pad0"] = 0
+        h_params["handle"] = self._gas_handle
+        h_params["width"] = width
+        h_params["height"] = height
+        h_params["eye_x"] = eye[0]
+        h_params["eye_y"] = eye[1]
+        h_params["eye_z"] = eye[2]
+        h_params["u_x"] = U[0]
+        h_params["u_y"] = U[1]
+        h_params["u_z"] = U[2]
+        h_params["v_x"] = V[0]
+        h_params["v_y"] = V[1]
+        h_params["v_z"] = V[2]
+        h_params["w_x"] = W[0]
+        h_params["w_y"] = W[1]
+        h_params["w_z"] = W[2]
+        h_params["sun_dir_x"] = sun_direction[0]
+        h_params["sun_dir_y"] = sun_direction[1]
+        h_params["sun_dir_z"] = sun_direction[2]
+        h_params["sun_intensity"] = sun_intensity
+        h_params["radius_scale"] = radius_scale
+        h_params["sky_top_r"] = sky_color_top[0]
+        h_params["sky_top_g"] = sky_color_top[1]
+        h_params["sky_top_b"] = sky_color_top[2]
+        h_params["sky_bot_r"] = sky_color_bottom[0]
+        h_params["sky_bot_g"] = sky_color_bottom[1]
+        h_params["sky_bot_b"] = sky_color_bottom[2]
+        h_params["_pad1"] = 0
+        h_params["accum_buffer"] = self._d_accum.data.ptr
+        h_params["sample_index"] = self._sample_count
+        h_params["samples_accumulated"] = self._sample_count + 1
+        h_params["exposure"] = exposure
+
+        # DOF, bounce control, materials
+        h_params["aperture"] = aperture
+        h_params["focal_plane_depth"] = focal_plane_depth
+        if cam_right is not None:
+            cr = np.asarray(cam_right, dtype=np.float32)
+            h_params["cam_right_x"] = cr[0]
+            h_params["cam_right_y"] = cr[1]
+            h_params["cam_right_z"] = cr[2]
+        if cam_up is not None:
+            cu = np.asarray(cam_up, dtype=np.float32)
+            h_params["cam_up_x"] = cu[0]
+            h_params["cam_up_y"] = cu[1]
+            h_params["cam_up_z"] = cu[2]
+        h_params["max_bounces"] = max_bounces
+        h_params["rr_start_depth"] = rr_start_depth
+        h_params["firefly_clamp"] = 1 if firefly_clamp else 0
+        h_params["firefly_clamp_max"] = firefly_clamp_max
+        h_params["global_material"] = global_material
+        h_params["glossy_ior"] = glossy_ior
+
+        # Sun NEE params
+        h_params["sun_color_r"] = sun_color[0]
+        h_params["sun_color_g"] = sun_color[1]
+        h_params["sun_color_b"] = sun_color[2]
+        h_params["sun_sampling"] = 1 if sun_sampling else 0
+        h_params["_pad4"] = 0
+
+        # Guide buffer pointers (null when not writing guides)
+        if write_guides and self._d_albedo is not None:
+            h_params["albedo_buffer"] = self._d_albedo.data.ptr
+            h_params["normal_buffer"] = self._d_normal.data.ptr
+        else:
+            h_params["albedo_buffer"] = 0
+            h_params["normal_buffer"] = 0
+
+        self._d_params.set(
+            np.frombuffer(h_params.tobytes(), dtype=np.uint8)
+        )
+
+        # OptiX launch: trace + accumulate into HDR buffer
+        optix.launch(
+            self._pipeline,
+            self._stream,
+            self._d_params.data.ptr,
+            PARAMS_DTYPE.itemsize,
+            self._sbt,
+            width,
+            height,
+            1,  # depth
+        )
+
+        self._sample_count += 1
+
+    def _tonemap_accum_to_pbo(self, image_ptr, width, height,
+                              denoise_enabled, exposure):
+        """Run optional denoiser + tonemap into the mapped PBO.
+
+        Args:
+            image_ptr: Device pointer to the mapped PBO.
+            width, height: Image dimensions.
+            denoise_enabled: If True, resolve + denoise then tonemap the
+                denoised buffer. If False, tonemap raw accumulation directly.
+            exposure: Exposure multiplier for tonemapping.
+        """
+        block = (16, 16, 1)
+        grid = ((width + 15) // 16, (height + 15) // 16, 1)
+        stream_wrapper = cp.cuda.ExternalStream(self._stream)
+
+        if denoise_enabled:
+            # Resolve + denoise, then tonemap the denoised result
+            self._run_denoiser(width, height)
+            self._tonemap_kernel(
+                grid, block,
+                (self._d_denoised.data.ptr,
+                 image_ptr,
+                 np.uint32(width),
+                 np.uint32(height),
+                 np.uint32(1),  # already resolved to mean
+                 np.float32(exposure)),
+                stream=stream_wrapper,
+            )
+        else:
+            # Tonemap directly from raw accum buffer
+            self._tonemap_kernel(
+                grid, block,
+                (self._d_accum.data.ptr,
+                 image_ptr,
+                 np.uint32(width),
+                 np.uint32(height),
+                 np.uint32(self._sample_count),
+                 np.float32(exposure)),
+                stream=stream_wrapper,
+            )
+
+    # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------
 
@@ -815,139 +1000,40 @@ class PathTracerRenderer:
             image_ptr, _ = map_resource(self._pbo_res)
 
             try:
-                # Fill launch params
-                eye = np.asarray(eye, dtype=np.float32)
-                U = np.asarray(U, dtype=np.float32)
-                V = np.asarray(V, dtype=np.float32)
-                W = np.asarray(W, dtype=np.float32)
-                sun_direction = np.asarray(sun_direction, dtype=np.float32)
-                sun_color = np.asarray(sun_color, dtype=np.float32)
-                sky_color_top = np.asarray(sky_color_top, dtype=np.float32)
-                sky_color_bottom = np.asarray(sky_color_bottom, dtype=np.float32)
+                check_cuda(cudart.cudaEventRecord(
+                    self._evt_render_start, self._stream_obj))
 
-                h_params = np.zeros(1, dtype=PARAMS_DTYPE)
-                h_params["image"] = image_ptr
-                h_params["entities"] = entities_ptr
-                h_params["entity_stride"] = self._entity_stride
-                h_params["_pad0"] = 0
-                h_params["handle"] = self._gas_handle
-                h_params["width"] = width
-                h_params["height"] = height
-                h_params["eye_x"] = eye[0]
-                h_params["eye_y"] = eye[1]
-                h_params["eye_z"] = eye[2]
-                h_params["u_x"] = U[0]
-                h_params["u_y"] = U[1]
-                h_params["u_z"] = U[2]
-                h_params["v_x"] = V[0]
-                h_params["v_y"] = V[1]
-                h_params["v_z"] = V[2]
-                h_params["w_x"] = W[0]
-                h_params["w_y"] = W[1]
-                h_params["w_z"] = W[2]
-                h_params["sun_dir_x"] = sun_direction[0]
-                h_params["sun_dir_y"] = sun_direction[1]
-                h_params["sun_dir_z"] = sun_direction[2]
-                h_params["sun_intensity"] = sun_intensity
-                h_params["radius_scale"] = radius_scale
-                h_params["sky_top_r"] = sky_color_top[0]
-                h_params["sky_top_g"] = sky_color_top[1]
-                h_params["sky_top_b"] = sky_color_top[2]
-                h_params["sky_bot_r"] = sky_color_bottom[0]
-                h_params["sky_bot_g"] = sky_color_bottom[1]
-                h_params["sky_bot_b"] = sky_color_bottom[2]
-                h_params["_pad1"] = 0
-                h_params["accum_buffer"] = self._d_accum.data.ptr
-                h_params["sample_index"] = self._sample_count
-                h_params["samples_accumulated"] = self._sample_count + 1
-                h_params["exposure"] = exposure
-
-                # Step 3: DOF, bounce control, materials
-                h_params["aperture"] = aperture
-                h_params["focal_plane_depth"] = focal_plane_depth
-                if cam_right is not None:
-                    cr = np.asarray(cam_right, dtype=np.float32)
-                    h_params["cam_right_x"] = cr[0]
-                    h_params["cam_right_y"] = cr[1]
-                    h_params["cam_right_z"] = cr[2]
-                if cam_up is not None:
-                    cu = np.asarray(cam_up, dtype=np.float32)
-                    h_params["cam_up_x"] = cu[0]
-                    h_params["cam_up_y"] = cu[1]
-                    h_params["cam_up_z"] = cu[2]
-                h_params["max_bounces"] = max_bounces
-                h_params["rr_start_depth"] = rr_start_depth
-                h_params["firefly_clamp"] = 1 if firefly_clamp else 0
-                h_params["firefly_clamp_max"] = firefly_clamp_max
-                h_params["global_material"] = global_material
-                h_params["glossy_ior"] = glossy_ior
-
-                # Step 4: Sun NEE params
-                h_params["sun_color_r"] = sun_color[0]
-                h_params["sun_color_g"] = sun_color[1]
-                h_params["sun_color_b"] = sun_color[2]
-                h_params["sun_sampling"] = 1 if sun_sampling else 0
-                h_params["_pad4"] = 0
-
-                # Step 5: Guide buffer pointers (0 = null if denoiser not active)
-                if denoise_enabled:
-                    h_params["albedo_buffer"] = self._d_albedo.data.ptr
-                    h_params["normal_buffer"] = self._d_normal.data.ptr
-                else:
-                    h_params["albedo_buffer"] = 0
-                    h_params["normal_buffer"] = 0
-
-                self._d_params.set(
-                    np.frombuffer(h_params.tobytes(), dtype=np.uint8)
+                self._fill_params_and_launch(
+                    entities_ptr, width, height, eye, U, V, W,
+                    write_guides=denoise_enabled,
+                    sun_direction=sun_direction,
+                    sun_intensity=sun_intensity,
+                    radius_scale=radius_scale,
+                    exposure=exposure,
+                    sky_color_top=sky_color_top,
+                    sky_color_bottom=sky_color_bottom,
+                    aperture=aperture,
+                    focal_plane_depth=focal_plane_depth,
+                    cam_right=cam_right,
+                    cam_up=cam_up,
+                    max_bounces=max_bounces,
+                    rr_start_depth=rr_start_depth,
+                    firefly_clamp=firefly_clamp,
+                    firefly_clamp_max=firefly_clamp_max,
+                    global_material=global_material,
+                    glossy_ior=glossy_ior,
+                    sun_color=sun_color,
+                    sun_sampling=sun_sampling,
                 )
 
-                # OptiX launch: trace + accumulate into HDR buffer
-                check_cuda(cudart.cudaEventRecord(self._evt_render_start, self._stream_obj))
-                optix.launch(
-                    self._pipeline,
-                    self._stream,
-                    self._d_params.data.ptr,
-                    PARAMS_DTYPE.itemsize,
-                    self._sbt,
-                    width,
-                    height,
-                    1,  # depth
+                self._tonemap_accum_to_pbo(
+                    image_ptr, width, height,
+                    denoise_enabled=denoise_enabled,
+                    exposure=exposure,
                 )
 
-                self._sample_count += 1
-
-                # Tonemap kernel: read accum (or denoised) buffer, write PBO
-                block = (16, 16, 1)
-                grid = ((width + 15) // 16, (height + 15) // 16, 1)
-                stream_wrapper = cp.cuda.ExternalStream(self._stream)
-
-                if denoise_enabled:
-                    # Resolve + denoise, then tonemap the denoised result
-                    self._run_denoiser(width, height)
-                    self._tonemap_kernel(
-                        grid, block,
-                        (self._d_denoised.data.ptr,
-                         image_ptr,
-                         np.uint32(width),
-                         np.uint32(height),
-                         np.uint32(1),  # already resolved to mean
-                         np.float32(exposure)),
-                        stream=stream_wrapper,
-                    )
-                else:
-                    # Tonemap directly from raw accum buffer
-                    self._tonemap_kernel(
-                        grid, block,
-                        (self._d_accum.data.ptr,
-                         image_ptr,
-                         np.uint32(width),
-                         np.uint32(height),
-                         np.uint32(self._sample_count),
-                         np.float32(exposure)),
-                        stream=stream_wrapper,
-                    )
-
-                check_cuda(cudart.cudaEventRecord(self._evt_render_end, self._stream_obj))
+                check_cuda(cudart.cudaEventRecord(
+                    self._evt_render_end, self._stream_obj))
                 check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
                 self.last_render_ms = check_cuda(
                     cudart.cudaEventElapsedTime(
@@ -1040,6 +1126,192 @@ class PathTracerRenderer:
             sun_sampling=sun_sampling,
             denoise_enabled=denoise_enabled,
         )
+
+    # ------------------------------------------------------------------
+    # Realtime / Offline mode API (Step 6)
+    # ------------------------------------------------------------------
+
+    def render_realtime(self, width, height, eye, U, V, W,
+                        radius_scale=1.0, gas_rebuild_interval=30,
+                        denoise_enabled=False, **render_kwargs):
+        """One-shot realtime render: reset, refit/rebuild GAS, trace 1 spp.
+
+        Manages GAS scheduling internally. The entity buffer must reflect
+        the current particle positions before calling.
+
+        Args:
+            width, height: Output dimensions.
+            eye, U, V, W: Camera basis vectors.
+            radius_scale: Entity size multiplier.
+            gas_rebuild_interval: Full GAS rebuild every N frames (refit
+                between). Set to 1 to rebuild every frame.
+            denoise_enabled: Run AI denoiser on this frame.
+            **render_kwargs: All other render params (sun, sky, materials,
+                DOF, bounce control, etc.).
+
+        Returns:
+            moderngl.Texture (rgba8).
+        """
+        # Reset accumulation each frame (realtime = single-frame renders)
+        self.reset_accumulation()
+
+        # GAS scheduling: periodic rebuild, refit between
+        self._frame_counter += 1
+        if (self._gas_handle is None
+                or self._frame_counter >= gas_rebuild_interval):
+            self.build_accel(radius_scale)
+            self._frame_counter = 0
+        else:
+            self.refit_accel(radius_scale)
+
+        return self.render(
+            width, height, eye, U, V, W,
+            radius_scale=radius_scale,
+            denoise_enabled=denoise_enabled,
+            **render_kwargs,
+        )
+
+    def render_offline_begin(self, width, height, total_substeps,
+                             spp_per_substep, denoise_enabled=False):
+        """Begin an offline motion-blur render.
+
+        Resets the accumulation buffer and stores parameters for the
+        substep sequence. After calling this, call render_offline_substep()
+        for each temporal sub-step, then render_offline_finish() to get
+        the final tonemapped image.
+
+        Args:
+            width, height: Output dimensions.
+            total_substeps: Number of temporal sub-steps for motion blur.
+                Each sub-step is a GAS refit at a different time instant.
+            spp_per_substep: Samples per pixel per sub-step.
+            denoise_enabled: Whether to denoise the final composed frame.
+        """
+        self._ensure_display(width, height)
+        self._ensure_accum_buffers(width, height)
+        self.reset_accumulation()
+
+        self._offline_active = True
+        self._offline_width = width
+        self._offline_height = height
+        self._offline_denoise = denoise_enabled
+        self._offline_substeps_done = 0
+        self._offline_spp_per_substep = spp_per_substep
+
+        if denoise_enabled:
+            self._setup_denoiser(width, height)
+
+    def render_offline_substep(self, eye, U, V, W,
+                               radius_scale=1.0, gas_rebuild_interval=0,
+                               **render_kwargs):
+        """Trace spp_per_substep samples for one temporal sub-step.
+
+        The caller must update entity positions (via physics step) and
+        ensure the entity buffer reflects the new state BEFORE calling.
+        The GAS is refitted (or rebuilt) to match the updated positions.
+        Samples accumulate into the same HDR buffer across all sub-steps,
+        producing motion blur via temporal integration.
+
+        Does NOT tonemap or denoise — those happen in render_offline_finish().
+
+        Args:
+            eye, U, V, W: Camera basis (constant across sub-steps).
+            radius_scale: Entity size multiplier.
+            gas_rebuild_interval: Full GAS rebuild every N sub-steps
+                (0 = refit only, never rebuild during this frame).
+            **render_kwargs: All other render params (sun, sky, materials,
+                DOF, bounce control, etc.).
+        """
+        if not self._offline_active:
+            raise RuntimeError(
+                "Call render_offline_begin() before render_offline_substep()."
+            )
+
+        w = self._offline_width
+        h = self._offline_height
+
+        # GAS update: refit or periodic rebuild
+        if (gas_rebuild_interval > 0
+                and self._offline_substeps_done > 0
+                and self._offline_substeps_done % gas_rebuild_interval == 0):
+            self.build_accel(radius_scale)
+        else:
+            self.refit_accel(radius_scale)
+
+        # Map entity buffer for all SPP in this substep
+        self._ctx.finish()
+        entities_ptr, _ = map_resource(self._entity_res)
+
+        try:
+            # Only write guide buffers on the first sample of the first
+            # substep. Later samples/substeps pass null pointers so the
+            # raygen skips guide writes, keeping a single coherent snapshot
+            # for the denoiser.
+            first_substep = (self._offline_substeps_done == 0)
+
+            check_cuda(cudart.cudaEventRecord(
+                self._evt_render_start, self._stream_obj))
+
+            for i in range(self._offline_spp_per_substep):
+                self._fill_params_and_launch(
+                    entities_ptr, w, h, eye, U, V, W,
+                    write_guides=(self._offline_denoise
+                                  and first_substep and i == 0),
+                    radius_scale=radius_scale,
+                    **render_kwargs,
+                )
+
+            check_cuda(cudart.cudaEventRecord(
+                self._evt_render_end, self._stream_obj))
+            check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
+            self.last_render_ms = check_cuda(
+                cudart.cudaEventElapsedTime(
+                    self._evt_render_start, self._evt_render_end
+                )
+            )
+        finally:
+            unmap_resource(self._entity_res)
+
+        self._offline_substeps_done += 1
+
+    def render_offline_finish(self, exposure=1.0):
+        """Denoise (if enabled) and tonemap the fully-accumulated frame.
+
+        Must be called after all sub-steps are complete. Returns the final
+        tonemapped texture suitable for display or video encoding.
+
+        Args:
+            exposure: Exposure multiplier for tonemapping.
+
+        Returns:
+            moderngl.Texture (rgba8).
+        """
+        if not self._offline_active:
+            raise RuntimeError(
+                "No offline render in progress."
+            )
+
+        w = self._offline_width
+        h = self._offline_height
+
+        self._ensure_display(w, h)
+
+        self._ctx.finish()
+        image_ptr, _ = map_resource(self._pbo_res)
+
+        try:
+            self._tonemap_accum_to_pbo(
+                image_ptr, w, h,
+                denoise_enabled=self._offline_denoise,
+                exposure=exposure,
+            )
+            check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
+        finally:
+            unmap_resource(self._pbo_res)
+
+        self._tex.write(self._pbo)
+        self._offline_active = False
+        return self._tex
 
     # ------------------------------------------------------------------
     # Buffer management
