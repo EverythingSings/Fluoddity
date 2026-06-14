@@ -24,3 +24,5 @@ class CameraState:
     optix_enabled: bool = False    # Use OptiX sphere raytracer instead of GL_POINTS
     optix_gas_time_ms: float = 0.0   # Last GAS build/refit time (for UI display)
     optix_render_time_ms: float = 0.0  # Last OptiX render time (for UI display)
+    pathtracer_gas_time_ms: float = 0.0    # Path tracer GAS timing (for UI display)
+    pathtracer_render_time_ms: float = 0.0 # Path tracer render timing (for UI display)

@@ -117,6 +117,8 @@ class App:
 
         # OptiX sphere renderer (lazy — created on first use when toggled on)
         self._optix_interface = None
+        # OptiX path tracer (lazy — created on first use when toggled on)
+        self._pathtracer_interface = None
 
         # Tracer references (for entity buffer and camera access)
         self.ui.tracer_sim = self.sim
@@ -215,12 +217,16 @@ class App:
 
         # Force full GAS rebuild after sim reset or config change
         # (refit is too slow when all entities move at once)
-        if self._optix_interface is not None and (
+        needs_gas_rebuild = (
             ui_state.request_reset
             or ui_state.request_full_reset
             or self.command_handler.config_applied_this_frame
-        ):
-            self._optix_interface.force_rebuild()
+        )
+        if needs_gas_rebuild:
+            if self._optix_interface is not None:
+                self._optix_interface.force_rebuild()
+            if self._pathtracer_interface is not None:
+                self._pathtracer_interface.force_rebuild()
 
         # 2.5. Check for render queue execution request
         if ui_state.request_execute_render_queue and not self.render_queue_executing:
@@ -385,10 +391,68 @@ class App:
                 self._optix_interface.ambient = ui_state.preferences.three_d_optix_ambient
                 self._optix_interface.sky_color_top = tuple(ui_state.preferences.three_d_optix_sky_color_top)
                 self._optix_interface.sky_color_bottom = tuple(ui_state.preferences.three_d_optix_sky_color_bottom)
+                self._optix_interface.ao_enabled = ui_state.preferences.three_d_optix_ao_enabled
+                self._optix_interface.ao_num_rays = ui_state.preferences.three_d_optix_ao_num_rays
+                self._optix_interface.ao_radius = ui_state.preferences.three_d_optix_ao_radius
                 # Copy timing for UI display
                 ui_state.camera.optix_gas_time_ms = self._optix_interface.gas_time_ms
                 ui_state.camera.optix_render_time_ms = self._optix_interface.render_time_ms
-        self.camera.optix_interface = self._optix_interface
+
+        # Path tracer lifecycle: lazy creation when path trace mode is toggled on
+        pt_mode = ui_state.preferences.three_d_pathtracer_enabled
+        pt_active = ui_state.camera.optix_enabled and pt_mode
+
+        if pt_active and self._pathtracer_interface is None:
+            try:
+                from pathtracer_interface import PathTracerInterface
+                if PathTracerInterface.is_available():
+                    self._pathtracer_interface = PathTracerInterface(self.ctx)
+                    print("OptiX path tracer initialized")
+                else:
+                    ui_state.preferences.three_d_pathtracer_enabled = False
+                    pt_active = False
+                    print("OptiX path tracer not available — falling back to sphere renderer")
+            except Exception as e:
+                ui_state.preferences.three_d_pathtracer_enabled = False
+                pt_active = False
+                print(f"Path tracer init failed: {e}")
+
+        # Sync path tracer settings from preferences
+        if self._pathtracer_interface is not None:
+            if self._pathtracer_interface.failed:
+                print(f"Path tracer auto-disabled: {self._pathtracer_interface.fail_reason}")
+                self._pathtracer_interface = None
+                ui_state.preferences.three_d_pathtracer_enabled = False
+                pt_active = False
+            elif pt_active:
+                pt = self._pathtracer_interface
+                pt.gas_rebuild_interval = ui_state.preferences.three_d_pt_gas_rebuild_interval
+                pt.radius_scale = ui_state.preferences.three_d_pt_sphere_radius_scale
+                pt.sun_direction = tuple(ui_state.preferences.three_d_pt_sun_direction)
+                pt.sun_color = tuple(ui_state.preferences.three_d_pt_sun_color)
+                pt.sun_intensity = ui_state.preferences.three_d_pt_sun_intensity
+                pt.sun_sampling = ui_state.preferences.three_d_pt_sun_sampling
+                pt.sky_color_top = tuple(ui_state.preferences.three_d_pt_sky_color_top)
+                pt.sky_color_bottom = tuple(ui_state.preferences.three_d_pt_sky_color_bottom)
+                pt.exposure = ui_state.preferences.three_d_pt_exposure
+                pt.max_bounces = ui_state.preferences.three_d_pt_max_bounces
+                pt.rr_start_depth = ui_state.preferences.three_d_pt_rr_start_depth
+                pt.firefly_clamp = ui_state.preferences.three_d_pt_firefly_clamp
+                pt.firefly_clamp_max = ui_state.preferences.three_d_pt_firefly_clamp_max
+                pt.global_material = ui_state.preferences.three_d_pt_global_material
+                pt.glossy_ior = ui_state.preferences.three_d_pt_glossy_ior
+                pt.denoise_enabled = ui_state.preferences.three_d_pt_denoise_enabled
+                pt.aperture = ui_state.camera.aperture
+                pt.focal_plane_depth = ui_state.camera.focal_plane_depth
+                # Copy timing for UI display
+                ui_state.camera.pathtracer_gas_time_ms = pt.gas_time_ms
+                ui_state.camera.pathtracer_render_time_ms = pt.render_time_ms
+
+        # Route the active renderer interface to camera
+        if pt_active and self._pathtracer_interface is not None:
+            self.camera.optix_interface = self._pathtracer_interface
+        else:
+            self.camera.optix_interface = self._optix_interface
 
         # Sync tracer SDF toggle to preferences for 3D preview
         ti = self.ui._tracer_interface
@@ -823,6 +887,9 @@ class App:
         if self._optix_interface is not None:
             self._optix_interface.cleanup()
             self._optix_interface = None
+        if self._pathtracer_interface is not None:
+            self._pathtracer_interface.cleanup()
+            self._pathtracer_interface = None
         self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()
         self.ui.cleanup()

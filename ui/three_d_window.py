@@ -33,59 +33,135 @@ class ThreeDWindowMixin:
 
             # OptiX settings (only shown when enabled)
             if self.state.camera.optix_enabled and optix_available:
-                _, self.state.preferences.three_d_optix_gas_rebuild_interval = imgui.slider_int(
-                    "GAS Rebuild", self.state.preferences.three_d_optix_gas_rebuild_interval,
-                    1, 120
-                )
-                _, self.state.preferences.three_d_optix_sphere_radius_scale = imgui.slider_float(
-                    "Sphere Scale", self.state.preferences.three_d_optix_sphere_radius_scale,
-                    0.1, 10.0, format="%.1fx"
-                )
+                p = self.state.preferences
+                pt_mode = p.three_d_pathtracer_enabled
 
-                # Lighting controls
-                if imgui.collapsing_header("Lighting", imgui.TreeNodeFlags_.default_open.value):
-                    changed, vals = imgui.drag_float3(
-                        "Light Dir", list(self.state.preferences.three_d_optix_light_direction),
-                        0.01, -1.0, 1.0
-                    )
-                    if changed:
-                        self.state.preferences.three_d_optix_light_direction = list(vals)
+                # Renderer mode selector
+                mode_labels = ["Rasterize", "Path Trace"]
+                current_mode = 1 if pt_mode else 0
+                changed, new_mode = imgui.combo("Renderer", current_mode, mode_labels)
+                if changed:
+                    p.three_d_pathtracer_enabled = (new_mode == 1)
+                    pt_mode = p.three_d_pathtracer_enabled
 
-                    _, self.state.preferences.three_d_optix_light_color = imgui.color_edit3(
-                        "Light Color", self.state.preferences.three_d_optix_light_color
-                    )
+                # Shared controls (bind to the active renderer's preferences)
+                if pt_mode:
+                    _, p.three_d_pt_gas_rebuild_interval = imgui.slider_int(
+                        "GAS Rebuild", p.three_d_pt_gas_rebuild_interval, 1, 120)
+                    _, p.three_d_pt_sphere_radius_scale = imgui.slider_float(
+                        "Sphere Scale", p.three_d_pt_sphere_radius_scale,
+                        0.1, 10.0, format="%.1fx")
+                else:
+                    _, p.three_d_optix_gas_rebuild_interval = imgui.slider_int(
+                        "GAS Rebuild", p.three_d_optix_gas_rebuild_interval, 1, 120)
+                    _, p.three_d_optix_sphere_radius_scale = imgui.slider_float(
+                        "Sphere Scale", p.three_d_optix_sphere_radius_scale,
+                        0.1, 10.0, format="%.1fx")
 
-                    _, self.state.preferences.three_d_optix_light_intensity = imgui.slider_float(
-                        "Intensity", self.state.preferences.three_d_optix_light_intensity,
-                        0.0, 5.0
-                    )
+                if pt_mode:
+                    # ---- Path Trace mode controls ----
 
-                    _, self.state.preferences.three_d_optix_shadows_enabled = imgui.checkbox(
-                        "Shadows", self.state.preferences.three_d_optix_shadows_enabled
-                    )
+                    # Sun
+                    if imgui.collapsing_header("Sun##pt", imgui.TreeNodeFlags_.default_open.value):
+                        changed, vals = imgui.drag_float3(
+                            "Sun Dir", list(p.three_d_pt_sun_direction),
+                            0.01, -1.0, 1.0)
+                        if changed:
+                            p.three_d_pt_sun_direction = list(vals)
+                        _, p.three_d_pt_sun_color = imgui.color_edit3(
+                            "Sun Color##pt", p.three_d_pt_sun_color)
+                        _, p.three_d_pt_sun_intensity = imgui.slider_float(
+                            "Sun Intensity", p.three_d_pt_sun_intensity, 0.0, 20.0)
+                        _, p.three_d_pt_sun_sampling = imgui.checkbox(
+                            "Sun Sampling (NEE)", p.three_d_pt_sun_sampling)
 
-                    _, self.state.preferences.three_d_optix_ambient = imgui.slider_float(
-                        "Ambient", self.state.preferences.three_d_optix_ambient,
-                        0.0, 1.0
-                    )
+                    # Sky
+                    if imgui.collapsing_header("Sky##pt", imgui.TreeNodeFlags_.default_open.value):
+                        _, p.three_d_pt_sky_color_top = imgui.color_edit3(
+                            "Sky Top##pt", p.three_d_pt_sky_color_top)
+                        _, p.three_d_pt_sky_color_bottom = imgui.color_edit3(
+                            "Sky Bottom##pt", p.three_d_pt_sky_color_bottom)
 
-                # Sky controls
-                if imgui.collapsing_header("Sky", imgui.TreeNodeFlags_.default_open.value):
-                    _, self.state.preferences.three_d_optix_sky_color_top = imgui.color_edit3(
-                        "Sky Top", self.state.preferences.three_d_optix_sky_color_top
-                    )
+                    # Material
+                    if imgui.collapsing_header("Material", imgui.TreeNodeFlags_.default_open.value):
+                        mat_labels = ["Lambert", "Glossy", "Mirror"]
+                        _, p.three_d_pt_global_material = imgui.combo(
+                            "Material##combo", p.three_d_pt_global_material, mat_labels)
+                        if p.three_d_pt_global_material == 1:  # Glossy
+                            _, p.three_d_pt_glossy_ior = imgui.slider_float(
+                                "Glossy IOR", p.three_d_pt_glossy_ior, 1.0, 3.0, format="%.2f")
 
-                    _, self.state.preferences.three_d_optix_sky_color_bottom = imgui.color_edit3(
-                        "Sky Bottom", self.state.preferences.three_d_optix_sky_color_bottom
-                    )
+                    # Render
+                    if imgui.collapsing_header("Render##pt", imgui.TreeNodeFlags_.default_open.value):
+                        _, p.three_d_pt_exposure = imgui.slider_float(
+                            "Exposure##pt", p.three_d_pt_exposure, 0.1, 10.0)
+                        _, p.three_d_pt_max_bounces = imgui.drag_int(
+                            "Max Bounces", p.three_d_pt_max_bounces, 0.1, 0, 64)
+                        if imgui.is_item_hovered():
+                            imgui.set_tooltip("0 = unbounded (Russian roulette only)")
+                        _, p.three_d_pt_rr_start_depth = imgui.slider_int(
+                            "RR Start Depth", p.three_d_pt_rr_start_depth, 1, 16)
+                        _, p.three_d_pt_firefly_clamp = imgui.checkbox(
+                            "Firefly Clamp##pt", p.three_d_pt_firefly_clamp)
+                        if p.three_d_pt_firefly_clamp:
+                            imgui.same_line()
+                            imgui.set_next_item_width(imgui.get_content_region_avail().x)
+                            _, p.three_d_pt_firefly_clamp_max = imgui.drag_float(
+                                "##pt_clamp_max", p.three_d_pt_firefly_clamp_max,
+                                0.1, 0.1, 1000.0, "Max: %.1f")
+                        _, p.three_d_pt_denoise_enabled = imgui.checkbox(
+                            "Denoise", p.three_d_pt_denoise_enabled)
 
-                # Timing display
-                gas_ms = self.state.camera.optix_gas_time_ms
-                render_ms = self.state.camera.optix_render_time_ms
-                imgui.text_colored(
-                    imgui.ImVec4(0.6, 0.6, 0.6, 1.0),
-                    f"GAS {gas_ms:.1f}ms  Render {render_ms:.1f}ms"
-                )
+                    # Timing display (path tracer)
+                    gas_ms = self.state.camera.pathtracer_gas_time_ms
+                    render_ms = self.state.camera.pathtracer_render_time_ms
+                    imgui.text_colored(
+                        imgui.ImVec4(0.6, 0.6, 0.6, 1.0),
+                        f"GAS {gas_ms:.1f}ms  Render {render_ms:.1f}ms")
+
+                else:
+                    # ---- Rasterize mode controls (existing sphere renderer) ----
+
+                    # Lighting
+                    if imgui.collapsing_header("Lighting", imgui.TreeNodeFlags_.default_open.value):
+                        changed, vals = imgui.drag_float3(
+                            "Light Dir", list(p.three_d_optix_light_direction),
+                            0.01, -1.0, 1.0)
+                        if changed:
+                            p.three_d_optix_light_direction = list(vals)
+                        _, p.three_d_optix_light_color = imgui.color_edit3(
+                            "Light Color", p.three_d_optix_light_color)
+                        _, p.three_d_optix_light_intensity = imgui.slider_float(
+                            "Intensity", p.three_d_optix_light_intensity, 0.0, 5.0)
+                        _, p.three_d_optix_shadows_enabled = imgui.checkbox(
+                            "Shadows", p.three_d_optix_shadows_enabled)
+                        _, p.three_d_optix_ambient = imgui.slider_float(
+                            "Ambient", p.three_d_optix_ambient, 0.0, 1.0)
+
+                    # Sky
+                    if imgui.collapsing_header("Sky", imgui.TreeNodeFlags_.default_open.value):
+                        _, p.three_d_optix_sky_color_top = imgui.color_edit3(
+                            "Sky Top", p.three_d_optix_sky_color_top)
+                        _, p.three_d_optix_sky_color_bottom = imgui.color_edit3(
+                            "Sky Bottom", p.three_d_optix_sky_color_bottom)
+
+                    # Ambient Occlusion
+                    if imgui.collapsing_header("Ambient Occlusion"):
+                        _, p.three_d_optix_ao_enabled = imgui.checkbox(
+                            "Enable AO", p.three_d_optix_ao_enabled)
+                        if p.three_d_optix_ao_enabled:
+                            _, p.three_d_optix_ao_num_rays = imgui.slider_int(
+                                "AO Rays", p.three_d_optix_ao_num_rays, 1, 16)
+                            _, p.three_d_optix_ao_radius = imgui.slider_float(
+                                "AO Radius", p.three_d_optix_ao_radius,
+                                0.01, 5.0, format="%.2f")
+
+                    # Timing display (sphere renderer)
+                    gas_ms = self.state.camera.optix_gas_time_ms
+                    render_ms = self.state.camera.optix_render_time_ms
+                    imgui.text_colored(
+                        imgui.ImVec4(0.6, 0.6, 0.6, 1.0),
+                        f"GAS {gas_ms:.1f}ms  Render {render_ms:.1f}ms")
 
             imgui.separator()
             imgui.text("Camera")

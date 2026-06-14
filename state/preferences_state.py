@@ -143,6 +143,28 @@ class PreferencesState:
     three_d_optix_ambient: float = 0.12
     three_d_optix_sky_color_top: list = field(default_factory=lambda: [0.45, 0.62, 0.85])
     three_d_optix_sky_color_bottom: list = field(default_factory=lambda: [0.08, 0.08, 0.10])
+    three_d_optix_ao_enabled: bool = False
+    three_d_optix_ao_num_rays: int = 2
+    three_d_optix_ao_radius: float = 0.5
+
+    # OptiX path tracer toggle + settings
+    three_d_pathtracer_enabled: bool = False
+    three_d_pt_gas_rebuild_interval: int = 30
+    three_d_pt_sphere_radius_scale: float = 1.0
+    three_d_pt_sun_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
+    three_d_pt_sun_color: list = field(default_factory=lambda: [1.0, 0.95, 0.85])
+    three_d_pt_sun_intensity: float = 3.0
+    three_d_pt_sun_sampling: bool = True
+    three_d_pt_sky_color_top: list = field(default_factory=lambda: [0.45, 0.62, 0.85])
+    three_d_pt_sky_color_bottom: list = field(default_factory=lambda: [0.08, 0.08, 0.10])
+    three_d_pt_exposure: float = 1.5
+    three_d_pt_max_bounces: int = 8
+    three_d_pt_rr_start_depth: int = 3
+    three_d_pt_firefly_clamp: bool = True
+    three_d_pt_firefly_clamp_max: float = 50.0
+    three_d_pt_global_material: int = 0  # 0=Lambert, 1=Glossy, 2=Mirror
+    three_d_pt_glossy_ior: float = 1.5
+    three_d_pt_denoise_enabled: bool = False
 
     # 3D camera settings
     three_d_render_3d: bool = True
