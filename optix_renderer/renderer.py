@@ -47,7 +47,16 @@ from .cuda_src import SPHERE_CUDA_SRC
 #   float  ambient;                    // offset 100, f4
 #   float  radius_scale;               // offset 104, f4
 #   int    shadows_enabled;            // offset 108, i4
-#   Total: 112 bytes (8-byte aligned)
+#   float3 light_color;               // offset 112, 3×f4
+#   float  light_intensity;           // offset 124, f4
+#   float3 sky_color_top;             // offset 128, 3×f4
+#   float3 sky_color_bottom;          // offset 140, 3×f4
+#   --- AO ---
+#   int    ao_enabled;                // offset 152, i4
+#   int    ao_num_rays;               // offset 156, i4
+#   float  ao_radius;                 // offset 160, f4
+#   unsigned int ao_frame_index;      // offset 164, u4
+#   Total: 168 bytes (8-byte aligned)
 # ---------------------------------------------------------------------------
 PARAMS_DTYPE = np.dtype({
     "names": [
@@ -63,6 +72,8 @@ PARAMS_DTYPE = np.dtype({
         "light_intensity",
         "sky_top_r", "sky_top_g", "sky_top_b",
         "sky_bot_r", "sky_bot_g", "sky_bot_b",
+        # AO
+        "ao_enabled", "ao_num_rays", "ao_radius", "ao_frame_index",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -77,6 +88,8 @@ PARAMS_DTYPE = np.dtype({
         "f4",
         "f4", "f4", "f4",
         "f4", "f4", "f4",
+        # AO
+        "i4", "i4", "f4", "u4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -91,8 +104,10 @@ PARAMS_DTYPE = np.dtype({
         124,
         128, 132, 136,
         140, 144, 148,
+        # AO
+        152, 156, 160, 164,
     ],
-    "itemsize": 152,
+    "itemsize": 168,
 })
 
 
@@ -517,7 +532,9 @@ class OptiXSphereRenderer:
                ambient=0.12, radius_scale=1.0, shadows_enabled=True,
                light_color=(1.0, 1.0, 1.0), light_intensity=1.0,
                sky_color_top=(0.45, 0.62, 0.85),
-               sky_color_bottom=(0.08, 0.08, 0.10)):
+               sky_color_bottom=(0.08, 0.08, 0.10),
+               ao_enabled=False, ao_num_rays=2, ao_radius=0.5,
+               ao_frame_index=0):
         """Render one frame of raytraced spheres.
 
         The entity buffer must NOT be mapped by the caller. This method
@@ -605,6 +622,11 @@ class OptiXSphereRenderer:
                 h_params["sky_bot_g"] = sky_color_bottom[1]
                 h_params["sky_bot_b"] = sky_color_bottom[2]
 
+                h_params["ao_enabled"] = 1 if ao_enabled else 0
+                h_params["ao_num_rays"] = ao_num_rays
+                h_params["ao_radius"] = ao_radius
+                h_params["ao_frame_index"] = ao_frame_index
+
                 self._d_params.set(
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
                 )
@@ -643,7 +665,9 @@ class OptiXSphereRenderer:
                            light_color=(1.0, 1.0, 1.0),
                            light_intensity=1.0,
                            sky_color_top=(0.45, 0.62, 0.85),
-                           sky_color_bottom=(0.08, 0.08, 0.10)):
+                           sky_color_bottom=(0.08, 0.08, 0.10),
+                           ao_enabled=False, ao_num_rays=2,
+                           ao_radius=0.5, ao_frame_index=0):
         """Convenience: render from FPS camera vectors.
 
         Converts Fluoddity's ControllerCam-style vectors to OptiX pinhole
@@ -679,6 +703,10 @@ class OptiXSphereRenderer:
             light_intensity=light_intensity,
             sky_color_top=sky_color_top,
             sky_color_bottom=sky_color_bottom,
+            ao_enabled=ao_enabled,
+            ao_num_rays=ao_num_rays,
+            ao_radius=ao_radius,
+            ao_frame_index=ao_frame_index,
         )
 
     # ------------------------------------------------------------------

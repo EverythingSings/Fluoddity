@@ -51,6 +51,12 @@ class OptiXInterface:
         self.light_intensity: float = 1.0
         self.sky_color_top: tuple[float, float, float] = (0.45, 0.62, 0.85)
         self.sky_color_bottom: tuple[float, float, float] = (0.08, 0.08, 0.10)
+        self.ao_enabled: bool = False
+        self.ao_num_rays: int = 2
+        self.ao_radius: float = 0.5
+
+        # AO frame counter for jitter (internal, incremented each frame)
+        self._ao_frame_index: int = 0
 
     # ------------------------------------------------------------------ core API
 
@@ -125,6 +131,7 @@ class OptiXInterface:
             self._entity_count = entity_count
             self._gas_exists = False
             self._frame_counter = 0
+            self._ao_frame_index = 0
 
         # 3. GAS scheduling (radius_scale must match intersection shader)
         if not self._gas_exists:
@@ -158,7 +165,12 @@ class OptiXInterface:
             light_intensity=self.light_intensity,
             sky_color_top=self.sky_color_top,
             sky_color_bottom=self.sky_color_bottom,
+            ao_enabled=self.ao_enabled,
+            ao_num_rays=self.ao_num_rays,
+            ao_radius=self.ao_radius,
+            ao_frame_index=self._ao_frame_index,
         )
+        self._ao_frame_index += 1
 
         # 5. Read timing from renderer
         self._gas_time_ms = self._renderer.last_gas_ms
@@ -218,6 +230,7 @@ class OptiXInterface:
         self._frame_counter = 0
         self._entity_buffer_glo = 0
         self._entity_count = 0
+        self._ao_frame_index = 0
 
     # -------------------------------------------------------------- availability
 

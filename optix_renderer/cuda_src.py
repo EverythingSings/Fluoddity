@@ -31,6 +31,11 @@ struct Params
     float  light_intensity;                     // light intensity multiplier
     float3 sky_color_top;                       // sky gradient top color
     float3 sky_color_bottom;                    // sky gradient bottom color
+    // Ambient occlusion
+    int            ao_enabled;                  // 0 or 1
+    int            ao_num_rays;                 // 1-4 AO rays per pixel
+    float          ao_radius;                   // max distance for AO rays
+    unsigned int   ao_frame_index;              // frame counter for RNG jitter
 };
 __constant__ Params params;
 }
@@ -183,7 +188,36 @@ extern "C" __global__ void __intersection__sphere()
     else if (t1 > tmin && t1 < tmax)  optixReportIntersection(t1, 0);
 }
 
-// --- closest hit: Lambert + shadow ray + hue-based albedo --------------------
+// --- AO RNG (minimal PCG-style hash for closesthit AO rays) ------------------
+static __forceinline__ __device__ unsigned int ao_hash(unsigned int seed)
+{
+    seed = seed * 747796405u + 2891336453u;
+    unsigned int word = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+    word ^= word >> 22u;
+    return word;
+}
+
+static __forceinline__ __device__ float ao_rand(unsigned int& seed)
+{
+    seed = ao_hash(seed);
+    return (float)seed / 4294967295.0f;
+}
+
+// Cosine-weighted hemisphere direction around N (Shirley trick)
+static __forceinline__ __device__ float3 ao_cosine_dir(float3 N, unsigned int& seed)
+{
+    float xi1 = ao_rand(seed);
+    float xi2 = ao_rand(seed);
+    float cos_theta = 1.0f - 2.0f * xi1;
+    float sin_theta = sqrtf(fmaxf(0.0f, 1.0f - cos_theta * cos_theta));
+    float phi = 6.283185307f * xi2;
+    float3 rand_sphere = mk3(sin_theta * cosf(phi),
+                              sin_theta * sinf(phi),
+                              cos_theta);
+    return normalize3(N + rand_sphere);
+}
+
+// --- closest hit: Lambert + shadow ray + AO + hue-based albedo ---------------
 extern "C" __global__ void __closesthit__ch()
 {
     const unsigned int prim = optixGetPrimitiveIndex();
@@ -217,10 +251,41 @@ extern "C" __global__ void __closesthit__ch()
         vis = occluded ? 0.0f : 1.0f;
     }
 
+    // Ambient occlusion (stochastic, jittered per frame)
+    float ao = 1.0f;
+    if (params.ao_enabled)
+    {
+        const uint3 idx = optixGetLaunchIndex();
+        unsigned int ao_seed = idx.x * 1973u + idx.y * 9277u
+                             + params.ao_frame_index * 26699u;
+        int ao_hits = 0;
+        const int num_rays = params.ao_num_rays;
+        for (int ray_i = 0; ray_i < num_rays; ray_i++)
+        {
+            ao_seed += ray_i * 13u;
+            float3 ao_dir = ao_cosine_dir(N, ao_seed);
+
+            unsigned int ao_occluded = 1u;
+            optixTrace(
+                (OptixTraversableHandle)params.handle,
+                P + 1e-3f * N, ao_dir,
+                0.0f, params.ao_radius, 0.0f,
+                OptixVisibilityMask(255),
+                OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+                | OPTIX_RAY_FLAG_DISABLE_ANYHIT
+                | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+                0, 0,
+                1,  // miss index: occlusion
+                ao_occluded);
+            ao_hits += ao_occluded ? 1 : 0;
+        }
+        ao = 1.0f - (float)ao_hits / (float)num_rays;
+    }
+
     const float ndl = fmaxf(dot3(N, L), 0.0f);
     const float3 lit = params.light_color * params.light_intensity;
     const float a = params.ambient;
-    const float3 c = albedo * (mk3(a, a, a) + (1.0f - a) * ndl * vis * lit);
+    const float3 c = albedo * (mk3(a, a, a) + (1.0f - a) * ndl * vis * lit) * ao;
 
     optixSetPayload_0(__float_as_uint(c.x));
     optixSetPayload_1(__float_as_uint(c.y));
