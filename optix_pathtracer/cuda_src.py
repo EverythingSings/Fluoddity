@@ -2,8 +2,9 @@
 
 Contains the CUDA C++ source compiled at runtime via NVRTC.
 Multi-bounce path tracing with three materials (Lambert, Glossy, Mirror),
-Russian roulette, depth of field, firefly clamping, and HDR accumulation.
-Step 3 of the path tracer implementation plan.
+Russian roulette, depth of field, firefly clamping, HDR accumulation,
+and sun NEE with binary GAS shadow rays.
+Step 4 of the path tracer implementation plan.
 
 Entity layout (32 bytes, stride=8 floats):
     [0] px  [1] py  [2] pz    -- sphere center
@@ -37,9 +38,9 @@ struct Params
     float3 V;                          // offset 64
     float3 W;                          // offset 76
 
-    // Lighting (used by Step 4 NEE; unused in Step 3)
-    float3 light_dir;                  // offset 88: unit vector TOWARD the light
-    float  ambient;                    // offset 100
+    // Sun lighting (Step 4: NEE + shadow rays)
+    float3 sun_direction;              // offset 88: unit vector TOWARD the sun
+    float  sun_intensity;              // offset 100: sun radiance multiplier
     float  radius_scale;               // offset 104
 
     // Sky gradient
@@ -70,7 +71,11 @@ struct Params
     // Material (Step 3)
     int            global_material;    // offset 204: 0=Lambert, 1=Glossy, 2=Mirror
     float          glossy_ior;         // offset 208: IOR for Fresnel (default 1.5)
-    // _pad3                           // offset 212: 4 bytes padding to 216 total
+
+    // Sun NEE (Step 4)
+    float3         sun_color;          // offset 212: sun color RGB
+    int            sun_sampling;       // offset 224: bool: enable NEE shadow rays
+    // _pad4                           // offset 228: 4 bytes padding to 232 total
 };
 __constant__ Params params;
 }
@@ -379,7 +384,31 @@ extern "C" __global__ void __raygen__rg()
         int   mat_id = params.global_material;
         float ior    = params.glossy_ior;
 
-        // 4d. (NEE placeholder -- Step 4 will add shadow rays here)
+        // 4d. Sun NEE: direct sun lighting via binary GAS shadow ray
+        if (params.sun_sampling) {
+            float3 shadow_origin = P + 1e-3f * N;
+
+            unsigned int occluded = 1u;
+            optixTrace(
+                (OptixTraversableHandle)params.handle,
+                shadow_origin, params.sun_direction,
+                0.0f, 1e16f, 0.0f,
+                OptixVisibilityMask(255),
+                OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+                | OPTIX_RAY_FLAG_DISABLE_ANYHIT
+                | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+                0, 0,       // SBT offset, stride
+                1,          // miss index: occlusion (miss -> p0 = 0 = not occluded)
+                occluded);
+
+            if (!occluded) {
+                float3 brdf_cos = eval_brdf_cos(
+                    ray_dir, params.sun_direction, N,
+                    mat_id, albedo, ior);
+                radiance = radiance + throughput * brdf_cos
+                         * params.sun_color * params.sun_intensity;
+            }
+        }
 
         // 4e. Depth and max_bounces check
         depth++;
@@ -429,9 +458,17 @@ extern "C" __global__ void __raygen__rg()
 extern "C" __global__ void __miss__radiance()
 {
     const float3 dir = optixGetWorldRayDirection();
+
+    // Base gradient sky
     const float t = 0.5f * (dir.y + 1.0f);
-    const float3 c = (1.0f - t) * params.sky_color_bottom
-                   + t * params.sky_color_top;
+    float3 c = (1.0f - t) * params.sky_color_bottom
+             + t * params.sky_color_top;
+
+    // Sun glow: bright spot in the sun direction
+    // (ported from volrender/shaders/pathtrace.comp get_sky_col)
+    float sun_dot = dot3(dir, params.sun_direction);
+    float sun_glow = powf(clamp_f(sun_dot * 0.5f + 0.5f, 0.0f, 1.0f), 900.0f);
+    c = c + sun_glow * 200.0f * params.sun_color * params.sun_intensity;
 
     // p0 stays 0 (initialized by caller) = miss signal
     // Write sky color to p5-p7

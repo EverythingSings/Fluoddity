@@ -4,8 +4,9 @@ This module provides the PathTracerRenderer class, a self-contained renderer
 that reads Fluoddity's entity SSBO via GL-CUDA interop and produces a
 path-traced image with progressive sample accumulation and tonemapping.
 
-Step 3 of the path tracer implementation plan: full bounce loop with
-Lambert/Glossy/Mirror materials, Russian roulette, DOF, firefly clamping.
+Step 4 of the path tracer implementation plan: sun NEE with binary GAS
+shadow rays, enhanced sky with sun glow. Builds on Step 3's bounce loop
+with Lambert/Glossy/Mirror materials, Russian roulette, DOF, firefly clamping.
 """
 
 import numpy as np
@@ -44,8 +45,8 @@ from .cuda_src import PATHTRACER_CUDA_SRC, TONEMAP_CUDA_SRC
 #   float3 U;                            // offset 52, 3×f4
 #   float3 V;                            // offset 64, 3×f4
 #   float3 W;                            // offset 76, 3×f4
-#   float3 light_dir;                    // offset 88, 3×f4
-#   float  ambient;                      // offset 100, f4
+#   float3 sun_direction;                // offset 88, 3×f4 (Step 4: was light_dir)
+#   float  sun_intensity;                // offset 100, f4  (Step 4: was ambient)
 #   float  radius_scale;                 // offset 104, f4
 #   float3 sky_color_top;                // offset 108, 3×f4
 #   float3 sky_color_bottom;             // offset 120, 3×f4
@@ -65,8 +66,11 @@ from .cuda_src import PATHTRACER_CUDA_SRC, TONEMAP_CUDA_SRC
 #   float  firefly_clamp_max;            // offset 200, f4
 #   int    global_material;              // offset 204, i4
 #   float  glossy_ior;                   // offset 208, f4
-#   <pad 4 bytes>                        // offset 212 (align total to 8)
-#   Total: 216 bytes
+#   --- Step 4 additions ---
+#   float3 sun_color;                    // offset 212, 3×f4
+#   int    sun_sampling;                 // offset 224, i4
+#   <pad 4 bytes>                        // offset 228 (align total to 8)
+#   Total: 232 bytes
 # ---------------------------------------------------------------------------
 PARAMS_DTYPE = np.dtype({
     "names": [
@@ -76,21 +80,24 @@ PARAMS_DTYPE = np.dtype({
         "u_x", "u_y", "u_z",
         "v_x", "v_y", "v_z",
         "w_x", "w_y", "w_z",
-        "l_x", "l_y", "l_z",
-        "ambient", "radius_scale",
+        "sun_dir_x", "sun_dir_y", "sun_dir_z",
+        "sun_intensity", "radius_scale",
         "sky_top_r", "sky_top_g", "sky_top_b",
         "sky_bot_r", "sky_bot_g", "sky_bot_b",
         "_pad1", "accum_buffer",
         "sample_index", "samples_accumulated",
         "exposure",
-        # Step 3 additions
+        # Step 3
         "aperture", "focal_plane_depth",
         "cam_right_x", "cam_right_y", "cam_right_z",
         "cam_up_x", "cam_up_y", "cam_up_z",
         "max_bounces", "rr_start_depth",
         "firefly_clamp", "firefly_clamp_max",
         "global_material", "glossy_ior",
-        "_pad3",
+        # Step 4
+        "sun_color_r", "sun_color_g", "sun_color_b",
+        "sun_sampling",
+        "_pad4",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -113,6 +120,9 @@ PARAMS_DTYPE = np.dtype({
         "i4", "i4",
         "i4", "f4",
         "i4", "f4",
+        # Step 4
+        "f4", "f4", "f4",
+        "i4",
         "u4",
     ],
     "offsets": [
@@ -136,9 +146,12 @@ PARAMS_DTYPE = np.dtype({
         188, 192,
         196, 200,
         204, 208,
-        212,
+        # Step 4
+        212, 216, 220,
+        224,
+        228,
     ],
-    "itemsize": 216,
+    "itemsize": 232,
 })
 
 
@@ -583,15 +596,17 @@ class PathTracerRenderer:
     # Rendering
     # ------------------------------------------------------------------
 
-    def render(self, width, height, eye, U, V, W, light_dir=(0.577, 0.577, 0.577),
-               ambient=0.12, radius_scale=1.0, exposure=1.0,
+    def render(self, width, height, eye, U, V, W,
+               sun_direction=(0.577, 0.577, 0.577),
+               sun_intensity=1.0, radius_scale=1.0, exposure=1.0,
                sky_color_top=(0.45, 0.62, 0.85),
                sky_color_bottom=(0.08, 0.08, 0.10),
                aperture=0.0, focal_plane_depth=10.0,
                cam_right=None, cam_up=None,
                max_bounces=0, rr_start_depth=3,
                firefly_clamp=False, firefly_clamp_max=100.0,
-               global_material=0, glossy_ior=1.5):
+               global_material=0, glossy_ior=1.5,
+               sun_color=(1.0, 1.0, 1.0), sun_sampling=True):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -606,8 +621,8 @@ class PathTracerRenderer:
             U: Camera horizontal extent vector (3-tuple or array).
             V: Camera vertical extent vector (3-tuple or array).
             W: Camera center ray direction (3-tuple or array).
-            light_dir: Directional light direction toward the light (3-tuple).
-            ambient: Ambient light intensity (0-1).
+            sun_direction: Unit vector toward the sun (3-tuple).
+            sun_intensity: Sun radiance multiplier.
             radius_scale: Multiplier on entity size field.
             exposure: Exposure multiplier for tonemapping.
             sky_color_top: Sky gradient top color (3-tuple).
@@ -622,6 +637,8 @@ class PathTracerRenderer:
             firefly_clamp_max: Max per-sample luminance.
             global_material: Material type (0=Lambert, 1=Glossy, 2=Mirror).
             glossy_ior: Index of refraction for glossy Fresnel.
+            sun_color: Sun color RGB (3-tuple).
+            sun_sampling: Enable NEE shadow rays for direct sun lighting.
 
         Returns:
             moderngl.Texture (rgba8) with the tonemapped image.
@@ -648,7 +665,8 @@ class PathTracerRenderer:
                 U = np.asarray(U, dtype=np.float32)
                 V = np.asarray(V, dtype=np.float32)
                 W = np.asarray(W, dtype=np.float32)
-                light_dir = np.asarray(light_dir, dtype=np.float32)
+                sun_direction = np.asarray(sun_direction, dtype=np.float32)
+                sun_color = np.asarray(sun_color, dtype=np.float32)
                 sky_color_top = np.asarray(sky_color_top, dtype=np.float32)
                 sky_color_bottom = np.asarray(sky_color_bottom, dtype=np.float32)
 
@@ -672,10 +690,10 @@ class PathTracerRenderer:
                 h_params["w_x"] = W[0]
                 h_params["w_y"] = W[1]
                 h_params["w_z"] = W[2]
-                h_params["l_x"] = light_dir[0]
-                h_params["l_y"] = light_dir[1]
-                h_params["l_z"] = light_dir[2]
-                h_params["ambient"] = ambient
+                h_params["sun_dir_x"] = sun_direction[0]
+                h_params["sun_dir_y"] = sun_direction[1]
+                h_params["sun_dir_z"] = sun_direction[2]
+                h_params["sun_intensity"] = sun_intensity
                 h_params["radius_scale"] = radius_scale
                 h_params["sky_top_r"] = sky_color_top[0]
                 h_params["sky_top_g"] = sky_color_top[1]
@@ -708,7 +726,13 @@ class PathTracerRenderer:
                 h_params["firefly_clamp_max"] = firefly_clamp_max
                 h_params["global_material"] = global_material
                 h_params["glossy_ior"] = glossy_ior
-                h_params["_pad3"] = 0
+
+                # Step 4: Sun NEE params
+                h_params["sun_color_r"] = sun_color[0]
+                h_params["sun_color_g"] = sun_color[1]
+                h_params["sun_color_b"] = sun_color[2]
+                h_params["sun_sampling"] = 1 if sun_sampling else 0
+                h_params["_pad4"] = 0
 
                 self._d_params.set(
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
@@ -761,14 +785,15 @@ class PathTracerRenderer:
         return self._tex
 
     def render_from_camera(self, width, height, cam_pos, cam_dir, cam_up,
-                           fov_deg, light_dir=(0.577, 0.577, 0.577),
-                           ambient=0.12, radius_scale=1.0, exposure=1.0,
+                           fov_deg, sun_direction=(0.577, 0.577, 0.577),
+                           sun_intensity=1.0, radius_scale=1.0, exposure=1.0,
                            sky_color_top=(0.45, 0.62, 0.85),
                            sky_color_bottom=(0.08, 0.08, 0.10),
                            aperture=0.0, focal_plane_depth=10.0,
                            max_bounces=0, rr_start_depth=3,
                            firefly_clamp=False, firefly_clamp_max=100.0,
-                           global_material=0, glossy_ior=1.5):
+                           global_material=0, glossy_ior=1.5,
+                           sun_color=(1.0, 1.0, 1.0), sun_sampling=True):
         """Convenience: render from FPS camera vectors.
 
         Converts Fluoddity's ControllerCam-style vectors to OptiX pinhole
@@ -779,8 +804,8 @@ class PathTracerRenderer:
             cam_dir: Unit look direction (3,).
             cam_up: Unit up vector (3,).
             fov_deg: Vertical FOV in degrees.
-            light_dir: Unit vector toward the light.
-            ambient: Ambient light intensity.
+            sun_direction: Unit vector toward the sun (3-tuple).
+            sun_intensity: Sun radiance multiplier.
             radius_scale: Multiplier on entity size field.
             exposure: Exposure multiplier for tonemapping.
             sky_color_top: Sky gradient top color (3-tuple).
@@ -793,6 +818,8 @@ class PathTracerRenderer:
             firefly_clamp_max: Max per-sample luminance.
             global_material: Material type (0=Lambert, 1=Glossy, 2=Mirror).
             glossy_ior: Index of refraction for glossy Fresnel.
+            sun_color: Sun color RGB (3-tuple).
+            sun_sampling: Enable NEE shadow rays for direct sun lighting.
 
         Returns:
             moderngl.Texture (rgba8).
@@ -811,8 +838,9 @@ class PathTracerRenderer:
         cam_up_vec = cam_up_vec / max(np.linalg.norm(cam_up_vec), 1e-8)
 
         return self.render(
-            width, height, eye, U, V, W, light_dir,
-            ambient=ambient,
+            width, height, eye, U, V, W,
+            sun_direction=sun_direction,
+            sun_intensity=sun_intensity,
             radius_scale=radius_scale,
             exposure=exposure,
             sky_color_top=sky_color_top,
@@ -827,6 +855,8 @@ class PathTracerRenderer:
             firefly_clamp_max=firefly_clamp_max,
             global_material=global_material,
             glossy_ior=glossy_ior,
+            sun_color=sun_color,
+            sun_sampling=sun_sampling,
         )
 
     # ------------------------------------------------------------------
