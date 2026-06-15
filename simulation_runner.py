@@ -596,6 +596,6 @@ class SimulationRunner:
             return None  # Still accumulating
 
         # --- All substeps done: finish and return ---
-        display_tex = pt_interface.finish_offline_render()
+        display_tex = pt_interface.finish_offline_render(flip_y=False)
         self._optix_pt_frame_started = False
         return display_tex
