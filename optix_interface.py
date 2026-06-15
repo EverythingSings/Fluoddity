@@ -31,7 +31,8 @@ class OptiXInterface:
         self._entity_count: int = 0
 
         # GAS scheduling state
-        self._frame_counter: int = 0
+        self._gas_dirty: bool = True  # True = needs full rebuild
+        self._physics_steps_since_rebuild: int = 0
         self._gas_exists: bool = False
 
         # Error recovery state
@@ -60,6 +61,9 @@ class OptiXInterface:
         self.sphere_size_jitter: float = 0.0
         self.sdf_enabled: bool = False
 
+        # Physics step tracking: set by orchestrator each frame before render
+        self.physics_steps: int = 0
+
         # AO frame counter for jitter (internal, incremented each frame)
         self._ao_frame_index: int = 0
         self._prev_sdf_enabled: bool = False
@@ -81,6 +85,9 @@ class OptiXInterface:
 
         Handles lazy init, entity buffer change detection, GAS scheduling,
         and per-frame error recovery. On failure, cleans up and returns None.
+
+        GAS rebuild scheduling uses self.physics_steps (set by orchestrator)
+        to track when entities have moved.
 
         Args:
             entity_buffer: ModernGL buffer (SSBO binding 0, 8-float stride).
@@ -126,7 +133,8 @@ class OptiXInterface:
             self._entity_buffer_glo = int(entity_buffer.glo)
             self._entity_count = entity_count
             self._gas_exists = False
-            self._frame_counter = 0
+            self._gas_dirty = True
+            self._physics_steps_since_rebuild = 0
 
         # 2. Entity buffer change detection
         current_glo = int(entity_buffer.glo)
@@ -136,33 +144,39 @@ class OptiXInterface:
             self._entity_buffer_glo = current_glo
             self._entity_count = entity_count
             self._gas_exists = False
-            self._frame_counter = 0
+            self._gas_dirty = True
+            self._physics_steps_since_rebuild = 0
             self._ao_frame_index = 0
 
         # 3. GAS scheduling (radius_scale must match intersection shader)
         # Force full rebuild when sdf_enabled toggles (changes primitive count)
         if self.sdf_enabled != self._prev_sdf_enabled:
             self._gas_exists = False
+            self._gas_dirty = True
+            self._physics_steps_since_rebuild = 0
             self._prev_sdf_enabled = self.sdf_enabled
+
+        # Track physics steps to know when entities have moved.
+        # self.physics_steps is set by the orchestrator each frame.
+        steps = self.physics_steps
+        self._physics_steps_since_rebuild += steps
+        if steps > 0 and self._physics_steps_since_rebuild >= self.gas_rebuild_interval:
+            self._gas_dirty = True
+
         sdf_kw = dict(
             sdf_enabled=self.sdf_enabled,
             sdf_aabb_min=SDF_AABB_MIN,
             sdf_aabb_max=SDF_AABB_MAX,
         )
-        if not self._gas_exists:
-            # First frame or after buffer change: full build required
+        if not self._gas_exists or self._gas_dirty:
+            # Full GAS rebuild
             self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
             self._gas_exists = True
-            self._frame_counter = 0
-        elif self._frame_counter >= self.gas_rebuild_interval:
-            # Periodic full rebuild for BVH quality
-            self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
-            self._frame_counter = 0
-        else:
-            # Fast in-place refit
+            self._gas_dirty = False
+            self._physics_steps_since_rebuild = 0
+        elif steps > 0:
+            # Entities moved but not enough steps for rebuild: fast refit
             self._renderer.refit_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
-
-        self._frame_counter += 1
 
         # 4. Render (delegates camera basis conversion to renderer)
         # Normalize light direction (UI drag_float3 can produce non-unit vectors)
@@ -207,7 +221,8 @@ class OptiXInterface:
         Call after sim reset or any event that moves all entities at once.
         Avoids the slow refit path on scrambled BVH data.
         """
-        self._gas_exists = False
+        self._gas_dirty = True
+        self._physics_steps_since_rebuild = 0
 
     # ---------------------------------------------------------------- properties
 
@@ -248,7 +263,8 @@ class OptiXInterface:
             self._renderer = None
         self._display_tex = None
         self._gas_exists = False
-        self._frame_counter = 0
+        self._gas_dirty = True
+        self._physics_steps_since_rebuild = 0
         self._entity_buffer_glo = 0
         self._entity_count = 0
         self._ao_frame_index = 0

@@ -80,6 +80,9 @@ class PathTracerInterface:
         # SDF scene
         self.sdf_enabled: bool = False
 
+        # Physics step tracking: set by orchestrator each frame before render
+        self.physics_steps: int = 0
+
         # RT mode controls
         self.render_mode: int = 1  # 1=X spp (reset each frame), 2=accumulate
         self.realtime_samples: int = 1  # samples/frame for mode 1
@@ -111,6 +114,9 @@ class PathTracerInterface:
             if enabled, tonemap. Returns fresh image each frame.
         Mode 2 (Accumulate): No reset, trace 1 sample, denoise if enabled,
             tonemap running average. Call reset_accumulation() on camera move.
+
+        GAS rebuild scheduling uses self.physics_steps (set by orchestrator)
+        to track when entities have moved.
 
         Args:
             entity_buffer: ModernGL buffer (SSBO binding 0, 8-float stride).
@@ -221,6 +227,7 @@ class PathTracerInterface:
             denoise_enabled=self.denoise_enabled,
             reset=reset,
             num_samples=num_samples,
+            physics_steps=self.physics_steps,
             **render_kwargs,
         )
 
@@ -514,6 +521,7 @@ class PathTracerInterface:
         self._renderer.render_offline_substep(
             eye, U, V, W,
             radius_scale=self.radius_scale,
+            gas_rebuild_interval=self.gas_rebuild_interval,
             sun_direction=sun_dir_norm,
             sun_intensity=self.sun_intensity,
             sun_color=self.sun_color,
@@ -579,7 +587,7 @@ class PathTracerInterface:
         """
         if self._renderer is not None:
             self._renderer._gas_handle = None
-            self._renderer._frame_counter = 0
+            self._renderer._physics_steps_since_rebuild = 0
 
     # ---------------------------------------------------------------- properties
 

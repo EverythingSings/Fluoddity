@@ -158,6 +158,9 @@ class App:
         self._prev_camera_position = np.array([0.0, 0.0])
         self._prev_camera_zoom = 1.0
 
+        # Physics step tracking for GAS rebuild scheduling
+        self._prev_sim_frame_count = 0
+
         # Render queue execution state machine
         self.render_queue_executing = False
         self.render_queue_index = 0
@@ -704,6 +707,15 @@ class App:
         # 6.5. Screenshot save and settings restoration
         if self.screenshot_in_progress:
             self._save_screenshot(ui_state)
+
+        # 6.6. Compute physics step delta for GAS rebuild scheduling
+        current_frame = self.sim.frame_count
+        physics_steps = max(0, current_frame - self._prev_sim_frame_count)
+        self._prev_sim_frame_count = current_frame
+        if self._optix_interface is not None:
+            self._optix_interface.physics_steps = physics_steps
+        if self._pathtracer_interface is not None:
+            self._pathtracer_interface.physics_steps = physics_steps
 
         # 7. Render camera view
         self._render_camera_view(ui_state, sweep_mode, sweep_reticle_pos,

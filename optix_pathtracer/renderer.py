@@ -292,7 +292,7 @@ class PathTracerRenderer:
         self._d_denoised = None
 
         # GAS scheduling (for render_realtime)
-        self._frame_counter = 0
+        self._physics_steps_since_rebuild = 0
 
         # Monotonic frame counter for RNG decorrelation (never resets)
         self._global_frame_counter = 0
@@ -1246,7 +1246,8 @@ class PathTracerRenderer:
     def render_realtime(self, width, height, eye, U, V, W,
                         radius_scale=1.0, gas_rebuild_interval=30,
                         denoise_enabled=False, reset=True,
-                        num_samples=1, flip_y=True, **render_kwargs):
+                        num_samples=1, flip_y=True,
+                        physics_steps=0, **render_kwargs):
         """Realtime render with configurable sample count and reset behavior.
 
         Manages GAS scheduling internally. The entity buffer must reflect
@@ -1256,12 +1257,15 @@ class PathTracerRenderer:
             width, height: Output dimensions.
             eye, U, V, W: Camera basis vectors.
             radius_scale: Entity size multiplier.
-            gas_rebuild_interval: Full GAS rebuild every N frames (refit
-                between). Set to 1 to rebuild every frame.
+            gas_rebuild_interval: Full GAS rebuild every N physics steps
+                (refit between). Set to 1 to rebuild every physics step.
             denoise_enabled: Run AI denoiser on this frame.
             reset: If True, reset accumulation each frame (default).
                 Set False for accumulate mode.
             num_samples: Number of samples to trace this frame (default 1).
+            physics_steps: Number of physics steps since last render.
+                Entities only move on physics steps, so GAS only needs
+                updating when steps > 0.
             **render_kwargs: All other render params (sun, sky, materials,
                 DOF, bounce control, etc.).
 
@@ -1276,14 +1280,16 @@ class PathTracerRenderer:
         sdf_aabb_min = render_kwargs.get('sdf_aabb_min', None)
         sdf_aabb_max = render_kwargs.get('sdf_aabb_max', None)
 
-        # GAS scheduling: periodic rebuild, refit between
-        self._frame_counter += 1
+        # GAS scheduling: tied to physics steps, not render frames.
+        # Entities only move when physics runs, so skip GAS update when paused.
+        self._physics_steps_since_rebuild += physics_steps
         if (self._gas_handle is None
-                or self._frame_counter >= gas_rebuild_interval):
+                or (physics_steps > 0
+                    and self._physics_steps_since_rebuild >= gas_rebuild_interval)):
             self.build_accel(radius_scale, sphere_size_jitter,
                              sdf_enabled, sdf_aabb_min, sdf_aabb_max)
-            self._frame_counter = 0
-        else:
+            self._physics_steps_since_rebuild = 0
+        elif physics_steps > 0:
             self.refit_accel(radius_scale, sphere_size_jitter,
                              sdf_enabled, sdf_aabb_min, sdf_aabb_max)
 
