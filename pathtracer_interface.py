@@ -568,7 +568,6 @@ class PathTracerInterface:
 
         try:
             self._display_tex = self._renderer.render_offline_finish(
-                exposure=1.0,
                 flip_y=flip_y,
             )
             return self._display_tex

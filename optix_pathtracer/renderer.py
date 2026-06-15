@@ -27,7 +27,7 @@ from optix_renderer.interop import (
     aligned_dtype,
     to_device,
 )
-from .cuda_src import PATHTRACER_CUDA_SRC, TONEMAP_CUDA_SRC, RESOLVE_CUDA_SRC
+from .cuda_src import PATHTRACER_CUDA_SRC, RESOLVE_TO_HALF_CUDA_SRC, RESOLVE_CUDA_SRC
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +344,9 @@ class PathTracerRenderer:
         self.last_gas_ms = 0.0
         self.last_render_ms = 0.0
 
-        # Compile tonemap and resolve kernels via CuPy RawKernel
-        self._tonemap_kernel = cp.RawKernel(TONEMAP_CUDA_SRC, 'tonemap')
+        # Compile resolve kernels via CuPy RawKernel
+        self._resolve_to_half_kernel = cp.RawKernel(
+            RESOLVE_TO_HALF_CUDA_SRC, 'resolve_to_half')
         self._resolve_kernel = cp.RawKernel(RESOLVE_CUDA_SRC, 'resolve')
 
         # Log device info
@@ -492,11 +493,11 @@ class PathTracerRenderer:
             unregister_resource(self._pbo_res)
             self._pbo_res = None
 
-        # Create new PBO and texture
+        # Create new PBO and texture (rgba16f for linear HDR output)
         self._pbo = self._ctx.buffer(
-            reserve=width * height * 4, dynamic=True
+            reserve=width * height * 8, dynamic=True  # 4 x fp16 per pixel
         )
-        self._tex = self._ctx.texture((width, height), 4)
+        self._tex = self._ctx.texture((width, height), 4, dtype='f2')
         self._tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
 
         # Register PBO with CUDA (write-discard)
@@ -984,16 +985,18 @@ class PathTracerRenderer:
 
         self._sample_count += 1
 
-    def _tonemap_accum_to_pbo(self, image_ptr, width, height,
-                              denoise_enabled, exposure, flip_y=True):
-        """Run optional denoiser + tonemap into the mapped PBO.
+    def _resolve_accum_to_pbo(self, image_ptr, width, height,
+                              denoise_enabled, flip_y=True):
+        """Run optional denoiser then resolve to linear HDR half-float PBO.
+
+        No tonemapping or gamma is applied — the output is linear HDR in
+        rgba16f format, suitable for frame_assembly.frag to tonemap.
 
         Args:
-            image_ptr: Device pointer to the mapped PBO.
+            image_ptr: Device pointer to the mapped PBO (rgba16f).
             width, height: Image dimensions.
-            denoise_enabled: If True, resolve + denoise then tonemap the
-                denoised buffer. If False, tonemap raw accumulation directly.
-            exposure: Exposure multiplier for tonemapping.
+            denoise_enabled: If True, resolve + denoise first, then write
+                denoised result to PBO. If False, resolve raw accum directly.
             flip_y: If True, flip Y axis for OpenGL convention (default).
         """
         block = (16, 16, 1)
@@ -1002,29 +1005,27 @@ class PathTracerRenderer:
         flip_y_val = np.uint32(1 if flip_y else 0)
 
         if denoise_enabled:
-            # Resolve + denoise, then tonemap the denoised result
+            # Resolve + denoise, then write denoised HDR to PBO
             self._run_denoiser(width, height)
-            self._tonemap_kernel(
+            self._resolve_to_half_kernel(
                 grid, block,
                 (self._d_denoised.data.ptr,
                  image_ptr,
                  np.uint32(width),
                  np.uint32(height),
                  np.uint32(1),  # already resolved to mean
-                 np.float32(exposure),
                  flip_y_val),
                 stream=stream_wrapper,
             )
         else:
-            # Tonemap directly from raw accum buffer
-            self._tonemap_kernel(
+            # Resolve raw accum buffer directly to half-float PBO
+            self._resolve_to_half_kernel(
                 grid, block,
                 (self._d_accum.data.ptr,
                  image_ptr,
                  np.uint32(width),
                  np.uint32(height),
                  np.uint32(self._sample_count),
-                 np.float32(exposure),
                  flip_y_val),
                 stream=stream_wrapper,
             )
@@ -1137,10 +1138,9 @@ class PathTracerRenderer:
                     sdf_aabb_max=sdf_aabb_max,
                 )
 
-                self._tonemap_accum_to_pbo(
+                self._resolve_accum_to_pbo(
                     image_ptr, width, height,
                     denoise_enabled=denoise_enabled,
-                    exposure=exposure,
                     flip_y=flip_y,
                 )
 
@@ -1327,10 +1327,9 @@ class PathTracerRenderer:
                         **render_kwargs,
                     )
 
-                self._tonemap_accum_to_pbo(
+                self._resolve_accum_to_pbo(
                     image_ptr, width, height,
                     denoise_enabled=denoise_enabled,
-                    exposure=render_kwargs.get('exposure', 1.0),
                     flip_y=flip_y,
                 )
 
@@ -1459,18 +1458,17 @@ class PathTracerRenderer:
 
         self._offline_substeps_done += 1
 
-    def render_offline_finish(self, exposure=1.0, flip_y=True):
-        """Denoise (if enabled) and tonemap the fully-accumulated frame.
+    def render_offline_finish(self, flip_y=True):
+        """Denoise (if enabled) and resolve to linear HDR texture.
 
-        Must be called after all sub-steps are complete. Returns the final
-        tonemapped texture suitable for display or video encoding.
+        Must be called after all sub-steps are complete. Returns the
+        resolved HDR texture (rgba16f) for frame_assembly.frag to tonemap.
 
         Args:
-            exposure: Exposure multiplier for tonemapping.
             flip_y: If True, flip Y axis for OpenGL convention (default).
 
         Returns:
-            moderngl.Texture (rgba8).
+            moderngl.Texture (rgba16f) with linear HDR data.
         """
         if not self._offline_active:
             raise RuntimeError(
@@ -1486,10 +1484,9 @@ class PathTracerRenderer:
         image_ptr, _ = map_resource(self._pbo_res)
 
         try:
-            self._tonemap_accum_to_pbo(
+            self._resolve_accum_to_pbo(
                 image_ptr, w, h,
                 denoise_enabled=self._offline_denoise,
-                exposure=exposure,
                 flip_y=flip_y,
             )
             check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))

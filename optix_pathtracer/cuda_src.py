@@ -622,14 +622,22 @@ extern "C" __global__ void __closesthit__ch()
 """
 
 
-TONEMAP_CUDA_SRC = r"""
-extern "C" __global__ void tonemap(
+RESOLVE_TO_HALF_CUDA_SRC = r"""
+// Resolve accumulation buffer to half-float (rgba16f) for OpenGL consumption.
+// No tonemapping or gamma — that is handled by frame_assembly.frag on the GL side.
+
+static __forceinline__ __device__ unsigned short f2h(float v) {
+    unsigned short h;
+    asm("cvt.rn.f16.f32 %0, %1;" : "=h"(h) : "f"(v));
+    return h;
+}
+
+extern "C" __global__ void resolve_to_half(
     const float4* __restrict__ accum,
-    uchar4*       __restrict__ image,
+    unsigned short* __restrict__ image,
     unsigned int  width,
     unsigned int  height,
     unsigned int  samples_accumulated,
-    float         exposure,
     unsigned int  flip_y)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -639,29 +647,19 @@ extern "C" __global__ void tonemap(
     const unsigned int idx = y * width + x;
     float4 hdr = accum[idx];
 
-    // Average over accumulated samples
+    // Average over accumulated samples (output linear HDR, no tonemap/gamma)
     float inv_n = 1.0f / fmaxf((float)samples_accumulated, 1.0f);
-    float r = hdr.x * inv_n * exposure;
-    float g = hdr.y * inv_n * exposure;
-    float b = hdr.z * inv_n * exposure;
-
-    // Reinhard tonemap: c / (1 + c)
-    r = r / (1.0f + r);
-    g = g / (1.0f + g);
-    b = b / (1.0f + b);
-
-    // Approximate sRGB gamma (sqrt = gamma 2.0, matches existing to_srgb)
-    r = sqrtf(fminf(fmaxf(r, 0.0f), 1.0f));
-    g = sqrtf(fminf(fmaxf(g, 0.0f), 1.0f));
-    b = sqrtf(fminf(fmaxf(b, 0.0f), 1.0f));
+    float r = hdr.x * inv_n;
+    float g = hdr.y * inv_n;
+    float b = hdr.z * inv_n;
 
     // Conditional Y-flip for OpenGL convention
     const unsigned int out_y = flip_y ? (height - 1u - y) : y;
-    image[out_y * width + x] = make_uchar4(
-        (unsigned char)(r * 255.99f),
-        (unsigned char)(g * 255.99f),
-        (unsigned char)(b * 255.99f),
-        255);
+    const unsigned int out_idx = (out_y * width + x) * 4;
+    image[out_idx + 0] = f2h(r);
+    image[out_idx + 1] = f2h(g);
+    image[out_idx + 2] = f2h(b);
+    image[out_idx + 3] = f2h(1.0f);
 }
 """
 

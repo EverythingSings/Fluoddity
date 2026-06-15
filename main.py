@@ -645,21 +645,31 @@ class App:
                 )
         elif optix_pt_video_active and ui_state.sim.going:
             # OptiX path tracer video mode: offline rendering with motion blur
-            pt_frame = self.sim_runner.run_optix_pt_video_frame(
+            pt_frame_hdr = self.sim_runner.run_optix_pt_video_frame(
                 ui_state, self._pathtracer_interface, tiling_mode=tiling_mode
             )
-            if pt_frame is not None:
-                # Display the completed frame in the camera view
-                self.camera.assembled_texture = pt_frame
-                # Send to video recorder
-                self.video_service.process_frame(
-                    self.ctx,
-                    pt_frame,
-                    ui_state.preferences.max_frames,
-                    ui_state.preferences.supersample_k,
-                    ui_state.preferences.filename_prefix,
-                    flip_y=False  # 3D path tracer: no flip needed
+            if pt_frame_hdr is not None:
+                # Tonemap HDR frame through frame assembler
+                pt_frame = self.camera.frame_assembler.assemble_frame(
+                    pt_frame_hdr,
+                    total_samples=1,
+                    current_sample_index=0,
+                    view_mode=1,  # cam_brush (3D view)
+                    brightness=ui_state.preferences.brightness,
+                    tonemap_softness=ui_state.preferences.tonemap_softness,
                 )
+                if pt_frame is not None:
+                    # Display the completed frame in the camera view
+                    self.camera.assembled_texture = pt_frame
+                    # Send to video recorder
+                    self.video_service.process_frame(
+                        self.ctx,
+                        pt_frame,
+                        ui_state.preferences.max_frames,
+                        ui_state.preferences.supersample_k,
+                        ui_state.preferences.filename_prefix,
+                        flip_y=False  # 3D path tracer: no flip needed
+                    )
         elif ui_state.sim.going:
             self.sim_runner.run_simulation_frame(
                 ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
@@ -807,23 +817,33 @@ class App:
             self.camera.vao.render()
             return
 
-        # OptiX preview: display progressive path-traced image fullscreen
+        # OptiX preview: tonemap via frame assembler and display fullscreen
         pt = self._pathtracer_interface
         if (pt is not None
                 and (pt.preview_active or pt.preview_has_result)
                 and pt.display_texture is not None
                 and ui_state.preferences.three_d_rt_mode == 0):
-            self.ctx.screen.use()
-            width, height = glfw.get_framebuffer_size(self.window)
-            self.ctx.viewport = (0, 0, width, height)
-            self.ctx.clear(0.0, 0.0, 0.0, 1.0)
-            self.camera.program['cam_pos'].value = (0, 0)
-            self.camera.program['cam_zoom'].value = 1.0
-            self.camera.program['tex_size'].value = (float(width), float(height))
-            self.camera.program['window_size'].value = (width, height)
-            pt.display_texture.use(location=0)
-            self.camera.program['view_tex'].value = 0
-            self.camera.vao.render()
+            # Run HDR preview texture through frame assembler for tonemapping
+            tonemapped = self.camera.frame_assembler.assemble_frame(
+                pt.display_texture,
+                total_samples=1,
+                current_sample_index=0,
+                view_mode=1,  # cam_brush (3D view)
+                brightness=ui_state.preferences.brightness,
+                tonemap_softness=ui_state.preferences.tonemap_softness,
+            )
+            if tonemapped is not None:
+                self.ctx.screen.use()
+                width, height = glfw.get_framebuffer_size(self.window)
+                self.ctx.viewport = (0, 0, width, height)
+                self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+                self.camera.program['cam_pos'].value = (0, 0)
+                self.camera.program['cam_zoom'].value = 1.0
+                self.camera.program['tex_size'].value = (float(width), float(height))
+                self.camera.program['window_size'].value = (width, height)
+                tonemapped.use(location=0)
+                self.camera.program['view_tex'].value = 0
+                self.camera.vao.render()
             return
 
         draw_trail_mode = ui_state.preferences.mouse_mode == "Draw Trail"
