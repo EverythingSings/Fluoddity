@@ -528,7 +528,7 @@ extern "C" __global__ void __miss__radiance()
     // (ported from volrender/shaders/pathtrace.comp get_sky_col)
     float sun_dot = dot3(dir, params.sun_direction);
     float sun_glow = powf(clamp_f(sun_dot * 0.5f + 0.5f, 0.0f, 1.0f), 900.0f);
-    c = c + sun_glow * 200.0f * params.sun_color * params.sun_intensity;
+    c = c + 0.0f*sun_glow * 200.0f * params.sun_color * params.sun_intensity;
 
     // p0 stays 0 (initialized by caller) = miss signal
     // Write sky color to p5-p7
