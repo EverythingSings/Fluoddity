@@ -149,6 +149,7 @@ class PreferencesState:
     three_d_optix_albedo_saturation: float = 0.8
     three_d_optix_albedo_brightness: float = 1.0
     three_d_optix_sphere_size_jitter: float = 0.0  # Per-sphere radius jitter to reduce banding (0-1)
+    three_d_optix_sdf_enabled: bool = False  # Enable SDF scene geometry in OptiX renderers
 
     # OptiX RT mode and path tracer settings
     three_d_rt_mode: int = 0  # 0=Rasterize, 1=X spp, 2=Accumulate

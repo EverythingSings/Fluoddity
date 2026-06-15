@@ -109,6 +109,11 @@ PARAMS_DTYPE = np.dtype({
         "sphere_size_jitter",
         # RNG decorrelation
         "frame_seed",
+        # SDF scene
+        "sdf_enabled",
+        "sdf_aabb_min_x", "sdf_aabb_min_y", "sdf_aabb_min_z",
+        "sdf_aabb_max_x", "sdf_aabb_max_y", "sdf_aabb_max_z",
+        "sdf_prim_index",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -142,6 +147,11 @@ PARAMS_DTYPE = np.dtype({
         # Sphere size jitter
         "f4",
         # RNG decorrelation
+        "u4",
+        # SDF scene
+        "i4",
+        "f4", "f4", "f4",
+        "f4", "f4", "f4",
         "u4",
     ],
     "offsets": [
@@ -177,8 +187,13 @@ PARAMS_DTYPE = np.dtype({
         256,
         # RNG decorrelation
         260,
+        # SDF scene
+        264,
+        268, 272, 276,
+        280, 284, 288,
+        292,
     ],
-    "itemsize": 264,
+    "itemsize": 296,
 })
 
 
@@ -253,6 +268,7 @@ class PathTracerRenderer:
         self._d_gas = None
         self._d_temp = None
         self._d_aabbs = None
+        self._total_prims = 0
         self._temp_size = 0
         self._gas_size = 0
 
@@ -644,8 +660,12 @@ class PathTracerRenderer:
     # ------------------------------------------------------------------
 
     def _compute_aabbs(self, d_entities_ptr, radius_scale=1.0,
-                       sphere_size_jitter=0.0):
-        """Compute float6 AABBs from the mapped entity buffer via CuPy."""
+                       sphere_size_jitter=0.0,
+                       sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
+        """Compute float6 AABBs from the mapped entity buffer via CuPy.
+
+        When sdf_enabled, appends one extra AABB for the SDF scene.
+        """
         nbytes = self._entity_count * self._entity_stride * 4
         mem = cp.cuda.UnownedMemory(d_entities_ptr, nbytes, owner=None)
         entities_flat = cp.ndarray(
@@ -664,16 +684,28 @@ class PathTracerRenderer:
             jitter = h.astype(cp.float32) / 32767.5 - 1.0
             rad = rad * (1.0 + sphere_size_jitter * jitter.reshape(-1, 1))
 
-        if self._d_aabbs is None or self._d_aabbs.shape[0] != self._entity_count:
+        total_prims = self._entity_count + (1 if sdf_enabled else 0)
+        if self._d_aabbs is None or self._d_aabbs.shape[0] != total_prims:
             self._d_aabbs = cp.empty(
-                (self._entity_count, 6), dtype=cp.float32
+                (total_prims, 6), dtype=cp.float32
             )
 
-        self._d_aabbs[:, 0:3] = pos - rad
-        self._d_aabbs[:, 3:6] = pos + rad
+        self._d_aabbs[:self._entity_count, 0:3] = pos - rad
+        self._d_aabbs[:self._entity_count, 3:6] = pos + rad
+
+        # Append SDF AABB as the last primitive
+        if sdf_enabled and sdf_aabb_min is not None:
+            sdf_row = cp.array([[
+                sdf_aabb_min[0], sdf_aabb_min[1], sdf_aabb_min[2],
+                sdf_aabb_max[0], sdf_aabb_max[1], sdf_aabb_max[2],
+            ]], dtype=cp.float32)
+            self._d_aabbs[self._entity_count:self._entity_count + 1, :] = sdf_row
+
+        self._total_prims = total_prims
         cp.cuda.Device().synchronize()
 
-    def build_accel(self, radius_scale=1.0, sphere_size_jitter=0.0):
+    def build_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
+                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
         """Full GAS build. Maps entity buffer, computes AABBs, builds BVH.
 
         Must be called at least once before render(). Call again periodically
@@ -682,16 +714,20 @@ class PathTracerRenderer:
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
             sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
+            sdf_enabled: If True, append SDF AABB as an extra primitive.
+            sdf_aabb_min: SDF bounding box min (3-tuple).
+            sdf_aabb_max: SDF bounding box max (3-tuple).
         """
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter)
+            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter,
+                                sdf_enabled, sdf_aabb_min, sdf_aabb_max)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],
-                numPrimitives=self._entity_count,
+                numPrimitives=self._total_prims,
                 flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
                 numSbtRecords=1,
             )
@@ -730,7 +766,8 @@ class PathTracerRenderer:
         finally:
             unmap_resource(self._entity_res)
 
-    def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0):
+    def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
+                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
         """Refit existing GAS with updated AABBs (faster, lower BVH quality).
 
         Requires a prior build_accel() call. The GAS is updated in-place
@@ -739,20 +776,25 @@ class PathTracerRenderer:
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
             sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
+            sdf_enabled: If True, append SDF AABB as an extra primitive.
+            sdf_aabb_min: SDF bounding box min (3-tuple).
+            sdf_aabb_max: SDF bounding box max (3-tuple).
         """
         if self._gas_handle is None:
-            self.build_accel(radius_scale, sphere_size_jitter)
+            self.build_accel(radius_scale, sphere_size_jitter,
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
             return
 
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter)
+            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter,
+                                sdf_enabled, sdf_aabb_min, sdf_aabb_max)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],
-                numPrimitives=self._entity_count,
+                numPrimitives=self._total_prims,
                 flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
                 numSbtRecords=1,
             )
@@ -801,7 +843,9 @@ class PathTracerRenderer:
                                 global_material=0, glossy_ior=1.5,
                                 sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
                                 albedo_saturation=0.8, albedo_brightness=1.0,
-                                sphere_size_jitter=0.0):
+                                sphere_size_jitter=0.0,
+                                sdf_enabled=False, sdf_aabb_min=None,
+                                sdf_aabb_max=None):
         """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
 
         The entity buffer must already be mapped (entities_ptr is the device
@@ -911,6 +955,17 @@ class PathTracerRenderer:
         h_params["frame_seed"] = self._global_frame_counter
         self._global_frame_counter += 1
 
+        # SDF scene
+        h_params["sdf_enabled"] = 1 if sdf_enabled else 0
+        if sdf_enabled and sdf_aabb_min is not None:
+            h_params["sdf_aabb_min_x"] = sdf_aabb_min[0]
+            h_params["sdf_aabb_min_y"] = sdf_aabb_min[1]
+            h_params["sdf_aabb_min_z"] = sdf_aabb_min[2]
+            h_params["sdf_aabb_max_x"] = sdf_aabb_max[0]
+            h_params["sdf_aabb_max_y"] = sdf_aabb_max[1]
+            h_params["sdf_aabb_max_z"] = sdf_aabb_max[2]
+            h_params["sdf_prim_index"] = self._entity_count
+
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
         )
@@ -991,7 +1046,8 @@ class PathTracerRenderer:
                sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
                denoise_enabled=False,
                albedo_saturation=0.8, albedo_brightness=1.0,
-               sphere_size_jitter=0.0, flip_y=True):
+               sphere_size_jitter=0.0, flip_y=True,
+               sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1076,6 +1132,9 @@ class PathTracerRenderer:
                     albedo_saturation=albedo_saturation,
                     albedo_brightness=albedo_brightness,
                     sphere_size_jitter=sphere_size_jitter,
+                    sdf_enabled=sdf_enabled,
+                    sdf_aabb_min=sdf_aabb_min,
+                    sdf_aabb_max=sdf_aabb_max,
                 )
 
                 self._tonemap_accum_to_pbo(
@@ -1213,15 +1272,20 @@ class PathTracerRenderer:
             self.reset_accumulation()
 
         sphere_size_jitter = render_kwargs.get('sphere_size_jitter', 0.0)
+        sdf_enabled = render_kwargs.get('sdf_enabled', False)
+        sdf_aabb_min = render_kwargs.get('sdf_aabb_min', None)
+        sdf_aabb_max = render_kwargs.get('sdf_aabb_max', None)
 
         # GAS scheduling: periodic rebuild, refit between
         self._frame_counter += 1
         if (self._gas_handle is None
                 or self._frame_counter >= gas_rebuild_interval):
-            self.build_accel(radius_scale, sphere_size_jitter)
+            self.build_accel(radius_scale, sphere_size_jitter,
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
             self._frame_counter = 0
         else:
-            self.refit_accel(radius_scale, sphere_size_jitter)
+            self.refit_accel(radius_scale, sphere_size_jitter,
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
 
         # Single-sample fast path
         if num_samples == 1:
@@ -1341,12 +1405,17 @@ class PathTracerRenderer:
 
         # GAS update: refit or periodic rebuild
         sphere_size_jitter = render_kwargs.get('sphere_size_jitter', 0.0)
+        sdf_enabled = render_kwargs.get('sdf_enabled', False)
+        sdf_aabb_min = render_kwargs.get('sdf_aabb_min', None)
+        sdf_aabb_max = render_kwargs.get('sdf_aabb_max', None)
         if (gas_rebuild_interval > 0
                 and self._offline_substeps_done > 0
                 and self._offline_substeps_done % gas_rebuild_interval == 0):
-            self.build_accel(radius_scale, sphere_size_jitter)
+            self.build_accel(radius_scale, sphere_size_jitter,
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
         else:
-            self.refit_accel(radius_scale, sphere_size_jitter)
+            self.refit_accel(radius_scale, sphere_size_jitter,
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
 
         # Map entity buffer for all SPP in this substep
         self._ctx.finish()

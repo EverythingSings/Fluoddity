@@ -91,6 +91,10 @@ class OptiXWindowMixin:
         _, p.three_d_optix_albedo_brightness = imgui.slider_float(
             "Albedo Brightness", p.three_d_optix_albedo_brightness, 0.0, 1.0)
 
+        # SDF scene
+        _, p.three_d_optix_sdf_enabled = imgui.checkbox(
+            "Enable SDF", p.three_d_optix_sdf_enabled)
+
         # ---- Lighting (shared) ----
         if imgui.collapsing_header("Lighting", imgui.TreeNodeFlags_.default_open.value):
             changed, vals = imgui.drag_float3(

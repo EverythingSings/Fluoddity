@@ -9,6 +9,7 @@ import moderngl
 import numpy as np
 
 from optix_renderer import OptiXSphereRenderer
+from optix_pathtracer.sdf_scene import SDF_AABB_MIN, SDF_AABB_MAX
 
 
 class OptiXInterface:
@@ -57,9 +58,11 @@ class OptiXInterface:
         self.albedo_saturation: float = 0.8
         self.albedo_brightness: float = 1.0
         self.sphere_size_jitter: float = 0.0
+        self.sdf_enabled: bool = False
 
         # AO frame counter for jitter (internal, incremented each frame)
         self._ao_frame_index: int = 0
+        self._prev_sdf_enabled: bool = False
 
     # ------------------------------------------------------------------ core API
 
@@ -137,18 +140,27 @@ class OptiXInterface:
             self._ao_frame_index = 0
 
         # 3. GAS scheduling (radius_scale must match intersection shader)
+        # Force full rebuild when sdf_enabled toggles (changes primitive count)
+        if self.sdf_enabled != self._prev_sdf_enabled:
+            self._gas_exists = False
+            self._prev_sdf_enabled = self.sdf_enabled
+        sdf_kw = dict(
+            sdf_enabled=self.sdf_enabled,
+            sdf_aabb_min=SDF_AABB_MIN,
+            sdf_aabb_max=SDF_AABB_MAX,
+        )
         if not self._gas_exists:
             # First frame or after buffer change: full build required
-            self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter)
+            self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
             self._gas_exists = True
             self._frame_counter = 0
         elif self._frame_counter >= self.gas_rebuild_interval:
             # Periodic full rebuild for BVH quality
-            self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter)
+            self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
             self._frame_counter = 0
         else:
             # Fast in-place refit
-            self._renderer.refit_accel(self.radius_scale, self.sphere_size_jitter)
+            self._renderer.refit_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
 
         self._frame_counter += 1
 
@@ -175,6 +187,9 @@ class OptiXInterface:
             albedo_saturation=self.albedo_saturation,
             albedo_brightness=self.albedo_brightness,
             sphere_size_jitter=self.sphere_size_jitter,
+            sdf_enabled=self.sdf_enabled,
+            sdf_aabb_min=SDF_AABB_MIN,
+            sdf_aabb_max=SDF_AABB_MAX,
         )
         self._ao_frame_index += 1
 

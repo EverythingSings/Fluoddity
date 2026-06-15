@@ -3,8 +3,8 @@
 Contains the CUDA C++ source compiled at runtime via NVRTC.
 Multi-bounce path tracing with three materials (Lambert, Glossy, Mirror),
 Russian roulette, depth of field, firefly clamping, HDR accumulation,
-and sun NEE with binary GAS shadow rays.
-Step 4 of the path tracer implementation plan.
+and sun NEE with binary GAS shadow rays. Supports optional SDF scene
+geometry via sphere tracing within a BVH custom primitive.
 
 Entity layout (32 bytes, stride=8 floats):
     [0] px  [1] py  [2] pz    -- sphere center
@@ -13,7 +13,9 @@ Entity layout (32 bytes, stride=8 floats):
     [7] size                   -- sphere radius
 """
 
-PATHTRACER_CUDA_SRC = r"""
+from .sdf_scene import SDF_SCENE_CUDA_SRC
+
+_CUDA_HEADER = r"""
 #include <optix.h>
 
 // Material ID constants
@@ -88,7 +90,17 @@ struct Params
     float          sphere_size_jitter; // offset 256: per-sphere radius jitter magnitude (0-1)
     // RNG decorrelation
     unsigned int   frame_seed;         // offset 260: monotonic counter (never resets)
-    // Total: 264 bytes (8-byte aligned)
+
+    // SDF scene
+    int            sdf_enabled;        // offset 264: bool: enable SDF geometry
+    float          sdf_aabb_min_x;     // offset 268
+    float          sdf_aabb_min_y;     // offset 272
+    float          sdf_aabb_min_z;     // offset 276
+    float          sdf_aabb_max_x;     // offset 280
+    float          sdf_aabb_max_y;     // offset 284
+    float          sdf_aabb_max_z;     // offset 288
+    unsigned int   sdf_prim_index;     // offset 292: primitive index of SDF AABB (= entity_count)
+    // Total: 296 bytes (8-byte aligned)
 };
 __constant__ Params params;
 }
@@ -321,7 +333,10 @@ static __forceinline__ __device__ float3 eval_brdf_cos(
     float inv_pi = 0.31830988618f;
     return albedo * NdotL * inv_pi;
 }
+"""
 
+# SDF scene code is inserted between header (math/BRDF) and programs (raygen etc.)
+_CUDA_PROGRAMS = r"""
 // --- ray generation (Step 3: full bounce loop) -------------------------------
 extern "C" __global__ void __raygen__rg()
 {
@@ -405,8 +420,22 @@ extern "C" __global__ void __raygen__rg()
         if (dot3(N, ray_dir) > 0.0f)
             N = neg3(N);
 
-        // HSV->RGB albedo (saturation and brightness from params)
-        float3 albedo = hsv2rgb(entity_hue(prim), params.albedo_saturation, params.albedo_brightness);
+        float3 albedo;
+        int   mat_id;
+        float ior;
+
+        if (prim == 0xFFFFFFFFu) {
+            // SDF hit: material from sdf_scene, albedo from sdf_get_albedo
+            float2 sdf_mat = make_float2(__uint_as_float(p5), __uint_as_float(p6));
+            mat_id = (int)floorf(sdf_mat.y);
+            albedo = sdf_get_albedo(sdf_mat, P);
+            ior    = sdf_get_ior(sdf_mat);
+        } else {
+            // Sphere hit: HSV->RGB albedo, global material
+            albedo = hsv2rgb(entity_hue(prim), params.albedo_saturation, params.albedo_brightness);
+            mat_id = params.global_material;
+            ior    = params.glossy_ior;
+        }
 
         // Guide buffers: primary hit -> surface albedo and normal
         if (depth == 0 && params.albedo_buffer) {
@@ -414,10 +443,6 @@ extern "C" __global__ void __raygen__rg()
             params.albedo_buffer[pidx] = make_float4(albedo.x, albedo.y, albedo.z, 1.0f);
             params.normal_buffer[pidx] = make_float4(N.x, N.y, N.z, 0.0f);
         }
-
-        // Material (global for now; per-particle in future)
-        int   mat_id = params.global_material;
-        float ior    = params.glossy_ior;
 
         // 4d. Sun NEE: direct sun lighting via binary GAS shadow ray
         if (params.sun_sampling) {
@@ -517,10 +542,26 @@ extern "C" __global__ void __miss__occlusion()
     optixSetPayload_0(0u);  // reached the light: not occluded
 }
 
-// --- sphere intersection (custom primitive, stride-aware) --------------------
+// --- intersection (custom primitive: spheres + SDF) --------------------------
 extern "C" __global__ void __intersection__sphere()
 {
     const unsigned int prim = optixGetPrimitiveIndex();
+
+    // SDF primitive: sphere trace instead of analytic sphere test
+    if (params.sdf_enabled && prim == params.sdf_prim_index) {
+        const float3 O = optixGetObjectRayOrigin();
+        const float3 D = optixGetObjectRayDirection();
+        const float tmin = optixGetRayTmin();
+        const float tmax = optixGetRayTmax();
+
+        float sdf_t;
+        float2 sdf_mat;
+        if (trace_sdf(O, D, fmaxf(tmin, SDF_SURFACE_EPS * 2.0f), tmax, sdf_t, sdf_mat))
+            optixReportIntersection(sdf_t, 1);  // hit kind 1 = SDF
+        return;
+    }
+
+    // Regular sphere intersection (hit kind 0)
     const float3 center = entity_center(prim);
     const float  radius = entity_radius(prim);
 
@@ -549,10 +590,26 @@ extern "C" __global__ void __intersection__sphere()
 extern "C" __global__ void __closesthit__ch()
 {
     const unsigned int prim = optixGetPrimitiveIndex();
-    const float3 center = entity_center(prim);
-
     const float  t = optixGetRayTmax();
     const float3 P = optixGetWorldRayOrigin() + t * optixGetWorldRayDirection();
+
+    if (optixGetHitKind() == 1) {
+        // SDF hit: compute normal via gradient, pass material via payloads
+        float3 N = sdf_normal(P);
+        float2 mat = sdf_scene(P);
+
+        optixSetPayload_0(__float_as_uint(t));     // hit distance (nonzero = hit)
+        optixSetPayload_1(0xFFFFFFFFu);            // sentinel: SDF hit
+        optixSetPayload_2(__float_as_uint(N.x));   // normal x
+        optixSetPayload_3(__float_as_uint(N.y));   // normal y
+        optixSetPayload_4(__float_as_uint(N.z));   // normal z
+        optixSetPayload_5(__float_as_uint(mat.x)); // SDF distance (for scene re-eval)
+        optixSetPayload_6(__float_as_uint(mat.y)); // SDF material ID
+        return;
+    }
+
+    // Sphere hit: normal from center
+    const float3 center = entity_center(prim);
     const float3 N = normalize3(P - center);
 
     // Report hit data via payloads
@@ -607,6 +664,10 @@ extern "C" __global__ void tonemap(
         255);
 }
 """
+
+
+# Compose the full path tracer CUDA source: header + SDF scene + programs
+PATHTRACER_CUDA_SRC = _CUDA_HEADER + "\n" + SDF_SCENE_CUDA_SRC + "\n" + _CUDA_PROGRAMS
 
 
 RESOLVE_CUDA_SRC = r"""

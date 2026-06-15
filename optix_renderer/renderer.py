@@ -78,6 +78,11 @@ PARAMS_DTYPE = np.dtype({
         "albedo_saturation", "albedo_brightness",
         # Sphere size jitter
         "sphere_size_jitter",
+        # SDF scene
+        "sdf_enabled",
+        "sdf_aabb_min_x", "sdf_aabb_min_y", "sdf_aabb_min_z",
+        "sdf_aabb_max_x", "sdf_aabb_max_y", "sdf_aabb_max_z",
+        "sdf_prim_index",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -98,6 +103,11 @@ PARAMS_DTYPE = np.dtype({
         "f4", "f4",
         # Sphere size jitter
         "f4",
+        # SDF scene
+        "i4",
+        "f4", "f4", "f4",
+        "f4", "f4", "f4",
+        "u4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -118,8 +128,13 @@ PARAMS_DTYPE = np.dtype({
         168, 172,
         # Sphere size jitter
         176,
+        # SDF scene
+        180,
+        184, 188, 192,
+        196, 200, 204,
+        208,
     ],
-    "itemsize": 184,
+    "itemsize": 216,
 })
 
 
@@ -196,6 +211,7 @@ class OptiXSphereRenderer:
         self._d_aabbs = None
         self._temp_size = 0
         self._gas_size = 0
+        self._total_prims = 0
 
         # Initialize CuPy / CUDA primary context
         cp.zeros(1)
@@ -401,12 +417,14 @@ class OptiXSphereRenderer:
     # ------------------------------------------------------------------
 
     def _compute_aabbs(self, d_entities_ptr, radius_scale=1.0,
-                       sphere_size_jitter=0.0):
+                       sphere_size_jitter=0.0,
+                       sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
         """Compute float6 AABBs from the mapped entity buffer via CuPy.
 
         Handles Fluoddity's 8-float stride by reshaping and indexing columns.
         radius_scale and sphere_size_jitter are applied so AABBs match the
-        intersection shader.
+        intersection shader. When sdf_enabled, appends one extra AABB for the
+        SDF scene.
         """
         nbytes = self._entity_count * self._entity_stride * 4
         mem = cp.cuda.UnownedMemory(d_entities_ptr, nbytes, owner=None)
@@ -427,16 +445,28 @@ class OptiXSphereRenderer:
             jitter = h.astype(cp.float32) / 32767.5 - 1.0
             rad = rad * (1.0 + sphere_size_jitter * jitter.reshape(-1, 1))
 
-        if self._d_aabbs is None or self._d_aabbs.shape[0] != self._entity_count:
+        total_prims = self._entity_count + (1 if sdf_enabled else 0)
+        if self._d_aabbs is None or self._d_aabbs.shape[0] != total_prims:
             self._d_aabbs = cp.empty(
-                (self._entity_count, 6), dtype=cp.float32
+                (total_prims, 6), dtype=cp.float32
             )
 
-        self._d_aabbs[:, 0:3] = pos - rad
-        self._d_aabbs[:, 3:6] = pos + rad
+        self._d_aabbs[:self._entity_count, 0:3] = pos - rad
+        self._d_aabbs[:self._entity_count, 3:6] = pos + rad
+
+        # Append SDF AABB as the last primitive
+        if sdf_enabled and sdf_aabb_min is not None:
+            sdf_row = cp.array([[
+                sdf_aabb_min[0], sdf_aabb_min[1], sdf_aabb_min[2],
+                sdf_aabb_max[0], sdf_aabb_max[1], sdf_aabb_max[2],
+            ]], dtype=cp.float32)
+            self._d_aabbs[self._entity_count:self._entity_count + 1, :] = sdf_row
+
+        self._total_prims = total_prims
         cp.cuda.Device().synchronize()  # sync CuPy's default stream
 
-    def build_accel(self, radius_scale=1.0, sphere_size_jitter=0.0):
+    def build_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
+                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
         """Full GAS build. Maps entity buffer, computes AABBs, builds BVH.
 
         Must be called at least once before render(). Call again periodically
@@ -445,16 +475,20 @@ class OptiXSphereRenderer:
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
             sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
+            sdf_enabled: If True, append SDF AABB as an extra primitive.
+            sdf_aabb_min: SDF bounding box min (3-tuple).
+            sdf_aabb_max: SDF bounding box max (3-tuple).
         """
         self._ctx.finish()  # ensure GL writes are complete
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter)
+            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter,
+                                sdf_enabled, sdf_aabb_min, sdf_aabb_max)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],
-                numPrimitives=self._entity_count,
+                numPrimitives=self._total_prims,
                 flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
                 numSbtRecords=1,
             )
@@ -493,7 +527,8 @@ class OptiXSphereRenderer:
         finally:
             unmap_resource(self._entity_res)
 
-    def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0):
+    def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
+                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
         """Refit existing GAS with updated AABBs (faster, lower BVH quality).
 
         Requires a prior build_accel() call. The GAS is updated in-place
@@ -502,20 +537,25 @@ class OptiXSphereRenderer:
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
             sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
+            sdf_enabled: If True, append SDF AABB as an extra primitive.
+            sdf_aabb_min: SDF bounding box min (3-tuple).
+            sdf_aabb_max: SDF bounding box max (3-tuple).
         """
         if self._gas_handle is None:
-            self.build_accel(radius_scale, sphere_size_jitter)
+            self.build_accel(radius_scale, sphere_size_jitter,
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
             return
 
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter)
+            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter,
+                                sdf_enabled, sdf_aabb_min, sdf_aabb_max)
 
             build_input = optix.BuildInputCustomPrimitiveArray(
                 aabbBuffers=[self._d_aabbs.data.ptr],
-                numPrimitives=self._entity_count,
+                numPrimitives=self._total_prims,
                 flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
                 numSbtRecords=1,
             )
@@ -558,7 +598,8 @@ class OptiXSphereRenderer:
                ao_enabled=False, ao_num_rays=2, ao_radius=0.5,
                ao_frame_index=0,
                albedo_saturation=0.8, albedo_brightness=1.0,
-               sphere_size_jitter=0.0):
+               sphere_size_jitter=0.0,
+               sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
         """Render one frame of raytraced spheres.
 
         The entity buffer must NOT be mapped by the caller. This method
@@ -654,6 +695,17 @@ class OptiXSphereRenderer:
                 h_params["albedo_brightness"] = albedo_brightness
                 h_params["sphere_size_jitter"] = sphere_size_jitter
 
+                # SDF scene
+                h_params["sdf_enabled"] = 1 if sdf_enabled else 0
+                if sdf_enabled and sdf_aabb_min is not None:
+                    h_params["sdf_aabb_min_x"] = sdf_aabb_min[0]
+                    h_params["sdf_aabb_min_y"] = sdf_aabb_min[1]
+                    h_params["sdf_aabb_min_z"] = sdf_aabb_min[2]
+                    h_params["sdf_aabb_max_x"] = sdf_aabb_max[0]
+                    h_params["sdf_aabb_max_y"] = sdf_aabb_max[1]
+                    h_params["sdf_aabb_max_z"] = sdf_aabb_max[2]
+                    h_params["sdf_prim_index"] = self._entity_count
+
                 self._d_params.set(
                     np.frombuffer(h_params.tobytes(), dtype=np.uint8)
                 )
@@ -696,7 +748,9 @@ class OptiXSphereRenderer:
                            ao_enabled=False, ao_num_rays=2,
                            ao_radius=0.5, ao_frame_index=0,
                            albedo_saturation=0.8, albedo_brightness=1.0,
-                           sphere_size_jitter=0.0):
+                           sphere_size_jitter=0.0,
+                           sdf_enabled=False, sdf_aabb_min=None,
+                           sdf_aabb_max=None):
         """Convenience: render from FPS camera vectors.
 
         Converts Fluoddity's ControllerCam-style vectors to OptiX pinhole
@@ -739,6 +793,9 @@ class OptiXSphereRenderer:
             albedo_saturation=albedo_saturation,
             albedo_brightness=albedo_brightness,
             sphere_size_jitter=sphere_size_jitter,
+            sdf_enabled=sdf_enabled,
+            sdf_aabb_min=sdf_aabb_min,
+            sdf_aabb_max=sdf_aabb_max,
         )
 
     # ------------------------------------------------------------------

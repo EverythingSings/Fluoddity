@@ -419,6 +419,7 @@ class App:
                 self._optix_interface.albedo_saturation = ui_state.preferences.three_d_optix_albedo_saturation
                 self._optix_interface.albedo_brightness = ui_state.preferences.three_d_optix_albedo_brightness
                 self._optix_interface.sphere_size_jitter = ui_state.preferences.three_d_optix_sphere_size_jitter
+                self._optix_interface.sdf_enabled = ui_state.preferences.three_d_optix_sdf_enabled
                 # Copy timing for UI display
                 ui_state.camera.optix_gas_time_ms = self._optix_interface.gas_time_ms
                 ui_state.camera.optix_render_time_ms = self._optix_interface.render_time_ms
@@ -463,6 +464,7 @@ class App:
                 pt.albedo_saturation = p.three_d_optix_albedo_saturation
                 pt.albedo_brightness = p.three_d_optix_albedo_brightness
                 pt.sphere_size_jitter = p.three_d_optix_sphere_size_jitter
+                pt.sdf_enabled = p.three_d_optix_sdf_enabled
                 # Path-tracer-only settings
                 pt.sun_sampling = p.three_d_pt_sun_sampling
                 pt.max_bounces = p.three_d_pt_max_bounces
@@ -530,6 +532,7 @@ class App:
                 pt.albedo_saturation = p.three_d_optix_albedo_saturation
                 pt.albedo_brightness = p.three_d_optix_albedo_brightness
                 pt.sphere_size_jitter = p.three_d_optix_sphere_size_jitter
+                pt.sdf_enabled = p.three_d_optix_sdf_enabled
                 pt.sun_sampling = p.three_d_pt_sun_sampling
                 pt.max_bounces = p.three_d_pt_max_bounces
                 pt.rr_start_depth = p.three_d_pt_rr_start_depth

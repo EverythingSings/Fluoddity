@@ -1,7 +1,9 @@
-"""OptiX device code for sphere rendering.
+"""OptiX device code for sphere rendering (rasterize mode).
 
 Contains the CUDA C++ source compiled at runtime via NVRTC.
 Adapted from demos/optix_demo.py for Fluoddity's 8-float entity stride.
+Supports optional SDF scene geometry via sphere tracing within a BVH
+custom primitive.
 
 Entity layout (32 bytes, stride=8 floats):
     [0] px  [1] py  [2] pz    -- sphere center
@@ -10,8 +12,15 @@ Entity layout (32 bytes, stride=8 floats):
     [7] size                   -- sphere radius
 """
 
-SPHERE_CUDA_SRC = r"""
+from optix_pathtracer.sdf_scene import SDF_SCENE_CUDA_SRC
+
+_CUDA_HEADER = r"""
 #include <optix.h>
+
+// Material ID constants (shared with SDF scene)
+#define MAT_DIFFUSE  0
+#define MAT_GLOSSY   1
+#define MAT_MIRROR   2
 
 extern "C" {
 struct Params
@@ -41,6 +50,15 @@ struct Params
     float          albedo_brightness;           // HSV value/brightness (0-1, default 1.0)
     // Sphere size jitter
     float          sphere_size_jitter;          // per-sphere radius jitter magnitude (0-1)
+    // SDF scene
+    int            sdf_enabled;                 // 0 or 1
+    float          sdf_aabb_min_x;
+    float          sdf_aabb_min_y;
+    float          sdf_aabb_min_z;
+    float          sdf_aabb_max_x;
+    float          sdf_aabb_max_y;
+    float          sdf_aabb_max_z;
+    unsigned int   sdf_prim_index;              // primitive index of SDF AABB (= entity_count)
 };
 __constant__ Params params;
 }
@@ -125,7 +143,10 @@ static __forceinline__ __device__ float entity_hue(unsigned int prim)
     unsigned int base = prim * params.entity_stride;
     return params.entities[base + 6];
 }
+"""
 
+# SDF scene code inserted between header (math/entity helpers) and programs
+_CUDA_PROGRAMS = r"""
 // --- ray generation ----------------------------------------------------------
 extern "C" __global__ void __raygen__rg()
 {
@@ -171,10 +192,26 @@ extern "C" __global__ void __miss__occlusion()
     optixSetPayload_0(0u);  // reached the light: not occluded
 }
 
-// --- sphere intersection (custom primitive, stride-aware) --------------------
+// --- intersection (custom primitive: spheres + SDF) --------------------------
 extern "C" __global__ void __intersection__sphere()
 {
     const unsigned int prim = optixGetPrimitiveIndex();
+
+    // SDF primitive: sphere trace instead of analytic sphere test
+    if (params.sdf_enabled && prim == params.sdf_prim_index) {
+        const float3 O = optixGetObjectRayOrigin();
+        const float3 D = optixGetObjectRayDirection();
+        const float tmin = optixGetRayTmin();
+        const float tmax = optixGetRayTmax();
+
+        float sdf_t;
+        float2 sdf_mat;
+        if (trace_sdf(O, D, fmaxf(tmin, SDF_SURFACE_EPS * 2.0f), tmax, sdf_t, sdf_mat))
+            optixReportIntersection(sdf_t, 1);  // hit kind 1 = SDF
+        return;
+    }
+
+    // Regular sphere intersection (hit kind 0)
     const float3 center = entity_center(prim);
     const float  radius = entity_radius(prim);
 
@@ -232,16 +269,29 @@ static __forceinline__ __device__ float3 ao_cosine_dir(float3 N, unsigned int& s
 extern "C" __global__ void __closesthit__ch()
 {
     const unsigned int prim = optixGetPrimitiveIndex();
-    const float3 center = entity_center(prim);
-    const float  hue    = entity_hue(prim);
-
     const float  t = optixGetRayTmax();
     const float3 P = optixGetWorldRayOrigin() + t * optixGetWorldRayDirection();
-    const float3 N = normalize3(P - center);
-    const float3 L = params.light_dir;
 
-    // HSV->RGB albedo (saturation and brightness from params)
-    const float3 albedo = hsv2rgb(hue, params.albedo_saturation, params.albedo_brightness);
+    float3 N;
+    float3 albedo;
+
+    if (optixGetHitKind() == 1) {
+        // SDF hit: compute normal via gradient, get albedo from scene
+        N = sdf_normal(P);
+        // Flip normal to face incoming ray
+        if (dot3(N, optixGetWorldRayDirection()) > 0.0f)
+            N = mk3(-N.x, -N.y, -N.z);
+        float2 sdf_mat = sdf_scene(P);
+        albedo = sdf_get_albedo(sdf_mat, P);
+    } else {
+        // Sphere hit: normal from center, HSV->RGB albedo
+        const float3 center = entity_center(prim);
+        N = normalize3(P - center);
+        const float hue = entity_hue(prim);
+        albedo = hsv2rgb(hue, params.albedo_saturation, params.albedo_brightness);
+    }
+
+    const float3 L = params.light_dir;
 
     // Shadow ray (optional)
     float vis = 1.0f;
@@ -303,3 +353,6 @@ extern "C" __global__ void __closesthit__ch()
     optixSetPayload_2(__float_as_uint(c.z));
 }
 """
+
+# Compose the full rasterize CUDA source: header + SDF scene + programs
+SPHERE_CUDA_SRC = _CUDA_HEADER + "\n" + SDF_SCENE_CUDA_SRC + "\n" + _CUDA_PROGRAMS
