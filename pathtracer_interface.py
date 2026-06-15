@@ -338,6 +338,7 @@ class PathTracerInterface:
                 denoise_enabled=False,
                 reset=False,
                 num_samples=1,
+                flip_y=False,  # Preview displayed directly, no intermediate blit
                 **render_kwargs,
             )
             done = self._renderer._sample_count >= self._preview_target_spp
@@ -352,6 +353,7 @@ class PathTracerInterface:
                     denoise_enabled=True,
                     reset=False,
                     num_samples=0,  # no additional samples, just denoise+tonemap
+                    flip_y=False,  # Preview displayed directly, no intermediate blit
                     **render_kwargs,
                 )
             self._preview_last_spp = self._renderer._sample_count
@@ -522,10 +524,13 @@ class PathTracerInterface:
         self._gas_time_ms = self._renderer.last_gas_ms
         self._render_time_ms = self._renderer.last_render_ms
 
-    def finish_offline_render(self) -> moderngl.Texture | None:
+    def finish_offline_render(self, flip_y=True) -> moderngl.Texture | None:
         """Denoise (if enabled) and tonemap the fully-accumulated offline frame.
 
         Must be called after all sub-steps are complete.
+
+        Args:
+            flip_y: If True, flip Y axis for OpenGL convention (default).
 
         Returns:
             moderngl.Texture (rgba8) with the final tonemapped image,
@@ -537,6 +542,7 @@ class PathTracerInterface:
         try:
             self._display_tex = self._renderer.render_offline_finish(
                 exposure=1.0,
+                flip_y=flip_y,
             )
             return self._display_tex
         except Exception as e:

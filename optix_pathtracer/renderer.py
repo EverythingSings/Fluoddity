@@ -107,6 +107,8 @@ PARAMS_DTYPE = np.dtype({
         "albedo_saturation", "albedo_brightness",
         # Sphere size jitter
         "sphere_size_jitter",
+        # RNG decorrelation
+        "frame_seed",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -139,6 +141,8 @@ PARAMS_DTYPE = np.dtype({
         "f4", "f4",
         # Sphere size jitter
         "f4",
+        # RNG decorrelation
+        "u4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -171,6 +175,8 @@ PARAMS_DTYPE = np.dtype({
         248, 252,
         # Sphere size jitter
         256,
+        # RNG decorrelation
+        260,
     ],
     "itemsize": 264,
 })
@@ -271,6 +277,9 @@ class PathTracerRenderer:
 
         # GAS scheduling (for render_realtime)
         self._frame_counter = 0
+
+        # Monotonic frame counter for RNG decorrelation (never resets)
+        self._global_frame_counter = 0
 
         # Offline render state
         self._offline_active = False
@@ -898,6 +907,10 @@ class PathTracerRenderer:
         # Sphere size jitter
         h_params["sphere_size_jitter"] = sphere_size_jitter
 
+        # RNG decorrelation: monotonic counter that never resets
+        h_params["frame_seed"] = self._global_frame_counter
+        self._global_frame_counter += 1
+
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
         )
@@ -917,7 +930,7 @@ class PathTracerRenderer:
         self._sample_count += 1
 
     def _tonemap_accum_to_pbo(self, image_ptr, width, height,
-                              denoise_enabled, exposure):
+                              denoise_enabled, exposure, flip_y=True):
         """Run optional denoiser + tonemap into the mapped PBO.
 
         Args:
@@ -926,10 +939,12 @@ class PathTracerRenderer:
             denoise_enabled: If True, resolve + denoise then tonemap the
                 denoised buffer. If False, tonemap raw accumulation directly.
             exposure: Exposure multiplier for tonemapping.
+            flip_y: If True, flip Y axis for OpenGL convention (default).
         """
         block = (16, 16, 1)
         grid = ((width + 15) // 16, (height + 15) // 16, 1)
         stream_wrapper = cp.cuda.ExternalStream(self._stream)
+        flip_y_val = np.uint32(1 if flip_y else 0)
 
         if denoise_enabled:
             # Resolve + denoise, then tonemap the denoised result
@@ -941,7 +956,8 @@ class PathTracerRenderer:
                  np.uint32(width),
                  np.uint32(height),
                  np.uint32(1),  # already resolved to mean
-                 np.float32(exposure)),
+                 np.float32(exposure),
+                 flip_y_val),
                 stream=stream_wrapper,
             )
         else:
@@ -953,7 +969,8 @@ class PathTracerRenderer:
                  np.uint32(width),
                  np.uint32(height),
                  np.uint32(self._sample_count),
-                 np.float32(exposure)),
+                 np.float32(exposure),
+                 flip_y_val),
                 stream=stream_wrapper,
             )
 
@@ -974,7 +991,7 @@ class PathTracerRenderer:
                sun_color=(1.0, 1.0, 1.0), sun_sampling=True,
                denoise_enabled=False,
                albedo_saturation=0.8, albedo_brightness=1.0,
-               sphere_size_jitter=0.0):
+               sphere_size_jitter=0.0, flip_y=True):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1065,6 +1082,7 @@ class PathTracerRenderer:
                     image_ptr, width, height,
                     denoise_enabled=denoise_enabled,
                     exposure=exposure,
+                    flip_y=flip_y,
                 )
 
                 check_cuda(cudart.cudaEventRecord(
@@ -1169,7 +1187,7 @@ class PathTracerRenderer:
     def render_realtime(self, width, height, eye, U, V, W,
                         radius_scale=1.0, gas_rebuild_interval=30,
                         denoise_enabled=False, reset=True,
-                        num_samples=1, **render_kwargs):
+                        num_samples=1, flip_y=True, **render_kwargs):
         """Realtime render with configurable sample count and reset behavior.
 
         Manages GAS scheduling internally. The entity buffer must reflect
@@ -1211,6 +1229,7 @@ class PathTracerRenderer:
                 width, height, eye, U, V, W,
                 radius_scale=radius_scale,
                 denoise_enabled=denoise_enabled,
+                flip_y=flip_y,
                 **render_kwargs,
             )
 
@@ -1242,6 +1261,7 @@ class PathTracerRenderer:
                     image_ptr, width, height,
                     denoise_enabled=denoise_enabled,
                     exposure=render_kwargs.get('exposure', 1.0),
+                    flip_y=flip_y,
                 )
 
                 check_cuda(cudart.cudaEventRecord(
@@ -1364,7 +1384,7 @@ class PathTracerRenderer:
 
         self._offline_substeps_done += 1
 
-    def render_offline_finish(self, exposure=1.0):
+    def render_offline_finish(self, exposure=1.0, flip_y=True):
         """Denoise (if enabled) and tonemap the fully-accumulated frame.
 
         Must be called after all sub-steps are complete. Returns the final
@@ -1372,6 +1392,7 @@ class PathTracerRenderer:
 
         Args:
             exposure: Exposure multiplier for tonemapping.
+            flip_y: If True, flip Y axis for OpenGL convention (default).
 
         Returns:
             moderngl.Texture (rgba8).
@@ -1394,6 +1415,7 @@ class PathTracerRenderer:
                 image_ptr, w, h,
                 denoise_enabled=self._offline_denoise,
                 exposure=exposure,
+                flip_y=flip_y,
             )
             check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
         finally:

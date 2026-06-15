@@ -86,7 +86,9 @@ struct Params
     float          albedo_brightness;  // offset 252: HSV value/brightness (0-1, default 1.0)
     // Sphere size jitter
     float          sphere_size_jitter; // offset 256: per-sphere radius jitter magnitude (0-1)
-    // Total: 260 bytes (padded to 264 for 8-byte alignment)
+    // RNG decorrelation
+    unsigned int   frame_seed;         // offset 260: monotonic counter (never resets)
+    // Total: 264 bytes (8-byte aligned)
 };
 __constant__ Params params;
 }
@@ -191,9 +193,10 @@ static __forceinline__ __device__ void _pcg_advance(unsigned int& state, unsigne
 static __forceinline__ __device__ void rng_init(unsigned int& state,
                                                  unsigned int px,
                                                  unsigned int py,
-                                                 unsigned int si)
+                                                 unsigned int si,
+                                                 unsigned int frame_seed)
 {
-    state = px * 1664525u + py * 1013904223u + si * 214013u + 2531011u;
+    state = px * 1664525u + py * 1013904223u + si * 214013u + frame_seed * 1103515245u + 2531011u;
     // Warm up: one full PCG step + output hash
     state = state * 747796405u + 2891336453u;
     state = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
@@ -324,9 +327,9 @@ extern "C" __global__ void __raygen__rg()
 {
     const uint3 idx = optixGetLaunchIndex();
 
-    // 1. Init RNG with pixel coordinates + sample index
+    // 1. Init RNG with pixel coordinates + sample index + frame seed
     unsigned int rng;
-    rng_init(rng, idx.x, idx.y, params.sample_index);
+    rng_init(rng, idx.x, idx.y, params.sample_index, params.frame_seed);
 
     // 2. Subpixel jitter for free AA across accumulated samples
     const float jx = next_float(rng);
@@ -569,7 +572,8 @@ extern "C" __global__ void tonemap(
     unsigned int  width,
     unsigned int  height,
     unsigned int  samples_accumulated,
-    float         exposure)
+    float         exposure,
+    unsigned int  flip_y)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -594,8 +598,8 @@ extern "C" __global__ void tonemap(
     g = sqrtf(fminf(fmaxf(g, 0.0f), 1.0f));
     b = sqrtf(fminf(fmaxf(b, 0.0f), 1.0f));
 
-    // Y-flip for OpenGL convention
-    const unsigned int out_y = height - 1u - y;
+    // Conditional Y-flip for OpenGL convention
+    const unsigned int out_y = flip_y ? (height - 1u - y) : y;
     image[out_y * width + x] = make_uchar4(
         (unsigned char)(r * 255.99f),
         (unsigned char)(g * 255.99f),

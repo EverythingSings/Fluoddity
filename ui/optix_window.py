@@ -42,9 +42,9 @@ class OptiXWindowMixin:
             _, p.three_d_rt_realtime_samples = imgui.slider_int(
                 "##rt_samples", p.three_d_rt_realtime_samples, 1, 8)
 
-        # Preview SPP + Re-render button
+        # Capture SPP + Re-render button
         _, p.three_d_rt_preview_spp = imgui.slider_int(
-            "Preview SPP", p.three_d_rt_preview_spp, 1, 512)
+            "Capture SPP", p.three_d_rt_preview_spp, 1, 512)
         rt_active = p.three_d_rt_mode > 0
         if rt_active:
             imgui.begin_disabled()

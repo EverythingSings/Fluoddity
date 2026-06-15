@@ -303,6 +303,11 @@ class App:
         # 4. Lock physics frequency to video recorder frequency if recording
         is_recording = self.video_service.is_active()
         tracer_video_active = is_recording and ui_state.preferences.tracer_mode
+        optix_pt_video_active = (is_recording
+                                 and not tracer_video_active
+                                 and ui_state.camera.optix_enabled
+                                 and ui_state.preferences.three_d_rt_mode > 0
+                                 and self._pathtracer_interface is not None)
 
         if is_recording and not self.was_recording:
             self.user_speedmult = ui_state.preferences.speedmult
@@ -319,10 +324,23 @@ class App:
                 # Sync DOF from camera state
                 self.ui._tracer_interface.aperture = ui_state.camera.aperture
                 self.ui._tracer_interface.focal_plane_depth = ui_state.camera.focal_plane_depth
+            elif optix_pt_video_active:
+                # Initialize OptiX path tracer video state
+                self.sim_runner.init_optix_pt_video_state()
+            elif (ui_state.camera.optix_enabled
+                  and ui_state.preferences.three_d_rt_mode == 0
+                  and self._optix_interface is not None):
+                # Rasterize mode: override AO rays with Capture SPP
+                self._saved_ao_num_rays = ui_state.preferences.three_d_optix_ao_num_rays
+                ui_state.preferences.three_d_optix_ao_num_rays = ui_state.preferences.three_d_rt_preview_spp
         elif not is_recording and self.was_recording:
             ui_state.preferences.speedmult = self.user_speedmult
             ui_state.preferences.motion_blur = self.user_motion_blur
             ui_state.preferences.blur_quality = self.user_blur_quality
+            # Restore AO rays if we overrode them
+            if hasattr(self, '_saved_ao_num_rays'):
+                ui_state.preferences.three_d_optix_ao_num_rays = self._saved_ao_num_rays
+                del self._saved_ao_num_rays
             # Pause simulation when recording ended by reaching max_frames
             if self.video_service.finished_naturally():
                 if self.render_queue_executing:
@@ -334,6 +352,10 @@ class App:
         if is_recording:
             if tracer_video_active:
                 # Tracer mode: physics steps are managed by run_tracer_video_frame
+                ui_state.preferences.speedmult = 1
+                ui_state.preferences.motion_blur = False
+            elif optix_pt_video_active:
+                # OptiX PT mode: physics steps managed by run_optix_pt_video_frame
                 ui_state.preferences.speedmult = 1
                 ui_state.preferences.motion_blur = False
             else:
@@ -614,6 +636,23 @@ class App:
                     ui_state.preferences.max_frames,
                     ui_state.preferences.supersample_k,
                     ui_state.preferences.filename_prefix
+                )
+        elif optix_pt_video_active and ui_state.sim.going:
+            # OptiX path tracer video mode: offline rendering with motion blur
+            pt_frame = self.sim_runner.run_optix_pt_video_frame(
+                ui_state, self._pathtracer_interface, tiling_mode=tiling_mode
+            )
+            if pt_frame is not None:
+                # Display the completed frame in the camera view
+                self.camera.assembled_texture = pt_frame
+                # Send to video recorder
+                self.video_service.process_frame(
+                    self.ctx,
+                    pt_frame,
+                    ui_state.preferences.max_frames,
+                    ui_state.preferences.supersample_k,
+                    ui_state.preferences.filename_prefix,
+                    flip_y=False  # 3D path tracer: no flip needed
                 )
         elif ui_state.sim.going:
             self.sim_runner.run_simulation_frame(

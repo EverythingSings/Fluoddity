@@ -533,3 +533,69 @@ class SimulationRunner:
         return self.camera.compute_fps_view_proj(
             cam.pos, cam.dir, cam.up, cam.fov, aspect
         )
+
+    # ============================================================
+    #  OptiX path tracer video mode
+    # ============================================================
+
+    def init_optix_pt_video_state(self):
+        """Initialize OptiX path tracer video recording state."""
+        self._optix_pt_frame_started = False
+        self._optix_pt_substeps_done = 0
+        self._optix_pt_physics_steps_done = 0
+
+    def run_optix_pt_video_frame(self, ui_state, pt_interface, tiling_mode=False):
+        """Run one app-frame of OptiX path tracer video recording.
+
+        Uses the PathTracerInterface's offline API to produce motion-blurred,
+        high-SPP frames for video capture. One substep per app frame keeps
+        the UI responsive.
+
+        Returns the tonemapped display texture when an output frame is complete,
+        or None if still accumulating.
+        """
+        capture_spp = ui_state.preferences.three_d_rt_preview_spp
+        physics_rate = ui_state.preferences.motion_blur_samples
+        spp_per_substep = max(1, capture_spp // max(physics_rate, 1))
+
+        # --- Start a new output frame if needed ---
+        if not self._optix_pt_frame_started:
+            # Run initial physics step to advance simulation
+            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
+                                   tiling_mode, 0)
+
+            # Start offline render at window resolution
+            width, height = glfw.get_framebuffer_size(self.window)
+            pt_interface.start_offline_render(
+                entity_buffer=self.sim.get_entity_buffer(),
+                entity_count=self.sim.entity_count,
+                width=width,
+                height=height,
+                total_substeps=physics_rate,
+                spp_per_substep=spp_per_substep,
+            )
+
+            # First substep: trace samples at current entity positions
+            cam = self.controller_cam
+            pt_interface.offline_substep(cam.pos, cam.dir, cam.up, cam.fov)
+
+            self._optix_pt_frame_started = True
+            self._optix_pt_substeps_done = 1
+            self._optix_pt_physics_steps_done = 1
+            return None  # Still accumulating
+
+        # --- Subsequent substeps: physics step + offline_substep ---
+        if self._optix_pt_substeps_done < physics_rate:
+            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
+                                   tiling_mode, self._optix_pt_physics_steps_done)
+            self._optix_pt_physics_steps_done += 1
+
+            cam = self.controller_cam
+            pt_interface.offline_substep(cam.pos, cam.dir, cam.up, cam.fov)
+            self._optix_pt_substeps_done += 1
+            return None  # Still accumulating
+
+        # --- All substeps done: finish and return ---
+        display_tex = pt_interface.finish_offline_render()
+        self._optix_pt_frame_started = False
+        return display_tex
