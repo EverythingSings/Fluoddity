@@ -543,26 +543,45 @@ class SimulationRunner:
         self._optix_pt_frame_started = False
         self._optix_pt_substeps_done = 0
         self._optix_pt_physics_steps_done = 0
+        self._optix_pt_total_substeps = 0
+        self._optix_pt_physics_per_substep = 0
 
     def run_optix_pt_video_frame(self, ui_state, pt_interface, tiling_mode=False):
         """Run one app-frame of OptiX path tracer video recording.
 
-        Uses the PathTracerInterface's offline API to produce motion-blurred,
-        high-SPP frames for video capture. One substep per app frame keeps
-        the UI responsive.
+        Uses the PathTracerInterface's offline API to produce high-SPP frames
+        for video capture. Respects recording_motion_blur and
+        recording_blur_quality to control temporal blur. One render substep
+        per app frame keeps the UI responsive.
 
         Returns the tonemapped display texture when an output frame is complete,
         or None if still accumulating.
         """
         capture_spp = ui_state.preferences.three_d_rt_preview_spp
-        physics_rate = ui_state.preferences.motion_blur_samples
-        spp_per_substep = max(1, capture_spp // max(physics_rate, 1))
+        physics_rate = ui_state.preferences.motion_blur_samples  # total physics steps per output frame
+
+        if ui_state.preferences.recording_motion_blur:
+            blur_quality = ui_state.preferences.recording_blur_quality
+            # Render every blur_quality physics steps
+            total_substeps = max(1, physics_rate // max(blur_quality, 1))
+            physics_per_substep = blur_quality
+        else:
+            # No motion blur: render once at a single moment, advance physics all at once
+            total_substeps = 1
+            physics_per_substep = physics_rate
+
+        spp_per_substep = max(1, capture_spp // max(total_substeps, 1))
 
         # --- Start a new output frame if needed ---
         if not self._optix_pt_frame_started:
-            # Run initial physics step to advance simulation
-            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                   tiling_mode, 0)
+            # Store computed values for use across subsequent app frames
+            self._optix_pt_total_substeps = total_substeps
+            self._optix_pt_physics_per_substep = physics_per_substep
+
+            # Run initial physics steps to advance simulation
+            for i in range(physics_per_substep):
+                self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
+                                       tiling_mode, i)
 
             # Start offline render at window resolution
             width, height = glfw.get_framebuffer_size(self.window)
@@ -571,7 +590,7 @@ class SimulationRunner:
                 entity_count=self.sim.entity_count,
                 width=width,
                 height=height,
-                total_substeps=physics_rate,
+                total_substeps=total_substeps,
                 spp_per_substep=spp_per_substep,
             )
 
@@ -581,14 +600,15 @@ class SimulationRunner:
 
             self._optix_pt_frame_started = True
             self._optix_pt_substeps_done = 1
-            self._optix_pt_physics_steps_done = 1
+            self._optix_pt_physics_steps_done = physics_per_substep
             return None  # Still accumulating
 
-        # --- Subsequent substeps: physics step + offline_substep ---
-        if self._optix_pt_substeps_done < physics_rate:
-            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                   tiling_mode, self._optix_pt_physics_steps_done)
-            self._optix_pt_physics_steps_done += 1
+        # --- Subsequent substeps: physics step(s) + offline_substep ---
+        if self._optix_pt_substeps_done < self._optix_pt_total_substeps:
+            for i in range(self._optix_pt_physics_per_substep):
+                self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
+                                       tiling_mode, self._optix_pt_physics_steps_done)
+                self._optix_pt_physics_steps_done += 1
 
             cam = self.controller_cam
             pt_interface.offline_substep(cam.pos, cam.dir, cam.up, cam.fov)
