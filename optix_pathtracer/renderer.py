@@ -1661,8 +1661,15 @@ class PathTracerRenderer:
 
         # GAS scheduling: tied to physics steps, not render frames.
         # Entities only move when physics runs, so skip GAS update when paused.
+        # Exception: geometry type change (curves <-> spheres) forces an
+        # immediate rebuild so pipeline/SBT/GAS stay consistent even when paused.
         self._physics_steps_since_rebuild += physics_steps
-        if (self._gas_handle is None
+        if use_curves != self._use_curves:
+            self.build_accel(radius_scale, sphere_size_jitter,
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                             use_curves, curve_length, curve_r0, curve_r1)
+            self._physics_steps_since_rebuild = 0
+        elif (self._gas_handle is None
                 or (physics_steps > 0
                     and self._physics_steps_since_rebuild >= gas_rebuild_interval)):
             self.build_accel(radius_scale, sphere_size_jitter,
