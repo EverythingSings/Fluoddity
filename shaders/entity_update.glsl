@@ -803,7 +803,8 @@ void main() {
     if(index%500==0){report(length(col_params),0);}//small sample
 
     //Set entity hue (saturation/brightness/alpha are computed in vertex shaders)
-    e.hue = get_particle_hue_sensitivity()*col_params.x;
+    e.hue = abs(get_particle_hue_sensitivity()*col_params.x);
+    if(abs(col_params.x-generic03.x*5)<2*generic03.y){e.hue=-e.hue;}
     e.size = 0.00015;
     //INVISIBILITY RADIO FEATURE
     if(RADIO_ENABLED>0){
