@@ -467,6 +467,10 @@ class App:
                 pt.albedo_saturation = p.three_d_optix_albedo_saturation
                 pt.albedo_brightness = p.three_d_optix_albedo_brightness
                 pt.sphere_size_jitter = p.three_d_optix_sphere_size_jitter
+                pt.use_curves = p.three_d_optix_use_curves
+                pt.curve_length = p.three_d_optix_curve_length
+                pt.curve_r0 = p.three_d_optix_curve_r0
+                pt.curve_r1 = p.three_d_optix_curve_r1
                 pt.sdf_enabled = p.three_d_optix_sdf_enabled
                 # Path-tracer-only settings
                 pt.sun_sampling = p.three_d_pt_sun_sampling
@@ -476,6 +480,7 @@ class App:
                 pt.firefly_clamp_max = p.three_d_pt_firefly_clamp_max
                 pt.global_material = p.three_d_pt_global_material
                 pt.glossy_ior = p.three_d_pt_glossy_ior
+                pt.emission_intensity = p.three_d_pt_emission_intensity
                 pt.denoise_enabled = p.three_d_pt_denoise_enabled
                 pt.aperture = ui_state.camera.aperture
                 pt.focal_plane_depth = ui_state.camera.focal_plane_depth
@@ -535,6 +540,10 @@ class App:
                 pt.albedo_saturation = p.three_d_optix_albedo_saturation
                 pt.albedo_brightness = p.three_d_optix_albedo_brightness
                 pt.sphere_size_jitter = p.three_d_optix_sphere_size_jitter
+                pt.use_curves = p.three_d_optix_use_curves
+                pt.curve_length = p.three_d_optix_curve_length
+                pt.curve_r0 = p.three_d_optix_curve_r0
+                pt.curve_r1 = p.three_d_optix_curve_r1
                 pt.sdf_enabled = p.three_d_optix_sdf_enabled
                 pt.sun_sampling = p.three_d_pt_sun_sampling
                 pt.max_bounces = p.three_d_pt_max_bounces
@@ -543,6 +552,7 @@ class App:
                 pt.firefly_clamp_max = p.three_d_pt_firefly_clamp_max
                 pt.global_material = p.three_d_pt_global_material
                 pt.glossy_ior = p.three_d_pt_glossy_ior
+                pt.emission_intensity = p.three_d_pt_emission_intensity
                 pt.denoise_enabled = p.three_d_pt_denoise_enabled
                 pt.aperture = ui_state.camera.aperture
                 pt.focal_plane_depth = ui_state.camera.focal_plane_depth

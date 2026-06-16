@@ -85,6 +85,22 @@ class OptiXWindowMixin:
         if imgui.is_item_hovered():
             imgui.set_tooltip("Per-sphere radius jitter to reduce banding artifacts")
 
+        # Curve primitives
+        _, p.three_d_optix_use_curves = imgui.checkbox(
+            "Curves", p.three_d_optix_use_curves)
+        if imgui.is_item_hovered():
+            imgui.set_tooltip("Render entities as round linear curves oriented along velocity")
+        if p.three_d_optix_use_curves:
+            _, p.three_d_optix_curve_length = imgui.slider_float(
+                "Curve Length", p.three_d_optix_curve_length,
+                0.0, 10.0, format="%.2f")
+            _, p.three_d_optix_curve_r0 = imgui.slider_float(
+                "Curve R0", p.three_d_optix_curve_r0,
+                0.01, 5.0, format="%.2f")
+            _, p.three_d_optix_curve_r1 = imgui.slider_float(
+                "Curve R1", p.three_d_optix_curve_r1,
+                0.01, 5.0, format="%.2f")
+
         # Albedo color controls
         _, p.three_d_optix_albedo_saturation = imgui.slider_float(
             "Albedo Saturation", p.three_d_optix_albedo_saturation, 0.0, 1.0)
@@ -159,6 +175,11 @@ class OptiXWindowMixin:
                 _, p.three_d_pt_firefly_clamp_max = imgui.drag_float(
                     "##pt_clamp_max", p.three_d_pt_firefly_clamp_max,
                     0.1, 0.1, 1000.0, "Max: %.1f")
+            _, p.three_d_pt_emission_intensity = imgui.slider_float(
+                "Emission Intensity", p.three_d_pt_emission_intensity,
+                0.0, 100.0, format="%.1f")
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Radiance multiplier for emissive entities (negative hue)")
             _, p.three_d_pt_denoise_enabled = imgui.checkbox(
                 "Denoise (path trace)", p.three_d_pt_denoise_enabled)
 

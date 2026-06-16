@@ -100,7 +100,17 @@ struct Params
     float          sdf_aabb_max_y;     // offset 284
     float          sdf_aabb_max_z;     // offset 288
     unsigned int   sdf_prim_index;     // offset 292: primitive index of SDF AABB (= entity_count)
-    // Total: 296 bytes (8-byte aligned)
+
+    // Emissive particles
+    float          emission_intensity; // offset 296: multiplier on emissive radiance
+
+    // Curve primitives
+    int            use_curves;        // offset 300: bool: curve mode active
+    float          curve_length;      // offset 304: control point distance (multiplier on entity size)
+    float          curve_r0;          // offset 308: radius at start (multiplier on entity size)
+    float          curve_r1;          // offset 312: radius at end (multiplier on entity size)
+    // Total: 316 bytes (pad to 320 for 8-byte alignment)
+    unsigned int   _pad5;             // offset 316: padding
 };
 __constant__ Params params;
 }
@@ -179,6 +189,25 @@ static __forceinline__ __device__ float entity_hue(unsigned int prim)
 {
     unsigned int base = prim * params.entity_stride;
     return params.entities[base + 6];
+}
+
+static __forceinline__ __device__ float3 entity_velocity(unsigned int prim)
+{
+    unsigned int base = prim * params.entity_stride;
+    return mk3(params.entities[base + 3],
+               params.entities[base + 4],
+               params.entities[base + 5]);
+}
+
+// --- emission helper (user-customizable) ---
+// Returns emission radiance for an entity. Returns (0,0,0) for non-emissive.
+// Default: negative hue -> emit at abs(hue), same saturation/brightness.
+static __forceinline__ __device__ float3 get_emission(
+    float hue, float saturation, float brightness)
+{
+    if (hue >= 0.0f)
+        return mk3(0.0f, 0.0f, 0.0f);
+    return hsv2rgb(-hue, saturation, brightness);
 }
 
 // --- PCG RNG (ported from volrender/shaders/common.glsl) ---------------------
@@ -431,8 +460,19 @@ extern "C" __global__ void __raygen__rg()
             albedo = sdf_get_albedo(sdf_mat, P);
             ior    = sdf_get_ior(sdf_mat);
         } else {
-            // Sphere hit: HSV->RGB albedo, global material
-            albedo = hsv2rgb(entity_hue(prim), params.albedo_saturation, params.albedo_brightness);
+            // Entity hit: check for emission (negative hue = emitter)
+            float hue = entity_hue(prim);
+            float3 emission = get_emission(hue, params.albedo_saturation, params.albedo_brightness);
+            if (emission.x + emission.y + emission.z > 0.0f) {
+                radiance = radiance + throughput * emission * params.emission_intensity;
+                if (depth == 0 && params.albedo_buffer) {
+                    const unsigned int pidx = idx.y * params.width + idx.x;
+                    params.albedo_buffer[pidx] = make_float4(emission.x, emission.y, emission.z, 1.0f);
+                    params.normal_buffer[pidx] = make_float4(N.x, N.y, N.z, 0.0f);
+                }
+                break;
+            }
+            albedo = hsv2rgb(hue, params.albedo_saturation, params.albedo_brightness);
             mat_id = params.global_material;
             ior    = params.glossy_ior;
         }
@@ -618,6 +658,49 @@ extern "C" __global__ void __closesthit__ch()
     optixSetPayload_2(__float_as_uint(N.x));   // normal x
     optixSetPayload_3(__float_as_uint(N.y));   // normal y
     optixSetPayload_4(__float_as_uint(N.z));   // normal z
+}
+
+// --- closest hit for curve primitives (built-in IS, shading in raygen) --------
+extern "C" __global__ void __closesthit__curve()
+{
+    const unsigned int prim = optixGetPrimitiveIndex();
+    const float  t = optixGetRayTmax();
+    const float3 P = optixGetWorldRayOrigin() + t * optixGetWorldRayDirection();
+
+    // Recompute control points from entity data (same formula as CPU-side)
+    const float3 center = entity_center(prim);
+    const float3 vel = entity_velocity(prim);
+    const float  base_r = entity_radius(prim);
+
+    float vel_len = sqrtf(dot3(vel, vel));
+    float3 vel_norm;
+    float has_vel;
+    if (vel_len > 1e-6f) {
+        vel_norm = (1.0f / vel_len) * vel;
+        has_vel = 1.0f;
+    } else {
+        vel_norm = mk3(0.0f, 0.0f, 0.0f);
+        has_vel = 0.0f;
+    }
+
+    float half_extent = has_vel * params.curve_length * base_r * 0.5f;
+    float3 c0 = center - half_extent * vel_norm;
+    float3 c1 = center + half_extent * vel_norm;
+
+    // Normal: radial from the curve axis
+    float3 axis = c1 - c0;
+    float axis_len2 = dot3(axis, axis);
+    float u_param = (axis_len2 > 1e-12f)
+        ? clamp_f(dot3(P - c0, axis) / axis_len2, 0.0f, 1.0f)
+        : 0.5f;
+    float3 closest = c0 + u_param * axis;
+    float3 N = normalize3(P - closest);
+
+    optixSetPayload_0(__float_as_uint(t));
+    optixSetPayload_1(prim);
+    optixSetPayload_2(__float_as_uint(N.x));
+    optixSetPayload_3(__float_as_uint(N.y));
+    optixSetPayload_4(__float_as_uint(N.z));
 }
 """
 

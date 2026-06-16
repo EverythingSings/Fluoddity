@@ -114,6 +114,14 @@ PARAMS_DTYPE = np.dtype({
         "sdf_aabb_min_x", "sdf_aabb_min_y", "sdf_aabb_min_z",
         "sdf_aabb_max_x", "sdf_aabb_max_y", "sdf_aabb_max_z",
         "sdf_prim_index",
+        # Emissive particles
+        "emission_intensity",
+        # Curve primitives
+        "use_curves",
+        "curve_length",
+        "curve_r0",
+        "curve_r1",
+        "_pad5",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -152,6 +160,14 @@ PARAMS_DTYPE = np.dtype({
         "i4",
         "f4", "f4", "f4",
         "f4", "f4", "f4",
+        "u4",
+        # Emissive particles
+        "f4",
+        # Curve primitives
+        "i4",
+        "f4",
+        "f4",
+        "f4",
         "u4",
     ],
     "offsets": [
@@ -192,8 +208,16 @@ PARAMS_DTYPE = np.dtype({
         268, 272, 276,
         280, 284, 288,
         292,
+        # Emissive particles
+        296,
+        # Curve primitives
+        300,
+        304,
+        308,
+        312,
+        316,
     ],
-    "itemsize": 296,
+    "itemsize": 320,
 })
 
 
@@ -272,6 +296,22 @@ class PathTracerRenderer:
         self._temp_size = 0
         self._gas_size = 0
 
+        # Curve resources (built in _compute_curve_data())
+        self._d_curve_vertices = None
+        self._d_curve_widths = None
+        self._d_curve_indices = None
+        self._d_sdf_aabb = None
+
+        # IAS resources (for curves + SDF: two GAS combined via IAS)
+        self._sdf_gas_handle = None
+        self._d_sdf_gas = None
+        self._d_sdf_temp = None
+        self._d_ias = None
+        self._d_ias_temp = None
+        self._d_instances = None
+        self._ias_handle = None
+        self._traversable_handle = None  # handle passed to optixTrace (GAS or IAS)
+
         # Accumulation resources
         self._d_accum = None
         self._d_albedo = None
@@ -325,8 +365,9 @@ class PathTracerRenderer:
         self._octx = optix.deviceContextCreate(0, opts)
 
         # Compile PTX via NVRTC
-        ptx = self._load_ptx()
-        self._pipeline, self._groups = self._build_pipeline(ptx)
+        self._ptx = self._load_ptx()
+        self._use_curves = False  # current pipeline mode
+        self._pipeline, self._groups = self._build_pipeline(self._ptx, use_curves=False)
         self._sbt, self._sbt_mem = self._build_sbt()
 
         # Device-side launch params buffer
@@ -381,18 +422,31 @@ class PathTracerRenderer:
     # Pipeline / SBT construction
     # ------------------------------------------------------------------
 
-    def _build_pipeline(self, ptx):
-        """Create OptiX pipeline with raygen, miss, and hitgroup programs."""
+    def _build_pipeline(self, ptx, use_curves=False):
+        """Create OptiX pipeline with raygen, miss, and hitgroup programs.
+
+        When use_curves is True, includes both custom (SDF) and curve (entity)
+        primitive types, with a built-in IS module for round linear curves.
+        """
+        prim_flags = optix.PRIMITIVE_TYPE_FLAGS_CUSTOM
+        if use_curves:
+            prim_flags = int(prim_flags) | int(optix.PRIMITIVE_TYPE_FLAGS_ROUND_LINEAR)
+
+        # When curves are enabled, we may need an IAS (curves GAS + SDF GAS)
+        # so use ALLOW_ANY to support both bare GAS and IAS traversal.
+        if use_curves:
+            trav_flags = int(optix.TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY)
+        else:
+            trav_flags = int(optix.TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS)
+
         pco = optix.PipelineCompileOptions(
             usesMotionBlur=False,
-            traversableGraphFlags=int(
-                optix.TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS
-            ),
+            traversableGraphFlags=trav_flags,
             numPayloadValues=8,
             numAttributeValues=2,
             exceptionFlags=int(optix.EXCEPTION_FLAG_NONE),
             pipelineLaunchParamsVariableName="params",
-            usesPrimitiveTypeFlags=optix.PRIMITIVE_TYPE_FLAGS_CUSTOM,
+            usesPrimitiveTypeFlags=prim_flags,
         )
 
         mco = optix.ModuleCompileOptions(
@@ -420,7 +474,7 @@ class PathTracerRenderer:
         ms2_desc.missEntryFunctionName = "__miss__occlusion"
         (ms_occ,), _ = self._octx.programGroupCreate([ms2_desc])
 
-        # Hit group: closest-hit + custom intersection
+        # Hit group: closest-hit + custom intersection (spheres + SDF)
         hg_desc = optix.ProgramGroupDesc()
         hg_desc.hitgroupModuleCH = module
         hg_desc.hitgroupEntryFunctionNameCH = "__closesthit__ch"
@@ -429,6 +483,26 @@ class PathTracerRenderer:
         (hg,), _ = self._octx.programGroupCreate([hg_desc])
 
         groups = [rg, ms_rad, ms_occ, hg]
+
+        # Hit group for curves (built-in IS + custom closest-hit)
+        if use_curves:
+            bis_opts = optix.BuiltinISOptions()
+            bis_opts.builtinISModuleType = optix.PrimitiveType.PRIMITIVE_TYPE_ROUND_LINEAR
+            bis_opts.buildFlags = int(
+                optix.BUILD_FLAG_PREFER_FAST_TRACE
+                | optix.BUILD_FLAG_ALLOW_UPDATE
+                | optix.BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS
+            )
+            curve_module = self._octx.builtinISModuleGet(mco, pco, bis_opts)
+
+            hg_curve_desc = optix.ProgramGroupDesc()
+            hg_curve_desc.hitgroupModuleCH = module
+            hg_curve_desc.hitgroupEntryFunctionNameCH = "__closesthit__curve"
+            hg_curve_desc.hitgroupModuleIS = curve_module
+            # Built-in IS module: do NOT set hitgroupEntryFunctionNameIS
+            # (default null tells OptiX to use the built-in intersection)
+            (hg_curve,), _ = self._octx.programGroupCreate([hg_curve_desc])
+            groups.append(hg_curve)
 
         max_trace_depth = 2  # primary + shadow (shadow added in Step 4)
         plo = optix.PipelineLinkOptions()
@@ -447,8 +521,19 @@ class PathTracerRenderer:
         return pipeline, groups
 
     def _build_sbt(self):
-        """Build the Shader Binding Table."""
-        rg, ms_rad, ms_occ, hg = self._groups
+        """Build the Shader Binding Table.
+
+        When curves are enabled (groups has 5 entries), the SBT has two
+        hit group records: [0] = curves (for BuildInputCurveArray geometry),
+        [1] = custom IS (for spheres/SDF, BuildInputCustomPrimitiveArray).
+        When curves are disabled (groups has 4 entries), single HG record.
+        """
+        has_curves = len(self._groups) == 5
+        if has_curves:
+            rg, ms_rad, ms_occ, hg, hg_curve = self._groups
+        else:
+            rg, ms_rad, ms_occ, hg = self._groups
+
         hdr = f"{optix.SBT_RECORD_HEADER_SIZE}B"
         dtype = aligned_dtype(["header"], [hdr], optix.SBT_RECORD_ALIGNMENT)
 
@@ -461,8 +546,18 @@ class PathTracerRenderer:
         optix.sbtRecordPackHeader(ms_occ, h_ms1)
         h_ms = np.concatenate([h_ms0, h_ms1])
 
-        h_hg = np.zeros(1, dtype=dtype)
-        optix.sbtRecordPackHeader(hg, h_hg)
+        if has_curves:
+            # Two HG records: [0] = curves, [1] = custom (SDF)
+            h_hg0 = np.zeros(1, dtype=dtype)
+            h_hg1 = np.zeros(1, dtype=dtype)
+            optix.sbtRecordPackHeader(hg_curve, h_hg0)
+            optix.sbtRecordPackHeader(hg, h_hg1)
+            h_hg = np.concatenate([h_hg0, h_hg1])
+            hg_count = 2
+        else:
+            h_hg = np.zeros(1, dtype=dtype)
+            optix.sbtRecordPackHeader(hg, h_hg)
+            hg_count = 1
 
         d_rg = to_device(h_rg)
         d_ms = to_device(h_ms)
@@ -475,9 +570,24 @@ class PathTracerRenderer:
             missRecordCount=2,
             hitgroupRecordBase=d_hg.ptr,
             hitgroupRecordStrideInBytes=dtype.itemsize,
-            hitgroupRecordCount=1,
+            hitgroupRecordCount=hg_count,
         )
         return sbt, (d_rg, d_ms, d_hg)  # prevent GC
+
+    def _ensure_pipeline(self, use_curves):
+        """Rebuild OptiX pipeline and SBT if curve mode changed."""
+        if use_curves == self._use_curves:
+            return
+        self._use_curves = use_curves
+        self._pipeline, self._groups = self._build_pipeline(
+            self._ptx, use_curves=use_curves)
+        self._sbt, self._sbt_mem = self._build_sbt()
+        # Force full GAS rebuild since geometry type changed
+        self._gas_handle = None
+        self._traversable_handle = None
+        self._sdf_gas_handle = None
+        self._ias_handle = None
+        self._physics_steps_since_rebuild = 0
 
     # ------------------------------------------------------------------
     # Display resources (PBO + texture)
@@ -705,60 +815,257 @@ class PathTracerRenderer:
         self._total_prims = total_prims
         cp.cuda.Device().synchronize()
 
+    def _compute_curve_data(self, d_entities_ptr, radius_scale=1.0,
+                            curve_length=1.0, curve_r0=1.0, curve_r1=0.5):
+        """Compute curve control points and widths from the entity buffer.
+
+        For ROUND_LINEAR curves: 2 control points per entity placed along
+        velocity direction, with per-vertex widths.
+
+        The vertex buffer is (entity_count * 2, 3) float32 — pairs of float3.
+        The width buffer is (entity_count * 2,) float32 — pairs of radius.
+        The index buffer is (entity_count,) uint32 — start vertex per curve.
+        """
+        nbytes = self._entity_count * self._entity_stride * 4
+        mem = cp.cuda.UnownedMemory(d_entities_ptr, nbytes, owner=None)
+        entities_flat = cp.ndarray(
+            self._entity_count * self._entity_stride,
+            dtype=cp.float32,
+            memptr=cp.cuda.MemoryPointer(mem, 0),
+        )
+        entities = entities_flat.reshape(self._entity_count, self._entity_stride)
+
+        pos = entities[:, 0:3]   # (N, 3) position
+        vel = entities[:, 3:6]   # (N, 3) velocity
+        size = entities[:, 7:8] * radius_scale  # (N, 1) base radius
+
+        # Normalize velocity with zero-safe fallback
+        vel_len = cp.linalg.norm(vel, axis=1, keepdims=True)  # (N, 1)
+        safe_len = cp.maximum(vel_len, 1e-8)
+        vel_norm = vel / safe_len  # (N, 3)
+        has_vel = (vel_len > 1e-6).astype(cp.float32)  # (N, 1)
+
+        # Control points along velocity
+        half_extent = has_vel * curve_length * size * 0.5  # (N, 1)
+        cp0 = pos - vel_norm * half_extent  # (N, 3) start
+        cp1 = pos + vel_norm * half_extent  # (N, 3) end
+
+        # Widths (OptiX curves use diameter, not radius — multiply by 2)
+        # Clamp to a small minimum to avoid degenerate zero-width curves
+        w0 = cp.maximum((size * curve_r0 * 2.0).ravel(), 1e-6)  # (N,)
+        w1 = cp.maximum((size * curve_r1 * 2.0).ravel(), 1e-6)  # (N,)
+
+        # Interleave into vertex buffer: [cp0_0, cp1_0, cp0_1, cp1_1, ...]
+        n = self._entity_count
+        if self._d_curve_vertices is None or self._d_curve_vertices.shape[0] != n * 2:
+            self._d_curve_vertices = cp.empty((n * 2, 3), dtype=cp.float32)
+            self._d_curve_widths = cp.empty(n * 2, dtype=cp.float32)
+            self._d_curve_indices = cp.arange(0, n * 2, 2, dtype=cp.uint32)
+
+        self._d_curve_vertices[0::2, :] = cp0
+        self._d_curve_vertices[1::2, :] = cp1
+        self._d_curve_widths[0::2] = w0
+        self._d_curve_widths[1::2] = w1
+
+        cp.cuda.Device().synchronize()
+
+    def _build_curve_input(self):
+        """Construct a BuildInputCurveArray for entity curves."""
+        return optix.BuildInputCurveArray(
+            curveType=optix.PrimitiveType.PRIMITIVE_TYPE_ROUND_LINEAR,
+            vertexBuffers=[self._d_curve_vertices.data.ptr],
+            vertexStrideInBytes=12,
+            numVertices=self._entity_count * 2,
+            widthBuffers=[self._d_curve_widths.data.ptr],
+            widthStrideInBytes=4,
+            indexBuffer=self._d_curve_indices.data.ptr,
+            indexStrideInBytes=4,
+            numPrimitives=self._entity_count,
+            flag=optix.GEOMETRY_FLAG_DISABLE_ANYHIT,
+        )
+
+    def _build_sdf_input(self):
+        """Construct a BuildInputCustomPrimitiveArray for the SDF AABB."""
+        return optix.BuildInputCustomPrimitiveArray(
+            aabbBuffers=[self._d_sdf_aabb.data.ptr],
+            numPrimitives=1,
+            flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
+            numSbtRecords=1,
+        )
+
+    def _build_sphere_input(self):
+        """Construct a BuildInputCustomPrimitiveArray for all sphere/SDF AABBs."""
+        return optix.BuildInputCustomPrimitiveArray(
+            aabbBuffers=[self._d_aabbs.data.ptr],
+            numPrimitives=self._total_prims,
+            flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
+            numSbtRecords=1,
+        )
+
+    def _accel_build_single(self, build_input, operation, use_curves=False):
+        """Build or update a single GAS and return (handle, d_gas, d_temp, sizes).
+
+        For BUILD operations, allocates new buffers.
+        For UPDATE operations, reuses existing buffers from the returned tuple.
+        """
+        build_flags = int(
+            optix.BUILD_FLAG_PREFER_FAST_TRACE
+            | optix.BUILD_FLAG_ALLOW_UPDATE
+        )
+        if use_curves:
+            build_flags |= int(optix.BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS)
+        accel_opts = optix.AccelBuildOptions(
+            buildFlags=build_flags,
+            operation=operation,
+        )
+
+        if operation == optix.BUILD_OPERATION_BUILD:
+            sizes = self._octx.accelComputeMemoryUsage(
+                [accel_opts], [build_input]
+            )
+            d_temp = cp.cuda.alloc(sizes.tempSizeInBytes)
+            d_gas = cp.cuda.alloc(sizes.outputSizeInBytes)
+            temp_size = sizes.tempSizeInBytes
+            gas_size = sizes.outputSizeInBytes
+        else:
+            # UPDATE reuses existing buffers — caller must pass them
+            raise ValueError("Use _accel_update_single for UPDATE")
+
+        handle = self._octx.accelBuild(
+            self._stream, [accel_opts], [build_input],
+            d_temp.ptr, temp_size, d_gas.ptr, gas_size, [],
+        )
+        return handle, d_gas, d_temp, temp_size, gas_size
+
+    def _build_ias(self, gas_handles, sbt_offsets):
+        """Build an Instance Acceleration Structure from multiple GAS handles.
+
+        Args:
+            gas_handles: List of GAS traversable handles.
+            sbt_offsets: List of SBT hit group record offsets per instance.
+
+        Returns:
+            IAS traversable handle.
+        """
+        identity = [1.0, 0.0, 0.0, 0.0,
+                     0.0, 1.0, 0.0, 0.0,
+                     0.0, 0.0, 1.0, 0.0]
+        instances = []
+        for i, (gh, sbt_off) in enumerate(zip(gas_handles, sbt_offsets)):
+            inst = optix.Instance(
+                transform=identity,
+                instanceId=i,
+                sbtOffset=sbt_off,
+                visibilityMask=255,
+                flags=int(optix.INSTANCE_FLAG_NONE),
+                traversableHandle=gh,
+            )
+            instances.append(inst)
+
+        # Serialize to bytes and upload to device
+        instance_bytes = optix.getDeviceRepresentation(instances)
+        self._d_instances = cp.array(
+            np.frombuffer(instance_bytes, dtype=np.uint8))
+
+        ias_input = optix.BuildInputInstanceArray()
+        ias_input.instances = self._d_instances.data.ptr
+        ias_input.numInstances = len(instances)
+
+        accel_opts = optix.AccelBuildOptions(
+            buildFlags=int(optix.BUILD_FLAG_PREFER_FAST_TRACE),
+            operation=optix.BUILD_OPERATION_BUILD,
+        )
+
+        sizes = self._octx.accelComputeMemoryUsage(
+            [accel_opts], [ias_input]
+        )
+        self._d_ias_temp = cp.cuda.alloc(sizes.tempSizeInBytes)
+        self._d_ias = cp.cuda.alloc(sizes.outputSizeInBytes)
+        self._ias_size = sizes.outputSizeInBytes
+
+        self._ias_handle = self._octx.accelBuild(
+            self._stream, [accel_opts], [ias_input],
+            self._d_ias_temp.ptr, sizes.tempSizeInBytes,
+            self._d_ias.ptr, self._ias_size, [],
+        )
+        return self._ias_handle
+
     def build_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
-                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
-        """Full GAS build. Maps entity buffer, computes AABBs, builds BVH.
+                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None,
+                    use_curves=False, curve_length=1.0, curve_r0=1.0,
+                    curve_r1=0.5):
+        """Full GAS build. Maps entity buffer, computes geometry, builds BVH.
 
         Must be called at least once before render(). Call again periodically
         to maintain BVH quality as entities move.
 
+        When curves + SDF are both active, builds two separate GAS (one for
+        curves, one for the SDF custom primitive) and combines them via an IAS,
+        since OptiX requires all build inputs in a GAS to be the same type.
+
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
             sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
-            sdf_enabled: If True, append SDF AABB as an extra primitive.
+            sdf_enabled: If True, include SDF geometry.
             sdf_aabb_min: SDF bounding box min (3-tuple).
             sdf_aabb_max: SDF bounding box max (3-tuple).
+            use_curves: If True, build entity geometry as round linear curves.
+            curve_length: Curve control point distance multiplier.
+            curve_r0: Curve start radius multiplier.
+            curve_r1: Curve end radius multiplier.
         """
+        self._ensure_pipeline(use_curves)
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter,
-                                sdf_enabled, sdf_aabb_min, sdf_aabb_max)
-
-            build_input = optix.BuildInputCustomPrimitiveArray(
-                aabbBuffers=[self._d_aabbs.data.ptr],
-                numPrimitives=self._total_prims,
-                flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
-                numSbtRecords=1,
-            )
-            accel_opts = optix.AccelBuildOptions(
-                buildFlags=int(
-                    optix.BUILD_FLAG_PREFER_FAST_TRACE
-                    | optix.BUILD_FLAG_ALLOW_UPDATE
-                ),
-                operation=optix.BUILD_OPERATION_BUILD,
-            )
-
-            sizes = self._octx.accelComputeMemoryUsage(
-                [accel_opts], [build_input]
-            )
-            self._d_temp = cp.cuda.alloc(sizes.tempSizeInBytes)
-            self._d_gas = cp.cuda.alloc(sizes.outputSizeInBytes)
-            self._temp_size = sizes.tempSizeInBytes
-            self._gas_size = sizes.outputSizeInBytes
-
             check_cuda(cudart.cudaEventRecord(self._evt_gas_start, self._stream_obj))
-            self._gas_handle = self._octx.accelBuild(
-                self._stream,
-                [accel_opts],
-                [build_input],
-                self._d_temp.ptr,
-                self._temp_size,
-                self._d_gas.ptr,
-                self._gas_size,
-                [],
-            )
+
+            if use_curves:
+                self._compute_curve_data(entities_ptr, radius_scale,
+                                         curve_length, curve_r0, curve_r1)
+
+                # Build curve GAS
+                curve_input = self._build_curve_input()
+                curve_handle, self._d_gas, self._d_temp, \
+                    self._temp_size, self._gas_size = \
+                    self._accel_build_single(curve_input, optix.BUILD_OPERATION_BUILD,
+                                             use_curves=True)
+                self._gas_handle = curve_handle
+
+                if sdf_enabled and sdf_aabb_min is not None:
+                    # Build separate SDF GAS
+                    self._d_sdf_aabb = cp.array([[
+                        sdf_aabb_min[0], sdf_aabb_min[1], sdf_aabb_min[2],
+                        sdf_aabb_max[0], sdf_aabb_max[1], sdf_aabb_max[2],
+                    ]], dtype=cp.float32)
+                    sdf_input = self._build_sdf_input()
+                    self._sdf_gas_handle, self._d_sdf_gas, self._d_sdf_temp, \
+                        _, _ = \
+                        self._accel_build_single(sdf_input, optix.BUILD_OPERATION_BUILD)
+
+                    # Combine into IAS: instance 0 = curves (SBT offset 0),
+                    #                   instance 1 = SDF (SBT offset 1)
+                    self._traversable_handle = self._build_ias(
+                        [curve_handle, self._sdf_gas_handle],
+                        [0, 1],
+                    )
+                else:
+                    # Curves only — bare GAS traversable
+                    self._traversable_handle = curve_handle
+                    self._sdf_gas_handle = None
+            else:
+                # Sphere mode: single GAS with all custom primitives
+                self._compute_aabbs(entities_ptr, radius_scale,
+                                    sphere_size_jitter, sdf_enabled,
+                                    sdf_aabb_min, sdf_aabb_max)
+                sphere_input = self._build_sphere_input()
+                self._gas_handle, self._d_gas, self._d_temp, \
+                    self._temp_size, self._gas_size = \
+                    self._accel_build_single(sphere_input, optix.BUILD_OPERATION_BUILD)
+                self._traversable_handle = self._gas_handle
+                self._sdf_gas_handle = None
+
             check_cuda(cudart.cudaEventRecord(self._evt_gas_end, self._stream_obj))
             check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
             self.last_gas_ms = check_cuda(
@@ -768,56 +1075,101 @@ class PathTracerRenderer:
             unmap_resource(self._entity_res)
 
     def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
-                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
-        """Refit existing GAS with updated AABBs (faster, lower BVH quality).
+                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None,
+                    use_curves=False, curve_length=1.0, curve_r0=1.0,
+                    curve_r1=0.5):
+        """Refit existing GAS with updated geometry (faster, lower BVH quality).
 
         Requires a prior build_accel() call. The GAS is updated in-place
-        without reallocation.
+        without reallocation. When curves + SDF use an IAS, only the curve
+        GAS is refitted (SDF AABB is static).
 
         Args:
             radius_scale: Multiplier on entity size for AABB computation.
             sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
-            sdf_enabled: If True, append SDF AABB as an extra primitive.
+            sdf_enabled: If True, include SDF geometry.
             sdf_aabb_min: SDF bounding box min (3-tuple).
             sdf_aabb_max: SDF bounding box max (3-tuple).
+            use_curves: If True, update entity geometry as round linear curves.
+            curve_length: Curve control point distance multiplier.
+            curve_r0: Curve start radius multiplier.
+            curve_r1: Curve end radius multiplier.
         """
         if self._gas_handle is None:
             self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                             use_curves, curve_length, curve_r0, curve_r1)
             return
 
+        # If SDF state changed (enabled but no SDF GAS, or vice versa),
+        # fall back to a full rebuild to create/remove the IAS.
+        if use_curves:
+            sdf_state_mismatch = (
+                (sdf_enabled and self._sdf_gas_handle is None)
+                or (not sdf_enabled and self._sdf_gas_handle is not None)
+            )
+            if sdf_state_mismatch:
+                self.build_accel(radius_scale, sphere_size_jitter,
+                                 sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                                 use_curves, curve_length, curve_r0, curve_r1)
+                return
+
+        self._ensure_pipeline(use_curves)
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
 
         try:
-            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter,
-                                sdf_enabled, sdf_aabb_min, sdf_aabb_max)
+            check_cuda(cudart.cudaEventRecord(self._evt_gas_start, self._stream_obj))
 
-            build_input = optix.BuildInputCustomPrimitiveArray(
-                aabbBuffers=[self._d_aabbs.data.ptr],
-                numPrimitives=self._total_prims,
-                flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
-                numSbtRecords=1,
-            )
-            accel_opts = optix.AccelBuildOptions(
-                buildFlags=int(
+            if use_curves:
+                self._compute_curve_data(entities_ptr, radius_scale,
+                                         curve_length, curve_r0, curve_r1)
+                # Refit curve GAS in place
+                curve_input = self._build_curve_input()
+                build_flags = int(
                     optix.BUILD_FLAG_PREFER_FAST_TRACE
                     | optix.BUILD_FLAG_ALLOW_UPDATE
-                ),
-                operation=optix.BUILD_OPERATION_UPDATE,
-            )
+                    | optix.BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS
+                )
+                accel_opts = optix.AccelBuildOptions(
+                    buildFlags=build_flags,
+                    operation=optix.BUILD_OPERATION_UPDATE,
+                )
+                self._gas_handle = self._octx.accelBuild(
+                    self._stream, [accel_opts], [curve_input],
+                    self._d_temp.ptr, self._temp_size,
+                    self._d_gas.ptr, self._gas_size, [],
+                )
 
-            check_cuda(cudart.cudaEventRecord(self._evt_gas_start, self._stream_obj))
-            self._gas_handle = self._octx.accelBuild(
-                self._stream,
-                [accel_opts],
-                [build_input],
-                self._d_temp.ptr,
-                self._temp_size,
-                self._d_gas.ptr,
-                self._gas_size,
-                [],
-            )
+                if sdf_enabled and self._sdf_gas_handle is not None:
+                    # IAS needs rebuild since curve GAS was updated in-place
+                    # (the IAS references the same GAS buffer, so just rebuild IAS)
+                    self._traversable_handle = self._build_ias(
+                        [self._gas_handle, self._sdf_gas_handle],
+                        [0, 1],
+                    )
+                else:
+                    self._traversable_handle = self._gas_handle
+            else:
+                self._compute_aabbs(entities_ptr, radius_scale,
+                                    sphere_size_jitter, sdf_enabled,
+                                    sdf_aabb_min, sdf_aabb_max)
+                sphere_input = self._build_sphere_input()
+                build_flags = int(
+                    optix.BUILD_FLAG_PREFER_FAST_TRACE
+                    | optix.BUILD_FLAG_ALLOW_UPDATE
+                )
+                accel_opts = optix.AccelBuildOptions(
+                    buildFlags=build_flags,
+                    operation=optix.BUILD_OPERATION_UPDATE,
+                )
+                self._gas_handle = self._octx.accelBuild(
+                    self._stream, [accel_opts], [sphere_input],
+                    self._d_temp.ptr, self._temp_size,
+                    self._d_gas.ptr, self._gas_size, [],
+                )
+                self._traversable_handle = self._gas_handle
+
             check_cuda(cudart.cudaEventRecord(self._evt_gas_end, self._stream_obj))
             check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
             self.last_gas_ms = check_cuda(
@@ -846,7 +1198,10 @@ class PathTracerRenderer:
                                 albedo_saturation=0.8, albedo_brightness=1.0,
                                 sphere_size_jitter=0.0,
                                 sdf_enabled=False, sdf_aabb_min=None,
-                                sdf_aabb_max=None):
+                                sdf_aabb_max=None,
+                                emission_intensity=10.0,
+                                use_curves=False, curve_length=1.0,
+                                curve_r0=1.0, curve_r1=0.5):
         """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
 
         The entity buffer must already be mapped (entities_ptr is the device
@@ -878,7 +1233,7 @@ class PathTracerRenderer:
         h_params["entities"] = entities_ptr
         h_params["entity_stride"] = self._entity_stride
         h_params["_pad0"] = 0
-        h_params["handle"] = self._gas_handle
+        h_params["handle"] = self._traversable_handle
         h_params["width"] = width
         h_params["height"] = height
         h_params["eye_x"] = eye[0]
@@ -965,7 +1320,19 @@ class PathTracerRenderer:
             h_params["sdf_aabb_max_x"] = sdf_aabb_max[0]
             h_params["sdf_aabb_max_y"] = sdf_aabb_max[1]
             h_params["sdf_aabb_max_z"] = sdf_aabb_max[2]
-            h_params["sdf_prim_index"] = self._entity_count
+            # In curve mode, SDF is the only custom primitive (index 0 in its build input).
+            # In sphere mode, SDF is the last primitive (index = entity_count).
+            h_params["sdf_prim_index"] = 0 if use_curves else self._entity_count
+
+        # Emissive particles
+        h_params["emission_intensity"] = emission_intensity
+
+        # Curve primitives
+        h_params["use_curves"] = 1 if use_curves else 0
+        h_params["curve_length"] = curve_length
+        h_params["curve_r0"] = curve_r0
+        h_params["curve_r1"] = curve_r1
+        h_params["_pad5"] = 0
 
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
@@ -1048,7 +1415,10 @@ class PathTracerRenderer:
                denoise_enabled=False,
                albedo_saturation=0.8, albedo_brightness=1.0,
                sphere_size_jitter=0.0, flip_y=True,
-               sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
+               sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None,
+               emission_intensity=10.0,
+               use_curves=False, curve_length=1.0,
+               curve_r0=1.0, curve_r1=0.5):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1136,6 +1506,11 @@ class PathTracerRenderer:
                     sdf_enabled=sdf_enabled,
                     sdf_aabb_min=sdf_aabb_min,
                     sdf_aabb_max=sdf_aabb_max,
+                    emission_intensity=emission_intensity,
+                    use_curves=use_curves,
+                    curve_length=curve_length,
+                    curve_r0=curve_r0,
+                    curve_r1=curve_r1,
                 )
 
                 self._resolve_accum_to_pbo(
@@ -1279,6 +1654,10 @@ class PathTracerRenderer:
         sdf_enabled = render_kwargs.get('sdf_enabled', False)
         sdf_aabb_min = render_kwargs.get('sdf_aabb_min', None)
         sdf_aabb_max = render_kwargs.get('sdf_aabb_max', None)
+        use_curves = render_kwargs.get('use_curves', False)
+        curve_length = render_kwargs.get('curve_length', 1.0)
+        curve_r0 = render_kwargs.get('curve_r0', 1.0)
+        curve_r1 = render_kwargs.get('curve_r1', 0.5)
 
         # GAS scheduling: tied to physics steps, not render frames.
         # Entities only move when physics runs, so skip GAS update when paused.
@@ -1287,11 +1666,13 @@ class PathTracerRenderer:
                 or (physics_steps > 0
                     and self._physics_steps_since_rebuild >= gas_rebuild_interval)):
             self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                             use_curves, curve_length, curve_r0, curve_r1)
             self._physics_steps_since_rebuild = 0
         elif physics_steps > 0:
             self.refit_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                             use_curves, curve_length, curve_r0, curve_r1)
 
         # Single-sample fast path
         if num_samples == 1:
@@ -1413,14 +1794,20 @@ class PathTracerRenderer:
         sdf_enabled = render_kwargs.get('sdf_enabled', False)
         sdf_aabb_min = render_kwargs.get('sdf_aabb_min', None)
         sdf_aabb_max = render_kwargs.get('sdf_aabb_max', None)
+        use_curves = render_kwargs.get('use_curves', False)
+        curve_length = render_kwargs.get('curve_length', 1.0)
+        curve_r0 = render_kwargs.get('curve_r0', 1.0)
+        curve_r1 = render_kwargs.get('curve_r1', 0.5)
         if (gas_rebuild_interval > 0
                 and self._offline_substeps_done > 0
                 and self._offline_substeps_done % gas_rebuild_interval == 0):
             self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                             use_curves, curve_length, curve_r0, curve_r1)
         else:
             self.refit_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
+                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                             use_curves, curve_length, curve_r0, curve_r1)
 
         # Map entity buffer for all SPP in this substep
         self._ctx.finish()

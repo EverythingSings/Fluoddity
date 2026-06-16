@@ -149,6 +149,10 @@ class PreferencesState:
     three_d_optix_albedo_saturation: float = 0.8
     three_d_optix_albedo_brightness: float = 1.0
     three_d_optix_sphere_size_jitter: float = 0.0  # Per-sphere radius jitter to reduce banding (0-1)
+    three_d_optix_use_curves: bool = False  # Toggle: render entities as round linear curves instead of spheres
+    three_d_optix_curve_length: float = 1.0  # Distance between curve control points (multiplier on entity_size * radius_scale)
+    three_d_optix_curve_r0: float = 1.0  # Radius at first control point (multiplier on entity_size * radius_scale)
+    three_d_optix_curve_r1: float = 0.5  # Radius at second control point (multiplier on entity_size * radius_scale)
     three_d_optix_sdf_enabled: bool = False  # Enable SDF scene geometry in OptiX renderers
 
     # OptiX RT mode and path tracer settings
@@ -162,6 +166,7 @@ class PreferencesState:
     three_d_pt_firefly_clamp_max: float = 50.0
     three_d_pt_global_material: int = 0  # 0=Lambert, 1=Glossy, 2=Mirror
     three_d_pt_glossy_ior: float = 1.5
+    three_d_pt_emission_intensity: float = 10.0  # Emissive radiance multiplier for negative-hue entities
     three_d_pt_denoise_enabled: bool = False
 
     # OptiX Controls window

@@ -73,6 +73,15 @@ class PathTracerInterface:
         # Denoiser
         self.denoise_enabled: bool = False
 
+        # Emissive particles
+        self.emission_intensity: float = 10.0
+
+        # Curve primitives
+        self.use_curves: bool = False
+        self.curve_length: float = 1.0
+        self.curve_r0: float = 1.0
+        self.curve_r1: float = 0.5
+
         # Albedo color controls (shared)
         self.albedo_saturation: float = 0.8
         self.albedo_brightness: float = 1.0
@@ -214,6 +223,11 @@ class PathTracerInterface:
             sdf_enabled=self.sdf_enabled,
             sdf_aabb_min=SDF_AABB_MIN,
             sdf_aabb_max=SDF_AABB_MAX,
+            emission_intensity=self.emission_intensity,
+            use_curves=self.use_curves,
+            curve_length=self.curve_length,
+            curve_r0=self.curve_r0,
+            curve_r1=self.curve_r1,
         )
 
         # 6. Dispatch based on render mode
@@ -277,7 +291,8 @@ class PathTracerInterface:
         self._renderer.build_accel(
             self.radius_scale, self.sphere_size_jitter,
             self.sdf_enabled, SDF_AABB_MIN if self.sdf_enabled else None,
-            SDF_AABB_MAX if self.sdf_enabled else None)
+            SDF_AABB_MAX if self.sdf_enabled else None,
+            self.use_curves, self.curve_length, self.curve_r0, self.curve_r1)
         self._renderer.reset_accumulation()
 
         # Camera basis
@@ -345,6 +360,11 @@ class PathTracerInterface:
             sdf_enabled=self.sdf_enabled,
             sdf_aabb_min=SDF_AABB_MIN,
             sdf_aabb_max=SDF_AABB_MAX,
+            emission_intensity=self.emission_intensity,
+            use_curves=self.use_curves,
+            curve_length=self.curve_length,
+            curve_r0=self.curve_r0,
+            curve_r1=self.curve_r1,
         )
 
         done = self._renderer._sample_count >= self._preview_target_spp
@@ -471,7 +491,8 @@ class PathTracerInterface:
         self._renderer.build_accel(
             self.radius_scale, self.sphere_size_jitter,
             self.sdf_enabled, SDF_AABB_MIN if self.sdf_enabled else None,
-            SDF_AABB_MAX if self.sdf_enabled else None)
+            SDF_AABB_MAX if self.sdf_enabled else None,
+            self.use_curves, self.curve_length, self.curve_r0, self.curve_r1)
 
         # Begin offline accumulation
         self._renderer.render_offline_begin(
@@ -545,6 +566,11 @@ class PathTracerInterface:
             sdf_enabled=self.sdf_enabled,
             sdf_aabb_min=SDF_AABB_MIN,
             sdf_aabb_max=SDF_AABB_MAX,
+            emission_intensity=self.emission_intensity,
+            use_curves=self.use_curves,
+            curve_length=self.curve_length,
+            curve_r0=self.curve_r0,
+            curve_r1=self.curve_r1,
         )
 
         # Read timing
