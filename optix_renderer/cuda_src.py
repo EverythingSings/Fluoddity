@@ -25,7 +25,7 @@ _CUDA_HEADER = r"""
 extern "C" {
 struct Params
 {
-    uchar4*            image;          // mapped GL PBO
+    ushort4*           image;          // mapped GL PBO (rgba16f half-float)
     float*             entities;       // mapped GL entity buffer (raw floats)
     unsigned int       entity_stride;  // floats per entity (8 for Fluoddity)
     unsigned long long handle;         // GAS traversable handle
@@ -88,11 +88,12 @@ static __forceinline__ __device__ float dot3(float3 a, float3 b)
 static __forceinline__ __device__ float3 normalize3(float3 a)
 { float s = rsqrtf(fmaxf(dot3(a, a), 1e-20f)); return s * a; }
 
-// --- sRGB gamma --------------------------------------------------------------
-static __forceinline__ __device__ unsigned char to_srgb(float x)
+// --- float to half (no gamma — tonemapping handled by frame_assembly.frag) --------
+static __forceinline__ __device__ unsigned short f2h(float v)
 {
-    x = sqrtf(fminf(fmaxf(x, 0.0f), 1.0f));   // approximate gamma 2.2 -> 2.0
-    return (unsigned char)(x * 255.99f);
+    unsigned short h;
+    asm("cvt.rn.f16.f32 %0, %1;" : "=h"(h) : "f"(v));
+    return h;
 }
 
 // --- HSV to RGB (matches points_3d.frag) -------------------------------------
@@ -168,11 +169,11 @@ extern "C" __global__ void __raygen__rg()
         p0, p1, p2);
 
     const unsigned int out_y = params.height - 1u - idx.y;  // flip for OpenGL
-    params.image[out_y * params.width + idx.x] = make_uchar4(
-        to_srgb(__uint_as_float(p0)),
-        to_srgb(__uint_as_float(p1)),
-        to_srgb(__uint_as_float(p2)),
-        255);
+    params.image[out_y * params.width + idx.x] = make_ushort4(
+        f2h(__uint_as_float(p0)),
+        f2h(__uint_as_float(p1)),
+        f2h(__uint_as_float(p2)),
+        f2h(1.0f));
 }
 
 // --- miss programs -----------------------------------------------------------
@@ -344,9 +345,10 @@ extern "C" __global__ void __closesthit__ch()
     }
 
     const float ndl = fmaxf(dot3(N, L), 0.0f);
+    const float inv_pi = 0.31830988618f;  // match path tracer's Lambertian 1/π
     const float3 lit = params.light_color * params.light_intensity;
     const float a = params.ambient;
-    const float3 c = albedo * (mk3(a, a, a) + (1.0f - a) * ndl * vis * lit) * ao;
+    const float3 c = albedo * (mk3(a, a, a) + (1.0f - a) * ndl * inv_pi * vis * lit) * ao;
 
     optixSetPayload_0(__float_as_uint(c.x));
     optixSetPayload_1(__float_as_uint(c.y));

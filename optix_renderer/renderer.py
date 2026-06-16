@@ -32,7 +32,7 @@ from .cuda_src import SPHERE_CUDA_SRC
 # Launch-params dtype -- must match the CUDA Params struct field-by-field.
 #
 # CUDA struct layout (with alignment):
-#   uchar4*            image;          // offset  0, ptr (8 bytes)
+#   ushort4*           image;          // offset  0, ptr (8 bytes)
 #   float*             entities;       // offset  8, ptr (8 bytes)
 #   unsigned int       entity_stride;  // offset 16, u4  (4 bytes)
 #   <pad 4 bytes>
@@ -396,11 +396,11 @@ class OptiXSphereRenderer:
             unregister_resource(self._pbo_res)
             self._pbo_res = None
 
-        # Create new PBO and texture
+        # Create new PBO and texture (rgba16f for linear HDR output)
         self._pbo = self._ctx.buffer(
-            reserve=width * height * 4, dynamic=True
+            reserve=width * height * 8, dynamic=True  # 4 x fp16 per pixel
         )
-        self._tex = self._ctx.texture((width, height), 4)
+        self._tex = self._ctx.texture((width, height), 4, dtype='f2')
         self._tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
 
         # Register PBO with CUDA (write-discard)
