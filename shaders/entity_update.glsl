@@ -431,7 +431,8 @@ float get_cohort(uint index) {
 //Return all entities to their initialization state
 void reset(uint index){
 
-    float size=index<ACTIVE_COUNT?.0015/CANVAS_SCALE: 0;
+    float size=index<ACTIVE_COUNT?.00015/CANVAS_SCALE: 0;//The main update will set the size once we are "initialized"
+    //
     float cohort_val = get_cohort(index);
     float aspect = sqrt(canvas_resolution.x/canvas_resolution.y);
 
@@ -493,10 +494,11 @@ void reset(uint index){
         float radius = 0.5;
         pos = .5*vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta) * radius;
     }
-
+    float hue = 0;
+    if(get_particle_color_by_cohort()) {hue = hash(vec2(floor(cohort_val)));}
     //pos = nearest_surf(pos);
     //store to persistent entity buffer
-    entities[index]=Entity(pos.x, pos.y, pos.z, vel.x, vel.y, vel.z, 0.0, size);
+    entities[index]=Entity(pos.x, pos.y, pos.z, vel.x, vel.y, vel.z, hue, size);
 }
 
 //randomly change noise function parameters, scaled by parameter amount. 
