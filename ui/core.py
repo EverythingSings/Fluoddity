@@ -157,6 +157,8 @@ class UI(
 
         # Track last applied world size to detect changes
         self._last_applied_world_size: float = 1.0
+        self._last_applied_entity_count: int = 4000000
+        self._last_applied_canvas_resolution: int = 256
 
         # State containers (Orchestrator reads these each frame)
         self.state = UIState(

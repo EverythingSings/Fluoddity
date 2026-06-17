@@ -12,8 +12,10 @@ class PreferencesState:
     speedmult: int = 5
     motion_blur: bool = True
     blur_quality: int = 2  # Motion blur render cadence (1 = every frame, 2 = every 2 frames, etc.)
-    world_size: float = 0.40  # World size multiplier (affects entity count and canvas dimensions)
-    canvas_aspect_ratio: str = "1:1"  # Canvas aspect ratio (e.g. "1:1", "16:9", "3:4")
+    world_size: float = 0.40  # Legacy (unused, kept for saved-prefs backward compat)
+    canvas_aspect_ratio: str = "1:1"  # Legacy (unused, kept for saved-prefs backward compat)
+    entity_count: int = 4000000  # Number of active particles (all allocated entities are active)
+    canvas_resolution: int = 256  # Cubic canvas dimension (W=H=D) for 3D trail textures
     rule_seed: float = 0.0
     brightness: float = 3.0  # Global brightness multiplier
     tonemap_softness: float = 2.5  # Asinh tonemap stretch (higher = more highlight compression)

@@ -48,17 +48,20 @@ class App:
         # Initialize user data directory (creates Documents/Fluoddity on first run)
         initialize_user_data()
 
-        # Load preferences first to get world_size
+        # Load preferences first to get entity_count / canvas_resolution
         loaded_prefs = load_preferences()
 
         # Create components (no cross-references between UI and sim/camera)
-        self.sim = Sim(self.ctx, world_size=loaded_prefs.world_size, canvas_aspect_ratio=loaded_prefs.canvas_aspect_ratio)
+        self.sim = Sim(self.ctx,
+                       entity_count=loaded_prefs.entity_count,
+                       canvas_resolution=loaded_prefs.canvas_resolution)
         self.camera = Camera(self.ctx, self.sim, self.window)
         self.ui = UI(self.window, self.ctx, self.sim.view_option_labels)
 
         # Apply loaded preferences to UI
         self.ui.state.preferences = loaded_prefs
-        self.ui._last_applied_world_size = loaded_prefs.world_size
+        self.ui._last_applied_entity_count = loaded_prefs.entity_count
+        self.ui._last_applied_canvas_resolution = loaded_prefs.canvas_resolution
 
         # Restore 3D camera settings from preferences
         cam = self.ui.state.camera

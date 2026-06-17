@@ -3,6 +3,7 @@ import random
 import time
 import numpy as np
 from utilities.gl_helpers import readback_rule
+from sim import RULE_BUFFER_SIZE
 from camera_input import sync_orbit_angles_from_camera
 
 
@@ -86,7 +87,8 @@ class CommandHandler:
         self._pending_entity_selection = None
 
         # Read back the rule (buffer was just written by entity_update)
-        rule = readback_rule(self.sim.get_rule_buffer(), entity_id)
+        # Rule buffer is fixed-size; map entity index to slot
+        rule = readback_rule(self.sim.get_rule_buffer(), entity_id % RULE_BUFFER_SIZE)
         self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
         self.sim.apply_rule(rule)
         self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
@@ -178,9 +180,9 @@ class CommandHandler:
         return None
 
     def _handle_world_size_change(self, ui_state):
-        """Handle world size change request (also handles aspect ratio changes)."""
-        self.sim.world_size = ui_state.preferences.world_size
-        self.sim.canvas_aspect_ratio = ui_state.preferences.canvas_aspect_ratio
+        """Handle entity count / canvas resolution change."""
+        self.sim._entity_count = ui_state.preferences.entity_count
+        self.sim.canvas_resolution = ui_state.preferences.canvas_resolution
         self.sim.setup_simulation_state()
         self.sim.setup_shaders()
         self.entity_picker.update_buffer(self.sim.get_entity_buffer())
@@ -191,8 +193,9 @@ class CommandHandler:
         if self.field_handler and self.field_handler._has_field_tex:
             canvas_dim_x, canvas_dim_y = self.sim.get_canvas_dimensions()
             self.field_handler.adv_draw.ensure_initialized(canvas_dim_x, canvas_dim_y)
-        self.ui._last_applied_world_size = ui_state.preferences.world_size
-        print(f"World size changed to {self.sim.world_size} "
+        self.ui._last_applied_entity_count = ui_state.preferences.entity_count
+        self.ui._last_applied_canvas_resolution = ui_state.preferences.canvas_resolution
+        print(f"World size changed "
               f"(entity_count: {self.sim.entity_count}, "
               f"canvas: {self.sim.get_canvas_dimensions()[0]}x{self.sim.get_canvas_dimensions()[1]})")
 

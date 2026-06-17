@@ -1,19 +1,5 @@
-"""Preferences window: world size, physics frequency, mouse mode, view, appearance."""
+"""Preferences window: particle count, canvas resolution, physics frequency, mouse mode, view, appearance."""
 from imgui_bundle import imgui
-
-# Aspect ratio options: (label, ratio_string, is_separator)
-_ASPECT_RATIO_OPTIONS = [
-    ("1:1",  "1:1",  False),
-    ("4:3",  "4:3",  False),
-    ("16:9", "16:9", False),
-    ("2:1",  "2:1",  False),
-    ("3:1",  "3:1",  False),
-    ("---",  None,   True),   # Separator (not selectable)
-    ("3:4",  "3:4",  False),
-    ("9:16", "9:16", False),
-    ("1:2",  "1:2",  False),
-    ("1:3",  "1:3",  False),
-]
 
 
 class PreferencesWindowMixin:
@@ -32,53 +18,50 @@ class PreferencesWindowMixin:
         expanded, self.state.preferences.show_preferences_window = imgui.begin("Preferences", True)
 
         if expanded:
-            # === World Size section (temporarily hidden — not hooked up) ===
-            # imgui.text("World Size")
-            #
-            # # Use input_float - only apply when user commits (Enter or focus loss)
-            # changed, new_value = imgui.input_float(
-            #     "World Size",
-            #     self.state.preferences.world_size,
-            #     step=0.0,  # No step buttons
-            #     step_fast=0.0,
-            #     format="%.2f"
-            # )
-            #
-            # # Clamp to valid range
-            # if new_value < 0.02:
-            #     new_value = 0.02
-            # elif new_value > 4.0:
-            #     new_value = 4.0
-            #
-            # # Update the displayed value (clamping happens immediately)
-            # self.state.preferences.world_size = new_value
-            #
-            # # Only trigger world size change when user commits the edit
-            # if imgui.is_item_deactivated_after_edit():
-            #     if abs(self.state.preferences.world_size - self._last_applied_world_size) > 0.001:
-            #         self._request_world_size_change = True
-            #
-            # self._delayed_tooltip("EXPENSIVE - Controls the size of the simulation world.\nAffects both entity count and canvas resolution to keep density ~fixed")
-            #
-            # # Canvas Aspect Ratio dropdown
-            # current_ratio = self.state.preferences.canvas_aspect_ratio
-            # if imgui.begin_combo("World Shape", current_ratio):
-            #     for label, ratio_str, is_sep in _ASPECT_RATIO_OPTIONS:
-            #         if is_sep:
-            #             imgui.separator()
-            #         else:
-            #             selected = (ratio_str == current_ratio)
-            #             clicked, _ = imgui.selectable(label, selected)
-            #             if clicked and ratio_str != current_ratio:
-            #                 self.state.preferences.canvas_aspect_ratio = ratio_str
-            #                 self._request_world_size_change = True
-            #                 self._request_reload = True
-            #             if selected:
-            #                 imgui.set_item_default_focus()
-            #     imgui.end_combo()
-            # self._delayed_tooltip("Changes the canvas aspect ratio.")
-            #
-            # imgui.separator()
+            # === World Size section ===
+            imgui.text("World Size")
+
+            # Particle Count — commit on Enter
+            changed, new_count = imgui.input_int(
+                "Particle Count",
+                self.state.preferences.entity_count,
+                step=0,
+                step_fast=0,
+            )
+            new_count = max(1000, min(new_count, 100_000_000))
+            self.state.preferences.entity_count = new_count
+            if imgui.is_item_deactivated_after_edit():
+                if self.state.preferences.entity_count != self._last_applied_entity_count:
+                    self._request_world_size_change = True
+            self._delayed_tooltip("Number of active particles. Takes effect on Enter.\nMore particles = more VRAM (32 bytes each).")
+
+            # Canvas Resolution — commit on Enter
+            changed, new_res = imgui.input_int(
+                "Canvas Resolution",
+                self.state.preferences.canvas_resolution,
+                step=0,
+                step_fast=0,
+            )
+            new_res = max(64, min(new_res, 1024))
+            self.state.preferences.canvas_resolution = new_res
+            if imgui.is_item_deactivated_after_edit():
+                if self.state.preferences.canvas_resolution != self._last_applied_canvas_resolution:
+                    self._request_world_size_change = True
+            self._delayed_tooltip("Cubic canvas dimension (W=H=D) for 3D trail textures.\nTakes effect on Enter. 6 textures at dim^3 * 4 bytes each.")
+
+            # VRAM estimate
+            ent_mb = self.state.preferences.entity_count * 32 / (1024 * 1024)
+            rule_mb = 480  # fixed 1M * 480 bytes
+            dim = self.state.preferences.canvas_resolution
+            canvas_mb = 6 * dim * dim * dim * 4 / (1024 * 1024)
+            total_mb = ent_mb + rule_mb + canvas_mb
+            if total_mb >= 1024:
+                imgui.text_colored(imgui.ImVec4(1.0, 0.7, 0.3, 1.0),
+                                   f"Est. VRAM: {total_mb / 1024:.2f} GB")
+            else:
+                imgui.text(f"Est. VRAM: {total_mb:.0f} MB")
+
+            imgui.separator()
 
             # === Physics Update Frequency section ===
             imgui.text("Physics Update Frequency")

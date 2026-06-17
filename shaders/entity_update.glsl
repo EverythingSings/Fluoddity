@@ -147,7 +147,7 @@ void report(float val, uint plot_num) {
 
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
-#define ACTIVE_COUNT 4000000//(600000*WORLD_SIZE) //Supports up to the size of the entity buffer.
+// ACTIVE_COUNT is now injected by prepend_defines() alongside ENTITY_COUNT and RULE_BUFFER_SIZE
 #define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
 
 // 6D noise channel wiring (edit and hot-reload with V key)
@@ -773,9 +773,11 @@ void main() {
     }
     //Each cohort gets a random mutation
     mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),vec2(e.px,e.py),cohort),get_particle_rule_seed()+floor(cohort));
-    // Only write rules when explicitly requested (expensive - 480 bytes per particle)
-    if(WRITE_RULES) {
-        rules[index] = current_rule;
+    // Only write rules when explicitly requested (expensive - 480 bytes per particle).
+    // Rule buffer is fixed at RULE_BUFFER_SIZE entries; entities map via index % RULE_BUFFER_SIZE.
+    // Only the lowest-indexed entity per slot writes to avoid races.
+    if(WRITE_RULES && index < RULE_BUFFER_SIZE) {
+        rules[index % RULE_BUFFER_SIZE] = current_rule;
     }
     
     //frame_count == 0 signals a simulation reset

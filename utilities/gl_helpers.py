@@ -17,9 +17,15 @@ def read_shader(path:str):
         
         result= file.read()
     return result
-def prepend_defines(shader_source, entity_count):
-    content_to_insert=f"#define ENTITY_COUNT {entity_count}\n"
-    return shader_prepend(shader_source,content_to_insert)
+def prepend_defines(shader_source, defines):
+    """Inject #define directives after the #version line.
+
+    Args:
+        shader_source: GLSL source string (must start with #version).
+        defines: dict of {NAME: value} to inject as ``#define NAME value``.
+    """
+    content_to_insert = "".join(f"#define {name} {value}\n" for name, value in defines.items())
+    return shader_prepend(shader_source, content_to_insert)
 def shader_prepend(shader_source, content_to_insert):
     first_newline = shader_source.find('\n')
     return shader_source[:first_newline+1] + content_to_insert + shader_source[first_newline+1:]
