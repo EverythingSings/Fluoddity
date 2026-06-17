@@ -841,10 +841,10 @@ void main() {
 
     //ADVANCED DRAWING force / strafe (still 2D, applied to XY only)
     vec4 draw_sample =get_field(vec2(e.px, e.py));
-    e.vx += .01*force_field_strength*draw_sample.x;
-    e.vy += .01*force_field_strength*draw_sample.y;
-    e.px += .01*strafe_field_strength*draw_sample.z;
-    e.py += .01*strafe_field_strength*draw_sample.w;
+    e.vx += .01/CANVAS_SCALE*force_field_strength*draw_sample.x;
+    e.vy += .01/CANVAS_SCALE*force_field_strength*draw_sample.y;
+    e.px += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.z;
+    e.py += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.w;
     vec3 sp = vec3(e.px,e.py,e.pz);
     vec3 n = scene(sp).x*-.01*sdf_normal(sp);
     //e.px+=n.x;
