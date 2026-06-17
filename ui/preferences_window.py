@@ -51,7 +51,7 @@ class PreferencesWindowMixin:
 
             # VRAM estimate
             ent_mb = self.state.preferences.entity_count * 32 / (1024 * 1024)
-            rule_mb = 480  # fixed 1M * 480 bytes
+            rule_mb = 16384 * 480 / (1024 * 1024)  # fixed 2^14 entries * 480 bytes
             dim = self.state.preferences.canvas_resolution
             canvas_mb = 6 * dim * dim * dim * 4 / (1024 * 1024)
             total_mb = ent_mb + rule_mb + canvas_mb

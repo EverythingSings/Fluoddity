@@ -86,9 +86,9 @@ class CommandHandler:
         entity_id, entity_pos, entity_cohort = self._pending_entity_selection
         self._pending_entity_selection = None
 
-        # Read back the rule (buffer was just written by entity_update)
-        # Rule buffer is fixed-size; map entity index to slot
-        rule = readback_rule(self.sim.get_rule_buffer(), entity_id % RULE_BUFFER_SIZE)
+        # Read back the rule — cohort maps to a slot in the fixed-size rule buffer
+        cohort_slot = int(entity_cohort) % RULE_BUFFER_SIZE
+        rule = readback_rule(self.sim.get_rule_buffer(), cohort_slot)
         self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
         self.sim.apply_rule(rule)
         self.sim.update_sliders_from_particle(entity_pos, entity_cohort)

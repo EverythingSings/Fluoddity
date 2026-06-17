@@ -34,7 +34,10 @@ struct PhysicsSetting {
     float cohort_sweep; // 0.0 = off, 1.0 = normal sweep, -1.0 = inverse sweep
     float jitter;       // 0.0 = off, higher = more randomness (proportional to result)
 };
-uniform float WORLD_SIZE;
+// Canvas-relative scaling: values that were proportional to sqrt(world_size)
+// now scale as canvas_dim / 256 (the original default resolution).
+#define CANVAS_DIM_DEFAULT 256.0
+#define CANVAS_SCALE (float(canvas_3d_size.x) / CANVAS_DIM_DEFAULT)
 uniform int frame_count;
 uniform Rule target_rule;
 uniform sampler3D canvas_3d_x; //trails canvas X channel (R32F, 3D)
@@ -148,7 +151,6 @@ void report(float val, uint plot_num) {
 ////////////////////////////CONSTANTS
 #define PI 3.1415926
 // ACTIVE_COUNT is now injected by prepend_defines() alongside ENTITY_COUNT and RULE_BUFFER_SIZE
-#define SQRT_WORLD_SIZE (sqrt(WORLD_SIZE))
 
 // 6D noise channel wiring (edit and hot-reload with V key)
 // INPUT_PROJECTION true:  sensor taps projected to 2D (u,v). false: 3D (u,v,w), filling fourier inputs 5-6
@@ -429,7 +431,7 @@ float get_cohort(uint index) {
 //Return all entities to their initialization state
 void reset(uint index){
 
-    float size=index<ACTIVE_COUNT?.0015/SQRT_WORLD_SIZE: 0;
+    float size=index<ACTIVE_COUNT?.0015/CANVAS_SCALE: 0;
     float cohort_val = get_cohort(index);
     float aspect = sqrt(canvas_resolution.x/canvas_resolution.y);
 
@@ -454,7 +456,7 @@ void reset(uint index){
         // Grid cell center in [-0.9, 0.9]
         vec3 cell_center = 1.8 * ((vec3(gx, gy, gz) + 0.5) / float(grid_side) - 0.5);
         // Rejection-sample a sphere inscribed in the grid cell for isotropic distribution
-        float cell_radius = 0.09 / float(grid_side);
+        float cell_radius = 0.09 / float(grid_side)/CANVAS_SCALE;
         vec3 candidate;
         float seed_offset = 0.0;
         for (int attempt = 0; attempt < 16; attempt++) {
@@ -673,7 +675,7 @@ void sample_plane_physics(
     }
 
     // Calculate sensor distance
-    float sample_dist = 1./SQRT_WORLD_SIZE*.005 * calculate_setting(get_particle_sensor_distance(), epos2, cohort);
+    float sample_dist = 1./CANVAS_SCALE*.005 * calculate_setting(get_particle_sensor_distance(), epos2, cohort);
 
     // In 3D, the tangent plane is perpendicular to vel_dir, so projecting
     // velocity onto it yields zero. Instead, use u as forward direction —
@@ -720,10 +722,10 @@ void sample_plane_physics(
     vec3 w = cross(u, v);
 
     // Rescale sensor values
-    float sensor_scaling = SQRT_WORLD_SIZE * 38.855 * calculate_setting(get_particle_sensor_gain(), epos2, cohort);
+    float sensor_scaling = CANVAS_SCALE*38.855 * calculate_setting(get_particle_sensor_gain(), epos2, cohort);
 
     // Global force multiplier for output rescaling
-    float gfm = 1./SQRT_WORLD_SIZE * calculate_setting(get_particle_global_force_mult(), epos2, cohort);
+    float gfm = 1./CANVAS_SCALE * calculate_setting(get_particle_global_force_mult(), epos2, cohort);
 
     // Project 3D trail vectors onto the tangent plane (+ normal when INPUT_PROJECTION is false)
 #if !INPUT_PROJECTION
@@ -773,11 +775,16 @@ void main() {
     }
     //Each cohort gets a random mutation
     mutate_rule(current_rule,calculate_setting(get_particle_mutation_scale(),vec2(e.px,e.py),cohort),get_particle_rule_seed()+floor(cohort));
-    // Only write rules when explicitly requested (expensive - 480 bytes per particle).
-    // Rule buffer is fixed at RULE_BUFFER_SIZE entries; entities map via index % RULE_BUFFER_SIZE.
-    // Only the lowest-indexed entity per slot writes to avoid races.
-    if(WRITE_RULES && index < RULE_BUFFER_SIZE) {
-        rules[index % RULE_BUFFER_SIZE] = current_rule;
+    // Only write rules when explicitly requested.
+    // Rule buffer is fixed at RULE_BUFFER_SIZE entries; each cohort maps to one slot.
+    // Only the first entity per cohort writes (cohort boundary detection).
+    int cohort_slot = int(floor(cohort)) % RULE_BUFFER_SIZE;
+    if(WRITE_RULES) {
+        bool is_first_in_cohort = (index == 0u) ||
+            (floor(cohort) != floor(float(get_particle_cohorts()) * float(index - 1u) / float(ACTIVE_COUNT)));
+        if(is_first_in_cohort) {
+            rules[cohort_slot] = current_rule;
+        }
     }
     
     //frame_count == 0 signals a simulation reset
@@ -807,7 +814,7 @@ void main() {
     //Set entity hue (saturation/brightness/alpha are computed in vertex shaders)
     e.hue = abs(get_particle_hue_sensitivity()*col_params.x);
     if(abs(col_params.x-generic03.x*5)<2*generic03.y){e.hue=-e.hue;}
-    e.size = 0.00015;
+    e.size = 0.00015/CANVAS_SCALE;
     //INVISIBILITY RADIO FEATURE
     if(RADIO_ENABLED>0){
         if(!(abs(col_params.x-RADIO_TARGET_FREQ)<RADIO_BANDWIDTH)){e.size=.0;}

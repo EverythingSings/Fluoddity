@@ -8,10 +8,9 @@ from state import SimState
 SIZE_OF_ENTITY_STRUCT = 4*8  # 4 bytes per 32bit value. 8 values (pos:2, vel:2, hue:1, size:1, padding:2)
 SIZE_OF_RULE_STRUCT = 10 * 12 * 4  # 10 centers * 12 floats per center * 4 bytes per float = 480
 
-# Fixed rule buffer size: 1M entries ≈ 480 MB.  When entity_count > RULE_BUFFER_SIZE,
-# multiple entities share a slot (index % RULE_BUFFER_SIZE); only the lowest-indexed
-# entity per slot writes, giving plenty of per-cohort diversity without scaling VRAM.
-RULE_BUFFER_SIZE = 1_000_000
+# Fixed rule buffer: 2^14 = 16384 entries (~7.7 MB).  Each cohort maps to one slot;
+# only the first entity per cohort writes.  16k cohorts is far more than practical use.
+RULE_BUFFER_SIZE = 16384
 
 class Sim:
     def __init__(self, ctx: moderngl.Context, entity_count: int = 4000000, canvas_resolution: int = 256):
@@ -169,7 +168,6 @@ class Sim:
         tryset(self.entity_update_program, 'canvas_3d_y', 6)
         tryset(self.entity_update_program, 'canvas_3d_z', 7)
         tryset(self.entity_update_program, 'canvas_3d_size', (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
-        tryset(self.entity_update_program, 'WORLD_SIZE', 1.0)
 
         # Advanced drawing field texture
         tryset(self.entity_update_program, 'field_texture', 5)
