@@ -120,7 +120,7 @@ static __forceinline__ __device__ float3 sdf_get_albedo(float2 mat, float3 p)
         // Checkerboard ground pattern
         float3 pp = mk3(p.x * 4.0f, p.y * 4.0f, p.z * 4.0f);
         float checker = fmodf(fabsf(floorf(pp.x) + floorf(pp.z)), 2.0f);
-        float grey = 0.02f + 0.6f * checker;
+        float grey = 0.02f + 0.6f * 1.;//checker;
         return mk3(grey, grey, grey);
     }
     return mk3(0.9f, 0.9f, 0.9f);  // bright reflector/glossy

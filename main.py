@@ -122,6 +122,9 @@ class App:
         self._optix_interface = None
         # OptiX path tracer (lazy — created on first use when toggled on)
         self._pathtracer_interface = None
+        # Track previous mode to detect transitions and release VRAM
+        self._prev_optix_enabled: bool = False
+        self._prev_rt_mode: int = 0
 
         # Tracer references (for entity buffer and camera access)
         self.ui.tracer_sim = self.sim
@@ -388,8 +391,20 @@ class App:
         self.multi_load_service.apply_state(ui_state.multi_load)
         self.camera.BRIGHTNESS = ui_state.preferences.brightness
 
-        # OptiX interface lifecycle: lazy creation when toggled on
-        if ui_state.camera.optix_enabled and self._optix_interface is None:
+        # Release all OptiX VRAM when OptiX is toggled off
+        if not ui_state.camera.optix_enabled and self._prev_optix_enabled and not is_recording:
+            if self._optix_interface is not None:
+                print("Releasing rasterizer VRAM (OptiX disabled)")
+                self._optix_interface.cleanup()
+                self._optix_interface = None
+            if self._pathtracer_interface is not None:
+                print("Releasing path tracer VRAM (OptiX disabled)")
+                self._pathtracer_interface.cleanup()
+                self._pathtracer_interface = None
+                self.ui._pathtracer_interface = None
+
+        # OptiX interface lifecycle: lazy creation when toggled on (skip if PT mode active)
+        if ui_state.camera.optix_enabled and self._optix_interface is None and ui_state.preferences.three_d_rt_mode == 0:
             try:
                 from optix_interface import OptiXInterface
                 if OptiXInterface.is_available():
@@ -448,6 +463,12 @@ class App:
                 ui_state.preferences.three_d_rt_mode = 0
                 pt_active = False
                 print(f"Path tracer init failed: {e}")
+
+        # Release rasterizer VRAM when path tracer takes over
+        if pt_active and self._optix_interface is not None and self._prev_rt_mode == 0:
+            print("Releasing rasterizer VRAM (switched to path tracer)")
+            self._optix_interface.cleanup()
+            self._optix_interface = None
 
         # Sync path tracer settings from preferences (shared + PT-only)
         if self._pathtracer_interface is not None:
@@ -580,6 +601,21 @@ class App:
         if (self._pathtracer_interface is not None
                 and self._pathtracer_interface.preview_active):
             self._pathtracer_interface.tick_preview()
+
+        # Release path tracer VRAM when not in use and no preview active
+        if (not pt_active
+                and self._pathtracer_interface is not None
+                and not self._pathtracer_interface.preview_active
+                and not self._pathtracer_interface.preview_has_result
+                and not is_recording):
+            print("Releasing path tracer VRAM (switched to rasterize mode)")
+            self._pathtracer_interface.cleanup()
+            self._pathtracer_interface = None
+            self.ui._pathtracer_interface = None
+
+        # Update mode tracking for transition detection
+        self._prev_optix_enabled = ui_state.camera.optix_enabled
+        self._prev_rt_mode = rt_mode
 
         # Route the active renderer interface to camera
         if pt_active and self._pathtracer_interface is not None:
