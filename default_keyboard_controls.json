@@ -19,5 +19,6 @@
   "toggle_sidebar": "X",
   "exit_keybinding": "ESCAPE",
   "reset_keybinding": "R",
-  "pick_focal_entity": "N"
+  "pick_focal_entity": "N",
+  "cycle_rt_mode": "B"
 }

@@ -219,6 +219,23 @@ class App:
         tiling_mode = (ui_state.sim.current_view_option == 2)
         self.plotting_manager.enabled = ui_state.preferences.show_plotting_window
 
+        # 1.5. Poll gamepad and inject one-shot flags before command processing
+        current_time = time.time()
+        dt = current_time - self.last_update_time
+        self.last_update_time = current_time
+        process_controller_input(self.controller_cam, self.joystick_state, dt,
+                                 move_speed=ui_state.camera.move_speed,
+                                 rotate_speed=ui_state.camera.rotate_speed)
+        # Gamepad face buttons
+        if self.joystick_state.get('cycle_rt_mode_pressed', False):
+            ui_state.preferences.three_d_rt_mode = (ui_state.preferences.three_d_rt_mode + 1) % 3
+        if self.joystick_state.get('toggle_pause_pressed', False):
+            ui_state.sim.going = not ui_state.sim.going
+        if self.joystick_state.get('reset_pressed', False):
+            ui_state.request_reset = True
+        if self.joystick_state.get('randomize_mutations_pressed', False):
+            ui_state.request_randomize_mutations = True
+
         # 2. Process one-shot commands
         result = self.command_handler.process_commands(ui_state, tiling_mode)
         if result == 'screenshot_pending' and not self.screenshot_pending and not self.screenshot_in_progress:
@@ -277,14 +294,8 @@ class App:
             self._advance_render_pipeline(ui_state)
 
         # 3. Process continuous input (camera movement)
-        current_time = time.time()
-        dt = current_time - self.last_update_time
-        self.last_update_time = current_time
         process_camera_input(ui_state, self.window, self.ui.keybindings,
                              self.sim.view_tex, dt, controller_cam=self.controller_cam)
-        process_controller_input(self.controller_cam, self.joystick_state, dt,
-                                 move_speed=ui_state.camera.move_speed,
-                                 rotate_speed=ui_state.camera.rotate_speed)
 
         # 3.2. Check if pending video should start
         cmd = self.command_handler

@@ -427,6 +427,9 @@ class UI(
                 glfw.set_window_should_close(window, True)
             elif key == self.keybindings.get_key("pick_focal_entity"):
                 self._request_pick_focal = True
+            elif key == self.keybindings.get_key("cycle_rt_mode"):
+                p = self.state.preferences
+                p.three_d_rt_mode = (p.three_d_rt_mode + 1) % 3
             #elif key == self.keybindings.get_key("toggle_tooltips"):
             #    self.show_demo_window = not self.show_demo_window
 

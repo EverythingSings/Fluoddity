@@ -91,6 +91,10 @@ AXIS_LT = 4
 AXIS_RT = 5
 
 # Button indices
+BUTTON_A = 0
+BUTTON_B = 1
+BUTTON_X = 2
+BUTTON_Y = 3
 BUTTON_LB = 4
 BUTTON_RB = 5
 BUTTON_SELECT = 6
@@ -175,6 +179,25 @@ def process_controller_input(controller_cam, joystick_state, dt, *,
     # Select button edge detection (for tracer accumulation reset)
     joystick_state['select_pressed'] = bool(
         len(prev) > BUTTON_SELECT and buttons[BUTTON_SELECT] and not prev[BUTTON_SELECT]
+    )
+
+    # A button edge detection (cycle RT mode)
+    joystick_state['cycle_rt_mode_pressed'] = bool(
+        len(prev) > BUTTON_A and buttons[BUTTON_A] and not prev[BUTTON_A]
+    )
+
+    # B button edge detection (toggle pause)
+    joystick_state['toggle_pause_pressed'] = bool(
+        len(prev) > BUTTON_B and buttons[BUTTON_B] and not prev[BUTTON_B]
+    )
+
+    # X button edge detection (reset simulation)
+    joystick_state['reset_pressed'] = bool(
+        len(prev) > BUTTON_X and buttons[BUTTON_X] and not prev[BUTTON_X]
+    )
+    # Y button edge detection (randomize mutations)
+    joystick_state['randomize_mutations_pressed'] = bool(
+        len(prev) > BUTTON_Y and buttons[BUTTON_Y] and not prev[BUTTON_Y]
     )
 
     joystick_state['prev_buttons'] = buttons.copy()
