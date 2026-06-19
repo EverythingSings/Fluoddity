@@ -12,7 +12,7 @@ import moderngl
 
 from optix_pathtracer import PathTracerRenderer
 from optix_pathtracer.renderer import _camera_basis_from_vectors
-from optix_pathtracer.sdf_scene import SDF_AABB_MIN, SDF_AABB_MAX
+from optix_pathtracer import sdf_scene
 
 
 class PathTracerInterface:
@@ -221,8 +221,8 @@ class PathTracerInterface:
             albedo_brightness=self.albedo_brightness,
             sphere_size_jitter=self.sphere_size_jitter,
             sdf_enabled=self.sdf_enabled,
-            sdf_aabb_min=SDF_AABB_MIN,
-            sdf_aabb_max=SDF_AABB_MAX,
+            sdf_aabb_min=sdf_scene.SDF_AABB_MIN,
+            sdf_aabb_max=sdf_scene.SDF_AABB_MAX,
             emission_intensity=self.emission_intensity,
             use_curves=self.use_curves,
             curve_length=self.curve_length,
@@ -290,8 +290,8 @@ class PathTracerInterface:
         # Build GAS
         self._renderer.build_accel(
             self.radius_scale, self.sphere_size_jitter,
-            self.sdf_enabled, SDF_AABB_MIN if self.sdf_enabled else None,
-            SDF_AABB_MAX if self.sdf_enabled else None,
+            self.sdf_enabled, sdf_scene.SDF_AABB_MIN if self.sdf_enabled else None,
+            sdf_scene.SDF_AABB_MAX if self.sdf_enabled else None,
             self.use_curves, self.curve_length, self.curve_r0, self.curve_r1)
         self._renderer.reset_accumulation()
 
@@ -358,8 +358,8 @@ class PathTracerInterface:
             albedo_brightness=self.albedo_brightness,
             sphere_size_jitter=self.sphere_size_jitter,
             sdf_enabled=self.sdf_enabled,
-            sdf_aabb_min=SDF_AABB_MIN,
-            sdf_aabb_max=SDF_AABB_MAX,
+            sdf_aabb_min=sdf_scene.SDF_AABB_MIN,
+            sdf_aabb_max=sdf_scene.SDF_AABB_MAX,
             emission_intensity=self.emission_intensity,
             use_curves=self.use_curves,
             curve_length=self.curve_length,
@@ -490,8 +490,8 @@ class PathTracerInterface:
         # Full GAS build before starting offline render
         self._renderer.build_accel(
             self.radius_scale, self.sphere_size_jitter,
-            self.sdf_enabled, SDF_AABB_MIN if self.sdf_enabled else None,
-            SDF_AABB_MAX if self.sdf_enabled else None,
+            self.sdf_enabled, sdf_scene.SDF_AABB_MIN if self.sdf_enabled else None,
+            sdf_scene.SDF_AABB_MAX if self.sdf_enabled else None,
             self.use_curves, self.curve_length, self.curve_r0, self.curve_r1)
 
         # Begin offline accumulation
@@ -564,8 +564,8 @@ class PathTracerInterface:
             albedo_brightness=self.albedo_brightness,
             sphere_size_jitter=self.sphere_size_jitter,
             sdf_enabled=self.sdf_enabled,
-            sdf_aabb_min=SDF_AABB_MIN,
-            sdf_aabb_max=SDF_AABB_MAX,
+            sdf_aabb_min=sdf_scene.SDF_AABB_MIN,
+            sdf_aabb_max=sdf_scene.SDF_AABB_MAX,
             emission_intensity=self.emission_intensity,
             use_curves=self.use_curves,
             curve_length=self.curve_length,
@@ -602,6 +602,16 @@ class PathTracerInterface:
             self._fail_reason = str(e)
             print(f"PathTracer offline finish error: {e}")
             return None
+
+    # ----------------------------------------------------------- shader reload
+
+    def reload_shaders(self):
+        """Hot-reload CUDA path tracer source (recompile PTX + rebuild pipeline)."""
+        if self._renderer is not None:
+            try:
+                self._renderer.reload_shaders()
+            except Exception as e:
+                print(f"PathTracer shader reload failed: {e}")
 
     # --------------------------------------------------------------- scheduling
 

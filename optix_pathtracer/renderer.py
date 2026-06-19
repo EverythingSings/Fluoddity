@@ -419,6 +419,45 @@ class PathTracerRenderer:
         return compile_ptx(PATHTRACER_CUDA_SRC)
 
     # ------------------------------------------------------------------
+    # Hot reload
+    # ------------------------------------------------------------------
+
+    def reload_shaders(self):
+        """Recompile CUDA source and rebuild OptiX pipeline (hot reload).
+
+        Re-reads sdf_scene.py and cuda_src.py from disk via importlib.reload(),
+        recompiles PTX via NVRTC, and rebuilds the OptiX module/pipeline/SBT.
+        """
+        import importlib
+        from . import sdf_scene as _sdf_mod
+        from . import cuda_src as _cuda_mod
+
+        # 1. Reload Python modules to pick up disk edits
+        #    Order matters: cuda_src imports from sdf_scene at module level
+        importlib.reload(_sdf_mod)
+        importlib.reload(_cuda_mod)
+
+        # 2. Re-read the assembled source and recompile PTX
+        from .cuda_src import PATHTRACER_CUDA_SRC as fresh_src
+        print("PathTracer: recompiling PTX via NVRTC...")
+        self._ptx = compile_ptx(fresh_src)
+        print(f"PathTracer: PTX compiled ({len(self._ptx)} bytes)")
+
+        # 3. Rebuild pipeline + SBT with current curve mode
+        self._pipeline, self._groups = self._build_pipeline(
+            self._ptx, use_curves=self._use_curves)
+        self._sbt, self._sbt_mem = self._build_sbt()
+
+        # 4. Invalidate GAS so it rebuilds next frame
+        self._gas_handle = None
+        self._traversable_handle = None
+        self._sdf_gas_handle = None
+        self._ias_handle = None
+        self._physics_steps_since_rebuild = 0
+
+        print("PathTracer: hot reload complete")
+
+    # ------------------------------------------------------------------
     # Pipeline / SBT construction
     # ------------------------------------------------------------------
 

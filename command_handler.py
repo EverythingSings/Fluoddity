@@ -127,6 +127,8 @@ class CommandHandler:
                 self.plotting_manager.reload_shader()
             if self.ui._tracer_interface is not None:
                 self.ui._tracer_interface.reload_shaders()
+            if getattr(self.ui, '_pathtracer_interface', None) is not None:
+                self.ui._pathtracer_interface.reload_shaders()
 
         # Simple reset (R key)
         if ui_state.request_reset:

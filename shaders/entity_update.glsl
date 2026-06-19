@@ -157,6 +157,7 @@ void report(float val, uint plot_num) {
 // OUTPUT_PROJECTION true: 4 fourier outputs -> 2D force/strafe. false: 6 outputs -> 3D force/strafe
 #define INPUT_PROJECTION false
 #define OUTPUT_PROJECTION false
+#define GRID_2D_MODE true
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
     if (MULTILOAD_COUNT == 0) return -1; // Not in multi-load mode
@@ -445,6 +446,35 @@ void reset(uint index){
     int reset_mode = get_particle_reset_mode();
     int cohorts = get_particle_cohorts();
     if(reset_mode == 0) {
+#if GRID_2D_MODE==true
+        //GRID 2D: position cohorts in a 2D grid on the XZ plane, Y near the bottom
+        int grid_side = int(ceil(sqrt(float(cohorts))));
+        int total_slots = grid_side * grid_side;
+        int offset = (total_slots - cohorts) / 2;
+        int slot = int(cohort_val) + offset;
+        int gx = slot % grid_side;
+        int gz = slot / grid_side;
+        // Grid cell center in [-0.9, 0.9] for X and Z, Y near bottom
+        vec3 cell_center = vec3(
+            1.8 * ((float(gx) + 0.5) / float(grid_side) - 0.5),
+            -0.85,
+            1.8 * ((float(gz) + 0.5) / float(grid_side) - 0.5)
+        );
+        // Rejection-sample a disk in XZ, thin spread in Y
+        float cell_radius = 0.09 / float(grid_side) / CANVAS_SCALE;
+        vec2 candidate_xz;
+        float seed_offset = 0.0;
+        for (int attempt = 0; attempt < 16; attempt++) {
+            candidate_xz = vec2(
+                hash(vec2(cohort_val + index, 1.0 + seed_offset)),
+                hash(vec2(cohort_val + index, 2.0 + seed_offset))
+            ) * 2.0 - 1.0;
+            if (dot(candidate_xz, candidate_xz) <= 1.0) break;
+            seed_offset += 2.0;
+        }
+        float candidate_y = (hash(vec2(cohort_val + index, 3.0 + seed_offset)) * 2.0 - 1.0) * 0.1;
+        pos = cell_center + vec3(candidate_xz.x, candidate_y, candidate_xz.y) * cell_radius;
+#else
         //GRID: position cohorts in a centered 3D grid (next-largest cube with gaps)
         int grid_side = int(ceil(pow(float(cohorts), 1.0/3.0)));
         int total_slots = grid_side * grid_side * grid_side;
@@ -470,6 +500,7 @@ void reset(uint index){
             seed_offset += 3.0;
         }
         pos = cell_center + candidate * cell_radius;
+#endif
     }
     else if(reset_mode == 1) {
         //RANDOM: rejection-sample from the sphere inscribing the unit cube
