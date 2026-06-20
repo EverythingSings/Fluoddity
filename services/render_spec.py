@@ -386,6 +386,9 @@ class RenderSpecService:
         # Force/strafe field texture (optional)
         if 'field' in gpu_buffers and adv_draw_processor is not None:
             adv_draw_processor.write_field_data(gpu_buffers['field'])
+        elif adv_draw_processor is not None and adv_draw_processor.field_texture is not None:
+            # No field in render spec — clear existing field to match saved state
+            adv_draw_processor.clear_fields()
 
     def list_available_specs(self) -> list[Path]:
         """List all .frs directories in the RenderSpecs folder.
