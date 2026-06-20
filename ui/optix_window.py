@@ -151,6 +151,14 @@ class OptiXWindowMixin:
         if imgui.collapsing_header("Path Trace", imgui.TreeNodeFlags_.default_open.value):
             _, p.three_d_pt_sun_sampling = imgui.checkbox(
                 "Sun Sampling NEE (path trace)", p.three_d_pt_sun_sampling)
+            _, p.three_d_pt_env_sky_nee = imgui.checkbox(
+                "Environment Sky NEE", p.three_d_pt_env_sky_nee)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Replace directional sun + gradient sky with\n"
+                    "a cosine-lobe environment skybox for NEE.\n"
+                    "Uses sky color for hemisphere glow and\n"
+                    "sun direction/color/intensity for sun disk.")
 
             # Material
             mat_labels = ["Lambert", "Glossy", "Mirror"]

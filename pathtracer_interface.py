@@ -89,6 +89,9 @@ class PathTracerInterface:
         # SDF scene
         self.sdf_enabled: bool = False
 
+        # Environment sky NEE
+        self.env_sky_nee: bool = False
+
         # Physics step tracking: set by orchestrator each frame before render
         self.physics_steps: int = 0
 
@@ -228,6 +231,7 @@ class PathTracerInterface:
             curve_length=self.curve_length,
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
+            env_sky_nee=self.env_sky_nee,
         )
 
         # 6. Dispatch based on render mode
@@ -365,6 +369,7 @@ class PathTracerInterface:
             curve_length=self.curve_length,
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
+            env_sky_nee=self.env_sky_nee,
         )
 
         done = self._renderer._sample_count >= self._preview_target_spp
@@ -571,6 +576,7 @@ class PathTracerInterface:
             curve_length=self.curve_length,
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
+            env_sky_nee=self.env_sky_nee,
         )
 
         # Read timing

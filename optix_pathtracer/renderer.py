@@ -121,7 +121,7 @@ PARAMS_DTYPE = np.dtype({
         "curve_length",
         "curve_r0",
         "curve_r1",
-        "_pad5",
+        "env_sky_nee",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -168,7 +168,7 @@ PARAMS_DTYPE = np.dtype({
         "f4",
         "f4",
         "f4",
-        "u4",
+        "i4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -1240,7 +1240,8 @@ class PathTracerRenderer:
                                 sdf_aabb_max=None,
                                 emission_intensity=10.0,
                                 use_curves=False, curve_length=1.0,
-                                curve_r0=1.0, curve_r1=0.5):
+                                curve_r0=1.0, curve_r1=0.5,
+                                env_sky_nee=False):
         """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
 
         The entity buffer must already be mapped (entities_ptr is the device
@@ -1371,7 +1372,7 @@ class PathTracerRenderer:
         h_params["curve_length"] = curve_length
         h_params["curve_r0"] = curve_r0
         h_params["curve_r1"] = curve_r1
-        h_params["_pad5"] = 0
+        h_params["env_sky_nee"] = 1 if env_sky_nee else 0
 
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
@@ -1457,7 +1458,8 @@ class PathTracerRenderer:
                sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None,
                emission_intensity=10.0,
                use_curves=False, curve_length=1.0,
-               curve_r0=1.0, curve_r1=0.5):
+               curve_r0=1.0, curve_r1=0.5,
+               env_sky_nee=False):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1550,6 +1552,7 @@ class PathTracerRenderer:
                     curve_length=curve_length,
                     curve_r0=curve_r0,
                     curve_r1=curve_r1,
+                    env_sky_nee=env_sky_nee,
                 )
 
                 self._resolve_accum_to_pbo(

@@ -109,8 +109,8 @@ struct Params
     float          curve_length;      // offset 304: control point distance (multiplier on entity size)
     float          curve_r0;          // offset 308: radius at start (multiplier on entity size)
     float          curve_r1;          // offset 312: radius at end (multiplier on entity size)
-    // Total: 316 bytes (pad to 320 for 8-byte alignment)
-    unsigned int   _pad5;             // offset 316: padding
+    // Environment sky NEE
+    int            env_sky_nee;       // offset 316: bool: use cosine-lobe env sky for NEE
 };
 __constant__ Params params;
 }
@@ -362,6 +362,98 @@ static __forceinline__ __device__ float3 eval_brdf_cos(
     float inv_pi = 0.31830988618f;
     return albedo * NdotL * inv_pi;
 }
+
+// --- environment sky helpers (cosine-power lobe model) -----------------------
+
+static __forceinline__ __device__ void build_onb(
+    float3 n, float3& t, float3& b)
+{
+    if (fabsf(n.y) < 0.999f) {
+        t = normalize3(mk3(n.z, 0.0f, -n.x));
+    } else {
+        t = mk3(1.0f, 0.0f, 0.0f);
+    }
+    b = mk3(n.y * t.z - n.z * t.y,
+             n.z * t.x - n.x * t.z,
+             n.x * t.y - n.y * t.x);
+}
+
+static __forceinline__ __device__ float3 sample_cosine_power_lobe(
+    float3 axis, float exponent, unsigned int& rng)
+{
+    float u1 = next_float(rng);
+    float u2 = next_float(rng);
+    float cos_theta = powf(u1, 1.0f / (exponent + 1.0f));
+    float sin_theta = sqrtf(fmaxf(0.0f, 1.0f - cos_theta * cos_theta));
+    float phi = 6.283185307f * u2;
+
+    float3 t, b;
+    build_onb(axis, t, b);
+
+    return normalize3(
+        sin_theta * cosf(phi) * t
+      + sin_theta * sinf(phi) * b
+      + cos_theta * axis);
+}
+
+static __forceinline__ __device__ float pdf_cosine_power_lobe(
+    float3 dir, float3 axis, float exponent)
+{
+    float cos_theta = fmaxf(dot3(dir, axis), 0.0f);
+    // pdf = (n+1) / (2*pi) * cos_theta^n
+    return (exponent + 1.0f) * 0.15915494f * powf(cos_theta, exponent);
+}
+
+// Environment sky exponents (hardcoded)
+#define ENV_SKY_EXP  1.0f
+#define ENV_SUN_EXP  256.0f
+
+static __forceinline__ __device__ float3 eval_env_sky(float3 dir)
+{
+    // Sky lobe: broad cosine lobe centered on +Y
+    float sky_cos = fmaxf(dir.y, 0.0f);
+    float3 sky_contrib = powf(sky_cos, ENV_SKY_EXP) * params.sky_color_top;
+
+    // Sun lobe: narrow cosine lobe around sun_direction
+    float sun_cos = fmaxf(dot3(dir, params.sun_direction), 0.0f);
+    float3 sun_contrib = powf(sun_cos, ENV_SUN_EXP)
+                       * params.sun_color * params.sun_intensity;
+
+    return sky_contrib + sun_contrib;
+}
+
+static __forceinline__ __device__ void sample_env_sky(
+    unsigned int& rng, float3& out_dir, float& out_pdf)
+{
+    // Mixture weights proportional to integrated hemisphere power:
+    //   lobe integral = 2*pi / (exp + 1), scaled by brightness
+    float sky_bright = fmaxf(params.sky_color_top.x,
+                       fmaxf(params.sky_color_top.y,
+                             params.sky_color_top.z));
+    float w_sky_raw = sky_bright / (ENV_SKY_EXP + 1.0f);
+    float w_sun_raw = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+    float w_total = w_sky_raw + w_sun_raw;
+
+    if (w_total < 1e-10f) {
+        // Fallback: uniform sphere
+        out_dir = sample_sphere(rng);
+        out_pdf = 0.079577f;  // 1/(4*pi)
+        return;
+    }
+
+    float p_sky = w_sky_raw / w_total;
+    float3 up = mk3(0.0f, 1.0f, 0.0f);
+
+    if (next_float(rng) < p_sky) {
+        out_dir = sample_cosine_power_lobe(up, ENV_SKY_EXP, rng);
+    } else {
+        out_dir = sample_cosine_power_lobe(params.sun_direction, ENV_SUN_EXP, rng);
+    }
+
+    // Mixture PDF
+    out_pdf = p_sky * pdf_cosine_power_lobe(out_dir, up, ENV_SKY_EXP)
+            + (1.0f - p_sky) * pdf_cosine_power_lobe(out_dir, params.sun_direction, ENV_SUN_EXP);
+}
 """
 
 # SDF scene code is inserted between header (math/BRDF) and programs (raygen etc.)
@@ -484,29 +576,62 @@ extern "C" __global__ void __raygen__rg()
             params.normal_buffer[pidx] = make_float4(N.x, N.y, N.z, 0.0f);
         }
 
-        // 4d. Sun NEE: direct sun lighting via binary GAS shadow ray
+        // 4d. NEE: direct lighting via shadow ray
         if (params.sun_sampling) {
             float3 shadow_origin = P + 1e-4f * N;
 
-            unsigned int occluded = 1u;
-            optixTrace(
-                (OptixTraversableHandle)params.handle,
-                shadow_origin, params.sun_direction,
-                0.0f, 1e16f, 0.0f,
-                OptixVisibilityMask(255),
-                OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
-                | OPTIX_RAY_FLAG_DISABLE_ANYHIT
-                | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
-                0, 0,       // SBT offset, stride
-                1,          // miss index: occlusion (miss -> p0 = 0 = not occluded)
-                occluded);
+            if (params.env_sky_nee) {
+                // --- Environment sky NEE: importance-sample cosine-power lobes ---
+                float3 light_dir;
+                float  light_pdf;
+                sample_env_sky(rng, light_dir, light_pdf);
 
-            if (!occluded) {
-                float3 brdf_cos = eval_brdf_cos(
-                    ray_dir, params.sun_direction, N,
-                    mat_id, albedo, ior);
-                radiance = radiance + throughput * brdf_cos
-                         * params.sun_color * params.sun_intensity;
+                float NdotL = dot3(N, light_dir);
+                if (NdotL > 0.0f && light_pdf > 1e-10f) {
+                    unsigned int occluded = 1u;
+                    optixTrace(
+                        (OptixTraversableHandle)params.handle,
+                        shadow_origin, light_dir,
+                        0.0f, 1e16f, 0.0f,
+                        OptixVisibilityMask(255),
+                        OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+                        | OPTIX_RAY_FLAG_DISABLE_ANYHIT
+                        | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+                        0, 0,
+                        1,
+                        occluded);
+
+                    if (!occluded) {
+                        float3 brdf_cos = eval_brdf_cos(
+                            ray_dir, light_dir, N,
+                            mat_id, albedo, ior);
+                        float3 L_env = eval_env_sky(light_dir);
+                        radiance = radiance + throughput * brdf_cos
+                                 * L_env * (1.0f / light_pdf);
+                    }
+                }
+            } else {
+                // --- Original directional sun NEE ---
+                unsigned int occluded = 1u;
+                optixTrace(
+                    (OptixTraversableHandle)params.handle,
+                    shadow_origin, params.sun_direction,
+                    0.0f, 1e16f, 0.0f,
+                    OptixVisibilityMask(255),
+                    OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+                    | OPTIX_RAY_FLAG_DISABLE_ANYHIT
+                    | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+                    0, 0,
+                    1,
+                    occluded);
+
+                if (!occluded) {
+                    float3 brdf_cos = eval_brdf_cos(
+                        ray_dir, params.sun_direction, N,
+                        mat_id, albedo, ior);
+                    radiance = radiance + throughput * brdf_cos
+                             * params.sun_color * params.sun_intensity;
+                }
             }
         }
 
@@ -558,17 +683,17 @@ extern "C" __global__ void __raygen__rg()
 extern "C" __global__ void __miss__radiance()
 {
     const float3 dir = optixGetWorldRayDirection();
+    float3 c;
 
-    // Base gradient sky
-    const float t = 0.5f * (dir.y + 1.0f);
-    float3 c = (1.0f - t) * params.sky_color_bottom
-             + t * params.sky_color_top;
-
-    // Sun glow: bright spot in the sun direction
-    // (ported from volrender/shaders/pathtrace.comp get_sky_col)
-    float sun_dot = dot3(dir, params.sun_direction);
-    float sun_glow = powf(clamp_f(sun_dot * 0.5f + 0.5f, 0.0f, 1.0f), 900.0f);
-    c = c + 0.00f*sun_glow * 200.0f * params.sun_color * params.sun_intensity;
+    if (params.env_sky_nee) {
+        // Environment sky model: cosine-power lobes
+        c = eval_env_sky(dir);
+    } else {
+        // Original gradient sky
+        const float t = 0.5f * (dir.y + 1.0f);
+        c = (1.0f - t) * params.sky_color_bottom
+          + t * params.sky_color_top;
+    }
 
     // p0 stays 0 (initialized by caller) = miss signal
     // Write sky color to p5-p7
