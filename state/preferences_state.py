@@ -156,6 +156,7 @@ class PreferencesState:
     three_d_optix_curve_r0: float = 1.0  # Radius at first control point (multiplier on entity_size * radius_scale)
     three_d_optix_curve_r1: float = 0.5  # Radius at second control point (multiplier on entity_size * radius_scale)
     three_d_optix_sdf_enabled: bool = False  # Enable SDF scene geometry in OptiX renderers
+    three_d_optix_resolution_scale: float = 1.0  # multiplier on render resolution
 
     # OptiX RT mode and path tracer settings
     three_d_rt_mode: int = 0  # 0=Rasterize, 1=X spp, 2=Accumulate

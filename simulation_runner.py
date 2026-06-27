@@ -583,8 +583,11 @@ class SimulationRunner:
                 self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
                                        tiling_mode, i)
 
-            # Start offline render at window resolution
+            # Start offline render at (optionally scaled) window resolution
             width, height = glfw.get_framebuffer_size(self.window)
+            scale = max(0.1, ui_state.preferences.three_d_optix_resolution_scale)
+            width = max(1, int(width * scale))
+            height = max(1, int(height * scale))
             pt_interface.start_offline_render(
                 entity_buffer=self.sim.get_entity_buffer(),
                 entity_count=self.sim.entity_count,

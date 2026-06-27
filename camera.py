@@ -26,6 +26,7 @@ class Camera:
         self.controller_cam = None  # Set by orchestrator for 3D FPS rendering
         self.optix_interface = None  # Set by orchestrator for OptiX sphere rendering
         self.optix_enabled = False   # Toggle between GL_POINTS and OptiX
+        self.optix_resolution_scale = 1.0  # Render resolution multiplier for OptiX
 
         self.setup_rendering()
 
@@ -214,6 +215,9 @@ class Camera:
                 and self.optix_interface is not None
                 and self.controller_cam is not None):
             cam = self.controller_cam
+            scale = max(0.1, self.optix_resolution_scale)
+            render_w = max(1, int(width * scale))
+            render_h = max(1, int(height * scale))
             tex = self.optix_interface.render_frame(
                 entity_buffer=self.sim.get_entity_buffer(),
                 entity_count=self.sim.entity_count,
@@ -221,8 +225,8 @@ class Camera:
                 cam_dir=cam.dir,
                 cam_up=cam.up,
                 fov=self.fov_3d,
-                width=width,
-                height=height,
+                width=render_w,
+                height=render_h,
             )
             if tex is not None:
                 # Blit OptiX result into cam_brush_target via FBO

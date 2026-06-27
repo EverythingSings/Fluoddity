@@ -71,6 +71,14 @@ class OptiXWindowMixin:
             imgui.same_line()
             imgui.text(f"  [done: {pt_interface.preview_last_spp} spp]")
 
+        # Resolution scale (applied on Enter key)
+        imgui.set_next_item_width(100)
+        changed, new_scale = imgui.input_float(
+            "Resolution Scale##optix", p.three_d_optix_resolution_scale, 0.0, 0.0, "%.2f"
+        )
+        if imgui.is_item_deactivated_after_edit():
+            p.three_d_optix_resolution_scale = max(0.1, min(4.0, new_scale))
+
         imgui.separator()
 
         # ---- Shared controls ----

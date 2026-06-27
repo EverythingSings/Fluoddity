@@ -597,6 +597,9 @@ class App:
 
                 cam = self.controller_cam
                 width_px, height_px = glfw.get_framebuffer_size(self.window)
+                scale = max(0.1, p.three_d_optix_resolution_scale)
+                width_px = max(1, int(width_px * scale))
+                height_px = max(1, int(height_px * scale))
                 entity_buffer = self.sim.get_entity_buffer()
                 entity_count = self.sim.entity_count
                 pt.start_preview(
@@ -636,6 +639,7 @@ class App:
             self.camera.optix_interface = self._pathtracer_interface
         else:
             self.camera.optix_interface = self._optix_interface
+        self.camera.optix_resolution_scale = ui_state.preferences.three_d_optix_resolution_scale
 
         # Sync tracer SDF toggle to preferences for 3D preview
         ti = self.ui._tracer_interface
