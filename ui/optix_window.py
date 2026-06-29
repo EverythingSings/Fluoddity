@@ -158,15 +158,22 @@ class OptiXWindowMixin:
         # ---- Path trace-specific (always visible) ----
         if imgui.collapsing_header("Path Trace", imgui.TreeNodeFlags_.default_open.value):
             _, p.three_d_pt_sun_sampling = imgui.checkbox(
-                "Sun Sampling NEE (path trace)", p.three_d_pt_sun_sampling)
-            _, p.three_d_pt_env_sky_nee = imgui.checkbox(
-                "Environment Sky NEE", p.three_d_pt_env_sky_nee)
+                "Enable NEE", p.three_d_pt_sun_sampling)
             if imgui.is_item_hovered():
                 imgui.set_tooltip(
-                    "Replace directional sun + gradient sky with\n"
-                    "a cosine-lobe environment skybox for NEE.\n"
-                    "Uses sky color for hemisphere glow and\n"
-                    "sun direction/color/intensity for sun disk.")
+                    "Next Event Estimation: trace shadow rays\n"
+                    "toward the light each bounce for faster\n"
+                    "convergence. Uses MIS with cos-lobe sky,\n"
+                    "delta PDF with legacy directional light.")
+            _, p.three_d_pt_env_sky_nee = imgui.checkbox(
+                "Cos-lobe Sky", p.three_d_pt_env_sky_nee)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Replace legacy directional sun + gradient sky\n"
+                    "with a cosine-lobe environment model.\n"
+                    "Sky color controls hemisphere glow,\n"
+                    "sun direction/color/intensity control sun disk.\n"
+                    "Works with or without NEE enabled.")
 
             # Material
             mat_labels = ["Lambert", "Glossy", "Mirror"]

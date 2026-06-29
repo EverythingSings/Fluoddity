@@ -311,10 +311,11 @@ static __forceinline__ __device__ float schlick_fresnel(float cos_theta, float R
 static __forceinline__ __device__ float3 sample_brdf(
     float3 incident, float3 normal,
     int mat_id, float3 albedo, float ior,
-    float3& out_dir, unsigned int& rng)
+    float3& out_dir, unsigned int& rng, int& out_delta)
 {
     if (mat_id == MAT_MIRROR) {
         out_dir = reflect3(incident, normal);
+        out_delta = 1;
         return albedo;
     }
 
@@ -324,15 +325,18 @@ static __forceinline__ __device__ float3 sample_brdf(
         float R = schlick_fresnel(cos_i, R0);
         if (next_float(rng) < R) {
             out_dir = reflect3(incident, normal);
+            out_delta = 1;
             return albedo;
         } else {
             out_dir = sample_cosine_hemisphere(normal, rng);
+            out_delta = 0;
             return albedo;
         }
     }
 
     // MAT_DIFFUSE: Lambertian
     out_dir = sample_cosine_hemisphere(normal, rng);
+    out_delta = 0;
     return albedo;
 }
 
@@ -361,6 +365,36 @@ static __forceinline__ __device__ float3 eval_brdf_cos(
     // MAT_DIFFUSE
     float inv_pi = 0.31830988618f;
     return albedo * NdotL * inv_pi;
+}
+
+// --- MIS helpers -------------------------------------------------------------
+
+static __forceinline__ __device__ float power_heuristic(float pdf_a, float pdf_b)
+{
+    float a2 = pdf_a * pdf_a;
+    return a2 / (a2 + pdf_b * pdf_b);
+}
+
+// Returns the continuous BRDF PDF for a given direction.
+// Delta lobes (mirror, glossy specular) return 0.
+static __forceinline__ __device__ float eval_brdf_pdf(
+    float3 incident, float3 light_dir, float3 normal,
+    int mat_id, float ior)
+{
+    float NdotL = fmaxf(dot3(normal, light_dir), 0.0f);
+    float inv_pi = 0.31830988618f;
+
+    if (mat_id == MAT_MIRROR)
+        return 0.0f;
+
+    if (mat_id == MAT_GLOSSY) {
+        float cos_i = fabsf(dot3(neg3(incident), normal));
+        float R0 = ior_to_r0(ior);
+        float R = schlick_fresnel(cos_i, R0);
+        return (1.0f - R) * NdotL * inv_pi;
+    }
+
+    return NdotL * inv_pi;
 }
 
 // --- environment sky helpers (cosine-power lobe model) -----------------------
@@ -422,6 +456,23 @@ static __forceinline__ __device__ float3 eval_env_sky(float3 dir)
     return sky_contrib + sun_contrib;
 }
 
+// Returns the mixture PDF of the environment sky for a given direction.
+// Used by both sample_env_sky and MIS weighting at BRDF miss.
+static __forceinline__ __device__ float eval_env_sky_pdf(float3 dir)
+{
+    float sky_bright = fmaxf(params.sky_color_top.x,
+                       fmaxf(params.sky_color_top.y,
+                             params.sky_color_top.z));
+    float w_sky_raw = sky_bright / (ENV_SKY_EXP + 1.0f);
+    float w_sun_raw = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+    float w_total = w_sky_raw + w_sun_raw;
+    if (w_total < 1e-10f) return 0.079577f;  // 1/(4*pi) fallback
+    float p_sky = w_sky_raw / w_total;
+    float3 up = mk3(0.0f, 1.0f, 0.0f);
+    return p_sky * pdf_cosine_power_lobe(dir, up, ENV_SKY_EXP)
+         + (1.0f - p_sky) * pdf_cosine_power_lobe(dir, params.sun_direction, ENV_SUN_EXP);
+}
+
 static __forceinline__ __device__ void sample_env_sky(
     unsigned int& rng, float3& out_dir, float& out_pdf)
 {
@@ -450,9 +501,7 @@ static __forceinline__ __device__ void sample_env_sky(
         out_dir = sample_cosine_power_lobe(params.sun_direction, ENV_SUN_EXP, rng);
     }
 
-    // Mixture PDF
-    out_pdf = p_sky * pdf_cosine_power_lobe(out_dir, up, ENV_SKY_EXP)
-            + (1.0f - p_sky) * pdf_cosine_power_lobe(out_dir, params.sun_direction, ENV_SUN_EXP);
+    out_pdf = eval_env_sky_pdf(out_dir);
 }
 """
 
@@ -494,6 +543,13 @@ extern "C" __global__ void __raygen__rg()
     float3 radiance   = mk3(0.0f, 0.0f, 0.0f);
     int    depth      = 0;
 
+    // MIS tracking: surface properties from previous hit for BRDF miss weighting
+    int    is_delta_bounce = 0;
+    float3 prev_N          = mk3(0.0f, 1.0f, 0.0f);
+    int    prev_mat_id     = MAT_DIFFUSE;
+    float  prev_ior        = 1.5f;
+    float3 prev_incident   = mk3(0.0f, 0.0f, -1.0f);
+
     const int MAX_WALK_BOUNCES = 512;
 
     for (int bounce = 0; bounce < MAX_WALK_BOUNCES; bounce++) {
@@ -518,6 +574,18 @@ extern "C" __global__ void __raygen__rg()
             float3 sky = mk3(__uint_as_float(p5),
                              __uint_as_float(p6),
                              __uint_as_float(p7));
+
+            // MIS: when env sky NEE was performed at the previous hit,
+            // weight this BRDF strategy sample against the light strategy
+            if (params.sun_sampling && params.env_sky_nee
+                && depth > 0 && !is_delta_bounce) {
+                float brdf_pdf  = eval_brdf_pdf(
+                    prev_incident, ray_dir, prev_N, prev_mat_id, prev_ior);
+                float light_pdf = eval_env_sky_pdf(ray_dir);
+                float mis_w     = power_heuristic(brdf_pdf, light_pdf);
+                sky = sky * mis_w;
+            }
+
             radiance = radiance + throughput * sky;
 
             // Guide buffers: primary miss -> sky albedo, neutral normal
@@ -606,8 +674,11 @@ extern "C" __global__ void __raygen__rg()
                             ray_dir, light_dir, N,
                             mat_id, albedo, ior);
                         float3 L_env = eval_env_sky(light_dir);
+                        float brdf_pdf = eval_brdf_pdf(
+                            ray_dir, light_dir, N, mat_id, ior);
+                        float mis_w = power_heuristic(light_pdf, brdf_pdf);
                         radiance = radiance + throughput * brdf_cos
-                                 * L_env * (1.0f / light_pdf);
+                                 * L_env * (mis_w / light_pdf);
                     }
                 }
             } else {
@@ -652,9 +723,17 @@ extern "C" __global__ void __raygen__rg()
 
         // 4g. Sample BRDF for next bounce
         float3 bounce_dir;
+        int    is_delta_local;
         float3 weight = sample_brdf(ray_dir, N, mat_id, albedo, ior,
-                                     bounce_dir, rng);
+                                     bounce_dir, rng, is_delta_local);
         throughput = throughput * weight;
+
+        // Track surface properties for MIS at potential next-bounce miss
+        is_delta_bounce = is_delta_local;
+        prev_N          = N;
+        prev_mat_id     = mat_id;
+        prev_ior        = ior;
+        prev_incident   = ray_dir;
 
         // 4h. Self-intersection avoidance: offset origin along normal
         ray_origin = P + 1e-4f * N;
