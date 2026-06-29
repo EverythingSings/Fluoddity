@@ -1,5 +1,6 @@
 #version 450
 layout(local_size_x = 64) in;
+#define LINEAR_MC_DEPOSIT
 
 //SAME STRUCT USED IN CAM_BRUSH.VERT AND POINTS_3D.VERT
 struct Entity {
@@ -929,9 +930,57 @@ void main() {
     vec2 half_ext = vec2(sqrt(ca), 1.0 / sqrt(ca));
     vec2 uv_xy = vec2(e.px, e.py) / (2.0 * half_ext) + 0.5;
     float uv_z = e.pz * 0.5 + 0.5;
-    // When depth is 1, always splat to z=0
+
+#ifdef LINEAR_MC_DEPOSIT
+    // Continuous voxel position (subtract 0.5 so integer coords = voxel centers)
+    vec3 voxel_f;
+    voxel_f.xy = uv_xy * vec2(img_res_3d.xy) - 0.5;
+    voxel_f.z = (img_res_3d.z <= 1) ? 0.0 : uv_z * float(img_res_3d.z) - 0.5;
+
+    ivec3 base = ivec3(floor(voxel_f));
+    vec3 frac = voxel_f - vec3(base);
+
+    // Trilinear weights per axis
+    float wx0 = 1.0 - frac.x, wx1 = frac.x;
+    float wy0 = 1.0 - frac.y, wy1 = frac.y;
+    float wz0 = 1.0 - frac.z, wz1 = frac.z;
+    if (img_res_3d.z <= 1) { wz0 = 1.0; wz1 = 0.0; } // depth-1: all weight to z=0
+
+    // Stochastic voxel selection: pick one corner of the 2x2x2 neighborhood
+    // proportional to trilinear weights (Monte Carlo linear filter)
+    float r = hash(vec2(float(gl_GlobalInvocationID.x), float(frame_count)));
+    float cumulative = 0.0;
+    ivec3 offset = ivec3(0);
+
+    cumulative += wx0 * wy0 * wz0;
+    if (r >= cumulative) {
+        cumulative += wx1 * wy0 * wz0;
+        if (r >= cumulative) {
+            cumulative += wx0 * wy1 * wz0;
+            if (r >= cumulative) {
+                cumulative += wx1 * wy1 * wz0;
+                if (r >= cumulative) {
+                    cumulative += wx0 * wy0 * wz1;
+                    if (r >= cumulative) {
+                        cumulative += wx1 * wy0 * wz1;
+                        if (r >= cumulative) {
+                            cumulative += wx0 * wy1 * wz1;
+                            if (r >= cumulative) {
+                                offset = ivec3(1,1,1);
+                            } else { offset = ivec3(0,1,1); }
+                        } else { offset = ivec3(1,0,1); }
+                    } else { offset = ivec3(0,0,1); }
+                } else { offset = ivec3(1,1,0); }
+            } else { offset = ivec3(0,1,0); }
+        } else { offset = ivec3(1,0,0); }
+    }
+
+    ivec3 voxel = base + offset;
+#else
+    // Nearest-neighbor deposit (original behavior)
     int voxel_z = (img_res_3d.z <= 1) ? 0 : int(uv_z * float(img_res_3d.z));
     ivec3 voxel = ivec3(ivec2(uv_xy * vec2(img_res_3d.xy)), voxel_z);
+#endif
 
     if (voxel.x >= 0 && voxel.x < img_res_3d.x &&
         voxel.y >= 0 && voxel.y < img_res_3d.y &&
