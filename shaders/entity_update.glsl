@@ -40,9 +40,7 @@ struct PhysicsSetting {
 #define CANVAS_SCALE (float(canvas_3d_size.x) / CANVAS_DIM_DEFAULT)
 uniform int frame_count;
 uniform Rule target_rule;
-uniform sampler3D canvas_3d_x; //trails canvas X channel (R32F, 3D)
-uniform sampler3D canvas_3d_y; //trails canvas Y channel (R32F, 3D)
-uniform sampler3D canvas_3d_z; //trails canvas Z channel (R32F, 3D)
+uniform sampler3D canvas_3d; //trails canvas (RGBA16F packed: R=vx, G=vy, B=vz)
 uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
 uniform ivec3 canvas_3d_size;  // (W, H, D) for non-cube support
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
@@ -60,9 +58,7 @@ uniform PhysicsSetting SENSOR_GAIN_SETTING;
 uniform PhysicsSetting MUTATION_SCALE_SETTING;
 uniform PhysicsSetting HAZARD_RATE_SETTING;
 uniform PhysicsSetting TRAIL_PERSISTENCE_SETTING;
-layout(r32f, binding = 0) uniform image3D can_img_x;
-layout(r32f, binding = 1) uniform image3D can_img_y;
-layout(r32f, binding = 2) uniform image3D can_img_z;
+layout(rgba16f, binding = 0) uniform image3D can_img;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
@@ -380,7 +376,7 @@ vec3 get_can_3d(vec3 p){
     // When canvas_3d_size.z == 1, uv_z is clamped to center of single slice
     if(canvas_3d_size.z <= 1) uv_z = 0.5;
     vec3 uvw = vec3(uv_xy, uv_z);
-    return vec3(texture(canvas_3d_x, uvw).r, texture(canvas_3d_y, uvw).r, texture(canvas_3d_z, uvw).r);
+    return texture(canvas_3d, uvw).rgb;
 }
 vec4 get_field(vec2 p){
     if(!advanced_drawing_resources_initialized)return vec4(0);
@@ -929,7 +925,7 @@ void main() {
     trail_p = clamp(trail_p, 0.001, 0.999);
     float splat_scale = (1.0 - trail_p) / trail_p;
 
-    ivec3 img_res_3d = imageSize(can_img_x);
+    ivec3 img_res_3d = imageSize(can_img);
     vec2 half_ext = vec2(sqrt(ca), 1.0 / sqrt(ca));
     vec2 uv_xy = vec2(e.px, e.py) / (2.0 * half_ext) + 0.5;
     float uv_z = e.pz * 0.5 + 0.5;
@@ -940,9 +936,7 @@ void main() {
     if (voxel.x >= 0 && voxel.x < img_res_3d.x &&
         voxel.y >= 0 && voxel.y < img_res_3d.y &&
         voxel.z >= 0 && voxel.z < img_res_3d.z) {
-        imageAtomicAdd(can_img_x, voxel, splat_scale * e.vx);
-        imageAtomicAdd(can_img_y, voxel, splat_scale * e.vy);
-        imageAtomicAdd(can_img_z, voxel, splat_scale * e.vz);
+        imageAtomicAdd(can_img, voxel, f16vec4(splat_scale * e.vx, splat_scale * e.vy, splat_scale * e.vz, 0.0));
     }
 
     //Commit new entity state to buffers

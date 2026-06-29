@@ -1,15 +1,11 @@
 #version 450
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
-// 3D canvas textures for reading (samplers)
-uniform sampler3D can_tex_x;
-uniform sampler3D can_tex_y;
-uniform sampler3D can_tex_z;
+// 3D canvas texture for reading (packed RGBA16F: R=vx, G=vy, B=vz)
+uniform sampler3D can_tex;
 
-// 3D canvas images for writing
-layout(r32f, binding = 0) uniform image3D can_out_x;
-layout(r32f, binding = 1) uniform image3D can_out_y;
-layout(r32f, binding = 2) uniform image3D can_out_z;
+// 3D canvas image for writing (packed RGBA16F)
+layout(rgba16f, binding = 0) uniform image3D can_out;
 
 uniform ivec3 canvas_3d_size;  // (W, H, D) — supports non-cube shapes
 uniform bool TESTING_MODE;
@@ -78,11 +74,7 @@ ivec3 wrap_coord(ivec3 coord) {
 
 vec3 fetch3(ivec3 coord) {
     coord = wrap_coord(coord);
-    return vec3(
-        texelFetch(can_tex_x, coord, 0).r,
-        texelFetch(can_tex_y, coord, 0).r,
-        texelFetch(can_tex_z, coord, 0).r
-    );
+    return texelFetch(can_tex, coord, 0).rgb;
 }
 
 // Diffusion blur: 4-neighbor (XY only) in TESTING_MODE, 6-neighbor (3D) otherwise
@@ -116,9 +108,7 @@ void main() {
 
     // Clear on frame 0
     if (frame_count == 0) {
-        imageStore(can_out_x, pos, vec4(0.0));
-        imageStore(can_out_y, pos, vec4(0.0));
-        imageStore(can_out_z, pos, vec4(0.0));
+        imageStore(can_out, pos, vec4(0.0));
         return;
     }
 
@@ -145,7 +135,5 @@ void main() {
 
     vec3 result = can_color * trail_persistence;
 
-    imageStore(can_out_x, pos, vec4(result.x));
-    imageStore(can_out_y, pos, vec4(result.y));
-    imageStore(can_out_z, pos, vec4(result.z));
+    imageStore(can_out, pos, vec4(result, 0.0));
 }

@@ -1,4 +1,6 @@
 #extension GL_NV_shader_atomic_float : require
+#extension GL_NV_gpu_shader5 : require
+#extension GL_NV_shader_atomic_fp16_vector : require
 // Fourier Feature Network: 6D input -> 6D output
 struct FourierCenter {
     vec4 frequency;       // first 4 frequency dimensions

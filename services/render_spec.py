@@ -130,14 +130,10 @@ class RenderSpecService:
         # Entity buffer (raw bytes → uint8 array for maximal compression)
         buffers['entities'] = np.frombuffer(sim.entities.read(), dtype=np.uint8).copy()
 
-        # 3D canvas textures (only the active read-side)
+        # 3D canvas texture (packed RGBA16F, only the active read-side)
         read_idx = sim.can_read_index
-        buffers['can_x'] = np.frombuffer(
-            sim.can_x_3d[read_idx].read(), dtype=np.float32).copy()
-        buffers['can_y'] = np.frombuffer(
-            sim.can_y_3d[read_idx].read(), dtype=np.float32).copy()
-        buffers['can_z'] = np.frombuffer(
-            sim.can_z_3d[read_idx].read(), dtype=np.float32).copy()
+        buffers['can_packed'] = np.frombuffer(
+            sim.can_3d[read_idx].read(), dtype=np.float16).copy()
 
         # Force/strafe field texture (optional)
         if adv_draw_processor is not None:
@@ -372,16 +368,22 @@ class RenderSpecService:
         if 'entities' in gpu_buffers:
             sim.entities.write(gpu_buffers['entities'].tobytes())
 
-        # Canvas 3D textures — write to BOTH double-buffer textures to prevent
-        # stale data in the non-active buffer from corrupting the next swap
-        if 'can_x' in gpu_buffers:
-            can_x_bytes = gpu_buffers['can_x'].tobytes()
-            can_y_bytes = gpu_buffers['can_y'].tobytes()
-            can_z_bytes = gpu_buffers['can_z'].tobytes()
+        # Canvas 3D texture (packed RGBA16F) — write to BOTH double-buffer textures
+        # to prevent stale data in the non-active buffer from corrupting the next swap
+        if 'can_packed' in gpu_buffers:
+            can_bytes = gpu_buffers['can_packed'].tobytes()
             for i in range(2):
-                sim.can_x_3d[i].write(can_x_bytes)
-                sim.can_y_3d[i].write(can_y_bytes)
-                sim.can_z_3d[i].write(can_z_bytes)
+                sim.can_3d[i].write(can_bytes)
+        elif 'can_x' in gpu_buffers:
+            # Legacy support: convert old separate R32F channels to packed RGBA16F
+            can_x = gpu_buffers['can_x'].astype(np.float16)
+            can_y = gpu_buffers['can_y'].astype(np.float16)
+            can_z = gpu_buffers['can_z'].astype(np.float16)
+            alpha = np.zeros_like(can_x)
+            packed = np.stack([can_x, can_y, can_z, alpha], axis=-1).flatten()
+            can_bytes = packed.tobytes()
+            for i in range(2):
+                sim.can_3d[i].write(can_bytes)
 
         # Force/strafe field texture (optional)
         if 'field' in gpu_buffers and adv_draw_processor is not None:

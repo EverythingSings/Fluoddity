@@ -75,29 +75,21 @@ class Sim:
 
         self.can_read_index = 0  # Index of texture pair to read from (write to the other)
 
-        # 3D canvas textures: 3 velocity components (X, Y, Z), double-buffered
-        # Each is R32F for imageAtomicAdd compatibility
+        # 3D canvas texture: packed RGBA16F (R=vx, G=vy, B=vz), double-buffered
+        # Uses GL_NV_shader_atomic_fp16_vector for imageAtomicAdd on f16vec4
         canvas_3d_shape = (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution)
-        self.can_x_3d = [
-            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
-            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
+        self.can_3d = [
+            self.ctx.texture3d(canvas_3d_shape, 4, dtype='f2'),
+            self.ctx.texture3d(canvas_3d_shape, 4, dtype='f2'),
         ]
-        self.can_y_3d = [
-            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
-            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
-        ]
-        self.can_z_3d = [
-            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
-            self.ctx.texture3d(canvas_3d_shape, 1, dtype='f4'),
-        ]
-        for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
+        for tex in self.can_3d:
             tex.repeat_x = True
             tex.repeat_y = True
             tex.repeat_z = True
 
-        # Clear 3D textures
-        zero_data = bytes(self.canvas_resolution * self.canvas_resolution * self.canvas_resolution * 4)
-        for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
+        # Clear 3D textures (4 components × 2 bytes each = 8 bytes per voxel)
+        zero_data = bytes(self.canvas_resolution * self.canvas_resolution * self.canvas_resolution * 8)
+        for tex in self.can_3d:
             tex.write(zero_data)
 
         # 2D view-slice texture: shows one z-slice of the 3D canvas X channel
@@ -132,9 +124,7 @@ class Sim:
             print(e)
 
         tryset(self.entity_update_program, 'canvas_resolution', (self.canvas_resolution, self.canvas_resolution))
-        tryset(self.entity_update_program, 'canvas_3d_x', 1)
-        tryset(self.entity_update_program, 'canvas_3d_y', 6)
-        tryset(self.entity_update_program, 'canvas_3d_z', 7)
+        tryset(self.entity_update_program, 'canvas_3d', 1)
         tryset(self.entity_update_program, 'canvas_3d_size', (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
         tryset(self.entity_update_program, 'field_texture', 5)
 
@@ -164,9 +154,7 @@ class Sim:
         Run a single physics update on all particles
         '''
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
-        tryset(self.entity_update_program, 'canvas_3d_x', 1)
-        tryset(self.entity_update_program, 'canvas_3d_y', 6)
-        tryset(self.entity_update_program, 'canvas_3d_z', 7)
+        tryset(self.entity_update_program, 'canvas_3d', 1)
         tryset(self.entity_update_program, 'canvas_3d_size', (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
 
         # Advanced drawing field texture
@@ -275,19 +263,13 @@ class Sim:
         tryset(prog, 'TRAIL_DIFFUSION_SETTING.cohort_sweep', 0.0)
         tryset(prog, 'TRAIL_DIFFUSION_SETTING.jitter', self._state.jitters.get('TRAIL_DIFFUSION', 0.0))
 
-        # Bind read textures as samplers
+        # Bind read texture as sampler
         write_index = 1 - self.can_read_index
-        self.can_x_3d[self.can_read_index].use(location=1)
-        self.can_y_3d[self.can_read_index].use(location=6)
-        self.can_z_3d[self.can_read_index].use(location=7)
-        tryset(prog, 'can_tex_x', 1)
-        tryset(prog, 'can_tex_y', 6)
-        tryset(prog, 'can_tex_z', 7)
+        self.can_3d[self.can_read_index].use(location=1)
+        tryset(prog, 'can_tex', 1)
 
-        # Bind write textures as images
-        self.can_x_3d[write_index].bind_to_image(0, read=False, write=True)
-        self.can_y_3d[write_index].bind_to_image(1, read=False, write=True)
-        self.can_z_3d[write_index].bind_to_image(2, read=False, write=True)
+        # Bind write texture as image
+        self.can_3d[write_index].bind_to_image(0, read=False, write=True)
 
         # Dispatch compute shader
         gx = (self.canvas_resolution + 3) // 4
@@ -315,7 +297,7 @@ class Sim:
         slice_z = min(self.canvas_3d_view_slice, self.canvas_resolution - 1)
 
         # Bind source 3D texture as sampler
-        self.can_x_3d[self.can_read_index].use(location=0)
+        self.can_3d[self.can_read_index].use(location=0)
         tryset(self.canvas_slice_program, 'source_3d', 0)
         tryset(self.canvas_slice_program, 'slice_z', slice_z)
         tryset(self.canvas_slice_program, 'canvas_3d_size',
@@ -341,15 +323,9 @@ class Sim:
                force_field_strength: float = 1.0,
                strafe_field_strength: float = 1.0,
                generics: tuple = None):
-        # Bind 3D canvas textures for entity_update sampling (sensors)
-        self.can_x_3d[self.can_read_index].use(location=1)
-        self.can_y_3d[self.can_read_index].use(location=6)
-        self.can_z_3d[self.can_read_index].use(location=7)
-
-        # Bind 3D canvas textures as images for atomic splatting
-        self.can_x_3d[self.can_read_index].bind_to_image(0, read=False, write=True)
-        self.can_y_3d[self.can_read_index].bind_to_image(1, read=False, write=True)
-        self.can_z_3d[self.can_read_index].bind_to_image(2, read=False, write=True)
+        # Bind packed 3D canvas texture for entity_update sampling (sensors) and atomic splatting
+        self.can_3d[self.can_read_index].use(location=1)
+        self.can_3d[self.can_read_index].bind_to_image(0, read=False, write=True)
 
         # Bind advanced drawing field texture if available
         if field_texture is not None:
@@ -381,8 +357,8 @@ class Sim:
     def _clear_3d_textures(self):
         """Clear all 3D canvas textures to zero."""
         canvas_dim_x, canvas_dim_y = self.get_canvas_dimensions()
-        zero_data = bytes(canvas_dim_x * canvas_dim_y * self.canvas_resolution* 4)
-        for tex in self.can_x_3d + self.can_y_3d + self.can_z_3d:
+        zero_data = bytes(canvas_dim_x * canvas_dim_y * self.canvas_resolution * 8)  # 4 components × 2 bytes
+        for tex in self.can_3d:
             tex.write(zero_data)
 
     def clear_canvas(self):
