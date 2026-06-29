@@ -346,7 +346,7 @@ extern "C" __global__ void __closesthit__ch()
 
     const float ndl = fmaxf(dot3(N, L), 0.0f);
     const float inv_pi = 0.31830988618f;  // match path tracer's Lambertian 1/π
-    const float3 lit = params.light_color * params.light_intensity;
+    const float3 lit = params.light_color * (params.light_intensity / 13.0f);
     const float a = params.ambient;
     const float3 c = albedo * (mk3(a, a, a) + (1.0f - a) * ndl * inv_pi * vis * lit) * ao;
 
