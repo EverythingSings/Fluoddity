@@ -2,10 +2,20 @@ import glfw
 import moderngl
 import time
 import numpy as np
+import copy
+from pathlib import Path
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService
+from services import (
+    RuleManager,
+    EntityPicker,
+    VideoRecorderService,
+    ConfigSaver,
+    ArrowDebugService,
+    MultiLoadService,
+    TrialService,
+)
 from services.field_handler import FieldHandler
 from services.parameter_lock_service import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
@@ -16,10 +26,48 @@ from camera_input import process_camera_input
 from controller_input import (
     ControllerCam,
     apply_controller_to_2d_camera,
+    apply_game_cursor_to_state,
     find_joystick,
     process_controller_input,
 )
-from launch_options import LaunchOptions, parse_launch_options
+from launch_options import LaunchOptions, editor_tools_enabled, parse_launch_options
+
+
+PLAYER_SHELL_BLOCKED_COMMAND_FLAGS = (
+    "request_reload",
+    "toggle_recording",
+    "request_screenshot",
+    "request_world_size_change",
+    "request_camera_reset",
+    "request_clear_canvas_and_fields",
+    "request_save_config",
+    "request_load_config",
+    "request_save_file",
+    "request_load_file",
+    "request_delete_file",
+    "request_preview_config",
+    "request_clear_preview",
+    "request_load_force_field_image",
+    "request_load_strafe_field_image",
+    "request_preview_clipboard_config",
+    "request_clear_clipboard_preview",
+    "request_load_clipboard_config",
+    "request_delete_clipboard_config",
+    "request_import_clipboard_to_multiload",
+)
+
+PLAYER_SHELL_BLOCKED_VALUE_FIELDS = (
+    "clipboard_text",
+    "save_filename",
+    "load_filename",
+    "load_category",
+    "delete_filename",
+    "delete_category",
+    "preview_filename",
+    "preview_category",
+    "field_load_image_path",
+    "clipboard_config_index",
+)
 from utilities.advanced_drawing import AdvancedDrawingProcessor
 
 
@@ -63,8 +111,12 @@ class App:
 
         # Load preferences first to get world_size
         loaded_prefs = load_preferences()
+        self._editor_preferences_snapshot = copy.deepcopy(loaded_prefs)
+        if self.launch_options.game:
+            self._apply_game_runtime_defaults(loaded_prefs)
         if self.launch_options.deck_performance:
             self._apply_deck_performance_defaults(loaded_prefs)
+            self._editor_preferences_snapshot = copy.deepcopy(loaded_prefs)
 
         # Create components (no cross-references between UI and sim/camera)
         self.sim = Sim(self.ctx, world_size=loaded_prefs.world_size, canvas_aspect_ratio=loaded_prefs.canvas_aspect_ratio)
@@ -88,9 +140,12 @@ class App:
         self.config_saver = ConfigSaver()
         self.arrow_debug_service = ArrowDebugService(self.ctx)
         self.multi_load_service = MultiLoadService()
+        self.trial_service = TrialService()
         self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
         self.ui.multi_load_service = self.multi_load_service
         self.ui.advanced_drawing_processor = self.advanced_drawing_processor
+        self.ui.game_editor_enabled = editor_tools_enabled(self.launch_options)
+        self._configure_game_mode()
 
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()
@@ -137,12 +192,87 @@ class App:
 
         # Track previous view option for camera repositioning when leaving tiling mode
         self.prev_view_option = 0
+        self.visual_smoke_frame_count = 0
+        self.visual_smoke_completed = False
+        self.game_cursor_screen_pos = None
+        self.performance_smoke_completed = False
+        self._performance_smoke_start = None
+        self._performance_smoke_last_frame = None
+        self._performance_smoke_frame_times = []
 
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
         self._load_default_config()
+        self._apply_game_mode_visual_defaults()
         self.sim.reload()
         self.sim.reset()
+
+    def _configure_game_mode(self):
+        """Apply the first Trial Dish shell without changing editor defaults."""
+        if not self.launch_options.game:
+            return
+
+        self.ui.state.trial.game_mode = True
+        trial_index = self.launch_options.visual_smoke_trial - 1
+        self.trial_service.load_trial(self.ui.state.trial, trial_index)
+        if (
+            (self.launch_options.visual_smoke_output and self.launch_options.visual_smoke_start)
+            or self.launch_options.performance_smoke_seconds > 0.0
+        ):
+            self.trial_service.start_trial(self.ui.state.trial)
+            self.ui.state.sim.going = True
+            if self.launch_options.visual_smoke_output and self.launch_options.visual_smoke_pause:
+                self.ui.state.trial.paused = True
+                self.trial_service._update_objective_status(self.ui.state.trial)
+                self.trial_service._update_guidance(self.ui.state.trial)
+        self.ui.state.trial.visual_smoke_feed = (
+            self.launch_options.visual_smoke_output is not None
+            and self.launch_options.visual_smoke_feed
+        )
+        self.ui.state.preferences.mouse_mode = "Draw Trail"
+        self.ui.state.preferences.show_tutorial_window = False
+        self.ui.state.preferences.show_preferences_window = False
+        self.ui.state.preferences.show_controls_window = False
+        self.ui.state.preferences.show_parameter_sweeps_window = False
+        self.ui.state.preferences.show_performance_window = False
+        self.ui.state.preferences.advanced_drawing_enabled = False
+        self.ui.show_sidebar = False
+        self.ui.show_video_recording_window = False
+        self.ui.show_history_window = False
+        glfw.set_window_title(self.window, "Xenoculture Prototype - Trial Dish")
+
+    def _apply_game_mode_visual_defaults(self):
+        """Make game mode readable even if editor configs/preferences were noisy."""
+        if not self.launch_options.game:
+            return
+
+        sim_state = self.ui.state.sim
+        prefs = self.ui.state.preferences
+
+        sim_state.going = (
+            (
+                self.launch_options.visual_smoke_output is not None
+                and self.launch_options.visual_smoke_start
+                and not self.launch_options.visual_smoke_pause
+            )
+            or self.launch_options.performance_smoke_seconds > 0.0
+        )
+        sim_state.current_view_option = 0
+        sim_state.parameter_sweeps_enabled = False
+        sim_state.sweep_preview_pending_restore = False
+        sim_state.watercolor_mode = False
+        sim_state.emboss_mode = 0
+
+        self.ui.state.camera.position[:] = 0.0
+        self.ui.state.camera.zoom = 1.0
+
+        prefs.mouse_mode = "Draw Trail"
+        prefs.speedmult = min(max(prefs.speedmult, 3), 4)
+        prefs.motion_blur = False
+        prefs.debug_arrows = False
+        prefs.advanced_drawing_enabled = False
+        prefs.draw_size = max(prefs.draw_size, 0.040)
+        prefs.draw_power = max(prefs.draw_power, 1.05)
 
     def _apply_deck_performance_defaults(self, prefs):
         """Prefer 30 FPS+ Steam Deck defaults without deleting user-tunable settings."""
@@ -152,6 +282,13 @@ class App:
         prefs.blur_quality = max(prefs.blur_quality, 2)
         prefs.bloom_enabled = False
         prefs.show_tutorial_window = False
+
+    def _apply_game_runtime_defaults(self, prefs):
+        """Use a smaller, calmer simulation for the first playable game shell."""
+        prefs.world_size = min(prefs.world_size, 0.06)
+        prefs.motion_blur = False
+        prefs.bloom_enabled = False
+        prefs.brightness = min(prefs.brightness, 0.45)
 
     def _ensure_default_config(self):
         """Ensure _Default.json exists in physics_configs directory. Create it if missing."""
@@ -178,28 +315,165 @@ class App:
 
     def run(self):
         while not glfw.window_should_close(self.window):
+            frame_start = time.perf_counter()
             glfw.poll_events()
             self.orchestrate_frame()
+            self._handle_visual_smoke_capture()
             glfw.swap_buffers(self.window)
+            self._handle_performance_smoke(frame_start)
 
-        self.cleanup()
+        if self.visual_smoke_completed or self.performance_smoke_completed:
+            glfw.terminate()
+        else:
+            self.cleanup()
+
+    def _handle_performance_smoke(self, frame_start):
+        """Print app-loop frame timing for timed runtime smoke checks."""
+        seconds = self.launch_options.performance_smoke_seconds
+        if seconds <= 0.0 or self.performance_smoke_completed:
+            return
+
+        now = time.perf_counter()
+        if self._performance_smoke_start is None:
+            self._performance_smoke_start = now
+            self._performance_smoke_last_frame = now
+            return
+
+        frame_time = now - frame_start
+        self._performance_smoke_frame_times.append(frame_time)
+        elapsed = now - self._performance_smoke_start
+        if elapsed < seconds:
+            return
+
+        frames = len(self._performance_smoke_frame_times)
+        avg_frame = (
+            sum(self._performance_smoke_frame_times) / frames
+            if frames > 0 else 0.0
+        )
+        worst_frame = (
+            max(self._performance_smoke_frame_times)
+            if frames > 0 else 0.0
+        )
+        avg_fps = frames / elapsed if elapsed > 0.0 else 0.0
+        print(
+            "performance_smoke="
+            f"frames={frames} "
+            f"elapsed={elapsed:.3f} "
+            f"avg_fps={avg_fps:.2f} "
+            f"avg_frame_ms={avg_frame * 1000.0:.2f} "
+            f"worst_frame_ms={worst_frame * 1000.0:.2f}"
+        )
+        self.performance_smoke_completed = True
+        glfw.set_window_should_close(self.window, True)
+
+    def _handle_visual_smoke_capture(self):
+        """Save the rendered framebuffer for launch-level visual smoke checks."""
+        output = self.launch_options.visual_smoke_output
+        if not output:
+            return
+
+        self.visual_smoke_frame_count += 1
+        if self.visual_smoke_frame_count < self.launch_options.visual_smoke_frame:
+            return
+
+        width, height = glfw.get_framebuffer_size(self.window)
+        data = self.ctx.screen.read(components=3, alignment=1)
+        pixels = np.frombuffer(data, dtype=np.uint8).reshape((height, width, 3))
+        pixels = np.flipud(pixels)
+
+        from PIL import Image
+
+        path = Path(output)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(pixels, "RGB").save(path)
+        print(f"visual_smoke_saved={path}")
+        trial = self.ui.state.trial
+        active_zones = sum(1 for zone in trial.zones if zone.active)
+        rival_zones = sum(1 for zone in trial.zones if zone.rival_controlled)
+        result_title = self._visual_smoke_token(trial.result_title)
+        result_readout = self._visual_smoke_token(trial.result_grade)
+        result_summary = self._visual_smoke_token(trial.result_summary)
+        prompt_specs = self.ui.trial_action_prompt_specs(
+            trial,
+            self.ui.keybindings,
+            self.ui.state.input_scheme,
+        )
+        prompt_text = self._visual_smoke_token(
+            " | ".join(prompt.render_text() for prompt in prompt_specs)
+        )
+        display_prompt_text = self._visual_smoke_token(
+            " | ".join(prompt.render_display_text() for prompt in prompt_specs)
+        )
+        prompt_glyphs = self._visual_smoke_token(
+            " | ".join(
+                glyph
+                for prompt in prompt_specs
+                for glyph in prompt.glyph_assets
+            )
+        )
+        print(
+            "visual_smoke_trial_state="
+            f"trial={trial.trial_index + 1} "
+            f"status={trial.status} "
+            f"active_zones={active_zones}/{len(trial.zones)} "
+            f"rival_zones={rival_zones} "
+            f"progress={trial.progress:.3f} "
+            f"elapsed={trial.elapsed_seconds:.2f} "
+            f"paused={int(trial.paused)} "
+            f"input_scheme={self.ui.state.input_scheme} "
+            f"cursor={int(self.ui.state.game_cursor_active)} "
+            f"cursor_draw={int(self.ui.state.game_draw_held)} "
+            f"result_title={result_title} "
+            f"result_readout={result_readout} "
+            f"result_summary={result_summary} "
+            f"prompts={prompt_text} "
+            f"display_prompts={display_prompt_text} "
+            f"glyphs={prompt_glyphs}"
+        )
+        self.visual_smoke_completed = True
+        glfw.set_window_should_close(self.window, True)
+
+    @staticmethod
+    def _visual_smoke_token(text):
+        """Normalize smoke-only text fields into whitespace-free tokens."""
+        return "_".join(str(text or "").strip().split()) or "-"
 
     def orchestrate_frame(self):
         """Main orchestration logic - reads UI state, coordinates components."""
 
         # 1. Get current UI state
         ui_state = self.ui.get_state()
+        self._filter_player_shell_commands(ui_state)
         tiling_mode = (ui_state.sim.current_view_option == 3)
 
         # 2. Process continuous input (camera movement)
         current_time = time.time()
         dt = current_time - self.last_update_time
         self.last_update_time = current_time
+        if self.launch_options.visual_smoke_output and self.launch_options.visual_smoke_start:
+            dt = 1.0 / 30.0
         process_camera_input(ui_state, self.window, self.ui.keybindings,
                              self.sim.view_tex, dt)
+        self.joystick_state['game_mode'] = ui_state.trial.game_mode
         controller_actions = process_controller_input(self.controller_cam, self.joystick_state, dt)
         apply_controller_to_2d_camera(ui_state, self.joystick_state, dt)
+        self._apply_game_controller_cursor(ui_state, dt)
+        self._apply_input_scheme(ui_state, controller_actions)
         self._apply_controller_actions(controller_actions, ui_state)
+        if ui_state.request_exit:
+            glfw.set_window_should_close(self.window, True)
+
+        self.trial_service.process_requests(ui_state.trial, ui_state)
+        if ui_state.trial.game_mode:
+            if (
+                ui_state.trial.briefing_active
+                or ui_state.trial.won
+                or ui_state.trial.failed
+                or ui_state.trial.paused
+            ):
+                ui_state.sim.going = False
+            elif ui_state.request_trial_start or ui_state.request_trial_pause:
+                ui_state.sim.going = True
 
         # 3. Process one-shot commands
         result = self.command_handler.process_commands(ui_state, tiling_mode)
@@ -313,13 +587,26 @@ class App:
                 screenshot_in_progress=self.screenshot_in_progress
             )
 
+        # 6.1. Update game-mode trial state after simulation advances.
+        self._apply_visual_smoke_resolution(ui_state, dt)
+        self.trial_service.update(
+            ui_state.trial, ui_state, self.sim.frame_count, dt, self.sim.can
+        )
+
         # 6.5. Screenshot save and settings restoration
         if self.screenshot_in_progress:
             self._save_screenshot(ui_state)
 
+        if (
+            ui_state.request_trial_next
+            or ui_state.request_trial_retry
+            or ui_state.request_trial_restart_sequence
+        ):
+            self.sim.reset()
+
         # 7. Render camera view
         self._render_camera_view(ui_state, sweep_mode, sweep_reticle_pos,
-                                  sweep_reticle_visible, screen_aspect, tiling_mode)
+                                 sweep_reticle_visible, screen_aspect, tiling_mode)
 
         # 7.5. Render arrow debug overlay if enabled
         if ui_state.preferences.debug_arrows:
@@ -354,11 +641,222 @@ class App:
             'recording_active': self.video_service.is_active(),
             'video_pending': cmd.video_pending,
             'video_scheduled_start_frame': cmd.video_scheduled_start_frame,
+            'game_mode': ui_state.trial.game_mode,
+            'trial': ui_state.trial,
+            'trial_zone_overlays': self._build_trial_zone_overlays(ui_state),
+            'trial_hazard_overlay': self._build_trial_hazard_overlay(ui_state),
+            'trial_rival_overlay': self._build_trial_rival_overlay(ui_state),
+            'game_cursor': self._build_game_cursor_overlay(ui_state),
         })
         self.ui.render()
 
+    def _filter_player_shell_commands(self, ui_state):
+        """Defensively block raw editor commands from the default player shell."""
+        if not (ui_state.trial.game_mode and not self.ui.game_editor_enabled):
+            return
+
+        for flag_name in PLAYER_SHELL_BLOCKED_COMMAND_FLAGS:
+            setattr(ui_state, flag_name, False)
+        for field_name in PLAYER_SHELL_BLOCKED_VALUE_FIELDS:
+            current = getattr(ui_state, field_name)
+            setattr(ui_state, field_name, -1 if isinstance(current, int) else "")
+
+        ui_state.sim.parameter_sweeps_enabled = False
+        ui_state.sim.sweep_preview_pending_restore = False
+        ui_state.request_fill_operation = False
+        ui_state.request_clear_force_field = False
+        ui_state.request_clear_strafe_field = False
+        ui_state.request_clear_canvas = False
+
+    def _apply_visual_smoke_resolution(self, ui_state, dt):
+        """Fast-forward a smoke capture to the Trial Dish result state."""
+        if not (
+            self.launch_options.visual_smoke_output
+            and self.launch_options.visual_smoke_resolve
+            and ui_state.trial.game_mode
+            and not ui_state.trial.briefing_active
+            and not ui_state.trial.won
+            and not ui_state.trial.failed
+        ):
+            return
+
+        next_capture_index = self.visual_smoke_frame_count + 1
+        if next_capture_index < self.launch_options.visual_smoke_frame:
+            return
+
+        ui_state.trial.elapsed_seconds = max(
+            ui_state.trial.elapsed_seconds,
+            ui_state.trial.failure_seconds + max(dt, 1.0 / 30.0),
+        )
+
+    def _apply_game_controller_cursor(self, ui_state, dt):
+        """Use the right stick and right trigger as the game-mode lab applicator."""
+        width, height = glfw.get_framebuffer_size(self.window)
+        if (
+            self.launch_options.visual_smoke_output
+            and self.launch_options.visual_smoke_controller_cursor
+            and ui_state.trial.game_mode
+        ):
+            ui_state.input_scheme = "controller"
+
+        if (
+            self.launch_options.visual_smoke_output
+            and self.launch_options.visual_smoke_controller_cursor
+            and ui_state.trial.game_mode
+            and not ui_state.trial.paused
+            and width > 0
+            and height > 0
+        ):
+            if self.game_cursor_screen_pos is None:
+                self.game_cursor_screen_pos = [width * 0.5, height * 0.5]
+            ui_state.game_cursor_active = True
+            ui_state.game_cursor_pos = tuple(self.game_cursor_screen_pos)
+            ui_state.game_draw_held = self.launch_options.visual_smoke_controller_feed
+            return
+
+        self.game_cursor_screen_pos = apply_game_cursor_to_state(
+            ui_state,
+            self.joystick_state,
+            dt,
+            (width, height),
+            self.game_cursor_screen_pos,
+        )
+
+    def _build_game_cursor_overlay(self, ui_state):
+        """Return a screen-space marker for the controller lab applicator."""
+        if not (
+            ui_state.trial.game_mode
+            and ui_state.game_cursor_active
+            and not ui_state.trial.briefing_active
+            and not ui_state.trial.won
+            and not ui_state.trial.failed
+            and not ui_state.trial.paused
+        ):
+            return None
+        return {
+            'pos': ui_state.game_cursor_pos,
+            'drawing': ui_state.game_draw_held,
+        }
+
+    def _build_trial_zone_overlays(self, ui_state):
+        """Convert Trial Dish texture-space objective zones to screen-space overlays."""
+        if not ui_state.trial.game_mode:
+            return []
+
+        tex_size = self.sim.view_tex.size
+        overlays = []
+        for zone in ui_state.trial.zones:
+            cx, cy = self.camera.tex_to_screen(zone.center, tex_size)
+            rx, _ = self.camera.tex_to_screen((zone.center[0] + zone.radius, zone.center[1]), tex_size)
+            _, ry = self.camera.tex_to_screen((zone.center[0], zone.center[1] + zone.radius), tex_size)
+            radius_px = max(8.0, (abs(rx - cx) + abs(ry - cy)) * 0.5)
+            overlays.append({
+                'name': zone.name,
+                'center': (cx, cy),
+                'radius': radius_px,
+                'active': zone.active,
+                'activity': zone.activity,
+                'rival_activity': zone.rival_activity,
+                'rival_controlled': zone.rival_controlled,
+            })
+        return overlays
+
+    def _build_trial_hazard_overlay(self, ui_state):
+        """Convert the Trial Dish antibiotic band to a screen-space rectangle."""
+        trial = ui_state.trial
+        if not trial.game_mode or not trial.hazard_enabled:
+            return None
+
+        half_width = trial.hazard_width * 0.5
+        x0 = trial.hazard_center_x - half_width
+        x1 = trial.hazard_center_x + half_width
+        p0 = self.camera.tex_to_screen((x0, 0.0), self.sim.view_tex.size)
+        p1 = self.camera.tex_to_screen((x1, 1.0), self.sim.view_tex.size)
+        return {
+            'name': trial.hazard_name,
+            'min': (min(p0[0], p1[0]), min(p0[1], p1[1])),
+            'max': (max(p0[0], p1[0]), max(p0[1], p1[1])),
+            'strength': trial.hazard_strength,
+        }
+
+    def _build_trial_rival_overlay(self, ui_state):
+        """Convert the Trial Dish rival bloom source to a screen-space circle."""
+        trial = ui_state.trial
+        if not trial.game_mode or not trial.rival_enabled:
+            return None
+
+        tex_size = self.sim.view_tex.size
+        cx, cy = self.camera.tex_to_screen(trial.rival_center, tex_size)
+        age_radius = trial.rival_radius + trial.elapsed_seconds * trial.rival_growth
+        rx, _ = self.camera.tex_to_screen(
+            (trial.rival_center[0] + age_radius, trial.rival_center[1]),
+            tex_size,
+        )
+        _, ry = self.camera.tex_to_screen(
+            (trial.rival_center[0], trial.rival_center[1] + age_radius),
+            tex_size,
+        )
+        return {
+            'name': trial.rival_name,
+            'center': (cx, cy),
+            'radius': max(8.0, (abs(rx - cx) + abs(ry - cy)) * 0.5),
+            'strength': trial.rival_strength,
+        }
+
     def _apply_controller_actions(self, actions, ui_state):
         """Map gamepad button edges to app-level actions for Deck/controller play."""
+        if ui_state.trial.game_mode:
+            if "game_confirm" in actions:
+                if ui_state.trial.briefing_active:
+                    ui_state.request_trial_start = True
+                elif ui_state.trial.won:
+                    if ui_state.trial.final_trial:
+                        ui_state.request_trial_restart_sequence = True
+                    else:
+                        ui_state.request_trial_next = True
+                elif ui_state.trial.failed:
+                    ui_state.request_trial_retry = True
+            if "game_retry" in actions:
+                ui_state.request_trial_retry = True
+            if (
+                "game_pause" in actions
+                and not ui_state.trial.briefing_active
+                and not ui_state.trial.won
+                and not ui_state.trial.failed
+            ):
+                ui_state.request_trial_pause = True
+            if "game_next" in actions and ui_state.trial.won:
+                if ui_state.trial.final_trial:
+                    ui_state.request_trial_restart_sequence = True
+                else:
+                    ui_state.request_trial_next = True
+            if (
+                "game_tool" in actions
+                and not ui_state.trial.briefing_active
+                and not ui_state.trial.won
+                and not ui_state.trial.failed
+                and ui_state.trial.irradiation_ready
+            ):
+                ui_state.request_randomize_mutations = True
+            if (
+                "game_revert" in actions
+                and not ui_state.trial.briefing_active
+                and not ui_state.trial.won
+                and not ui_state.trial.failed
+                and ui_state.trial.revert_ready
+            ):
+                ui_state.request_revert_strain = True
+            if "toggle_sidebar" in actions and self.ui.game_editor_enabled:
+                self.ui.show_sidebar = not self.ui.show_sidebar
+            if "game_exit" in actions and ui_state.trial.paused:
+                ui_state.request_exit = True
+            if "toggle_mouse_mode" in actions and self.ui.game_editor_enabled:
+                if ui_state.preferences.mouse_mode == "Select Particle":
+                    ui_state.preferences.mouse_mode = "Draw Trail"
+                else:
+                    ui_state.preferences.mouse_mode = "Select Particle"
+            return
+
         if "toggle_pause" in actions:
             ui_state.sim.going = not ui_state.sim.going
         if "reset_particles" in actions:
@@ -372,6 +870,19 @@ class App:
                 ui_state.preferences.mouse_mode = "Draw Trail"
             else:
                 ui_state.preferences.mouse_mode = "Select Particle"
+
+    def _apply_input_scheme(self, ui_state, controller_actions):
+        """Keep Trial Dish prompts aligned with the most recent active input family."""
+        controller_axis_active = any(
+            abs(self.joystick_state.get(axis, 0.0)) > 0.01
+            for axis in ("left_x", "left_y", "right_x", "right_y")
+        )
+        controller_trigger_active = (
+            self.joystick_state.get("lt", 0.0) > 0.25
+            or self.joystick_state.get("rt", 0.0) > 0.25
+        )
+        if controller_actions or controller_axis_active or controller_trigger_active:
+            ui_state.input_scheme = "controller"
 
     def _render_camera_view(self, ui_state, sweep_mode, sweep_reticle_pos,
                              sweep_reticle_visible, screen_aspect, tiling_mode):
@@ -448,7 +959,10 @@ class App:
     def cleanup(self):
         # Save preferences before cleanup
         ui_state = self.ui.get_state()
-        save_preferences(ui_state.preferences)
+        if self.launch_options.game:
+            save_preferences(self._editor_preferences_snapshot)
+        else:
+            save_preferences(ui_state.preferences)
 
         self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()

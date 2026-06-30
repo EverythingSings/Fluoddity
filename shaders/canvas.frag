@@ -21,6 +21,15 @@ uniform bool erase_mode;       // Right-click eraser active
 uniform bool fill_mode;        // Fill entire canvas for one frame
 uniform int fill_direction_type; // 0=fixed, 1=radial_in, 2=radial_out
 uniform bool canvas_draw_active; // Whether canvas is a draw target
+uniform bool hazard_enabled;   // Game-mode antibiotic band
+uniform float hazard_center_x;
+uniform float hazard_width;
+uniform float hazard_strength;
+uniform bool rival_enabled;    // Game-mode rival culture source
+uniform vec2 rival_center;
+uniform float rival_radius;
+uniform float rival_growth;
+uniform float rival_strength;
 
 // Boundary conditions
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
@@ -273,5 +282,24 @@ void main() {
         }
         fill_vector *= draw_power / 5.0;
         can_out.xy += .25*fill_vector;
+    }
+
+    if (hazard_enabled && hazard_width > 0.0 && hazard_strength > 0.0) {
+        float dist_to_band = abs(texcoord.x - hazard_center_x);
+        float half_width = hazard_width * 0.5;
+        float feather = max(hazard_width * 0.35, 0.001);
+        float band = 1.0 - smoothstep(half_width, half_width + feather, dist_to_band);
+        float decay = clamp(1.0 - hazard_strength * band, 0.0, 1.0);
+        can_out.xyz *= decay;
+    }
+
+    if (rival_enabled && rival_radius > 0.0 && rival_strength > 0.0) {
+        float age = max(float(frame_count) / 60.0, 0.0);
+        float radius = rival_radius + age * rival_growth;
+        float dist_to_rival = length(aspect_correct_uv(texcoord - rival_center));
+        float core = 1.0 - smoothstep(radius, radius + max(radius * 0.35, 0.001), dist_to_rival);
+        vec2 swirl = normalize(vec2(-(texcoord.y - rival_center.y), texcoord.x - rival_center.x) + vec2(0.0001));
+        can_out.xy = mix(can_out.xy, swirl * 0.03, core * rival_strength);
+        can_out.z += core * rival_strength * 0.035;
     }
 }

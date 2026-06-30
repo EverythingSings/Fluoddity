@@ -84,6 +84,115 @@ pip install requirements, then run main.py
 OR
 Download a release and run Fluoddity.exe 
 
+## Game Prototype
+
+This fork is starting to grow a game shell around the simulation. The current V1 direction is an alien petri-dish xenotech game mode, documented in [docs/game_v1_prototype.md](docs/game_v1_prototype.md).
+
+Current stack and porting strategy are tracked in [docs/tech_stack_strategy.md](docs/tech_stack_strategy.md).
+
+Run the first Trial Dish shell with:
+
+```bash
+python main.py --game
+```
+
+The default game shell hides raw editor panels and text-entry save/config tools.
+For development work inside a Trial Dish launch, use:
+
+```bash
+python main.py --game --allow-editor-in-game
+```
+
+In game mode, mouse/touch can apply Nutrient Gel directly. With a controller,
+use the right stick to aim the lab cursor and R2 to apply Nutrient Gel.
+Press Menu to pause or resume the active assay. Press View from the paused
+state to exit the player shell.
+The Trial Dish HUD adapts its prompt labels to the most recent controller or
+keyboard/mouse input.
+
+Check Trial Dish logic without launching OpenGL:
+
+```bash
+python scripts/smoke_trial_dishes.py
+python scripts/smoke_game_controller.py
+python scripts/smoke_game_shell_contract.py
+python scripts/smoke_steam_input_manifest.py
+python scripts/smoke_steam_deck_packaging.py
+```
+
+Run the V1 prototype smoke suite:
+
+```bash
+python scripts/smoke_game_v1.py
+```
+
+Run the visual V1 checks, including rendered success and failure result screens:
+
+```bash
+python scripts/smoke_game_v1.py --with-visual --with-fed-results
+```
+
+Use a specific interpreter when validating a venv or platform install:
+
+```bash
+python scripts/smoke_game_v1.py --python .venv/Scripts/python.exe
+```
+
+Check that game mode launches and stays alive briefly:
+
+```bash
+python scripts/smoke_game_runtime.py
+```
+
+Record game-mode frame timing at the Deck-sized profile:
+
+```bash
+python scripts/smoke_game_performance.py --extra-arg=--deck-performance
+```
+
+Prepare a Steam Deck hardware validation report:
+
+```bash
+python scripts/prepare_steam_deck_packet.py
+```
+
+This writes a packet index, Steam Input handoff, manual playtest sheet,
+playtest summary, tuning reference, tuning plan, and Steam Deck preflight
+report under `artifacts/`.
+
+For a packet that also reruns local automated gates:
+
+```bash
+python scripts/prepare_steam_deck_packet.py --run-automated --with-visual --with-fed-results
+```
+
+Capture and validate a nonblank game-mode frame:
+
+```bash
+python scripts/smoke_game_visual.py
+```
+
+Capture later trial states:
+
+```bash
+python scripts/smoke_game_visual.py --trial 1 --start --frame 25 --expect-active-zones 1 --expect-progress-min 0.01 --expect-status running
+python scripts/smoke_game_visual.py --trial 1 --start --frame 45 --controller-cursor --controller-feed --expect-active-zones 1 --expect-progress-min 0.01 --expect-status running --expect-controller-cursor --expect-controller-draw
+python scripts/smoke_game_visual.py --trial 1 --start --pause --frame 45 --controller-cursor --controller-feed --expect-status running --expect-paused --expect-no-controller-cursor --expect-no-controller-draw
+python scripts/smoke_game_visual.py --trial 2 --start --feed --frame 90 --expect-active-zones 2 --expect-progress-min 0.05 --expect-status running
+python scripts/smoke_game_visual.py --trial 3 --start --feed --frame 90 --expect-active-zones 2 --expect-rival-zones 1 --expect-progress-min 0.01 --expect-status running
+python scripts/smoke_game_visual.py --trial 1 --start --feed --frame 240 --expect-active-zones 1 --expect-progress-min 1.0 --expect-status won
+python scripts/smoke_game_visual.py --trial 2 --start --resolve --frame 120 --expect-progress-max 0.99 --expect-status failed
+python scripts/smoke_game_visual.py --trial 2 --start --feed --frame 450 --expect-active-zones 2 --expect-progress-min 1.0 --expect-status won
+python scripts/smoke_game_visual.py --trial 3 --start --feed --resolve --frame 120 --expect-active-zones 2 --expect-rival-zones 1 --expect-progress-min 1.0 --expect-status won
+```
+
+Pass launch variants through with repeated `--extra-arg` values:
+
+```bash
+python scripts/smoke_game_runtime.py --extra-arg=--deck-performance
+python scripts/smoke_game_performance.py --extra-arg=--deck-performance --min-fps 30
+```
+
 ## Steam Deck / Linux
 
 ```bash
@@ -93,11 +202,15 @@ bash scripts/build_linux.sh
 ./dist/Fluoddity/run_steam_deck.sh
 ```
 
+The generated Deck wrapper launches the player shell with `--steam-deck --game`.
+
 For source runs without packaging:
 
 ```bash
-python main.py --steam-deck
+python main.py --steam-deck --game
 ```
+
+Steam Input artifacts live under `steam_input/` and are copied into `dist/Fluoddity/steam_input/` by `scripts/build_linux.sh`. This includes the initial action manifest, Trial Dish prompt glyph map, checked placeholder SVG glyphs, and a generated handoff report for the Steamworks import pass. Local smokes verify the manifest, localization tokens, prompt action ids, glyph metadata, packaged glyph file presence, active HUD prompt-to-glyph path, and recommended default bindings. A real Steamworks import/default configuration pass and official Steam/Deck glyph rendering pass are still required before this should be treated as final store-package input support.
 
 ## Building
 

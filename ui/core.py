@@ -13,6 +13,7 @@ import moderngl
 from dataclasses import dataclass
 from state import UIState, SimState, CameraState, RecordingState
 from services.config_saver import ConfigSaver, PhysicsConfig
+from services.trial_prompts import trial_action_hints, trial_action_prompt_specs
 from utilities.keybinding_management import KeybindingManager
 from utilities.paths import get_user_physics_configs_dir, get_app_physics_configs_dir
 
@@ -62,6 +63,7 @@ class UI(
         self.view_option_labels = view_option_labels
         self.multi_load_service = multi_load_service
         self.param_lock_service = None  # Set by App after construction
+        self.game_editor_enabled = True
 
         # Initialize keybinding manager
         self.keybindings = KeybindingManager()
@@ -74,7 +76,8 @@ class UI(
         io.config_flags |= imgui.ConfigFlags_.docking_enable  # Enable docking
         io.config_flags |= imgui.ConfigFlags_.nav_enable_keyboard
         io.config_flags |= imgui.ConfigFlags_.nav_enable_gamepad
-        io.font_global_scale = ui_scale
+        if hasattr(io, "font_global_scale"):
+            io.font_global_scale = ui_scale
 
         # Default font at normal size
         io.fonts.add_font_default()
@@ -206,6 +209,13 @@ class UI(
         self._request_clear_canvas = False
         self._request_camera_reset = False
         self._request_clear_canvas_and_fields = False
+        self._request_trial_start = False
+        self._request_trial_retry = False
+        self._request_trial_next = False
+        self._request_trial_restart_sequence = False
+        self._request_trial_pause = False
+        self._request_revert_strain = False
+        self._request_exit = False
 
         # Config clipboard flags
         self._request_preview_clipboard_config = False
@@ -314,6 +324,8 @@ class UI(
         if action != glfw.PRESS:
             return
 
+        self.state.input_scheme = "keyboard_mouse"
+
         # Track ALL clicks (including imgui) for sweep preview restore
         if button == glfw.MOUSE_BUTTON_LEFT:
             self._any_left_click_pending = True
@@ -356,8 +368,14 @@ class UI(
 
         # One-shot key commands
         if action == glfw.PRESS:
+            self.state.input_scheme = "keyboard_mouse"
             ctrl_pressed = mods & glfw.MOD_CONTROL
             shift_pressed = mods & glfw.MOD_SHIFT
+
+            if self.state.trial.game_mode and self._handle_game_keypress(key):
+                return
+            if not self._editor_tools_visible():
+                return
 
             # Config save/load with Ctrl+C/Ctrl+V
             if ctrl_pressed and key == self.keybindings.get_key("copy_config_with_ctrl"):
@@ -405,6 +423,67 @@ class UI(
                 glfw.set_window_should_close(window, True)
             #elif key == self.keybindings.get_key("toggle_tooltips"):
             #    self.show_demo_window = not self.show_demo_window
+
+    def _handle_game_keypress(self, key):
+        """Handle Trial Dish one-shot keys, with fallbacks for existing user configs."""
+        trial = self.state.trial
+        confirm_key = self.keybindings.get_key("game_confirm")
+        retry_key = self.keybindings.get_key("game_retry")
+        next_key = self.keybindings.get_key("game_next")
+        tool_key = self.keybindings.get_key("game_tool")
+        revert_key = self.keybindings.get_key("game_revert")
+        pause_key = self.keybindings.get_key("game_pause")
+        exit_key = self.keybindings.get_key("game_exit")
+
+        if key == confirm_key or key == glfw.KEY_ENTER:
+            if trial.briefing_active:
+                self._request_trial_start = True
+            elif trial.won:
+                if trial.final_trial:
+                    self._request_trial_restart_sequence = True
+                else:
+                    self._request_trial_next = True
+            elif trial.failed:
+                self._request_trial_retry = True
+            return True
+
+        if key == retry_key or key == glfw.KEY_BACKSPACE:
+            self._request_trial_retry = True
+            return True
+
+        if key == pause_key or key == glfw.KEY_ESCAPE:
+            if not trial.briefing_active and not trial.won and not trial.failed:
+                self._request_trial_pause = True
+            return True
+
+        if key == exit_key or key == glfw.KEY_Q:
+            if trial.paused:
+                self._request_exit = True
+            return True
+
+        if key == next_key or key == glfw.KEY_N:
+            if trial.won:
+                if trial.final_trial:
+                    self._request_trial_restart_sequence = True
+                else:
+                    self._request_trial_next = True
+            return True
+
+        if (
+            key == tool_key
+            or key == glfw.KEY_G
+            or key == self.keybindings.get_key("randomize_mutations")
+        ):
+            if not trial.briefing_active and not trial.won and not trial.failed and trial.irradiation_ready:
+                self._request_randomize_mutations = True
+            return True
+
+        if key == revert_key or key == glfw.KEY_C:
+            if not trial.briefing_active and not trial.won and not trial.failed and trial.revert_ready:
+                self._request_revert_strain = True
+            return True
+
+        return False
 
     def char_callback(self, window, char):
         if self.imgui_char_callback:
@@ -463,6 +542,13 @@ class UI(
         self.state.request_clear_canvas = self._request_clear_canvas
         self.state.request_camera_reset = self._request_camera_reset
         self.state.request_clear_canvas_and_fields = self._request_clear_canvas_and_fields
+        self.state.request_trial_start = self._request_trial_start
+        self.state.request_trial_retry = self._request_trial_retry
+        self.state.request_trial_next = self._request_trial_next
+        self.state.request_trial_restart_sequence = self._request_trial_restart_sequence
+        self.state.request_trial_pause = self._request_trial_pause
+        self.state.request_revert_strain = self._request_revert_strain
+        self.state.request_exit = self._request_exit
 
         # Transfer field loader flags
         self.state.request_load_force_field_image = self._request_load_force_field_image
@@ -520,6 +606,13 @@ class UI(
         self._request_clear_canvas = False
         self._request_camera_reset = False
         self._request_clear_canvas_and_fields = False
+        self._request_trial_start = False
+        self._request_trial_retry = False
+        self._request_trial_next = False
+        self._request_trial_restart_sequence = False
+        self._request_trial_pause = False
+        self._request_revert_strain = False
+        self._request_exit = False
         self._request_load_force_field_image = False
         self._request_load_strafe_field_image = False
         self._field_load_image_path = ""
@@ -647,47 +740,59 @@ class UI(
         # Main application menu bar
         self.render_main_menu_bar()
 
-        # Render popup modals (Save, Overwrite, Delete) - always rendered regardless of sidebar
-        self.render_popup_modals()
+        # Render popup modals (Save, Overwrite, Delete) when editor tools are exposed.
+        if not self.state.trial.game_mode or self.game_editor_enabled:
+            self.render_popup_modals()
 
         # Render Physics Settings window if sidebar is visible
-        if self.show_sidebar:
+        show_editor_panels = self.show_sidebar and self._editor_tools_visible()
+        if show_editor_panels:
             self.render_physics_settings_window()
 
         # Render Preferences window if sidebar is visible AND preferences are enabled
-        if self.show_sidebar and self.state.preferences.show_preferences_window:
+        if show_editor_panels and self.state.preferences.show_preferences_window:
             self.render_preferences_window()
 
+        show_support_windows = self._editor_tools_visible()
+
         # Render Controls help window if visible
-        if self.state.preferences.show_controls_window:
+        if show_support_windows and self.state.preferences.show_controls_window:
             self.render_controls_window()
 
         # Render Parameter Sweeps help window if visible
-        if self.state.preferences.show_parameter_sweeps_window:
+        if show_support_windows and self.state.preferences.show_parameter_sweeps_window:
             self.render_parameter_sweeps_window()
 
         # Render Tutorial help window if visible
-        if self.state.preferences.show_tutorial_window:
+        if show_support_windows and self.state.preferences.show_tutorial_window:
             self.render_tutorial_window()
 
         # Render Performance help window if visible
-        if self.state.preferences.show_performance_window:
+        if show_support_windows and self.state.preferences.show_performance_window:
             self.render_performance_window()
 
         # Render Screen Recording window if visible (hidden when windows toggled off)
-        if self.show_sidebar and self.show_video_recording_window:
+        if show_editor_panels and self.show_video_recording_window:
             self.render_video_recording_window()
 
         # Render history window if visible (hidden when windows toggled off)
-        if self.show_sidebar and self.show_history_window:
+        if show_editor_panels and self.show_history_window:
             self.render_history_window()
 
         # Render Advanced Drawing window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.advanced_drawing_enabled:
+        if show_editor_panels and self.state.preferences.advanced_drawing_enabled:
             self.render_advanced_drawing_window()
 
-        # Render field loader window (transient, not gated by sidebar)
-        self.render_field_loader_window()
+        # Render field loader window (transient editor tool, not part of player shell)
+        if show_support_windows:
+            self.render_field_loader_window()
+
+        if self.state.trial.game_mode:
+            self.render_trial_hazard_overlay()
+            self.render_trial_rival_overlay()
+            self.render_trial_zone_overlay()
+            self.render_game_cursor_overlay()
+            self.render_trial_hud()
 
         if self.show_demo_window:
             imgui.show_demo_window()
@@ -701,6 +806,395 @@ class UI(
 
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
+
+    def _editor_tools_visible(self) -> bool:
+        """Whether raw editor windows and shortcuts are available in this shell."""
+        return not self.state.trial.game_mode or self.game_editor_enabled
+
+    def render_trial_hud(self):
+        """Render the first game-mode Trial Dish HUD."""
+        trial = self.state.trial
+        viewport = imgui.get_main_viewport()
+        margin = 16.0
+        width = min(430.0, max(320.0, viewport.work_size.x * 0.34))
+        imgui.set_next_window_pos(
+            imgui.ImVec2(viewport.work_pos.x + margin, viewport.work_pos.y + margin),
+            imgui.Cond_.always,
+        )
+        imgui.set_next_window_size(imgui.ImVec2(width, 0.0), imgui.Cond_.always)
+        flags = (
+            imgui.WindowFlags_.no_resize
+            | imgui.WindowFlags_.no_collapse
+            | imgui.WindowFlags_.no_saved_settings
+        )
+        imgui.begin("Trial Dish", None, flags)
+        imgui.text(trial.title)
+        imgui.same_line()
+        imgui.text_disabled(f"{trial.trial_index + 1}/{trial.trial_count}")
+        imgui.separator()
+        imgui.text_wrapped(trial.objective)
+        imgui.spacing()
+        if trial.briefing_active:
+            if trial.station_line:
+                imgui.text_disabled(trial.station_line)
+                imgui.spacing()
+            if trial.story_line:
+                imgui.text_wrapped(trial.story_line)
+                imgui.spacing()
+            imgui.text_wrapped(trial.briefing)
+            imgui.spacing()
+            for step in trial.protocol_steps:
+                imgui.text_wrapped(f"- {step}")
+            imgui.spacing()
+            if trial.guidance_message:
+                imgui.text_disabled(trial.guidance_title)
+                imgui.text_wrapped(trial.guidance_message)
+                imgui.spacing()
+            if imgui.button("Start Experiment"):
+                self._request_trial_start = True
+            self._render_trial_action_hints(trial)
+            imgui.end()
+            return
+
+        if not trial.won and not trial.failed:
+            self._render_trial_tools(trial)
+        if trial.paused:
+            imgui.spacing()
+            imgui.text_colored(imgui.ImVec4(1.0, 0.82, 0.35, 1.0), "Assay Paused")
+            imgui.text_wrapped("The dish is held in station stasis.")
+            if imgui.button("Resume"):
+                self._request_trial_pause = True
+            imgui.same_line()
+            if imgui.button("Retry"):
+                self._request_trial_retry = True
+            imgui.same_line()
+            if imgui.button("Exit"):
+                self._request_exit = True
+            self._render_trial_action_hints(trial)
+            imgui.end()
+            return
+
+        intro_trial = trial.trial_id == "bloom"
+        if trial.hazard_enabled:
+            if trial.trial_id == "antibiotic_band":
+                imgui.text(f"Counterforce: {trial.hazard_name}")
+            else:
+                imgui.text(f"Hazard: {trial.hazard_name} ({int(trial.hazard_strength * 100)}%)")
+        if trial.rival_enabled:
+            imgui.text(
+                f"Rival pressure: culture {trial.player_controlled_zones} sites / "
+                f"rival {trial.rival_controlled_zones}"
+            )
+        if trial.tool_feedback and trial.tool_feedback_seconds > 0.0:
+            imgui.text_disabled(trial.tool_feedback)
+        if not intro_trial:
+            imgui.text(f"Time: {trial.elapsed_seconds:05.1f}s / {trial.failure_seconds:05.1f}s")
+        if trial.objective_status:
+            imgui.text_wrapped(trial.objective_status)
+        progress_label = (
+            f"Stability {int(trial.progress * 100)}%"
+            if intro_trial
+            else f"{int(trial.progress * 100)}%"
+        )
+        imgui.progress_bar(trial.progress, imgui.ImVec2(-1.0, 0.0), progress_label)
+        show_guidance = (
+            trial.guidance_message
+            and not trial.won
+            and not trial.failed
+        )
+        if show_guidance:
+            imgui.spacing()
+            imgui.text_disabled(trial.guidance_title)
+            imgui.text_wrapped(trial.guidance_message)
+            imgui.spacing()
+
+        if not intro_trial:
+            zone_labels = []
+            for zone in trial.zones:
+                if zone.rival_controlled:
+                    state = "rival"
+                else:
+                    state = "active" if zone.active else "dormant"
+                zone_labels.append(f"{zone.name}:{state}")
+            imgui.text("Sites: " + "  ".join(zone_labels))
+
+        if trial.won:
+            imgui.spacing()
+            imgui.text_colored(imgui.ImVec4(0.35, 1.0, 0.65, 1.0), trial.result_title or "Culture Stabilized")
+            if trial.result_grade:
+                imgui.text(f"Readout: {trial.result_grade}")
+            if trial.result_summary:
+                imgui.text_wrapped(trial.result_summary)
+            if trial.result_next_step:
+                imgui.spacing()
+                imgui.text_wrapped(trial.result_next_step)
+            if not trial.final_trial:
+                if imgui.button("Next Trial"):
+                    self._request_trial_next = True
+                imgui.same_line()
+            else:
+                if imgui.button("Restart Sequence"):
+                    self._request_trial_restart_sequence = True
+                imgui.same_line()
+            if imgui.button("Retry"):
+                self._request_trial_retry = True
+            self._render_trial_action_hints(trial)
+        elif trial.failed:
+            imgui.spacing()
+            imgui.text_colored(imgui.ImVec4(1.0, 0.35, 0.35, 1.0), trial.result_title or "Culture Failed")
+            if trial.result_grade:
+                imgui.text(f"Readout: {trial.result_grade}")
+            if trial.result_summary:
+                imgui.text_wrapped(trial.result_summary)
+            if trial.result_next_step:
+                imgui.spacing()
+                imgui.text_wrapped(trial.result_next_step)
+            if imgui.button("Retry Trial"):
+                self._request_trial_retry = True
+            self._render_trial_action_hints(trial)
+        else:
+            imgui.spacing()
+            if not intro_trial:
+                imgui.text_wrapped(trial.running_hint)
+            self._render_trial_action_hints(trial)
+
+        imgui.end()
+
+    @staticmethod
+    def trial_action_hints(trial, keybindings=None, input_scheme: str = "hybrid") -> list[str]:
+        return trial_action_hints(trial, keybindings, input_scheme)
+
+    @staticmethod
+    def trial_action_prompt_specs(trial, keybindings=None, input_scheme: str = "hybrid"):
+        return trial_action_prompt_specs(trial, keybindings, input_scheme)
+
+    @staticmethod
+    def trial_tool_status_labels(trial) -> dict[str, str]:
+        """Return compact readiness labels for active lab tools."""
+        labels = {}
+        if trial.irradiation_unlocked:
+            if trial.irradiation_charges <= 0:
+                labels["irradiation"] = (
+                    f"0/{trial.irradiation_max_charges} depleted"
+                )
+            elif trial.irradiation_cooldown_remaining > 0.0:
+                labels["irradiation"] = (
+                    f"{trial.irradiation_charges}/{trial.irradiation_max_charges} "
+                    f"recharge {trial.irradiation_cooldown_remaining:.1f}s"
+                )
+            else:
+                labels["irradiation"] = (
+                    f"{trial.irradiation_charges}/{trial.irradiation_max_charges} ready"
+                )
+
+        if trial.revert_unlocked:
+            if trial.revert_charges <= 0:
+                state = "spent"
+            elif trial.preserved_strain_available:
+                state = "archive ready"
+            else:
+                state = "no archive"
+            labels["revert"] = f"{trial.revert_charges}/{trial.revert_max_charges} {state}"
+        return labels
+
+    def _render_trial_action_hints(self, trial) -> None:
+        prompts = self.trial_action_prompt_specs(trial, self.keybindings, self.state.input_scheme)
+        if not prompts:
+            return
+        imgui.spacing()
+        imgui.separator()
+        imgui.text_disabled("Controls")
+        for prompt in prompts:
+            self._render_trial_prompt(prompt)
+
+    @staticmethod
+    def _render_trial_prompt(prompt) -> None:
+        rendered_input = UI._render_trial_prompt_input(prompt)
+        if not rendered_input:
+            imgui.text_wrapped(prompt.label)
+            return
+
+        imgui.same_line()
+        imgui.text_wrapped(f": {prompt.label}")
+
+    @staticmethod
+    def _render_trial_prompt_input(prompt) -> bool:
+        """Render the input side of a Trial Dish prompt.
+
+        Controller prompts use chip-like text backed by glyph metadata. The
+        official Steam/Deck glyph renderer can replace this without changing
+        the prompt selection logic.
+        """
+        if prompt.input_scheme == "keyboard_mouse" or not prompt.has_controller_glyphs:
+            input_text = prompt.render_input_text()
+            if not input_text:
+                return False
+            imgui.text_colored(imgui.ImVec4(0.58, 0.82, 1.0, 1.0), input_text)
+            return True
+
+        for index, label in enumerate(prompt.controller_labels):
+            if index > 0:
+                imgui.same_line()
+                imgui.text_disabled("+")
+                imgui.same_line()
+            imgui.text_colored(imgui.ImVec4(0.72, 0.90, 1.0, 1.0), f"[{label}]")
+
+        if prompt.input_scheme == "hybrid" and prompt.keyboard_labels:
+            imgui.same_line()
+            imgui.text_disabled("/")
+            imgui.same_line()
+            imgui.text_colored(
+                imgui.ImVec4(0.58, 0.82, 1.0, 1.0),
+                " + ".join(prompt.keyboard_labels),
+            )
+        return True
+
+    def _render_trial_tools(self, trial):
+        """Render compact game-facing lab tool controls for the current trial."""
+        tool_status = self.trial_tool_status_labels(trial)
+        imgui.text("Tools:")
+        imgui.text_disabled("Nutrient Gel")
+
+        if not trial.irradiation_unlocked:
+            return
+
+        is_running = not trial.briefing_active and not trial.won and not trial.failed and not trial.paused
+        can_irradiate = is_running and trial.irradiation_ready
+        if not can_irradiate:
+            imgui.begin_disabled()
+        if imgui.button("Irradiate Strain"):
+            self._request_randomize_mutations = True
+        if not can_irradiate:
+            imgui.end_disabled()
+        imgui.same_line()
+        imgui.text_disabled(tool_status.get("irradiation", ""))
+
+        if not trial.revert_unlocked:
+            return
+
+        can_revert = is_running and trial.revert_ready
+        if not can_revert:
+            imgui.begin_disabled()
+        if imgui.button("Revert Strain"):
+            self._request_revert_strain = True
+        if not can_revert:
+            imgui.end_disabled()
+        imgui.same_line()
+        imgui.text_disabled(tool_status.get("revert", ""))
+
+    def render_trial_zone_overlay(self):
+        """Draw objective zone circles over the simulation view."""
+        overlays = self._display_info.get('trial_zone_overlays', [])
+        if not overlays:
+            return
+
+        draw_list = imgui.get_foreground_draw_list()
+        show_labels = len(overlays) > 1
+        for zone in overlays:
+            center = imgui.ImVec2(zone['center'][0], zone['center'][1])
+            radius = zone['radius']
+            if zone.get('rival_controlled'):
+                color = imgui.color_convert_float4_to_u32(imgui.ImVec4(1.0, 0.22, 0.82, 0.95))
+                fill = imgui.color_convert_float4_to_u32(imgui.ImVec4(0.95, 0.10, 0.65, 0.14))
+            elif zone['active']:
+                color = imgui.color_convert_float4_to_u32(imgui.ImVec4(0.25, 1.0, 0.62, 0.95))
+                fill = imgui.color_convert_float4_to_u32(imgui.ImVec4(0.10, 0.80, 0.35, 0.13))
+            else:
+                color = imgui.color_convert_float4_to_u32(imgui.ImVec4(1.0, 0.82, 0.25, 0.88))
+                fill = imgui.color_convert_float4_to_u32(imgui.ImVec4(1.0, 0.55, 0.10, 0.09))
+            draw_list.add_circle_filled(center, radius, fill, 48)
+            draw_list.add_circle(center, radius, color, 48, 2.0)
+            if show_labels:
+                label_pos = imgui.ImVec2(center.x - 5.0, center.y - radius - 18.0)
+                draw_list.add_text(label_pos, color, zone['name'])
+
+    def render_trial_rival_overlay(self):
+        """Draw the rival culture source over the simulation view."""
+        rival = self._display_info.get('trial_rival_overlay')
+        if not rival:
+            return
+
+        draw_list = imgui.get_foreground_draw_list()
+        center = imgui.ImVec2(rival['center'][0], rival['center'][1])
+        radius = rival['radius']
+        fill = imgui.color_convert_float4_to_u32(imgui.ImVec4(0.95, 0.08, 0.65, 0.12))
+        edge = imgui.color_convert_float4_to_u32(imgui.ImVec4(1.0, 0.22, 0.82, 0.76))
+        text = imgui.color_convert_float4_to_u32(imgui.ImVec4(1.0, 0.45, 0.86, 0.95))
+        draw_list.add_circle_filled(center, radius, fill, 64)
+        draw_list.add_circle(center, radius, edge, 64, 2.0)
+        draw_list.add_text(
+            imgui.ImVec2(center.x - radius, center.y + radius + 8.0),
+            text,
+            rival['name'],
+        )
+
+    def render_trial_hazard_overlay(self):
+        """Draw the antibiotic band counterforce over the simulation view."""
+        hazard = self._display_info.get('trial_hazard_overlay')
+        if not hazard:
+            return
+
+        draw_list = imgui.get_foreground_draw_list()
+        min_pos = imgui.ImVec2(hazard['min'][0], hazard['min'][1])
+        max_pos = imgui.ImVec2(hazard['max'][0], hazard['max'][1])
+        fill = imgui.color_convert_float4_to_u32(imgui.ImVec4(0.9, 0.18, 0.28, 0.16))
+        edge = imgui.color_convert_float4_to_u32(imgui.ImVec4(1.0, 0.25, 0.35, 0.72))
+        text = imgui.color_convert_float4_to_u32(imgui.ImVec4(1.0, 0.48, 0.55, 0.95))
+        draw_list.add_rect_filled(min_pos, max_pos, fill, 0.0)
+        draw_list.add_rect(min_pos, max_pos, edge, 0.0, 2.0, 0)
+        draw_list.add_text(
+            imgui.ImVec2(min_pos.x + 8.0, min_pos.y + 28.0),
+            text,
+            hazard['name'],
+        )
+
+    def render_game_cursor_overlay(self):
+        """Draw the controller lab applicator cursor."""
+        cursor = self._display_info.get('game_cursor')
+        if not cursor:
+            return
+
+        draw_list = imgui.get_foreground_draw_list()
+        pos = cursor['pos']
+        center = imgui.ImVec2(pos[0], pos[1])
+        drawing = cursor.get('drawing', False)
+        edge = imgui.color_convert_float4_to_u32(
+            imgui.ImVec4(0.30, 1.0, 0.66, 0.95)
+            if drawing
+            else imgui.ImVec4(0.70, 0.92, 1.0, 0.82)
+        )
+        fill = imgui.color_convert_float4_to_u32(
+            imgui.ImVec4(0.12, 0.85, 0.40, 0.18)
+            if drawing
+            else imgui.ImVec4(0.25, 0.55, 0.95, 0.08)
+        )
+        radius = 16.0 if drawing else 12.0
+        draw_list.add_circle_filled(center, radius, fill, 32)
+        draw_list.add_circle(center, radius, edge, 32, 2.0)
+        draw_list.add_line(
+            imgui.ImVec2(center.x - radius - 5.0, center.y),
+            imgui.ImVec2(center.x - 4.0, center.y),
+            edge,
+            1.5,
+        )
+        draw_list.add_line(
+            imgui.ImVec2(center.x + 4.0, center.y),
+            imgui.ImVec2(center.x + radius + 5.0, center.y),
+            edge,
+            1.5,
+        )
+        draw_list.add_line(
+            imgui.ImVec2(center.x, center.y - radius - 5.0),
+            imgui.ImVec2(center.x, center.y - 4.0),
+            edge,
+            1.5,
+        )
+        draw_list.add_line(
+            imgui.ImVec2(center.x, center.y + 4.0),
+            imgui.ImVec2(center.x, center.y + radius + 5.0),
+            edge,
+            1.5,
+        )
 
     def _delayed_tooltip(self, text: str):
         """Show tooltip with delay, requiring mouse to be stationary."""

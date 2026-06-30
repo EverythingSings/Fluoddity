@@ -17,6 +17,13 @@
   "toggle_parameter_sweep": "F",
   "randomize_rules": "Z",
   "toggle_sidebar": "X",
+  "game_confirm": "ENTER",
+  "game_retry": "BACKSPACE",
+  "game_next": "N",
+  "game_tool": "G",
+  "game_revert": "C",
+  "game_pause": "ESCAPE",
+  "game_exit": "Q",
   "exit_keybinding": "ESCAPE",
   "reset_keybinding": "R"
 }

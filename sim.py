@@ -240,7 +240,16 @@ class Sim:
                    strong_determinism: bool = False,
                    brush_mode: int = 0, fixed_direction_heading: float = 0.0,
                    erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
-                   canvas_draw_active: bool = True):
+                   canvas_draw_active: bool = True,
+                   hazard_enabled: bool = False,
+                   hazard_center_x: float = 0.5,
+                   hazard_width: float = 0.0,
+                   hazard_strength: float = 0.0,
+                   rival_enabled: bool = False,
+                   rival_center: tuple[float, float] = (0.5, 0.5),
+                   rival_radius: float = 0.0,
+                   rival_growth: float = 0.0,
+                   rival_strength: float = 0.0):
         # Boundary conditions mode for wrap behavior
         tryset(self.canvas_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(self.canvas_update_program, 'tiling_mode', tiling_mode)
@@ -300,6 +309,15 @@ class Sim:
         tryset(self.canvas_update_program, 'fill_mode', fill_mode)
         tryset(self.canvas_update_program, 'fill_direction_type', fill_direction_type)
         tryset(self.canvas_update_program, 'canvas_draw_active', canvas_draw_active)
+        tryset(self.canvas_update_program, 'hazard_enabled', hazard_enabled)
+        tryset(self.canvas_update_program, 'hazard_center_x', hazard_center_x)
+        tryset(self.canvas_update_program, 'hazard_width', hazard_width)
+        tryset(self.canvas_update_program, 'hazard_strength', hazard_strength)
+        tryset(self.canvas_update_program, 'rival_enabled', rival_enabled)
+        tryset(self.canvas_update_program, 'rival_center', rival_center)
+        tryset(self.canvas_update_program, 'rival_radius', rival_radius)
+        tryset(self.canvas_update_program, 'rival_growth', rival_growth)
+        tryset(self.canvas_update_program, 'rival_strength', rival_strength)
         if (draw_mode or erase_mode or fill_mode) and mouse_pos is not None and prev_mouse_pos is not None:
             tryset(self.canvas_update_program, 'mouse', mouse_pos)
             tryset(self.canvas_update_program, 'previous_mouse', prev_mouse_pos)
@@ -335,7 +353,16 @@ class Sim:
                canvas_draw_active: bool = True,
                field_texture=None,
                force_field_strength: float = 1.0,
-               strafe_field_strength: float = 1.0):
+               strafe_field_strength: float = 1.0,
+               hazard_enabled: bool = False,
+               hazard_center_x: float = 0.5,
+               hazard_width: float = 0.0,
+               hazard_strength: float = 0.0,
+               rival_enabled: bool = False,
+               rival_center: tuple[float, float] = (0.5, 0.5),
+               rival_radius: float = 0.0,
+               rival_growth: float = 0.0,
+               rival_strength: float = 0.0):
         # Bind the current read buffer for sampling (will write to the other one)
         self.can_textures[self.can_read_index].use(location=1)
         self.brush_tex.use(location=3)
@@ -358,7 +385,9 @@ class Sim:
         self.can_update(ctx, draw_mode, mouse_pos, prev_mouse_pos, draw_size, draw_power,
                         multi_load_service, is_preview_active, tiling_mode, strong_determinism,
                         brush_mode, fixed_direction_heading, erase_mode, fill_mode,
-                        fill_direction_type, canvas_draw_active)
+                        fill_direction_type, canvas_draw_active,
+                        hazard_enabled, hazard_center_x, hazard_width, hazard_strength,
+                        rival_enabled, rival_center, rival_radius, rival_growth, rival_strength)
         self.frame_count += 1
 
         # Increment multi-load progress if active

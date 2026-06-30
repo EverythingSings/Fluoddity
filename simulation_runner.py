@@ -29,14 +29,20 @@ class SimulationRunner:
                               screenshot_in_progress=False):
         """Run simulation step(s) with frame assembly and video recording."""
         self._screenshot_in_progress = screenshot_in_progress
+        self._trial_draw_size_override = None
         self.camera.watercolor_mode = watercolor_mode
         speedmult = ui_state.preferences.speedmult
         motion_blur = ui_state.preferences.motion_blur
 
         # Calculate mouse screen coordinates for draw overlay
         width, height = glfw.get_framebuffer_size(self.window)
-        mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
-        mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
+        pointer_pos = (
+            ui_state.game_cursor_pos
+            if ui_state.game_cursor_active
+            else ui_state.mouse_pos
+        )
+        mouse_x_norm = pointer_pos[0] / width if width > 0 else 0.5
+        mouse_y_norm = pointer_pos[1] / height if height > 0 else 0.5
         mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
 
         # Compute view bounds for tiling mode
@@ -45,6 +51,12 @@ class SimulationRunner:
         # Calculate draw mode parameters
         draw_mode, mouse_tex_coords, draw_power_value = self._compute_draw_params(
             ui_state, tiling_mode
+        )
+        draw_mode, mouse_tex_coords, draw_power_value = self._apply_trial_primer(
+            ui_state, draw_mode, mouse_tex_coords, draw_power_value
+        )
+        draw_mode, mouse_tex_coords, draw_power_value = self._apply_visual_smoke_feed(
+            ui_state, draw_mode, mouse_tex_coords, draw_power_value
         )
 
         # Compute erase mode (right-click drag in Draw Trail mode)
@@ -140,6 +152,41 @@ class SimulationRunner:
         # Update previous mouse position for next frame
         if draw_mode or erase_mode:
             self.prev_mouse_tex_coords = mouse_tex_coords
+        self._trial_draw_size_override = None
+
+    def _apply_trial_primer(self, ui_state, draw_mode, mouse_tex_coords, draw_power_value):
+        """Inject a brief game-mode starter pulse using the normal trail draw path."""
+        trial = ui_state.trial
+        if not (trial.game_mode and trial.primer_remaining > 0.0):
+            return draw_mode, mouse_tex_coords, draw_power_value
+
+        self._trial_draw_size_override = trial.primer_radius
+        center = trial.primer_center
+        self.prev_mouse_tex_coords = (center[0], center[1] - trial.primer_radius * 0.35)
+        return True, center, max(draw_power_value, trial.primer_power)
+
+    def _apply_visual_smoke_feed(self, ui_state, draw_mode, mouse_tex_coords, draw_power_value):
+        """Apply smoke-only nutrient pulses to objective zones for visual QA."""
+        trial = ui_state.trial
+        if not (
+            trial.game_mode
+            and trial.visual_smoke_feed
+            and not trial.briefing_active
+            and not trial.won
+            and not trial.failed
+            and trial.zones
+        ):
+            return draw_mode, mouse_tex_coords, draw_power_value
+
+        zone_index = (self.sim.frame_count // 18) % len(trial.zones)
+        zone = trial.zones[zone_index]
+        self._trial_draw_size_override = max(trial.primer_radius, zone.radius * 0.72)
+        offset = 0.26 + 0.12 * ((self.sim.frame_count // 6) % 3)
+        self.prev_mouse_tex_coords = (
+            zone.center[0] - zone.radius * offset,
+            zone.center[1] - zone.radius * 0.25,
+        )
+        return True, zone.center, max(draw_power_value, trial.primer_power, ui_state.preferences.draw_power)
 
     def _compute_view_bounds(self, tiling_mode, screen_aspect):
         """Compute view bounds for tiling mode.
@@ -161,15 +208,20 @@ class SimulationRunner:
         draw_power_value = 0.0
 
         if draw_mode:
+            pointer_pos = (
+                ui_state.game_cursor_pos
+                if ui_state.game_cursor_active
+                else ui_state.mouse_pos
+            )
             mouse_tex_coords = self.camera.screen_to_tex(
-                ui_state.mouse_pos, self.sim.can.size
+                pointer_pos, self.sim.can.size
             )
             if tiling_mode:
                 mouse_tex_coords = (
                     np.fmod(mouse_tex_coords[0] + 10.0, 1.0),
                     np.fmod(mouse_tex_coords[1] + 10.0, 1.0)
                 )
-            if ui_state.mouse_left_held or ui_state.request_fill_operation:
+            if ui_state.mouse_left_held or ui_state.game_draw_held or ui_state.request_fill_operation:
                 draw_power_value = ui_state.preferences.draw_power
 
         return draw_mode, mouse_tex_coords, draw_power_value
@@ -196,6 +248,8 @@ class SimulationRunner:
             return 0
         if ui_state.sim.parameter_sweeps_enabled:
             return 0
+        if ui_state.game_cursor_active:
+            return ui_state.preferences.draw_size
         return ui_state.preferences.draw_size
 
     def _build_assemble_kwargs(self, ui_state, sweep_mode, sweep_reticle_pos,
@@ -277,12 +331,18 @@ class SimulationRunner:
         # Only send draw_power if canvas is actually a draw target
         effective_draw_power = draw_power_value if canvas_draw_active else 0.0
 
+        draw_size = (
+            self._trial_draw_size_override
+            if self._trial_draw_size_override is not None
+            else ui_state.preferences.draw_size
+        )
+
         self.sim.update(
             self.camera.ctx,
             draw_mode=draw_mode,
             mouse_pos=mouse_tex_coords,
             prev_mouse_pos=self.prev_mouse_tex_coords,
-            draw_size=ui_state.preferences.draw_size,
+            draw_size=draw_size,
             draw_power=effective_draw_power,
             multi_load_service=(
                 self.command_handler.multi_load_service
@@ -300,6 +360,15 @@ class SimulationRunner:
             field_texture = self.advanced_drawing_processor.field_texture,
             force_field_strength=adv_prefs.force_field_strength,
             strafe_field_strength=adv_prefs.strafe_field_strength,
+            hazard_enabled=ui_state.trial.game_mode and ui_state.trial.hazard_enabled,
+            hazard_center_x=ui_state.trial.hazard_center_x,
+            hazard_width=ui_state.trial.hazard_width,
+            hazard_strength=ui_state.trial.hazard_strength,
+            rival_enabled=ui_state.trial.game_mode and ui_state.trial.rival_enabled,
+            rival_center=ui_state.trial.rival_center,
+            rival_radius=ui_state.trial.rival_radius,
+            rival_growth=ui_state.trial.rival_growth,
+            rival_strength=ui_state.trial.rival_strength,
         )
 
         # Check for deferred entity selection only on first physics step

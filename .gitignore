@@ -2,6 +2,7 @@
 *.mp4
 *.png
 *_ffmpeg.log
+artifacts/
 
 # Python
 __pycache__/

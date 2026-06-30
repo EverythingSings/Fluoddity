@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-label="Right stick">
+  <circle cx="40" cy="40" r="30" fill="#111827" stroke="#e5e7eb" stroke-width="4"/>
+  <circle cx="40" cy="40" r="12" fill="#e5e7eb"/>
+  <path d="M40 12v10M40 58v10M12 40h10M58 40h10" stroke="#e5e7eb" stroke-width="4" stroke-linecap="round"/>
+  <text x="40" y="76" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#e5e7eb">RS</text>
+</svg>

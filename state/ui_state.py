@@ -4,6 +4,7 @@ from .camera_state import CameraState
 from .recording_state import RecordingState
 from .preferences_state import PreferencesState
 from .multi_load_state import MultiLoadState
+from .trial_state import TrialState
 
 
 @dataclass
@@ -14,6 +15,7 @@ class UIState:
     recording: RecordingState = field(default_factory=RecordingState)
     preferences: PreferencesState = field(default_factory=PreferencesState)
     multi_load: MultiLoadState = field(default_factory=MultiLoadState)
+    trial: TrialState = field(default_factory=TrialState)
 
     # Input state (updated by callbacks)
     keys_pressed: set = field(default_factory=set)
@@ -30,6 +32,10 @@ class UIState:
     # Continuous mouse state (respects imgui capture)
     mouse_left_held: bool = False
     mouse_right_held: bool = False  # For right-click eraser in Draw Trail mode
+    input_scheme: str = "hybrid"  # hybrid, controller, or keyboard_mouse
+    game_cursor_active: bool = False
+    game_cursor_pos: tuple = (0.0, 0.0)
+    game_draw_held: bool = False
 
     # Advanced drawing one-shot flags
     request_fill_operation: bool = False  # Fill entire canvas/field for one frame
@@ -51,6 +57,13 @@ class UIState:
     request_world_size_change: bool = False
     request_camera_reset: bool = False
     request_clear_canvas_and_fields: bool = False
+    request_trial_start: bool = False
+    request_trial_retry: bool = False
+    request_trial_next: bool = False
+    request_trial_restart_sequence: bool = False
+    request_trial_pause: bool = False
+    request_revert_strain: bool = False
+    request_exit: bool = False
 
     # Config save/load (Ctrl+C/Ctrl+V)
     request_save_config: bool = False

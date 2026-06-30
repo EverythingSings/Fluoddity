@@ -1,4 +1,5 @@
 """Main menu bar: File, Reset, Help, Extras menus with auto-close logic."""
+import glfw
 from imgui_bundle import imgui
 
 
@@ -25,6 +26,10 @@ class MenuBarMixin:
 
     def render_main_menu_bar(self):
         """Render the main application menu bar at the top of the window."""
+        if self.state.trial.game_mode:
+            self.render_game_menu_bar()
+            return
+
         load_submenu_open = False
         any_menu_open_this_frame = False
 
@@ -424,3 +429,93 @@ class MenuBarMixin:
             self.load_menu_watercolor_mode = None  # Clear the watercolor lock
 
         self.load_submenu_was_open = load_submenu_open
+
+    def render_game_menu_bar(self):
+        """Render a reduced game-mode menu that keeps editor tools out of first view."""
+        if not imgui.begin_main_menu_bar():
+            return
+
+        trial = self.state.trial
+        imgui.text("K-7 Xenobiology")
+        imgui.separator()
+        imgui.text_disabled(trial.title)
+
+        if trial.briefing_active:
+            status = "Briefing"
+        elif trial.won:
+            status = "Stabilized"
+        elif trial.failed:
+            status = "Failed"
+        else:
+            status = "Assay Running"
+        imgui.separator()
+        imgui.text_disabled(status)
+
+        if imgui.begin_menu("Experiment", not self.force_close_main_menus):
+            if trial.briefing_active:
+                if imgui.menu_item("Start Experiment", "", False)[0]:
+                    self._request_trial_start = True
+            elif trial.won and not trial.final_trial:
+                if imgui.menu_item("Next Trial", "", False)[0]:
+                    self._request_trial_next = True
+            elif trial.won:
+                if imgui.menu_item("Restart Sequence", "", False)[0]:
+                    self._request_trial_restart_sequence = True
+            elif trial.failed:
+                if imgui.menu_item("Retry Trial", "", False)[0]:
+                    self._request_trial_retry = True
+            else:
+                pause_label = "Resume Assay" if trial.paused else "Pause Assay"
+                if imgui.menu_item(pause_label, "", False)[0]:
+                    self._request_trial_pause = True
+
+            if (
+                not trial.briefing_active
+                and not trial.won
+                and not trial.failed
+                and not trial.paused
+                and trial.irradiation_unlocked
+            ):
+                if not trial.irradiation_ready:
+                    imgui.begin_disabled()
+                if imgui.menu_item("Irradiate Strain", "", False)[0]:
+                    self._request_randomize_mutations = True
+                if not trial.irradiation_ready:
+                    imgui.end_disabled()
+
+            if (
+                not trial.briefing_active
+                and not trial.won
+                and not trial.failed
+                and not trial.paused
+                and trial.revert_unlocked
+            ):
+                if not trial.revert_ready:
+                    imgui.begin_disabled()
+                if imgui.menu_item("Revert Strain", "", False)[0]:
+                    self._request_revert_strain = True
+                if not trial.revert_ready:
+                    imgui.end_disabled()
+
+            if imgui.menu_item("Retry Current Trial", "", False)[0]:
+                self._request_trial_retry = True
+            if imgui.menu_item("Sterilize Dish", "", False)[0]:
+                self._request_reset = True
+            imgui.end_menu()
+
+        if self.game_editor_enabled and imgui.begin_menu("Developer", not self.force_close_main_menus):
+            _, self.show_sidebar = imgui.checkbox("Show Editor Panels", self.show_sidebar)
+            _, self.show_history_window = imgui.checkbox("Config Clipboard", self.show_history_window)
+            _, self.show_video_recording_window = imgui.checkbox(
+                "Screen Recording Controls",
+                self.show_video_recording_window,
+            )
+            imgui.separator()
+            if imgui.menu_item("Exit", "", False)[0]:
+                glfw.set_window_should_close(self.window, True)
+            imgui.end_menu()
+        elif not self.game_editor_enabled:
+            if imgui.menu_item("Exit", "", False)[0]:
+                glfw.set_window_should_close(self.window, True)
+
+        imgui.end_main_menu_bar()

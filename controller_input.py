@@ -107,6 +107,16 @@ BUTTON_ACTIONS = {
     BUTTON_START: "reset_controller_camera",
 }
 
+GAME_BUTTON_ACTIONS = {
+    BUTTON_A: "game_confirm",
+    BUTTON_B: "game_retry",
+    BUTTON_X: "toggle_sidebar",
+    BUTTON_Y: "game_tool",
+    BUTTON_LB: "game_revert",
+    BUTTON_SELECT: "game_exit",
+    BUTTON_START: "game_pause",
+}
+
 
 def find_joystick():
     """Find the first connected joystick."""
@@ -183,7 +193,8 @@ def process_controller_input(controller_cam, joystick_state, dt):
     prev = joystick_state['prev_buttons']
 
     if prev:
-        for button, action_name in BUTTON_ACTIONS.items():
+        button_actions = GAME_BUTTON_ACTIONS if joystick_state.get('game_mode') else BUTTON_ACTIONS
+        for button, action_name in button_actions.items():
             if len(prev) > button and buttons[button] and not prev[button]:
                 actions.add(action_name)
 
@@ -250,8 +261,51 @@ def apply_controller_to_2d_camera(ui_state, joystick_state, dt):
         ui_state.camera.position[0] += left_x * move_speed
         ui_state.camera.position[1] += left_y * move_speed
 
+    if ui_state.trial.game_mode:
+        return
+
     zoom_input = trigger_zoom - right_y
     if abs(zoom_input) > 0.01:
         zoom_factor = 1.0 - zoom_input * zoom_speed
         zoom_factor = max(0.25, min(4.0, zoom_factor))
         ui_state.camera.zoom *= zoom_factor
+
+
+def apply_game_cursor_to_state(ui_state, joystick_state, dt, viewport_size, cursor_pos):
+    """Apply game-mode controller aim/feed state to the UI snapshot.
+
+    Returns the updated persistent cursor position, or the incoming value when
+    the game cursor is inactive.
+    """
+    if not ui_state.trial.game_mode or ui_state.trial.paused:
+        ui_state.game_cursor_active = False
+        ui_state.game_draw_held = False
+        return cursor_pos
+
+    if joystick_state.get('joystick_id') is None:
+        ui_state.game_cursor_active = False
+        ui_state.game_draw_held = False
+        return cursor_pos
+
+    width, height = viewport_size
+    if width <= 0 or height <= 0:
+        ui_state.game_cursor_active = False
+        ui_state.game_draw_held = False
+        return cursor_pos
+
+    if cursor_pos is None:
+        cursor_pos = [width * 0.5, height * 0.5]
+
+    right_x = joystick_state.get('right_x', 0.0)
+    right_y = joystick_state.get('right_y', 0.0)
+    fast_mult = 1.8 if joystick_state.get('fast') else 1.0
+    cursor_speed = min(width, height) * 0.72 * fast_mult
+    cursor_pos[0] += right_x * cursor_speed * dt
+    cursor_pos[1] += right_y * cursor_speed * dt
+    cursor_pos[0] = float(np.clip(cursor_pos[0], 0.0, width - 1.0))
+    cursor_pos[1] = float(np.clip(cursor_pos[1], 0.0, height - 1.0))
+
+    ui_state.game_cursor_active = True
+    ui_state.game_cursor_pos = tuple(cursor_pos)
+    ui_state.game_draw_held = joystick_state.get('rt', 0.0) > 0.25
+    return cursor_pos

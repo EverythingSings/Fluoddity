@@ -122,6 +122,9 @@ class CommandHandler:
         if ui_state.request_randomize_mutations:
             self._handle_randomize_mutations(ui_state)
 
+        if ui_state.request_revert_strain:
+            self._handle_revert_strain(ui_state)
+
         # Handle sweep preview restore
         restored_sweep_preview = self._handle_sweep_preview_restore(ui_state)
 
@@ -200,6 +203,16 @@ class CommandHandler:
             ui_state.sim.rule_seed = random.random()
             self.rule_manager.push_rule(current_rule.copy(), ui_state.sim.rule_seed)
             self.sim.apply_rule(current_rule)
+
+    def _handle_revert_strain(self, ui_state):
+        """Restore the previous strain rule/seed from rule history."""
+        if self.rule_manager.length() <= 1:
+            return
+        prev_rule, prev_seed = self.rule_manager.pop_rule()
+        if prev_seed is not None:
+            ui_state.sim.rule_seed = prev_seed
+        if prev_rule is not None:
+            self.sim.apply_rule(prev_rule)
 
     def _handle_sweep_preview_restore(self, ui_state):
         """Handle sweep preview restore: ANY click re-enables sweeps. Returns True if restored."""

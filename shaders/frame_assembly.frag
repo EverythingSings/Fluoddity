@@ -155,8 +155,19 @@ vec3 draw_overlay(vec2 uv_coord) {
     float ring = smoothstep(radius - line_thickness, radius, dist)
                - smoothstep(radius, radius + line_thickness, dist);
 
+    float direction_tick = 0.0;
+    if (brush_mode == 2) {
+        vec2 direction = vec2(sin(fixed_direction_heading), -cos(fixed_direction_heading));
+        vec2 radial = delta / max(screen_aspect, 0.0001);
+        float along = dot(radial, direction);
+        float across = length(radial - direction * along);
+        direction_tick = smoothstep(line_thickness * 2.0, line_thickness, across)
+                       * step(radius * 0.35, along)
+                       * step(along, radius * 0.95);
+    }
+
     // Return white or black depending on watercolor mode (like sweep_overlay)
-    return vec3(ring * 0.6);
+    return vec3(max(ring * 0.6, direction_tick * 0.75));
 }
 vec2 safenorm(vec2 n){
     float l = length(n);
@@ -364,8 +375,12 @@ void main() {
             if(tiling_mode_enabled||clamp(field_uv,vec2(0),vec2(1))==field_uv){
                 field = texture(field_texture,field_uv);
             }
-            vec3 force_col = 8*hsv2rgb(vec3(atan(field.y,field.x)/2./3.1415,.75,length(field.xy)));
-            vec3 strafe_col = 8*hsv2rgb(vec3(atan(field.w,field.z)/2./3.1415,.75,length(field.zw)));
+            vec3 force_col = force_field_checked
+                ? 8*hsv2rgb(vec3(atan(field.y,field.x)/2./3.1415,.75,length(field.xy)))
+                : vec3(0);
+            vec3 strafe_col = strafe_field_checked
+                ? 8*hsv2rgb(vec3(atan(field.w,field.z)/2./3.1415,.75,length(field.zw)))
+                : vec3(0);
             fragColor.xyz +=draw_target_overlay_opacity*(force_col+strafe_col);
         }
     }

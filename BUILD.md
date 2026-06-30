@@ -86,6 +86,7 @@ This will create a `dist/Fluoddity` folder containing:
 - `Fluoddity.exe` (or `Fluoddity` on Unix-like systems) - The main executable
 - All required DLLs and dependencies
 - `shaders/` directory with all GLSL shader files
+- `steam_input/` directory with the initial Steam Input action manifest, prompt glyph map, and placeholder glyph SVGs
 - Python runtime and libraries
 
 ### Linux / Steam Deck Build
@@ -96,12 +97,12 @@ Build on Linux or Steam Deck Desktop Mode:
 bash scripts/build_linux.sh
 ```
 
-The script creates `dist/Fluoddity/run_steam_deck.sh`, which is the intended Steam launch target for Deck testing. It sets `FLUODDITY_STEAM_DECK=1` and runs Fluoddity with `--steam-deck`.
+The script creates `dist/Fluoddity/run_steam_deck.sh`, which is the intended Steam launch target for Deck testing. It sets `FLUODDITY_STEAM_DECK=1` and runs Fluoddity with `--steam-deck --game`, so the packaged Deck target opens the Trial Dish player shell by default. It also copies `steam_input/` into the distribution so the intended Steam Input action surface, prompt glyph map, and placeholder glyph assets stay beside the Deck build artifacts.
 
 For source validation without packaging:
 
 ```bash
-python main.py --steam-deck
+python main.py --steam-deck --game
 ```
 
 The Steam Deck profile launches at `1280x800` fullscreen, increases UI scale, and applies conservative performance defaults. Track release-readiness in [`docs/steam_deck_verified.md`](docs/steam_deck_verified.md).

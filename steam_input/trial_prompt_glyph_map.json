@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "description": "Trial Dish prompt actions mapped to Deck-style fallback labels and future Steam Input glyph asset ids.",
+  "actions": {
+    "AimNutrientGel": {
+      "fallback_label": "Right Stick",
+      "glyph_asset": "steam_input/glyphs/right_stick.svg"
+    },
+    "ApplyNutrientGel": {
+      "fallback_label": "R2",
+      "glyph_asset": "steam_input/glyphs/r2.svg"
+    },
+    "StartExperiment": {
+      "fallback_label": "A",
+      "glyph_asset": "steam_input/glyphs/a.svg"
+    },
+    "PauseExperiment": {
+      "fallback_label": "Menu",
+      "glyph_asset": "steam_input/glyphs/menu.svg"
+    },
+    "ExitExperiment": {
+      "fallback_label": "View",
+      "glyph_asset": "steam_input/glyphs/view.svg"
+    },
+    "RetryTrial": {
+      "fallback_label": "B",
+      "glyph_asset": "steam_input/glyphs/b.svg"
+    },
+    "NextTrial": {
+      "fallback_label": "A",
+      "glyph_asset": "steam_input/glyphs/a.svg"
+    },
+    "IrradiateStrain": {
+      "fallback_label": "Y",
+      "glyph_asset": "steam_input/glyphs/y.svg"
+    },
+    "RevertStrain": {
+      "fallback_label": "L1",
+      "glyph_asset": "steam_input/glyphs/l1.svg"
+    }
+  }
+}

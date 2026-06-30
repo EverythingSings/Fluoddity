@@ -2,16 +2,83 @@
 
 Use this after large refactors or significant new features. Items roughly ordered by breakage risk.
 
+## Game Prototype Quick Check
+- [ ] Run `python scripts/smoke_game_v1.py`
+- [ ] Run `python scripts/smoke_trial_definitions.py`
+- [ ] Run `python scripts/smoke_trial_dish_tuning_reference.py`
+- [ ] Run `python scripts/smoke_trial_dishes.py`
+- [ ] Run `python scripts/smoke_game_controller.py`
+- [ ] Run `python scripts/smoke_game_shell_contract.py`
+- [ ] Run `python scripts/smoke_steam_input_manifest.py`
+- [ ] Run `python scripts/write_steam_input_handoff.py`
+- [ ] Run `python scripts/write_trial_dish_playtest_report.py`
+- [ ] Run `python scripts/smoke_trial_dish_playtest_summary.py`
+- [ ] Run `python scripts/prepare_steam_deck_packet.py`
+- [ ] Review `artifacts/steam_deck_packet_index.md` before a hardware pass and confirm it points to every generated report
+- [ ] Review `artifacts/trial_dish_tuning_reference.md` before changing thresholds from playtest findings
+- [ ] Run `python scripts/smoke_steam_deck_packet.py`
+- [ ] Run `python scripts/prepare_steam_deck_packet.py --run-automated --with-visual --with-fed-results` before a full hardware packet refresh
+- [ ] Run `python scripts/smoke_steam_deck_packaging.py`
+- [ ] Confirm `smoke_trial_dishes.py` includes the full synthetic three-trial playthrough path
+- [ ] Run `python scripts/smoke_game_runtime.py`
+- [ ] Run `python scripts/smoke_game_performance.py --extra-arg=--deck-performance --min-fps 30`
+- [ ] Run `python scripts/smoke_game_visual.py`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 1 --start --frame 25 --expect-active-zones 1 --expect-progress-min 0.01 --expect-status running`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 1 --start --frame 45 --controller-cursor --controller-feed --expect-active-zones 1 --expect-progress-min 0.01 --expect-status running --expect-controller-cursor --expect-controller-draw`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 1 --start --pause --frame 45 --controller-cursor --controller-feed --expect-status running --expect-paused --expect-no-controller-cursor --expect-no-controller-draw`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 2 --start --feed --frame 90 --expect-active-zones 2 --expect-progress-min 0.05 --expect-status running`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 3 --start --feed --frame 90 --expect-active-zones 2 --expect-rival-zones 1 --expect-progress-min 0.01 --expect-status running`
+- [ ] Run `python scripts/smoke_game_v1.py --with-fed-results`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 1 --start --feed --frame 240 --expect-active-zones 1 --expect-progress-min 1.0 --expect-status won`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 2 --start --resolve --frame 120 --expect-progress-max 0.99 --expect-status failed`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 2 --start --feed --frame 540 --expect-active-zones 2 --expect-progress-min 1.0 --expect-status won`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 3 --start --feed --resolve --frame 120 --expect-active-zones 2 --expect-rival-zones 1 --expect-progress-min 1.0 --expect-status won`
+- [ ] Run `python scripts/smoke_game_runtime.py --extra-arg=--deck-performance`
+- [ ] Run `python scripts/smoke_game_v1.py --with-deck-performance --seconds 5 --min-fps 30`
+- [ ] Run `python scripts/steam_deck_preflight.py --with-visual --with-fed-results` before a hardware pass and fill in `artifacts/steam_deck_preflight.md`
+- [ ] Confirm the preflight report links to `artifacts/steam_deck_packet_index.md`, `artifacts/trial_dish_tuning_reference.md`, and `artifacts/trial_dish_tuning_plan.md`, marks automated gate coverage, summarizes controller prompt-mode evidence, and still lists actual Deck hardware, Steamworks Steam Input import, official glyph rendering, and native/Proton package validation as external gates
+- [ ] Review `artifacts/steam_input_handoff.md` before the Steamworks import and confirm the recommended TrialDish default bindings match the intended controller layout
+- [ ] Fill in `artifacts/trial_dish_playtest.md` during a controller-only playtest before changing thresholds
+- [ ] Run `python scripts/summarize_trial_dish_playtest.py --require-ready` after filling the playtest report, then run `python scripts/write_trial_dish_tuning_plan.py --require-ready` before changing threshold/copy/visual tuning
+- [ ] Run `python main.py --game`
+- [ ] Confirm `python main.py --game` hides raw editor panels/text-entry tools, and `python main.py --game --allow-editor-in-game` exposes them for development
+- [ ] Confirm default `python main.py --game` ignores raw editor shortcuts and command flags such as config copy/paste, sidebar toggle, parameter sweeps, recording, screenshots, field loading, and mouse-mode toggles unless `--allow-editor-in-game` is passed
+- [ ] Inspect `artifacts/visual_smoke/trial1_briefing.png`, `trial1_running.png`, `trial1_controller_feed.png`, `trial1_paused.png`, `trial2_running.png`, `trial2_result.png`, `trial3_running.png`, and `trial3_result.png` for clipped HUD text, objective response, active zone colors, controller reticle visibility, paused/result-state readability, or markers hidden behind the panel
+- [ ] Trial 1 starts with a single marked zone and no editor panels visible
+- [ ] Each briefing shows a short K-7 story beat before protocol instructions
+- [ ] Starting Trial 1 primes a visible specimen response
+- [ ] Progress text explains the current objective status, such as active culture sites, hold time, or rival pressure
+- [ ] Trial 2 shows the antibiotic band and multiple zones
+- [ ] Trial 3 shows Rival Bloom, Irradiate Strain, and Revert Strain controls
+- [ ] Trial Dish HUD shows current controller/keyboard prompts for Start, Retry, Next, Irradiate, and Revert states
+- [ ] Trial Dish visual smoke output includes active prompt input scheme, chip-style controller prompt text, and glyph paths for Start, Nutrient Gel, Pause, Resume, Exit, Irradiate, Revert, Retry, Next, and Restart states
+- [ ] Trial Dish HUD switches from hybrid prompts to controller-only prompts after gamepad input, and back to keyboard/mouse prompts after keyboard or mouse input
+- [ ] Controller Menu pauses/resumes an active Trial Dish, and paused state freezes trial time plus Nutrient Gel application
+- [ ] Controller View does not exit during active play, but exits from the paused Trial Dish state
+- [ ] Controller A/B/Menu/View/Y/L1 actions drive Trial Dish state transitions without keyboard/mouse fallback
+- [ ] In game mode, right stick moves the nutrient gel cursor and R2 applies nutrient gel without mouse or touch
+- [ ] Trial 3 tool labels distinguish ready, recharge, depleted, archive-ready, no-archive, and spent states
+- [ ] Sterilize Dish returns to briefing with visible station feedback
+- [ ] Irradiate Strain creates an archive, consumes a charge, and starts cooldown
+- [ ] Revert Strain is unavailable before archive and consumes its one charge after use
+- [ ] Trial 3 result summary reports culture-site control plus irradiation/revert usage
+- [ ] Trial 3 grade changes for clean wins, narrow wins, and stalemates
+- [ ] Result screen explains next assay, retry focus, or sequence completion
+- [ ] Winning Trial 3 shows sequence-complete text and can restart from Trial 1
+
 ## 0. Steam Deck Verified Readiness
-- [ ] Run `python main.py --steam-deck` or the packaged `run_steam_deck.sh`
+- [ ] Run `python main.py --steam-deck --game` or the packaged `run_steam_deck.sh`
+- [ ] Confirm the packaged `run_steam_deck.sh` launches with `--steam-deck --game`, not the raw editor shell
 - [ ] App launches directly at Deck-native `1280x800` fullscreen with no launcher or setup prompt
 - [ ] Default settings hold 30 FPS or better at 800p
 - [ ] Smallest UI text is legible at handheld distance
-- [ ] Controller can pause/resume, reset, toggle sidebar, toggle mouse mode, randomize mutations, navigate UI, load a preset, and exit
-- [ ] Controller can pan with the left stick, zoom with triggers/right stick, and use right bumper as a fast modifier
+- [ ] In the default `--game` player shell, controller can start, feed, pause/resume, retry, complete Trial 1, and exit from paused state
+- [ ] In `--allow-editor-in-game` dev mode, controller/editor shortcuts can still pan, zoom, toggle panels, randomize mutations, and use editor tools
 - [ ] No normal play path requires keyboard, mouse, touchscreen, or manual controller configuration
-- [ ] Text entry is either avoided in normal play or opens a controller-safe on-screen keyboard path
+- [ ] Text entry is avoided in normal play; any editor/dev text entry must be gated out of the shipped player shell or open a controller-safe on-screen keyboard path
 - [ ] See `docs/steam_deck_verified.md` for the release-blocking checklist
+- [ ] Confirm `dist/Fluoddity/steam_input/steam_input_manifest.vdf` is present after `bash scripts/build_linux.sh`
+- [ ] Confirm `dist/Fluoddity/steam_input/trial_prompt_glyph_map.json` and `dist/Fluoddity/steam_input/glyphs/*.svg` are present after `bash scripts/build_linux.sh`
 
 ## 1. Config Save/Load System
 - [ ] **a.** File → Save: enter name, verify JSON appears in Custom folder

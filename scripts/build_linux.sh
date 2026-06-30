@@ -18,13 +18,16 @@ rm -rf dist/Fluoddity/physics_configs
 mkdir -p dist/Fluoddity/physics_configs
 cp -R physics_configs/Core dist/Fluoddity/physics_configs/Core
 cp -R physics_configs/Advanced dist/Fluoddity/physics_configs/Advanced
+rm -rf dist/Fluoddity/steam_input
+mkdir -p dist/Fluoddity/steam_input
+cp -R steam_input/* dist/Fluoddity/steam_input/
 
 cat > dist/Fluoddity/run_steam_deck.sh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
 export FLUODDITY_STEAM_DECK=1
-exec ./Fluoddity --steam-deck "$@"
+exec ./Fluoddity --steam-deck --game "$@"
 EOF
 chmod +x dist/Fluoddity/run_steam_deck.sh
 

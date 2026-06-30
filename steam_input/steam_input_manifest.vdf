@@ -1,0 +1,94 @@
+"Action Manifest"
+{
+    "actions"
+    {
+        "TrialDish"
+        {
+            "title" "#Set_TrialDish"
+            "StickPadGyro"
+            {
+                "AimNutrientGel"
+                {
+                    "title" "#Action_AimNutrientGel"
+                    "input_mode" "absolute_mouse"
+                }
+                "PanDish"
+                {
+                    "title" "#Action_PanDish"
+                    "input_mode" "joystick_move"
+                }
+            }
+            "AnalogTrigger"
+            {
+                "ApplyNutrientGel" "#Action_ApplyNutrientGel"
+            }
+            "Button"
+            {
+                "StartExperiment" "#Action_StartExperiment"
+                "PauseExperiment" "#Action_PauseExperiment"
+                "ExitExperiment" "#Action_ExitExperiment"
+                "RetryTrial" "#Action_RetryTrial"
+                "NextTrial" "#Action_NextTrial"
+                "IrradiateStrain" "#Action_IrradiateStrain"
+                "RevertStrain" "#Action_RevertStrain"
+                "ToggleLabPanel" "#Action_ToggleLabPanel"
+                "SterilizeDish" "#Action_SterilizeDish"
+            }
+        }
+        "Editor"
+        {
+            "title" "#Set_Editor"
+            "StickPadGyro"
+            {
+                "PanView"
+                {
+                    "title" "#Action_PanView"
+                    "input_mode" "joystick_move"
+                }
+                "ZoomView"
+                {
+                    "title" "#Action_ZoomView"
+                    "input_mode" "joystick_move"
+                }
+            }
+            "Button"
+            {
+                "TogglePause" "#Action_TogglePause"
+                "ResetParticles" "#Action_ResetParticles"
+                "RandomizeMutation" "#Action_RandomizeMutation"
+                "ToggleSidebar" "#Action_ToggleSidebar"
+                "ToggleMouseMode" "#Action_ToggleMouseMode"
+            }
+        }
+    }
+    "localization"
+    {
+        "english"
+        {
+            "Set_TrialDish" "Trial Dish"
+            "Set_Editor" "Editor"
+            "Action_AimNutrientGel" "Aim Nutrient Gel"
+            "Action_PanDish" "Pan Dish"
+            "Action_ApplyNutrientGel" "Apply Nutrient Gel"
+            "Action_StartExperiment" "Start Experiment"
+            "Action_PauseExperiment" "Pause Experiment"
+            "Action_ExitExperiment" "Exit Experiment"
+            "Action_RetryTrial" "Retry Trial"
+            "Action_NextTrial" "Next Trial"
+            "Action_IrradiateStrain" "Irradiate Strain"
+            "Action_RevertStrain" "Revert Strain"
+            "Action_ToggleLabPanel" "Toggle Lab Panel"
+            "Action_SterilizeDish" "Sterilize Dish"
+            "Action_PanView" "Pan View"
+            "Action_ZoomView" "Zoom View"
+            "Action_TogglePause" "Pause / Resume"
+            "Action_ResetParticles" "Reset Particles"
+            "Action_RandomizeMutation" "Randomize Mutation"
+            "Action_ToggleSidebar" "Toggle Sidebar"
+            "Action_ToggleMouseMode" "Toggle Mouse Mode"
+        }
+    }
+    "configurations"
+    {
+    }
+}
