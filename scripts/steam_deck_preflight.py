@@ -18,6 +18,11 @@ from build_metadata import current_build_id
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from services.game_identity import ENGINE_NAME, GAME_TITLE
+
 DEFAULT_OUTPUT = ROOT / "artifacts" / "steam_deck_preflight.md"
 PACKET_INDEX_OUTPUT = ROOT / "artifacts" / "steam_deck_packet_index.md"
 HANDOFF_OUTPUT = ROOT / "artifacts" / "steam_input_handoff.md"
@@ -27,7 +32,7 @@ TUNING_REFERENCE_OUTPUT = ROOT / "artifacts" / "trial_dish_tuning_reference.md"
 TUNING_PLAN_OUTPUT = ROOT / "artifacts" / "trial_dish_tuning_plan.md"
 
 MANUAL_CHECKS = [
-    "Launch from Steam with ./run_steam_deck.sh and confirm it opens the Trial Dish player shell.",
+    f"Launch {GAME_TITLE} from Steam with ./run_steam_deck.sh and confirm it opens the Trial Dish player shell.",
     "Confirm the app starts directly, with no console prompt, launcher, compatibility warning, setup dialog, or desktop-only first-run step.",
     "Confirm the framebuffer is 1280x800 or the Deck-native fullscreen equivalent.",
     "Confirm the default preset holds 30 FPS or better for five minutes.",
@@ -182,6 +187,8 @@ def write_report(
         "# Steam Deck Preflight Report",
         "",
         f"- Generated: {now}",
+        f"- Game: {GAME_TITLE}",
+        f"- Engine/package: {ENGINE_NAME}",
         f"- Build: {build_id or current_build_id(ROOT)}",
         f"- Host: {platform.platform()}",
         f"- Python: {sys.version.split()[0]}",

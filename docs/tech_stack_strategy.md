@@ -2,7 +2,7 @@
 
 This project should keep Python for the current V1 game prototype, but it should not assume Python is the final shipping runtime.
 
-The core asset is not Python. The core asset is the GPU simulation, the shader pipeline, the rule/mutation model, the visual identity, and the emerging Trial Dish game loop. Python is currently the fastest way to wrap those assets in enough UI, launch behavior, controller handling, and smoke coverage to learn whether there is a game here.
+The core asset is not Python. The core asset is the GPU simulation, the shader pipeline, the rule/mutation model, the visual identity, and the emerging Xenoculture: Trial Dish game loop. Python is currently the fastest way to wrap those assets in enough UI, launch behavior, controller handling, and smoke coverage to learn whether there is a game here.
 
 ## Current Stack
 
@@ -107,7 +107,7 @@ Cons:
 ## Recommended Path
 
 1. Keep the Python/ModernGL prototype through V1 Trial Dishes.
-2. Keep the simulation logic, trial definitions, onboarding focus, tool names, and game-state model cleanly separated from editor windows. Trial Dish authored data now lives in `services/trial_definitions.py` and exports as a normalized JSON/schema runtime contract, so tuning/report tools and future ports do not have to depend on service internals.
+2. Keep the simulation logic, trial definitions, onboarding focus, tool names, game identity, and game-state model cleanly separated from editor windows. Trial Dish authored data now lives in `services/trial_definitions.py` and exports as a normalized JSON/schema runtime contract, so tuning/report tools and future ports do not have to depend on service internals.
 3. Add smoke tests around game rules, exported trial data, and launch behavior so a future port has a behavioral target.
 4. Do one real Steam Deck hardware pass before committing to shipping Python.
 5. If V1 is promising, prototype a tiny Rust + wgpu spike that runs one dish shader and one objective overlay.

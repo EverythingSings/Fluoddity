@@ -86,11 +86,13 @@ Download a release and run Fluoddity.exe
 
 ## Game Prototype
 
-This fork is starting to grow a game shell around the simulation. The current V1 direction is an alien petri-dish xenotech game mode, documented in [docs/game_v1_prototype.md](docs/game_v1_prototype.md).
+This fork is starting to grow a game shell around the simulation. The current V1 player-facing shell is **Xenoculture: Trial Dish**, an alien petri-dish xenotech game mode documented in [docs/game_v1_prototype.md](docs/game_v1_prototype.md).
+
+For now, Fluoddity remains the engine/repo/package name. The executable and build folders still use Fluoddity while the `--game` window uses the Xenoculture title.
 
 Current stack and porting strategy are tracked in [docs/tech_stack_strategy.md](docs/tech_stack_strategy.md).
 
-Run the first Trial Dish shell with:
+Run the first Xenoculture: Trial Dish shell with:
 
 ```bash
 python main.py --game

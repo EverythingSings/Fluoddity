@@ -4,12 +4,18 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import platform
+import sys
 from pathlib import Path
 
 from build_metadata import current_build_id
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from services.game_identity import ENGINE_NAME, GAME_TITLE
+
 DEFAULT_OUTPUT = ROOT / "artifacts" / "trial_dish_playtest.md"
 
 PLAYTEST_GOALS = [
@@ -93,6 +99,8 @@ def write_report(output: Path, tester: str, device: str, build_id: str) -> Path:
         "# Trial Dish Manual Playtest Report",
         "",
         f"- Generated: {now}",
+        f"- Game: {GAME_TITLE}",
+        f"- Engine/package: {ENGINE_NAME}",
         f"- Host: {platform.platform()}",
         f"- Tester: {tester or ''}",
         f"- Device: {device or ''}",

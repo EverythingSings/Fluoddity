@@ -26,6 +26,7 @@ COMPILE_TARGETS = [
     "scripts/smoke_trial_module_boundaries.py",
     "scripts/smoke_trial_dishes.py",
     "scripts/smoke_game_runtime.py",
+    "scripts/smoke_game_identity.py",
     "scripts/smoke_game_controller.py",
     "scripts/smoke_game_performance.py",
     "scripts/smoke_game_shell_contract.py",
@@ -46,6 +47,7 @@ COMPILE_TARGETS = [
     "state/ui_state.py",
     "state/__init__.py",
     "services/trial_definitions.py",
+    "services/game_identity.py",
     "services/trial_service.py",
     "services/trial_prompts.py",
     "services/__init__.py",
@@ -109,6 +111,7 @@ def main() -> int:
     run_step("trial tuning reference", [python, "scripts/smoke_trial_dish_tuning_reference.py"])
     run_step("trial module boundaries", [python, "scripts/smoke_trial_module_boundaries.py"])
     run_step("trial logic", [python, "scripts/smoke_trial_dishes.py"])
+    run_step("game identity", [python, "scripts/smoke_game_identity.py"])
     run_step("game controller", [python, "scripts/smoke_game_controller.py"])
     run_step("game shell contract", [python, "scripts/smoke_game_shell_contract.py"])
     run_step("steam input manifest", [python, "scripts/smoke_steam_input_manifest.py"])

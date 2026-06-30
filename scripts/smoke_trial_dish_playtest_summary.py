@@ -7,6 +7,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from services.game_identity import ENGINE_NAME, GAME_TITLE
+
 TEMPLATE = ROOT / "artifacts" / "trial_dish_playtest_summary_template.md"
 FILLED = ROOT / "artifacts" / "trial_dish_playtest_summary_filled.md"
 SUMMARY = ROOT / "artifacts" / "trial_dish_playtest_summary_smoke.md"
@@ -64,6 +69,8 @@ def main() -> int:
     )
     require(proc.returncode == 0, f"template generation failed: {proc.stdout}\n{proc.stderr}")
     template_text = TEMPLATE.read_text(encoding="utf-8")
+    require(f"- Game: {GAME_TITLE}" in template_text, "playtest template should include game title")
+    require(f"- Engine/package: {ENGINE_NAME}" in template_text, "playtest template should include engine/package identity")
 
     blank_proc = run(
         [

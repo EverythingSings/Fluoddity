@@ -10,6 +10,7 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] Run `python scripts/smoke_trial_runtime_contract.py`
 - [ ] Run `python scripts/smoke_trial_dish_tuning_reference.py`
 - [ ] Run `python scripts/smoke_trial_module_boundaries.py`
+- [ ] Run `python scripts/smoke_game_identity.py`
 - [ ] Run `python scripts/smoke_trial_dishes.py`
 - [ ] Run `python scripts/smoke_game_controller.py`
 - [ ] Run `python scripts/smoke_game_shell_contract.py`
@@ -19,6 +20,7 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] Run `python scripts/smoke_trial_dish_playtest_summary.py`
 - [ ] Run `python scripts/prepare_steam_deck_packet.py`
 - [ ] Review `artifacts/steam_deck_packet_index.md` before a hardware pass and confirm it points to every generated report
+- [ ] Confirm generated packet reports stamp `Xenoculture: Trial Dish` as the game and `Fluoddity` as the engine/package lineage
 - [ ] Confirm `artifacts/trial_definitions.json` and `artifacts/trial_definitions.schema.json` are generated with the hardware packet for future tooling/port checks
 - [ ] Review `artifacts/trial_dish_tuning_reference.md` before changing thresholds from playtest findings
 - [ ] Run `python scripts/smoke_steam_deck_packet.py`
@@ -55,6 +57,7 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] Trial 1 briefing starts visually quiet with no objective marker, then the running assay reveals a single marked zone with no editor panels visible
 - [ ] Trial 2 and Trial 3 briefings hold hazard/rival overlays until the assay starts
 - [ ] Visual smoke state reports `zone_overlays`, `hazard_overlay`, and `rival_overlay` for onboarding reveal checks
+- [ ] Game-mode window title is `Xenoculture: Trial Dish`; editor/build/package paths may still say Fluoddity during V1
 - [ ] Each briefing shows a short K-7 story beat before protocol instructions
 - [ ] Starting Trial 1 primes a visible specimen response
 - [ ] Progress text explains the current objective status, such as active culture sites, hold time, or rival pressure

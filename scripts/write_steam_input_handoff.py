@@ -5,12 +5,18 @@ import argparse
 import datetime as dt
 import json
 import re
+import sys
 from pathlib import Path
 
 from build_metadata import current_build_id
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from services.game_identity import ENGINE_NAME, GAME_TITLE
+
 MANIFEST = ROOT / "steam_input" / "steam_input_manifest.vdf"
 GLYPH_MAP = ROOT / "steam_input" / "trial_prompt_glyph_map.json"
 DEFAULT_OUTPUT = ROOT / "artifacts" / "steam_input_handoff.md"
@@ -112,6 +118,8 @@ def write_report(output: Path, glyph_map: dict, localizations: dict[str, str], b
         "# Steam Input Handoff",
         "",
         f"- Generated: {now}",
+        f"- Game: {GAME_TITLE}",
+        f"- Engine/package: {ENGINE_NAME}",
         f"- Build: {build_id or current_build_id(ROOT)}",
         f"- Manifest: `{MANIFEST.relative_to(ROOT).as_posix()}`",
         f"- Glyph map: `{GLYPH_MAP.relative_to(ROOT).as_posix()}`",
@@ -120,7 +128,7 @@ def write_report(output: Path, glyph_map: dict, localizations: dict[str, str], b
         "## Import Steps",
         "",
         "1. Import `steam_input/steam_input_manifest.vdf` into Steamworks.",
-        "2. Create a default Steam Deck configuration for the `TrialDish` action set.",
+        f"2. Create a default Steam Deck configuration for {GAME_TITLE}'s `TrialDish` action set.",
         "3. Bind the actions below using the recommended Deck controls.",
         "4. Confirm Steam launches the game through `run_steam_deck.sh` or the final packaged launch target.",
         "5. Confirm prompts render with official Steam/Deck glyphs, or with an approved shipped fallback.",

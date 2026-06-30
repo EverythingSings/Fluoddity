@@ -13,6 +13,8 @@ from services import (
     VideoRecorderService,
     ConfigSaver,
     ArrowDebugService,
+    ENGINE_NAME,
+    GAME_TITLE,
     MultiLoadService,
     TrialService,
 )
@@ -88,7 +90,7 @@ class App:
         self.window = glfw.create_window(
             self.launch_options.width,
             self.launch_options.height,
-            "Fluoddity",
+            GAME_TITLE if self.launch_options.game else ENGINE_NAME,
             monitor,
             None,
         )
@@ -239,7 +241,7 @@ class App:
         self.ui.show_sidebar = False
         self.ui.show_video_recording_window = False
         self.ui.show_history_window = False
-        glfw.set_window_title(self.window, "Xenoculture Prototype - Trial Dish")
+        glfw.set_window_title(self.window, GAME_TITLE)
 
     def _apply_game_mode_visual_defaults(self):
         """Make game mode readable even if editor configs/preferences were noisy."""

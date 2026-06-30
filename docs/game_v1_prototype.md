@@ -1,6 +1,6 @@
 # Game V1 Prototype
 
-This document defines the first game-shaped prototype for the Fluoddity fork. It is intentionally small. The goal is to prove that the existing simulation can support a satisfying game loop before renaming everything, rewriting the engine, or building a full progression system.
+This document defines the first game-shaped prototype for the Fluoddity fork. The current player-facing V1 shell is **Xenoculture: Trial Dish**. It is intentionally small. The goal is to prove that the existing simulation can support a satisfying game loop before renaming build/package internals, rewriting the engine, or building a full progression system.
 
 ## Readiness
 
@@ -72,6 +72,8 @@ Unlocked active tools should appear as actual lab controls in the Trial Dish HUD
 ## Theme
 
 Working theme: alien petri-dish xenotech.
+
+Current game-shell title: **Xenoculture: Trial Dish**. Fluoddity remains the engine/repo/package name during V1 so build scripts, user data paths, and Steam Deck packet paths stay stable while the playable shell gets its own identity.
 
 The player is not directly piloting units. They are conducting experiments on living synthetic swarms: part alien microorganism, part programmable nanobot culture. This lets the game use biological language for visuals and engineering language for objectives.
 
@@ -241,6 +243,8 @@ Implementation status:
 - Done: Trial 1 uses shorter protocol copy and simplified running HUD language, emphasizing specimen stability instead of timer and zone diagnostics.
 - Done: Trial definitions now carry `onboarding_focus`, and launch-contract smoke verifies the first briefing suppresses objective overlays before revealing the first marked culture zone.
 - Done: visual smoke now emits overlay counts/flags and can assert the onboarding reveal order through the actual launch/render path.
+- Done: `--game` uses the player-facing window title `Xenoculture: Trial Dish`, while Fluoddity remains the engine/package identity until a deliberate build rename.
+- Done: Steam Deck packet reports now stamp both `Xenoculture: Trial Dish` and the Fluoddity engine/package lineage so hardware notes identify the tested shell without forcing a build rename.
 - Done: starter specimen primer so early trials begin with a visible culture response.
 - Done: Irradiate Strain and Revert Strain unlock in Trial 3, mapped to existing rule history commands.
 - Done: Irradiate Strain has limited charges and cooldown, making mutation a deliberate trial tool rather than a spam action.

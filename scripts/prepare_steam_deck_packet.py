@@ -13,6 +13,11 @@ from build_metadata import current_build_id
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from services.game_identity import ENGINE_NAME, GAME_TITLE
+
 TRIAL_DEFINITIONS_SCHEMA = ROOT / "schemas" / "trial_definitions.schema.json"
 
 
@@ -63,6 +68,8 @@ def write_packet_index(args: argparse.Namespace, build_id: str) -> Path:
         "# Steam Deck Hardware Packet",
         "",
         f"- Generated: {now}",
+        f"- Game: {GAME_TITLE}",
+        f"- Engine/package: {ENGINE_NAME}",
         f"- Build: {build_id}",
         f"- Host: {platform.platform()}",
         f"- Tester: {args.tester or ''}",
@@ -86,7 +93,7 @@ def write_packet_index(args: argparse.Namespace, build_id: str) -> Path:
         "## Hardware Pass Order",
         "",
         "1. Review `artifacts/steam_input_handoff.md` while importing the TrialDish Steam Input manifest.",
-        "2. Launch the packaged Steam target with `./run_steam_deck.sh` or the Steamworks launch option.",
+        f"2. Launch {GAME_TITLE} from the packaged Steam target with `./run_steam_deck.sh` or the Steamworks launch option.",
         "3. Fill in `artifacts/steam_deck_preflight.md` while checking launch, controller, legibility, performance, and suspend/resume.",
         "4. Fill in `artifacts/trial_dish_playtest.md` during a controller-only Trial Dish playtest.",
         "5. Rerun `python scripts/summarize_trial_dish_playtest.py --require-ready` after the playtest sheet is filled.",

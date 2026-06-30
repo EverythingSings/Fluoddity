@@ -93,6 +93,7 @@ These are release-blocking gates for a Steam build.
 - Done: the preflight report links back to the generated packet index, so hardware testers start from the same report order.
 - Done: `scripts/write_trial_dish_playtest_report.py` writes a controller-first manual playtest report for game-feel, onboarding, readability, and threshold tuning evidence.
 - Done: `scripts/prepare_steam_deck_packet.py` writes a packet index, Trial Dish definitions JSON/schema, Steam Input handoff, Trial Dish playtest report, playtest summary, tuning reference, tuning plan, and Deck preflight report together for a hardware pass.
+- Done: generated packet reports stamp the player-facing game title `Xenoculture: Trial Dish` separately from the Fluoddity engine/package lineage.
 - Done: generated packet reports are stamped with branch, commit, clean/dirty state, and changed-path count so hardware notes can be traced back to the tested prototype snapshot.
 - Done: default `--game` gates raw editor shortcuts and persisted editor/help windows behind `--allow-editor-in-game`.
 - Done: default `--game` defensively clears editor-only command flags before command processing, and the shell-contract smoke verifies Trial Dish actions still pass through.

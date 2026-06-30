@@ -8,6 +8,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from services.game_identity import ENGINE_NAME, GAME_TITLE
 
 EXPECTED_REPORTS = {
     ROOT / "artifacts" / "steam_deck_packet_index.md": "# Steam Deck Hardware Packet",
@@ -68,6 +72,13 @@ def run_packet(python: str) -> None:
     playtest = (ROOT / "artifacts" / "trial_dish_playtest.md").read_text(encoding="utf-8")
     summary = (ROOT / "artifacts" / "trial_dish_playtest_summary.md").read_text(encoding="utf-8")
     index = (ROOT / "artifacts" / "steam_deck_packet_index.md").read_text(encoding="utf-8")
+    for report_name, text in {
+        "packet index": index,
+        "Steam Input handoff": handoff,
+        "playtest report": playtest,
+    }.items():
+        require(f"- Game: {GAME_TITLE}" in text, f"{report_name} should be stamped with game title")
+        require(f"- Engine/package: {ENGINE_NAME}" in text, f"{report_name} should be stamped with engine/package name")
     for report in [
         "artifacts/steam_input_handoff.md",
         "artifacts/trial_definitions.json",
@@ -95,6 +106,8 @@ def run_packet(python: str) -> None:
     require("## Blocker" in plan, "fresh packet tuning plan should explain the evidence blocker")
 
     preflight = (ROOT / "artifacts" / "steam_deck_preflight.md").read_text(encoding="utf-8")
+    require(f"- Game: {GAME_TITLE}" in preflight, "preflight report should be stamped with game title")
+    require(f"- Engine/package: {ENGINE_NAME}" in preflight, "preflight report should be stamped with engine/package name")
     require("- Build:" in preflight, "preflight report should be stamped with build metadata")
     require(
         "Packet index: artifacts/steam_deck_packet_index.md" in preflight,
