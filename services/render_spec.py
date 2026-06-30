@@ -180,9 +180,7 @@ class RenderSpecService:
 
         canvas_path = dir_path / 'canvas.npz'
         np.savez_compressed(str(canvas_path),
-                            can_x=gpu_buffers['can_x'],
-                            can_y=gpu_buffers['can_y'],
-                            can_z=gpu_buffers['can_z'])
+                            can_packed=gpu_buffers['can_packed'])
 
         if 'field' in gpu_buffers:
             field_path = dir_path / 'field.npz'
@@ -190,9 +188,7 @@ class RenderSpecService:
 
         # Print compression stats
         raw_entities = gpu_buffers['entities'].nbytes
-        raw_canvas = (gpu_buffers['can_x'].nbytes +
-                      gpu_buffers['can_y'].nbytes +
-                      gpu_buffers['can_z'].nbytes)
+        raw_canvas = gpu_buffers['can_packed'].nbytes
         comp_entities = entities_path.stat().st_size
         comp_canvas = canvas_path.stat().st_size
         total_raw = raw_entities + raw_canvas
@@ -275,9 +271,13 @@ class RenderSpecService:
             return None
         try:
             with np.load(str(canvas_path)) as data:
-                buffers['can_x'] = data['can_x']
-                buffers['can_y'] = data['can_y']
-                buffers['can_z'] = data['can_z']
+                if 'can_packed' in data:
+                    buffers['can_packed'] = data['can_packed']
+                else:
+                    # Legacy: load old separate-channel format
+                    buffers['can_x'] = data['can_x']
+                    buffers['can_y'] = data['can_y']
+                    buffers['can_z'] = data['can_z']
         except Exception as e:
             print(f"[RenderSpec] Failed to load canvas: {e}")
             return None

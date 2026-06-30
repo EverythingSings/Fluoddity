@@ -440,7 +440,7 @@ static __forceinline__ __device__ float pdf_cosine_power_lobe(
 
 // Environment sky exponents (hardcoded)
 #define ENV_SKY_EXP  1.0f
-#define ENV_SUN_EXP  256.0f
+#define ENV_SUN_EXP  25.0f
 
 static __forceinline__ __device__ float3 eval_env_sky(float3 dir)
 {

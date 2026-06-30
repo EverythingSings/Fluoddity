@@ -844,7 +844,10 @@ void main() {
     //Set entity hue (saturation/brightness/alpha are computed in vertex shaders)
     e.hue = abs(get_particle_hue_sensitivity()*col_params.x);
     if(abs(col_params.x-generic03.x*5)<2*generic03.y){e.hue=-e.hue;}
-    e.size = 0.00015/CANVAS_SCALE;
+    float negrmin2 = 1./(.5*.5);
+    float negrmax2 = 1./(1.5*1.5);
+    float szscal = 1./sqrt(negrmin2-hash(vec2(index))*(negrmin2-negrmax2));//exp(-hash(vec2(index))*50);//abs(col_params.y);//hash(vec2());
+    e.size = 0.00015/CANVAS_SCALE*szscal;
     //INVISIBILITY RADIO FEATURE
     if(RADIO_ENABLED>0){
         if(!(abs(col_params.x-RADIO_TARGET_FREQ)<RADIO_BANDWIDTH)){e.size=.0;}
