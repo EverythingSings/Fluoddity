@@ -24,6 +24,9 @@ class PathTracerInterface:
     ``failed`` property.
     """
 
+    # Class-level cache: survives interface recreation across mode cycles
+    _cached_photosphere_image: dict | None = None
+
     def __init__(self, ctx: moderngl.Context):
         self.ctx = ctx
         self._renderer: PathTracerRenderer | None = None
@@ -115,7 +118,14 @@ class PathTracerInterface:
     # --------------------------------------------------------- photosphere loading
 
     def _load_photosphere_image(self) -> dict | None:
-        """Load skybox.jpg, convert sRGB->linear, downscale 2x, return as f16 RGBA."""
+        """Load skybox.jpg, convert sRGB->linear, downscale 2x, return as f16 RGBA.
+
+        Result is cached at class level so it survives interface recreation.
+        """
+        # Return class-level cache if available
+        if PathTracerInterface._cached_photosphere_image is not None:
+            return PathTracerInterface._cached_photosphere_image
+
         import os
         try:
             from PIL import Image
@@ -157,12 +167,14 @@ class PathTracerInterface:
             # Ensure contiguous C-order array
             rgba_f16 = np.ascontiguousarray(rgba_f16)
 
-            return {
+            result = {
                 'data': rgba_f16,
                 'width': new_w,
                 'height': new_h,
                 'avg_color': avg_color,
             }
+            PathTracerInterface._cached_photosphere_image = result
+            return result
         except Exception as e:
             print(f"Photosphere: failed to load skybox: {e}")
             return None
