@@ -174,6 +174,13 @@ class OptiXWindowMixin:
                     "Sky color controls hemisphere glow,\n"
                     "sun direction/color/intensity control sun disk.\n"
                     "Works with or without NEE enabled.")
+            _, p.three_d_pt_photosphere = imgui.checkbox(
+                "Photosphere", p.three_d_pt_photosphere)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Use equirectangular environment map for sky.\n"
+                    "When Cos-lobe Sky is also checked, the sun\n"
+                    "lobe is added on top of the photosphere.")
 
             # Material
             mat_labels = ["Lambert", "Glossy", "Mirror"]

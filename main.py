@@ -511,6 +511,7 @@ class App:
                 # Path-tracer-only settings
                 pt.sun_sampling = p.three_d_pt_sun_sampling
                 pt.env_sky_nee = p.three_d_pt_env_sky_nee
+                pt.photosphere = p.three_d_pt_photosphere
                 pt.max_bounces = p.three_d_pt_max_bounces
                 pt.rr_start_depth = p.three_d_pt_rr_start_depth
                 pt.firefly_clamp = p.three_d_pt_firefly_clamp
@@ -584,6 +585,7 @@ class App:
                 pt.sdf_enabled = p.three_d_optix_sdf_enabled
                 pt.sun_sampling = p.three_d_pt_sun_sampling
                 pt.env_sky_nee = p.three_d_pt_env_sky_nee
+                pt.photosphere = p.three_d_pt_photosphere
                 pt.max_bounces = p.three_d_pt_max_bounces
                 pt.rr_start_depth = p.three_d_pt_rr_start_depth
                 pt.firefly_clamp = p.three_d_pt_firefly_clamp

@@ -172,6 +172,7 @@ class PreferencesState:
     three_d_pt_emission_intensity: float = 10.0  # Emissive radiance multiplier for negative-hue entities
     three_d_pt_denoise_enabled: bool = False
     three_d_pt_env_sky_nee: bool = False  # Use cosine-lobe environment sky for NEE instead of directional sun
+    three_d_pt_photosphere: bool = False  # Use equirectangular environment map for sky
 
     # OptiX Controls window
     show_optix_window: bool = False

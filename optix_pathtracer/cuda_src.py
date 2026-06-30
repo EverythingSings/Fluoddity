@@ -111,6 +111,15 @@ struct Params
     float          curve_r1;          // offset 312: radius at end (multiplier on entity size)
     // Environment sky NEE
     int            env_sky_nee;       // offset 316: bool: use cosine-lobe env sky for NEE
+
+    // Photosphere (equirectangular environment map)
+    int            photosphere_enabled; // offset 320: bool: use photosphere sky
+    // _pad_photo                       // offset 324: 4 bytes padding for pointer alignment
+    unsigned long long photosphere_tex; // offset 328: cudaTextureObject_t handle
+    float          photosphere_avg_r;  // offset 336: pre-computed average color R (for NEE)
+    float          photosphere_avg_g;  // offset 340: pre-computed average color G
+    float          photosphere_avg_b;  // offset 344: pre-computed average color B
+    // _pad_photo2                      // offset 348: pad to 352
 };
 __constant__ Params params;
 }
@@ -442,13 +451,34 @@ static __forceinline__ __device__ float pdf_cosine_power_lobe(
 #define ENV_SKY_EXP  1.0f
 #define ENV_SUN_EXP  25.0f
 
+// --- photosphere equirectangular texture lookup ------------------------------
+static __forceinline__ __device__ float3 sample_photosphere(float3 dir)
+{
+    float theta = atan2f(dir.z, dir.x);          // [-pi, pi]
+    float u = theta * 0.15915494f + 0.5f;        // theta/(2*pi) + 0.5 -> [0,1]
+    float v = -dir.y * 0.5f + 0.5f;              // [-1,1] -> [1,0] (Y-inverted)
+    float4 c = tex2D<float4>(params.photosphere_tex, u, v);
+    return mk3(c.x, c.y, c.z);
+}
+
 static __forceinline__ __device__ float3 eval_env_sky(float3 dir)
 {
-    // Sky lobe: broad cosine lobe centered on +Y
+    if (params.photosphere_enabled) {
+        float3 photo = sample_photosphere(dir);
+        if (params.env_sky_nee) {
+            // Add sun lobe on top of photosphere
+            float sun_cos = fmaxf(dot3(dir, params.sun_direction), 0.0f);
+            float3 sun_contrib = powf(sun_cos, ENV_SUN_EXP)
+                               * params.sun_color * params.sun_intensity;
+            photo = photo + sun_contrib;
+        }
+        return photo;
+    }
+
+    // Original: Sky lobe + Sun lobe
     float sky_cos = fmaxf(dir.y, 0.0f);
     float3 sky_contrib = powf(sky_cos, ENV_SKY_EXP) * params.sky_color_top;
 
-    // Sun lobe: narrow cosine lobe around sun_direction
     float sun_cos = fmaxf(dot3(dir, params.sun_direction), 0.0f);
     float3 sun_contrib = powf(sun_cos, ENV_SUN_EXP)
                        * params.sun_color * params.sun_intensity;
@@ -460,6 +490,30 @@ static __forceinline__ __device__ float3 eval_env_sky(float3 dir)
 // Used by both sample_env_sky and MIS weighting at BRDF miss.
 static __forceinline__ __device__ float eval_env_sky_pdf(float3 dir)
 {
+    if (params.photosphere_enabled) {
+        // Cosine-hemisphere PDF for photosphere: cos(theta) / pi
+        float cos_theta = fmaxf(dir.y, 0.0f);
+        float photo_pdf = cos_theta * 0.31830988618f;  // cos/pi
+
+        if (params.env_sky_nee) {
+            // Mixture: photosphere (cosine hemisphere) + sun lobe
+            float photo_bright = fmaxf(params.photosphere_avg_r,
+                                  fmaxf(params.photosphere_avg_g,
+                                        params.photosphere_avg_b));
+            float w_photo = photo_bright;
+            float w_sun   = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+            float w_total = w_photo + w_sun;
+            if (w_total < 1e-10f) return 0.079577f;  // 1/(4*pi) fallback
+            float p_photo = w_photo / w_total;
+            return p_photo * photo_pdf
+                 + (1.0f - p_photo) * pdf_cosine_power_lobe(
+                       dir, params.sun_direction, ENV_SUN_EXP);
+        }
+        // Photosphere only, no sun lobe in NEE
+        return photo_pdf;
+    }
+
+    // Original: mixture of sky lobe + sun lobe
     float sky_bright = fmaxf(params.sky_color_top.x,
                        fmaxf(params.sky_color_top.y,
                              params.sky_color_top.z));
@@ -476,8 +530,42 @@ static __forceinline__ __device__ float eval_env_sky_pdf(float3 dir)
 static __forceinline__ __device__ void sample_env_sky(
     unsigned int& rng, float3& out_dir, float& out_pdf)
 {
-    // Mixture weights proportional to integrated hemisphere power:
-    //   lobe integral = 2*pi / (exp + 1), scaled by brightness
+    if (params.photosphere_enabled) {
+        if (params.env_sky_nee) {
+            // Mixture: cosine hemisphere (photosphere proxy) + sun lobe
+            float photo_bright = fmaxf(params.photosphere_avg_r,
+                                  fmaxf(params.photosphere_avg_g,
+                                        params.photosphere_avg_b));
+            float w_photo = photo_bright;
+            float w_sun   = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+            float w_total = w_photo + w_sun;
+
+            if (w_total < 1e-10f) {
+                out_dir = sample_sphere(rng);
+                out_pdf = 0.079577f;  // 1/(4*pi)
+                return;
+            }
+
+            float p_photo = w_photo / w_total;
+            float3 up = mk3(0.0f, 1.0f, 0.0f);
+
+            if (next_float(rng) < p_photo) {
+                out_dir = sample_cosine_hemisphere(up, rng);
+            } else {
+                out_dir = sample_cosine_power_lobe(
+                    params.sun_direction, ENV_SUN_EXP, rng);
+            }
+            out_pdf = eval_env_sky_pdf(out_dir);
+        } else {
+            // Photosphere only (no cos-lobe): cosine hemisphere
+            float3 up = mk3(0.0f, 1.0f, 0.0f);
+            out_dir = sample_cosine_hemisphere(up, rng);
+            out_pdf = eval_env_sky_pdf(out_dir);
+        }
+        return;
+    }
+
+    // Original: Mixture weights proportional to integrated hemisphere power
     float sky_bright = fmaxf(params.sky_color_top.x,
                        fmaxf(params.sky_color_top.y,
                              params.sky_color_top.z));
@@ -764,8 +852,8 @@ extern "C" __global__ void __miss__radiance()
     const float3 dir = optixGetWorldRayDirection();
     float3 c;
 
-    if (params.env_sky_nee) {
-        // Environment sky model: cosine-power lobes
+    if (params.photosphere_enabled || params.env_sky_nee) {
+        // Photosphere or cosine-lobe environment sky
         c = eval_env_sky(dir);
     } else {
         // Original gradient sky

@@ -122,6 +122,14 @@ PARAMS_DTYPE = np.dtype({
         "curve_r0",
         "curve_r1",
         "env_sky_nee",
+        # Photosphere
+        "photosphere_enabled",
+        "_pad_photo",
+        "photosphere_tex",
+        "photosphere_avg_r",
+        "photosphere_avg_g",
+        "photosphere_avg_b",
+        "_pad_photo2",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -169,6 +177,14 @@ PARAMS_DTYPE = np.dtype({
         "f4",
         "f4",
         "i4",
+        # Photosphere
+        "i4",
+        "u4",
+        "u8",
+        "f4",
+        "f4",
+        "f4",
+        "u4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -216,8 +232,16 @@ PARAMS_DTYPE = np.dtype({
         308,
         312,
         316,
+        # Photosphere
+        320,
+        324,
+        328,
+        336,
+        340,
+        344,
+        348,
     ],
-    "itemsize": 320,
+    "itemsize": 352,
 })
 
 
@@ -336,6 +360,11 @@ class PathTracerRenderer:
 
         # Monotonic frame counter for RNG decorrelation (never resets)
         self._global_frame_counter = 0
+
+        # Photosphere CUDA texture
+        self._photo_cuda_array = None         # cudaArray_t handle
+        self._photo_tex_obj = 0               # cudaTextureObject_t (unsigned long long)
+        self._photo_loaded = False
 
         # Offline render state
         self._offline_active = False
@@ -1241,7 +1270,11 @@ class PathTracerRenderer:
                                 emission_intensity=10.0,
                                 use_curves=False, curve_length=1.0,
                                 curve_r0=1.0, curve_r1=0.5,
-                                env_sky_nee=False):
+                                env_sky_nee=False,
+                                photosphere=False,
+                                photosphere_avg_r=0.0,
+                                photosphere_avg_g=0.0,
+                                photosphere_avg_b=0.0):
         """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
 
         The entity buffer must already be mapped (entities_ptr is the device
@@ -1374,6 +1407,15 @@ class PathTracerRenderer:
         h_params["curve_r1"] = curve_r1
         h_params["env_sky_nee"] = 1 if env_sky_nee else 0
 
+        # Photosphere
+        h_params["photosphere_enabled"] = 1 if photosphere else 0
+        h_params["_pad_photo"] = 0
+        h_params["photosphere_tex"] = self._photo_tex_obj if photosphere else 0
+        h_params["photosphere_avg_r"] = photosphere_avg_r
+        h_params["photosphere_avg_g"] = photosphere_avg_g
+        h_params["photosphere_avg_b"] = photosphere_avg_b
+        h_params["_pad_photo2"] = 0
+
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
         )
@@ -1459,7 +1501,11 @@ class PathTracerRenderer:
                emission_intensity=10.0,
                use_curves=False, curve_length=1.0,
                curve_r0=1.0, curve_r1=0.5,
-               env_sky_nee=False):
+               env_sky_nee=False,
+               photosphere=False,
+               photosphere_avg_r=0.0,
+               photosphere_avg_g=0.0,
+               photosphere_avg_b=0.0):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1553,6 +1599,10 @@ class PathTracerRenderer:
                     curve_r0=curve_r0,
                     curve_r1=curve_r1,
                     env_sky_nee=env_sky_nee,
+                    photosphere=photosphere,
+                    photosphere_avg_r=photosphere_avg_r,
+                    photosphere_avg_g=photosphere_avg_g,
+                    photosphere_avg_b=photosphere_avg_b,
                 )
 
                 self._resolve_accum_to_pbo(
@@ -1984,11 +2034,86 @@ class PathTracerRenderer:
         return albedo, normal
 
     # ------------------------------------------------------------------
+    # Photosphere texture
+    # ------------------------------------------------------------------
+
+    def set_photosphere_texture(self, image_data):
+        """Create a CUDA texture object from equirectangular image data.
+
+        Args:
+            image_data: dict with 'data' (H,W,4 float16 RGBA),
+                        'width', 'height'.
+                        Pass None to destroy existing texture.
+        """
+        self._destroy_photosphere_texture()
+
+        if image_data is None:
+            return
+
+        width = image_data['width']
+        height = image_data['height']
+        rgba_f16 = image_data['data']  # (H, W, 4) float16
+
+        # Channel format: 4x 16-bit float
+        chan_desc = check_cuda(cudart.cudaCreateChannelDesc(
+            16, 16, 16, 16,
+            cudart.cudaChannelFormatKind.cudaChannelFormatKindFloat))
+
+        # Allocate CUDA array
+        self._photo_cuda_array = check_cuda(
+            cudart.cudaMallocArray(chan_desc, width, height, 0))
+
+        # Upload data: cudaMemcpy2DToArray(dst, wOff, hOff, src, spitch, w_bytes, h, kind)
+        src_pitch = width * 4 * 2  # 4 channels * 2 bytes (float16)
+        check_cuda(cudart.cudaMemcpy2DToArray(
+            self._photo_cuda_array,
+            0, 0,
+            rgba_f16.ctypes.data,
+            src_pitch,
+            src_pitch,
+            height,
+            cudart.cudaMemcpyKind.cudaMemcpyHostToDevice))
+
+        # Create texture object
+        res_desc = cudart.cudaResourceDesc()
+        res_desc.resType = cudart.cudaResourceType.cudaResourceTypeArray
+        res_desc.res.array.array = self._photo_cuda_array
+
+        tex_desc = cudart.cudaTextureDesc()
+        tex_desc.addressMode[0] = cudart.cudaTextureAddressMode.cudaAddressModeWrap
+        tex_desc.addressMode[1] = cudart.cudaTextureAddressMode.cudaAddressModeClamp
+        tex_desc.filterMode = cudart.cudaTextureFilterMode.cudaFilterModeLinear
+        tex_desc.readMode = cudart.cudaTextureReadMode.cudaReadModeElementType
+        tex_desc.normalizedCoords = 1
+
+        self._photo_tex_obj = check_cuda(
+            cudart.cudaCreateTextureObject(res_desc, tex_desc, None))
+        self._photo_loaded = True
+
+    def _destroy_photosphere_texture(self):
+        """Destroy CUDA texture object and array."""
+        if self._photo_tex_obj != 0:
+            try:
+                cudart.cudaDestroyTextureObject(self._photo_tex_obj)
+            except Exception:
+                pass
+            self._photo_tex_obj = 0
+        if self._photo_cuda_array is not None:
+            try:
+                cudart.cudaFreeArray(self._photo_cuda_array)
+            except Exception:
+                pass
+            self._photo_cuda_array = None
+        self._photo_loaded = False
+
+    # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
     def cleanup(self):
         """Release all CUDA and OptiX resources."""
+        self._destroy_photosphere_texture()
+
         if self._pbo_res is not None:
             try:
                 unregister_resource(self._pbo_res)

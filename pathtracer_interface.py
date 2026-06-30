@@ -92,6 +92,11 @@ class PathTracerInterface:
         # Environment sky NEE
         self.env_sky_nee: bool = False
 
+        # Photosphere
+        self.photosphere: bool = False
+        self._photosphere_image_data: dict | None = None  # cached loaded image
+        self._photosphere_avg_color: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
         # Physics step tracking: set by orchestrator each frame before render
         self.physics_steps: int = 0
 
@@ -106,6 +111,77 @@ class PathTracerInterface:
         self._preview_has_result: bool = False
         # Camera state for preview (captured at start)
         self._preview_cam: dict | None = None
+
+    # --------------------------------------------------------- photosphere loading
+
+    def _load_photosphere_image(self) -> dict | None:
+        """Load skybox.jpg, convert sRGB->linear, downscale 2x, return as f16 RGBA."""
+        import os
+        try:
+            from PIL import Image
+        except ImportError:
+            print("Photosphere: PIL not available")
+            return None
+
+        skybox_path = os.path.join(os.path.dirname(__file__),
+                                   "volrender", "textures", "skybox.jpg")
+        if not os.path.exists(skybox_path):
+            print(f"Photosphere: {skybox_path} not found")
+            return None
+
+        try:
+            img = Image.open(skybox_path).convert('RGB')
+
+            # Downscale 2x
+            new_w = img.width // 2
+            new_h = img.height // 2
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+
+            # Convert to float32 RGB
+            data = np.frombuffer(img.tobytes(), dtype=np.uint8).reshape(
+                new_h, new_w, 3).astype(np.float32) / 255.0
+
+            # sRGB to linear
+            linear = np.where(data < 0.04045,
+                              data / 12.92,
+                              ((data + 0.055) / 1.055) ** 2.4)
+
+            # Compute average color (on linear data)
+            avg_color = tuple(linear.mean(axis=(0, 1)).tolist())
+
+            # Pad to RGBA and convert to float16
+            rgba = np.ones((new_h, new_w, 4), dtype=np.float32)
+            rgba[:, :, :3] = linear
+            rgba_f16 = rgba.astype(np.float16)
+
+            # Ensure contiguous C-order array
+            rgba_f16 = np.ascontiguousarray(rgba_f16)
+
+            return {
+                'data': rgba_f16,
+                'width': new_w,
+                'height': new_h,
+                'avg_color': avg_color,
+            }
+        except Exception as e:
+            print(f"Photosphere: failed to load skybox: {e}")
+            return None
+
+    def _ensure_photosphere_texture(self):
+        """Lazy-load photosphere image and upload CUDA texture if needed."""
+        if not self.photosphere:
+            return
+
+        if self._photosphere_image_data is None:
+            self._photosphere_image_data = self._load_photosphere_image()
+            if self._photosphere_image_data is not None:
+                self._photosphere_avg_color = self._photosphere_image_data['avg_color']
+            else:
+                self.photosphere = False
+                return
+
+        if self._renderer is not None and not self._renderer._photo_loaded:
+            self._renderer.set_photosphere_texture(self._photosphere_image_data)
 
     # ------------------------------------------------------------------ core API
 
@@ -182,6 +258,9 @@ class PathTracerInterface:
             self._entity_buffer_glo = current_glo
             self._entity_count = entity_count
 
+        # 2b. Ensure photosphere texture is loaded if enabled
+        self._ensure_photosphere_texture()
+
         # 3. Camera basis conversion
         aspect = width / max(height, 1)
         eye, U, V, W = _camera_basis_from_vectors(
@@ -232,6 +311,10 @@ class PathTracerInterface:
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
             env_sky_nee=self.env_sky_nee,
+            photosphere=self.photosphere,
+            photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
+            photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
+            photosphere_avg_b=self._photosphere_avg_color[2] if self.photosphere else 0.0,
         )
 
         # 6. Dispatch based on render mode
@@ -370,6 +453,10 @@ class PathTracerInterface:
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
             env_sky_nee=self.env_sky_nee,
+            photosphere=self.photosphere,
+            photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
+            photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
+            photosphere_avg_b=self._photosphere_avg_color[2] if self.photosphere else 0.0,
         )
 
         done = self._renderer._sample_count >= self._preview_target_spp
@@ -577,6 +664,10 @@ class PathTracerInterface:
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
             env_sky_nee=self.env_sky_nee,
+            photosphere=self.photosphere,
+            photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
+            photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
+            photosphere_avg_b=self._photosphere_avg_color[2] if self.photosphere else 0.0,
         )
 
         # Read timing
