@@ -16,9 +16,14 @@ COMPILE_TARGETS = [
     "simulation_runner.py",
     "sim.py",
     "controller_input.py",
+    "scripts/export_trial_definitions.py",
     "scripts/build_metadata.py",
     "scripts/smoke_trial_definitions.py",
+    "scripts/smoke_trial_definitions_export.py",
+    "scripts/smoke_trial_definitions_schema.py",
+    "scripts/smoke_trial_runtime_contract.py",
     "scripts/smoke_trial_dish_tuning_reference.py",
+    "scripts/smoke_trial_module_boundaries.py",
     "scripts/smoke_trial_dishes.py",
     "scripts/smoke_game_runtime.py",
     "scripts/smoke_game_controller.py",
@@ -40,6 +45,7 @@ COMPILE_TARGETS = [
     "state/trial_state.py",
     "state/ui_state.py",
     "state/__init__.py",
+    "services/trial_definitions.py",
     "services/trial_service.py",
     "services/trial_prompts.py",
     "services/__init__.py",
@@ -97,7 +103,11 @@ def main() -> int:
     python = args.python
 
     run_step("trial definitions", [python, "scripts/smoke_trial_definitions.py"])
+    run_step("trial definitions export", [python, "scripts/smoke_trial_definitions_export.py"])
+    run_step("trial definitions schema", [python, "scripts/smoke_trial_definitions_schema.py"])
+    run_step("trial runtime contract", [python, "scripts/smoke_trial_runtime_contract.py"])
     run_step("trial tuning reference", [python, "scripts/smoke_trial_dish_tuning_reference.py"])
+    run_step("trial module boundaries", [python, "scripts/smoke_trial_module_boundaries.py"])
     run_step("trial logic", [python, "scripts/smoke_trial_dishes.py"])
     run_step("game controller", [python, "scripts/smoke_game_controller.py"])
     run_step("game shell contract", [python, "scripts/smoke_game_shell_contract.py"])
@@ -200,6 +210,10 @@ def main() -> int:
                 "[A]",
                 "--expect-glyph-contains",
                 "steam_input/glyphs/a.svg",
+                "--expect-zone-overlays",
+                "0",
+                "--expect-no-hazard-overlay",
+                "--expect-no-rival-overlay",
             ],
         )
         run_step(
@@ -220,6 +234,10 @@ def main() -> int:
                 "0.01",
                 "--expect-status",
                 "running",
+                "--expect-zone-overlays",
+                "1",
+                "--expect-no-hazard-overlay",
+                "--expect-no-rival-overlay",
                 "--expect-input-scheme",
                 "hybrid",
                 "--expect-prompt-contains",
@@ -309,6 +327,23 @@ def main() -> int:
             ],
         )
         run_step(
+            "visual --game Trial 2 briefing",
+            [
+                python,
+                "scripts/smoke_game_visual.py",
+                "--python",
+                python,
+                "--trial",
+                "2",
+                "--expect-zone-overlays",
+                "3",
+                "--expect-no-hazard-overlay",
+                "--expect-no-rival-overlay",
+                "--expect-prompt-contains",
+                "Start",
+            ],
+        )
+        run_step(
             "visual --game Trial 2 running",
             [
                 python,
@@ -327,6 +362,10 @@ def main() -> int:
                 "0.05",
                 "--expect-status",
                 "running",
+                "--expect-zone-overlays",
+                "3",
+                "--expect-hazard-overlay",
+                "--expect-no-rival-overlay",
                 "--expect-prompt-contains",
                 "Nutrient Gel",
                 "--expect-display-prompt-contains",
@@ -335,6 +374,23 @@ def main() -> int:
                 "steam_input/glyphs/right_stick.svg",
                 "--expect-glyph-contains",
                 "steam_input/glyphs/r2.svg",
+            ],
+        )
+        run_step(
+            "visual --game Trial 3 briefing",
+            [
+                python,
+                "scripts/smoke_game_visual.py",
+                "--python",
+                python,
+                "--trial",
+                "3",
+                "--expect-zone-overlays",
+                "3",
+                "--expect-no-hazard-overlay",
+                "--expect-no-rival-overlay",
+                "--expect-prompt-contains",
+                "Start",
             ],
         )
         run_step(
@@ -358,6 +414,10 @@ def main() -> int:
                 "0.01",
                 "--expect-status",
                 "running",
+                "--expect-zone-overlays",
+                "3",
+                "--expect-no-hazard-overlay",
+                "--expect-rival-overlay",
                 "--expect-prompt-contains",
                 "Irradiate",
                 "--expect-prompt-contains",

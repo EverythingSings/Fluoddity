@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from services.trial_service import TRIAL_DEFINITIONS, TrialService
+from services.trial_definitions import TRIAL_DEFINITIONS
+from services.trial_service import TrialService
 from services.trial_prompts import TRIAL_PROMPT_GLYPHS, trial_action_prompt_specs
 from state import TrialState
 from main import App

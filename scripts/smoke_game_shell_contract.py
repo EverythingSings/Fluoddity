@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 
 from main import App
 from launch_options import STEAM_DECK_SIZE, editor_tools_enabled, parse_launch_options
+from services.trial_service import TrialService
 from state import UIState
 
 
@@ -93,6 +94,25 @@ def shell_app(editor_enabled: bool):
     return app
 
 
+def overlay_app():
+    app = App.__new__(App)
+
+    class ViewTexture:
+        size = (1024, 1024)
+
+    class Sim:
+        view_tex = ViewTexture()
+
+    class Camera:
+        @staticmethod
+        def tex_to_screen(point, tex_size):
+            return (point[0] * tex_size[0], point[1] * tex_size[1])
+
+    app.sim = Sim()
+    app.camera = Camera()
+    return app
+
+
 def assert_editor_commands_blocked(state: UIState) -> None:
     for flag in EDITOR_ONLY_FLAGS:
         assert_true(not getattr(state, flag), f"{flag} should be blocked in default --game")
@@ -123,6 +143,52 @@ def assert_game_commands_preserved(state: UIState) -> None:
     assert_true(state.request_reset, "Sterilize Dish reset should stay available in default --game")
     assert_true(state.request_randomize_mutations, "Irradiate Strain should stay available in default --game")
     assert_true(state.request_exit, "paused exit should stay available in default --game")
+
+
+def assert_onboarding_overlay_reveal() -> None:
+    service = TrialService()
+    app = overlay_app()
+    state = UIState()
+    state.trial.game_mode = True
+
+    service.load_trial(state.trial, 0)
+    assert_true(state.trial.minimal_onboarding, "Trial 1 should use minimal onboarding")
+    assert_true(
+        App._build_trial_zone_overlays(app, state) == [],
+        "Trial 1 briefing should not show objective overlays before the protocol starts",
+    )
+    service.process_requests(state.trial, UIState(request_trial_start=True))
+    assert_true(
+        len(App._build_trial_zone_overlays(app, state)) == 1,
+        "Trial 1 running should reveal the single objective zone",
+    )
+
+    service.load_trial(state.trial, 1)
+    assert_true(state.trial.onboarding_focus == "counterforce", "Trial 2 should use counterforce focus")
+    assert_true(
+        len(App._build_trial_zone_overlays(app, state)) == 3,
+        "Trial 2 briefing should reveal multi-site route context",
+    )
+    assert_true(
+        App._build_trial_hazard_overlay(app, state) is None,
+        "Trial 2 briefing should hold the hazard overlay until the assay starts",
+    )
+    service.process_requests(state.trial, UIState(request_trial_start=True))
+    assert_true(
+        App._build_trial_hazard_overlay(app, state) is not None,
+        "Trial 2 running should reveal the antibiotic band overlay",
+    )
+
+    service.load_trial(state.trial, 2)
+    assert_true(
+        App._build_trial_rival_overlay(app, state) is None,
+        "Trial 3 briefing should hold the rival overlay until the assay starts",
+    )
+    service.process_requests(state.trial, UIState(request_trial_start=True))
+    assert_true(
+        App._build_trial_rival_overlay(app, state) is not None,
+        "Trial 3 running should reveal rival pressure",
+    )
 
 
 def main() -> int:
@@ -172,6 +238,8 @@ def main() -> int:
         assert_true(getattr(dev_state, flag), f"{flag} should stay available with --allow-editor-in-game")
     assert_true(dev_state.clipboard_text == "editor-value", "clipboard text should stay available in dev mode")
     assert_true(dev_state.clipboard_config_index == 2, "clipboard index should stay available in dev mode")
+
+    assert_onboarding_overlay_reveal()
 
     print("game_shell_contract_smoke=ok")
     return 0

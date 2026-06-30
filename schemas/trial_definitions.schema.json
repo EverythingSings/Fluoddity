@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fluoddity.trial_definitions.v1",
+  "title": "Fluoddity Trial Dish Definitions",
+  "type": "object",
+  "required": ["schema", "source", "trial_count", "trials"],
+  "properties": {
+    "schema": { "const": "fluoddity.trial_definitions.v1" },
+    "source": { "const": "services/trial_definitions.py" },
+    "trial_count": { "type": "integer", "minimum": 1 },
+    "trials": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "trial_id",
+          "title",
+          "objective",
+          "briefing",
+          "station_line",
+          "story_line",
+          "running_hint",
+          "onboarding_focus",
+          "protocol_steps",
+          "unlocked_tools",
+          "current_tool",
+          "irradiation_charges",
+          "irradiation_cooldown_seconds",
+          "revert_charges",
+          "primer_enabled",
+          "primer_center",
+          "primer_radius",
+          "primer_power",
+          "primer_seconds",
+          "hold_seconds",
+          "failure_seconds",
+          "activity_threshold",
+          "win_condition",
+          "hazard_enabled",
+          "hazard_name",
+          "hazard_center_x",
+          "hazard_width",
+          "hazard_strength",
+          "rival_enabled",
+          "rival_name",
+          "rival_center",
+          "rival_radius",
+          "rival_growth",
+          "rival_strength",
+          "rival_activity_threshold",
+          "zones"
+        ],
+        "properties": {
+          "trial_id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "objective": { "type": "string", "minLength": 1 },
+          "briefing": { "type": "string", "minLength": 1 },
+          "station_line": { "type": "string", "minLength": 1 },
+          "story_line": { "type": "string", "minLength": 1 },
+          "running_hint": { "type": "string", "minLength": 1 },
+          "onboarding_focus": {
+            "type": "string",
+            "enum": ["single_culture", "counterforce", "rival_pressure"]
+          },
+          "protocol_steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "unlocked_tools": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "current_tool": { "type": "string", "minLength": 1 },
+          "primer_enabled": { "type": "boolean" },
+          "primer_center": { "$ref": "#/$defs/point" },
+          "primer_radius": { "type": "number" },
+          "primer_power": { "type": "number" },
+          "primer_seconds": { "type": "number" },
+          "hold_seconds": { "type": "number" },
+          "failure_seconds": { "type": "number" },
+          "activity_threshold": { "type": "number" },
+          "hazard_enabled": { "type": "boolean" },
+          "hazard_name": { "type": "string" },
+          "hazard_center_x": { "type": "number" },
+          "hazard_width": { "type": "number" },
+          "hazard_strength": { "type": "number" },
+          "win_condition": { "type": "string" },
+          "rival_enabled": { "type": "boolean" },
+          "rival_name": { "type": "string" },
+          "rival_center": { "$ref": "#/$defs/point" },
+          "rival_radius": { "type": "number" },
+          "rival_growth": { "type": "number" },
+          "rival_strength": { "type": "number" },
+          "rival_activity_threshold": { "type": "number" },
+          "irradiation_charges": { "type": "integer" },
+          "irradiation_cooldown_seconds": { "type": "number" },
+          "revert_charges": { "type": "integer" },
+          "zones": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/zone" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "number" }
+    },
+    "zone": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        { "type": "string", "minLength": 1 },
+        { "$ref": "#/$defs/point" },
+        { "type": "number" }
+      ]
+    }
+  }
+}

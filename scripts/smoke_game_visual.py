@@ -51,6 +51,32 @@ def parse_args() -> argparse.Namespace:
         help="Fail unless at least this many zones are rival-controlled at capture time.",
     )
     parser.add_argument(
+        "--expect-zone-overlays",
+        type=int,
+        default=None,
+        help="Fail unless exactly this many objective-zone overlays are reported at capture time.",
+    )
+    parser.add_argument(
+        "--expect-hazard-overlay",
+        action="store_true",
+        help="Fail unless the capture reports a visible hazard overlay.",
+    )
+    parser.add_argument(
+        "--expect-no-hazard-overlay",
+        action="store_true",
+        help="Fail unless the capture reports no visible hazard overlay.",
+    )
+    parser.add_argument(
+        "--expect-rival-overlay",
+        action="store_true",
+        help="Fail unless the capture reports a visible rival overlay.",
+    )
+    parser.add_argument(
+        "--expect-no-rival-overlay",
+        action="store_true",
+        help="Fail unless the capture reports no visible rival overlay.",
+    )
+    parser.add_argument(
         "--expect-progress-min",
         type=float,
         default=None,
@@ -228,6 +254,11 @@ def assert_trial_state(
     stdout: str,
     min_active_zones: int | None,
     min_rival_zones: int | None,
+    expected_zone_overlays: int | None,
+    expect_hazard_overlay: bool,
+    expect_no_hazard_overlay: bool,
+    expect_rival_overlay: bool,
+    expect_no_rival_overlay: bool,
     min_progress: float | None,
     max_progress: float | None,
     expected_status: str | None,
@@ -247,6 +278,11 @@ def assert_trial_state(
     if (
         min_active_zones is None
         and min_rival_zones is None
+        and expected_zone_overlays is None
+        and not expect_hazard_overlay
+        and not expect_no_hazard_overlay
+        and not expect_rival_overlay
+        and not expect_no_rival_overlay
         and min_progress is None
         and max_progress is None
         and expected_status is None
@@ -281,6 +317,24 @@ def assert_trial_state(
             raise AssertionError(
                 f"expected at least {min_rival_zones} rival zones, got {rival_value}"
             )
+
+    zone_overlay_value = int(fields.get("zone_overlays", "0"))
+    if expected_zone_overlays is not None and zone_overlay_value != expected_zone_overlays:
+        raise AssertionError(
+            f"expected {expected_zone_overlays} zone overlays, got {zone_overlay_value}"
+        )
+
+    hazard_overlay_value = fields.get("hazard_overlay", "0")
+    if expect_hazard_overlay and hazard_overlay_value != "1":
+        raise AssertionError("expected visible hazard overlay")
+    if expect_no_hazard_overlay and hazard_overlay_value != "0":
+        raise AssertionError("expected no visible hazard overlay")
+
+    rival_overlay_value = fields.get("rival_overlay", "0")
+    if expect_rival_overlay and rival_overlay_value != "1":
+        raise AssertionError("expected visible rival overlay")
+    if expect_no_rival_overlay and rival_overlay_value != "0":
+        raise AssertionError("expected no visible rival overlay")
 
     progress_value = float(fields.get("progress", "0"))
     if min_progress is not None and progress_value < min_progress:
@@ -371,6 +425,9 @@ def assert_trial_state(
     print(
         "visual_smoke_trial_assert=ok "
         f"active_zones={active_value} rival_zones={rival_value} status={status_value} "
+        f"zone_overlays={zone_overlay_value} "
+        f"hazard_overlay={hazard_overlay_value} "
+        f"rival_overlay={rival_overlay_value} "
         f"progress={progress_value:.3f} "
         f"paused={paused_value} "
         f"input_scheme={input_scheme_value} "
@@ -476,6 +533,11 @@ def main() -> int:
         proc.stdout,
         args.expect_active_zones,
         args.expect_rival_zones,
+        args.expect_zone_overlays,
+        args.expect_hazard_overlay,
+        args.expect_no_hazard_overlay,
+        args.expect_rival_overlay,
+        args.expect_no_rival_overlay,
         args.expect_progress_min,
         args.expect_progress_max,
         args.expect_status,

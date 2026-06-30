@@ -156,9 +156,9 @@ Prepare a Steam Deck hardware validation report:
 python scripts/prepare_steam_deck_packet.py
 ```
 
-This writes a packet index, Steam Input handoff, manual playtest sheet,
-playtest summary, tuning reference, tuning plan, and Steam Deck preflight
-report under `artifacts/`.
+This writes a packet index, Trial Dish definitions JSON/schema, Steam Input
+handoff, manual playtest sheet, playtest summary, tuning reference, tuning plan,
+and Steam Deck preflight report under `artifacts/`.
 
 For a packet that also reruns local automated gates:
 

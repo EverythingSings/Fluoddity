@@ -31,6 +31,7 @@ class TrialState:
     running_hint: str = "Apply nutrient gel until the marked culture zone stabilizes."
     guidance_title: str = "Station Guidance"
     guidance_message: str = "Awaiting protocol start."
+    onboarding_focus: str = "single_culture"
     protocol_steps: list[str] = field(default_factory=lambda: [
         "Observe the marked zone.",
         "Apply nutrient gel.",
@@ -101,6 +102,10 @@ class TrialState:
     @property
     def briefing_active(self) -> bool:
         return self.status == "briefing"
+
+    @property
+    def minimal_onboarding(self) -> bool:
+        return self.onboarding_focus == "single_culture"
 
     @property
     def final_trial(self) -> bool:

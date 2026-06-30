@@ -5,9 +5,11 @@ from .config_saver import ConfigSaver
 from .arrow_debug_service import ArrowDebugService
 from .multi_load_service import MultiLoadService
 from .field_handler import FieldHandler
+from .trial_definitions import TRIAL_DEFINITIONS
 from .trial_service import TrialService
 
 __all__ = [
     'RuleManager', 'EntityPicker', 'VideoRecorderService', 'ConfigSaver',
-    'ArrowDebugService', 'MultiLoadService', 'FieldHandler', 'TrialService',
+    'ArrowDebugService', 'MultiLoadService', 'FieldHandler',
+    'TRIAL_DEFINITIONS', 'TrialService',
 ]

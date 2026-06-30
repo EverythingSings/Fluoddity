@@ -92,7 +92,7 @@ These are release-blocking gates for a Steam build.
 - Done: the preflight report extracts high-signal automated evidence, including controller-mode visual prompt captures and paused controller suppression evidence when visual smokes are run.
 - Done: the preflight report links back to the generated packet index, so hardware testers start from the same report order.
 - Done: `scripts/write_trial_dish_playtest_report.py` writes a controller-first manual playtest report for game-feel, onboarding, readability, and threshold tuning evidence.
-- Done: `scripts/prepare_steam_deck_packet.py` writes a packet index, Steam Input handoff, Trial Dish playtest report, playtest summary, tuning reference, tuning plan, and Deck preflight report together for a hardware pass.
+- Done: `scripts/prepare_steam_deck_packet.py` writes a packet index, Trial Dish definitions JSON/schema, Steam Input handoff, Trial Dish playtest report, playtest summary, tuning reference, tuning plan, and Deck preflight report together for a hardware pass.
 - Done: generated packet reports are stamped with branch, commit, clean/dirty state, and changed-path count so hardware notes can be traced back to the tested prototype snapshot.
 - Done: default `--game` gates raw editor shortcuts and persisted editor/help windows behind `--allow-editor-in-game`.
 - Done: default `--game` defensively clears editor-only command flags before command processing, and the shell-contract smoke verifies Trial Dish actions still pass through.
@@ -125,12 +125,13 @@ python scripts/prepare_steam_deck_packet.py --run-automated --with-visual --with
 ```
 
 These write `artifacts/steam_deck_packet_index.md`,
+`artifacts/trial_definitions.json`, `artifacts/trial_definitions.schema.json`,
 `artifacts/steam_input_handoff.md`, `artifacts/trial_dish_playtest.md`,
 `artifacts/trial_dish_playtest_summary.md`,
 `artifacts/trial_dish_tuning_reference.md`, `artifacts/trial_dish_tuning_plan.md`,
 and
 `artifacts/steam_deck_preflight.md` with a shared build stamp, a hardware-pass
-runbook, the Steam Input import checklist, manual playtest sheet,
+runbook, the Trial Dish data contract, the Steam Input import checklist, manual playtest sheet,
 tuning-readiness summary, current tuning reference, post-playtest tuning plan,
 automated smoke output, and the checklist below.
 

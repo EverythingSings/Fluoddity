@@ -12,7 +12,7 @@ OUTPUT = ROOT / "artifacts" / "trial_dish_tuning_reference_smoke.md"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from services.trial_service import TRIAL_DEFINITIONS
+from services.trial_definitions import TRIAL_DEFINITIONS
 from scripts.write_trial_dish_tuning_reference import TUNING_KEYS
 
 

@@ -107,8 +107,8 @@ Cons:
 ## Recommended Path
 
 1. Keep the Python/ModernGL prototype through V1 Trial Dishes.
-2. Keep the simulation logic, trial definitions, tool names, and game-state model cleanly separated from editor windows.
-3. Add smoke tests around game rules and launch behavior so a future port has a behavioral target.
+2. Keep the simulation logic, trial definitions, onboarding focus, tool names, and game-state model cleanly separated from editor windows. Trial Dish authored data now lives in `services/trial_definitions.py` and exports as a normalized JSON/schema runtime contract, so tuning/report tools and future ports do not have to depend on service internals.
+3. Add smoke tests around game rules, exported trial data, and launch behavior so a future port has a behavioral target.
 4. Do one real Steam Deck hardware pass before committing to shipping Python.
 5. If V1 is promising, prototype a tiny Rust + wgpu spike that runs one dish shader and one objective overlay.
 6. Decide final runtime after that spike, not before.

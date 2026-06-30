@@ -390,6 +390,9 @@ class App:
         trial = self.ui.state.trial
         active_zones = sum(1 for zone in trial.zones if zone.active)
         rival_zones = sum(1 for zone in trial.zones if zone.rival_controlled)
+        zone_overlays = self.ui._display_info.get('trial_zone_overlays', [])
+        hazard_overlay = self.ui._display_info.get('trial_hazard_overlay')
+        rival_overlay = self.ui._display_info.get('trial_rival_overlay')
         result_title = self._visual_smoke_token(trial.result_title)
         result_readout = self._visual_smoke_token(trial.result_grade)
         result_summary = self._visual_smoke_token(trial.result_summary)
@@ -417,6 +420,9 @@ class App:
             f"status={trial.status} "
             f"active_zones={active_zones}/{len(trial.zones)} "
             f"rival_zones={rival_zones} "
+            f"zone_overlays={len(zone_overlays)} "
+            f"hazard_overlay={int(hazard_overlay is not None)} "
+            f"rival_overlay={int(rival_overlay is not None)} "
             f"progress={trial.progress:.3f} "
             f"elapsed={trial.elapsed_seconds:.2f} "
             f"paused={int(trial.paused)} "
@@ -742,6 +748,8 @@ class App:
         """Convert Trial Dish texture-space objective zones to screen-space overlays."""
         if not ui_state.trial.game_mode:
             return []
+        if ui_state.trial.briefing_active and ui_state.trial.minimal_onboarding:
+            return []
 
         tex_size = self.sim.view_tex.size
         overlays = []
@@ -764,7 +772,7 @@ class App:
     def _build_trial_hazard_overlay(self, ui_state):
         """Convert the Trial Dish antibiotic band to a screen-space rectangle."""
         trial = ui_state.trial
-        if not trial.game_mode or not trial.hazard_enabled:
+        if not trial.game_mode or not trial.hazard_enabled or trial.briefing_active:
             return None
 
         half_width = trial.hazard_width * 0.5
@@ -782,7 +790,7 @@ class App:
     def _build_trial_rival_overlay(self, ui_state):
         """Convert the Trial Dish rival bloom source to a screen-space circle."""
         trial = ui_state.trial
-        if not trial.game_mode or not trial.rival_enabled:
+        if not trial.game_mode or not trial.rival_enabled or trial.briefing_active:
             return None
 
         tex_size = self.sim.view_tex.size

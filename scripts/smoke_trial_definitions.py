@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from services.trial_service import TRIAL_DEFINITIONS
+from services.trial_definitions import TRIAL_DEFINITIONS
 from scripts.write_trial_dish_tuning_reference import TUNING_KEYS
 
 
@@ -21,6 +21,7 @@ REQUIRED_COMMON_KEYS = {
     "station_line",
     "story_line",
     "running_hint",
+    "onboarding_focus",
     "protocol_steps",
     "unlocked_tools",
     "current_tool",
@@ -68,6 +69,10 @@ def validate_definition(index: int, definition: dict) -> None:
     require(1 <= len(definition["protocol_steps"]) <= 3, f"{trial_id} should keep onboarding protocol compact")
     require(definition["briefing"].strip(), f"{trial_id} briefing should be nonempty")
     require(definition["story_line"].strip(), f"{trial_id} story line should be nonempty")
+    require(
+        definition["onboarding_focus"] in {"single_culture", "counterforce", "rival_pressure"},
+        f"{trial_id} onboarding focus should be known",
+    )
 
     require_number(definition["activity_threshold"], f"{trial_id} activity threshold", minimum=0.0, maximum=0.01)
     require_number(definition["failure_seconds"], f"{trial_id} timeout", minimum=10.0, maximum=180.0)
@@ -112,8 +117,11 @@ def smoke_trial_definitions() -> None:
         validate_definition(index, definition)
 
     require(len(TRIAL_DEFINITIONS[0]["zones"]) == 1, "Trial 1 should remain visually minimal")
+    require(TRIAL_DEFINITIONS[0]["onboarding_focus"] == "single_culture", "Trial 1 should focus on one culture concept")
     require(not TRIAL_DEFINITIONS[0].get("hazard_enabled", False), "Trial 1 should not introduce hazards")
+    require(TRIAL_DEFINITIONS[1]["onboarding_focus"] == "counterforce", "Trial 2 should introduce counterforce focus")
     require(TRIAL_DEFINITIONS[1].get("hazard_enabled") is True, "Trial 2 should introduce the passive hazard")
+    require(TRIAL_DEFINITIONS[2]["onboarding_focus"] == "rival_pressure", "Trial 3 should introduce rival-pressure focus")
     require(TRIAL_DEFINITIONS[2].get("rival_enabled") is True, "Trial 3 should introduce rival pressure")
     require("Irradiate Strain" in TRIAL_DEFINITIONS[2]["unlocked_tools"], "Trial 3 should unlock irradiation")
     require("Revert Strain" in TRIAL_DEFINITIONS[2]["unlocked_tools"], "Trial 3 should unlock revert")

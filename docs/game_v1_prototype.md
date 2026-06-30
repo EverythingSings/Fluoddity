@@ -61,6 +61,8 @@ The simulation is visually dense, so the game introduction must reveal one new i
 
 Briefings should establish the alien-space-lab fiction before presenting mechanics. Running HUD text should use readable protocol language, not raw engine diagnostics. Detailed activity values can return later as an optional lab-instrument view, but they should not be part of the first playable path.
 
+The first briefing should stay visually quiet: no objective marker, no counterforce band, no rival overlay. Starting the assay reveals the first marked culture zone. Later briefings may show route context, but hazards and rivals should appear only when their assays start.
+
 Game mode must also override noisy editor state at launch. A player entering `--game` should start in a centered camera view with parameter sweeps, debug arrows, watercolor, emboss, advanced drawing, and editor windows off by default. These changes are runtime game-shell defaults, not persistent editor preference changes.
 
 The top menu in game mode should also be game-first. The default bar should expose experiment actions and a deliberately tucked-away editor panel toggle, not the full configuration browser, reset tools, and experimental engine menus.
@@ -237,6 +239,8 @@ Implementation status:
 - Done: second counterforce, a rival bloom source that grows into zone-control pressure.
 - Done: first-play ramp reduced to one zone before hazards and rivals are introduced.
 - Done: Trial 1 uses shorter protocol copy and simplified running HUD language, emphasizing specimen stability instead of timer and zone diagnostics.
+- Done: Trial definitions now carry `onboarding_focus`, and launch-contract smoke verifies the first briefing suppresses objective overlays before revealing the first marked culture zone.
+- Done: visual smoke now emits overlay counts/flags and can assert the onboarding reveal order through the actual launch/render path.
 - Done: starter specimen primer so early trials begin with a visible culture response.
 - Done: Irradiate Strain and Revert Strain unlock in Trial 3, mapped to existing rule history commands.
 - Done: Irradiate Strain has limited charges and cooldown, making mutation a deliberate trial tool rather than a spam action.
@@ -297,6 +301,12 @@ Implementation status:
 - Done: `scripts/write_trial_dish_tuning_plan.py` combines the playtest summary with the tuning reference into a post-playtest action plan and blocks on incomplete evidence.
 - Done: `scripts/smoke_trial_definitions.py` validates Trial Dish schema, onboarding order, zone bounds, timing ranges, hazards, rival pressure, and tuning-reference coverage.
 - Done: `scripts/smoke_trial_dish_tuning_reference.py` verifies the generated tuning reference includes every declared Trial Dish tunable with readable labels.
+- Done: Trial Dish authored data is separated into `services/trial_definitions.py`, keeping tuning/report tools away from service implementation details.
+- Done: `scripts/smoke_trial_module_boundaries.py` keeps authored Trial Dish data owned by `services/trial_definitions.py` instead of drifting back into `TrialService`.
+- Done: `scripts/export_trial_definitions.py` generates `artifacts/trial_definitions.json` as a normalized runtime contract, and `scripts/smoke_trial_definitions_export.py` verifies the export is ordered, schema-tagged, JSON-native, and complete enough for runtime defaults.
+- Done: `schemas/trial_definitions.schema.json` documents the exported Trial Dish contract, and `scripts/smoke_trial_definitions_schema.py` validates the generated export against it.
+- Done: `scripts/smoke_trial_runtime_contract.py` verifies each exported trial matches the `TrialService.load_trial()` runtime state for tools, timers, hazards, rival pressure, primer settings, win condition, and zones.
+- Done: `scripts/prepare_steam_deck_packet.py` copies the checked Trial Dish schema into `artifacts/trial_definitions.schema.json` so the hardware packet carries the data contract beside the export.
 - Next: use the manual playtest report on real hardware and tune thresholds against that evidence.
 
 ## Not V1

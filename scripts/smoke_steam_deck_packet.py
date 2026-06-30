@@ -1,6 +1,7 @@
 """Smoke-check the Steam Deck hardware packet generator."""
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,12 @@ EXPECTED_REPORTS = {
     ROOT / "artifacts" / "trial_dish_tuning_reference.md": "# Trial Dish Tuning Reference",
     ROOT / "artifacts" / "trial_dish_tuning_plan.md": "# Trial Dish Post-Playtest Tuning Plan",
     ROOT / "artifacts" / "steam_deck_preflight.md": "# Steam Deck Preflight Report",
+}
+EXPECTED_JSON_REPORTS = {
+    ROOT / "artifacts" / "trial_definitions.json": "fluoddity.trial_definitions.v1",
+}
+EXPECTED_JSON_SCHEMA_REPORTS = {
+    ROOT / "artifacts" / "trial_definitions.schema.json": "fluoddity.trial_definitions.v1",
 }
 
 
@@ -47,6 +54,15 @@ def run_packet(python: str) -> None:
         require(path.exists(), f"missing generated report: {path}")
         text = path.read_text(encoding="utf-8")
         require(heading in text, f"report should contain heading {heading!r}: {path}")
+    for path, schema in EXPECTED_JSON_REPORTS.items():
+        require(path.exists(), f"missing generated JSON report: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        require(payload.get("schema") == schema, f"JSON report should contain schema {schema!r}: {path}")
+    for path, schema_id in EXPECTED_JSON_SCHEMA_REPORTS.items():
+        require(path.exists(), f"missing generated JSON schema report: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        require(payload.get("$id") == schema_id, f"JSON schema report should contain $id {schema_id!r}: {path}")
+        require(payload.get("properties", {}).get("trials"), f"JSON schema report should describe trial records: {path}")
 
     handoff = (ROOT / "artifacts" / "steam_input_handoff.md").read_text(encoding="utf-8")
     playtest = (ROOT / "artifacts" / "trial_dish_playtest.md").read_text(encoding="utf-8")
@@ -54,6 +70,8 @@ def run_packet(python: str) -> None:
     index = (ROOT / "artifacts" / "steam_deck_packet_index.md").read_text(encoding="utf-8")
     for report in [
         "artifacts/steam_input_handoff.md",
+        "artifacts/trial_definitions.json",
+        "artifacts/trial_definitions.schema.json",
         "artifacts/trial_dish_playtest.md",
         "artifacts/trial_dish_playtest_summary.md",
         "artifacts/trial_dish_tuning_reference.md",

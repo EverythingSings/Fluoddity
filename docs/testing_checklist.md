@@ -5,7 +5,11 @@ Use this after large refactors or significant new features. Items roughly ordere
 ## Game Prototype Quick Check
 - [ ] Run `python scripts/smoke_game_v1.py`
 - [ ] Run `python scripts/smoke_trial_definitions.py`
+- [ ] Run `python scripts/smoke_trial_definitions_export.py`
+- [ ] Run `python scripts/smoke_trial_definitions_schema.py`
+- [ ] Run `python scripts/smoke_trial_runtime_contract.py`
 - [ ] Run `python scripts/smoke_trial_dish_tuning_reference.py`
+- [ ] Run `python scripts/smoke_trial_module_boundaries.py`
 - [ ] Run `python scripts/smoke_trial_dishes.py`
 - [ ] Run `python scripts/smoke_game_controller.py`
 - [ ] Run `python scripts/smoke_game_shell_contract.py`
@@ -15,6 +19,7 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] Run `python scripts/smoke_trial_dish_playtest_summary.py`
 - [ ] Run `python scripts/prepare_steam_deck_packet.py`
 - [ ] Review `artifacts/steam_deck_packet_index.md` before a hardware pass and confirm it points to every generated report
+- [ ] Confirm `artifacts/trial_definitions.json` and `artifacts/trial_definitions.schema.json` are generated with the hardware packet for future tooling/port checks
 - [ ] Review `artifacts/trial_dish_tuning_reference.md` before changing thresholds from playtest findings
 - [ ] Run `python scripts/smoke_steam_deck_packet.py`
 - [ ] Run `python scripts/prepare_steam_deck_packet.py --run-automated --with-visual --with-fed-results` before a full hardware packet refresh
@@ -23,7 +28,10 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] Run `python scripts/smoke_game_runtime.py`
 - [ ] Run `python scripts/smoke_game_performance.py --extra-arg=--deck-performance --min-fps 30`
 - [ ] Run `python scripts/smoke_game_visual.py`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 1 --expect-zone-overlays 0 --expect-no-hazard-overlay --expect-no-rival-overlay`
 - [ ] Run `python scripts/smoke_game_visual.py --trial 1 --start --frame 25 --expect-active-zones 1 --expect-progress-min 0.01 --expect-status running`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 2 --expect-zone-overlays 3 --expect-no-hazard-overlay --expect-no-rival-overlay`
+- [ ] Run `python scripts/smoke_game_visual.py --trial 3 --expect-zone-overlays 3 --expect-no-hazard-overlay --expect-no-rival-overlay`
 - [ ] Run `python scripts/smoke_game_visual.py --trial 1 --start --frame 45 --controller-cursor --controller-feed --expect-active-zones 1 --expect-progress-min 0.01 --expect-status running --expect-controller-cursor --expect-controller-draw`
 - [ ] Run `python scripts/smoke_game_visual.py --trial 1 --start --pause --frame 45 --controller-cursor --controller-feed --expect-status running --expect-paused --expect-no-controller-cursor --expect-no-controller-draw`
 - [ ] Run `python scripts/smoke_game_visual.py --trial 2 --start --feed --frame 90 --expect-active-zones 2 --expect-progress-min 0.05 --expect-status running`
@@ -44,7 +52,9 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] Confirm `python main.py --game` hides raw editor panels/text-entry tools, and `python main.py --game --allow-editor-in-game` exposes them for development
 - [ ] Confirm default `python main.py --game` ignores raw editor shortcuts and command flags such as config copy/paste, sidebar toggle, parameter sweeps, recording, screenshots, field loading, and mouse-mode toggles unless `--allow-editor-in-game` is passed
 - [ ] Inspect `artifacts/visual_smoke/trial1_briefing.png`, `trial1_running.png`, `trial1_controller_feed.png`, `trial1_paused.png`, `trial2_running.png`, `trial2_result.png`, `trial3_running.png`, and `trial3_result.png` for clipped HUD text, objective response, active zone colors, controller reticle visibility, paused/result-state readability, or markers hidden behind the panel
-- [ ] Trial 1 starts with a single marked zone and no editor panels visible
+- [ ] Trial 1 briefing starts visually quiet with no objective marker, then the running assay reveals a single marked zone with no editor panels visible
+- [ ] Trial 2 and Trial 3 briefings hold hazard/rival overlays until the assay starts
+- [ ] Visual smoke state reports `zone_overlays`, `hazard_overlay`, and `rival_overlay` for onboarding reveal checks
 - [ ] Each briefing shows a short K-7 story beat before protocol instructions
 - [ ] Starting Trial 1 primes a visible specimen response
 - [ ] Progress text explains the current objective status, such as active culture sites, hold time, or rival pressure

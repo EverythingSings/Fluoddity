@@ -874,7 +874,7 @@ class UI(
             imgui.end()
             return
 
-        intro_trial = trial.trial_id == "bloom"
+        intro_trial = trial.minimal_onboarding
         if trial.hazard_enabled:
             if trial.trial_id == "antibiotic_band":
                 imgui.text(f"Counterforce: {trial.hazard_name}")

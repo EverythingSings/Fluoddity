@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from build_metadata import current_build_id
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TRIAL_DEFINITIONS_SCHEMA = ROOT / "schemas" / "trial_definitions.schema.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,6 +44,13 @@ def run_step(label: str, command: list[str]) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
+def copy_trial_definitions_schema() -> Path:
+    output = ROOT / "artifacts" / "trial_definitions.schema.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(TRIAL_DEFINITIONS_SCHEMA, output)
+    return output
+
+
 def write_packet_index(args: argparse.Namespace, build_id: str) -> Path:
     output = ROOT / "artifacts" / "steam_deck_packet_index.md"
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -65,6 +74,8 @@ def write_packet_index(args: argparse.Namespace, build_id: str) -> Path:
         "",
         "## Packet Reports",
         "",
+        "- `artifacts/trial_definitions.json` - machine-readable Trial Dish definitions for tooling and future runtime ports.",
+        "- `artifacts/trial_definitions.schema.json` - checked schema for the Trial Dish definitions export.",
         "- `artifacts/steam_input_handoff.md` - Steamworks Steam Input import/default binding checklist.",
         "- `artifacts/trial_dish_playtest.md` - controller-only Trial Dish playtest sheet.",
         "- `artifacts/trial_dish_playtest_summary.md` - tuning-readiness summary for the filled playtest sheet.",
@@ -109,6 +120,18 @@ def main() -> int:
             build_id,
         ],
     )
+
+    run_step(
+        "trial definitions json",
+        [
+            python,
+            "scripts/export_trial_definitions.py",
+            "--output",
+            "artifacts/trial_definitions.json",
+        ],
+    )
+
+    copy_trial_definitions_schema()
 
     playtest_command = [
         python,
@@ -189,6 +212,8 @@ def main() -> int:
     print(
         "steam_deck_packet_reports="
         "artifacts/steam_deck_packet_index.md "
+        "artifacts/trial_definitions.json "
+        "artifacts/trial_definitions.schema.json "
         "artifacts/steam_input_handoff.md "
         "artifacts/trial_dish_playtest.md "
         "artifacts/trial_dish_playtest_summary.md "
