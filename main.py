@@ -13,7 +13,13 @@ from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
 from camera_input import process_camera_input
-from controller_input import ControllerCam, process_controller_input, find_joystick
+from controller_input import (
+    ControllerCam,
+    apply_controller_to_2d_camera,
+    find_joystick,
+    process_controller_input,
+)
+from launch_options import LaunchOptions, parse_launch_options
 from utilities.advanced_drawing import AdvancedDrawingProcessor
 
 
@@ -25,11 +31,19 @@ class App:
     screenshot state machines.
     """
 
-    def __init__(self):
+    def __init__(self, launch_options: LaunchOptions | None = None):
+        self.launch_options = launch_options or LaunchOptions()
         # Initialize GLFW
         if not glfw.init():
             raise Exception("GLFW initialization failed")
-        self.window = glfw.create_window(800, 600, "Fluoddity", None, None)
+        monitor = glfw.get_primary_monitor() if self.launch_options.fullscreen else None
+        self.window = glfw.create_window(
+            self.launch_options.width,
+            self.launch_options.height,
+            "Fluoddity",
+            monitor,
+            None,
+        )
         if not self.window:
             glfw.terminate()
             raise Exception("GLFW window creation failed")
@@ -49,11 +63,18 @@ class App:
 
         # Load preferences first to get world_size
         loaded_prefs = load_preferences()
+        if self.launch_options.deck_performance:
+            self._apply_deck_performance_defaults(loaded_prefs)
 
         # Create components (no cross-references between UI and sim/camera)
         self.sim = Sim(self.ctx, world_size=loaded_prefs.world_size, canvas_aspect_ratio=loaded_prefs.canvas_aspect_ratio)
         self.camera = Camera(self.ctx, self.sim, self.window)
-        self.ui = UI(self.window, self.ctx, self.sim.view_option_labels)
+        self.ui = UI(
+            self.window,
+            self.ctx,
+            self.sim.view_option_labels,
+            ui_scale=self.launch_options.ui_scale,
+        )
 
         # Apply loaded preferences to UI
         self.ui.state.preferences = loaded_prefs
@@ -123,6 +144,15 @@ class App:
         self.sim.reload()
         self.sim.reset()
 
+    def _apply_deck_performance_defaults(self, prefs):
+        """Prefer 30 FPS+ Steam Deck defaults without deleting user-tunable settings."""
+        prefs.world_size = min(prefs.world_size, 0.35)
+        prefs.speedmult = min(prefs.speedmult, 3)
+        prefs.motion_blur = False
+        prefs.blur_quality = max(prefs.blur_quality, 2)
+        prefs.bloom_enabled = False
+        prefs.show_tutorial_window = False
+
     def _ensure_default_config(self):
         """Ensure _Default.json exists in physics_configs directory. Create it if missing."""
         default_path = self.app_configs_dir / "Core/_Default.json"
@@ -161,18 +191,20 @@ class App:
         ui_state = self.ui.get_state()
         tiling_mode = (ui_state.sim.current_view_option == 3)
 
-        # 2. Process one-shot commands
-        result = self.command_handler.process_commands(ui_state, tiling_mode)
-        if result == 'screenshot_pending' and not self.screenshot_pending and not self.screenshot_in_progress:
-            self.screenshot_pending = True
-
-        # 3. Process continuous input (camera movement)
+        # 2. Process continuous input (camera movement)
         current_time = time.time()
         dt = current_time - self.last_update_time
         self.last_update_time = current_time
         process_camera_input(ui_state, self.window, self.ui.keybindings,
                              self.sim.view_tex, dt)
-        process_controller_input(self.controller_cam, self.joystick_state, dt)
+        controller_actions = process_controller_input(self.controller_cam, self.joystick_state, dt)
+        apply_controller_to_2d_camera(ui_state, self.joystick_state, dt)
+        self._apply_controller_actions(controller_actions, ui_state)
+
+        # 3. Process one-shot commands
+        result = self.command_handler.process_commands(ui_state, tiling_mode)
+        if result == 'screenshot_pending' and not self.screenshot_pending and not self.screenshot_in_progress:
+            self.screenshot_pending = True
 
         # 3.2. Check if pending video should start
         cmd = self.command_handler
@@ -325,6 +357,22 @@ class App:
         })
         self.ui.render()
 
+    def _apply_controller_actions(self, actions, ui_state):
+        """Map gamepad button edges to app-level actions for Deck/controller play."""
+        if "toggle_pause" in actions:
+            ui_state.sim.going = not ui_state.sim.going
+        if "reset_particles" in actions:
+            ui_state.request_reset = True
+        if "toggle_sidebar" in actions:
+            self.ui.show_sidebar = not self.ui.show_sidebar
+        if "randomize_mutations" in actions:
+            ui_state.request_randomize_mutations = True
+        if "toggle_mouse_mode" in actions:
+            if ui_state.preferences.mouse_mode == "Select Particle":
+                ui_state.preferences.mouse_mode = "Draw Trail"
+            else:
+                ui_state.preferences.mouse_mode = "Select Particle"
+
     def _render_camera_view(self, ui_state, sweep_mode, sweep_reticle_pos,
                              sweep_reticle_visible, screen_aspect, tiling_mode):
         """Render the camera view to screen."""
@@ -409,5 +457,5 @@ class App:
 
 
 if __name__ == "__main__":
-    app = App()
+    app = App(parse_launch_options())
     app.run()

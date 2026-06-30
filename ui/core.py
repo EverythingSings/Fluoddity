@@ -49,7 +49,14 @@ class UI(
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
-    def __init__(self, window, ctx: moderngl.Context, view_option_labels: list[str], multi_load_service=None):
+    def __init__(
+        self,
+        window,
+        ctx: moderngl.Context,
+        view_option_labels: list[str],
+        multi_load_service=None,
+        ui_scale: float = 1.0,
+    ):
         self.window = window
         self.ctx = ctx
         self.view_option_labels = view_option_labels
@@ -65,6 +72,9 @@ class UI(
 
         io = imgui.get_io()
         io.config_flags |= imgui.ConfigFlags_.docking_enable  # Enable docking
+        io.config_flags |= imgui.ConfigFlags_.nav_enable_keyboard
+        io.config_flags |= imgui.ConfigFlags_.nav_enable_gamepad
+        io.font_global_scale = ui_scale
 
         # Default font at normal size
         io.fonts.add_font_default()

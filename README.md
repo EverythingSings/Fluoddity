@@ -84,6 +84,21 @@ pip install requirements, then run main.py
 OR
 Download a release and run Fluoddity.exe 
 
+## Steam Deck / Linux
+
+```bash
+git clone https://github.com/EverythingSings/Fluoddity.git
+cd Fluoddity
+bash scripts/build_linux.sh
+./dist/Fluoddity/run_steam_deck.sh
+```
+
+For source runs without packaging:
+
+```bash
+python main.py --steam-deck
+```
+
 ## Building
 
 For instructions on building a standalone executable, see [BUILD.md](BUILD.md).

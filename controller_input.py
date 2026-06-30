@@ -92,6 +92,20 @@ BUTTON_LB = 4
 BUTTON_RB = 5
 BUTTON_SELECT = 6
 BUTTON_START = 7
+BUTTON_A = 0
+BUTTON_B = 1
+BUTTON_X = 2
+BUTTON_Y = 3
+
+
+BUTTON_ACTIONS = {
+    BUTTON_A: "toggle_pause",
+    BUTTON_B: "reset_particles",
+    BUTTON_X: "toggle_sidebar",
+    BUTTON_Y: "randomize_mutations",
+    BUTTON_SELECT: "toggle_mouse_mode",
+    BUTTON_START: "reset_controller_camera",
+}
 
 
 def find_joystick():
@@ -122,6 +136,14 @@ def process_controller_input(controller_cam, joystick_state, dt):
         joystick_state: Mutable dict with 'joystick_id' and 'prev_buttons'.
         dt: Delta time in seconds.
     """
+    actions = set()
+    joystick_state['left_x'] = 0.0
+    joystick_state['left_y'] = 0.0
+    joystick_state['right_x'] = 0.0
+    joystick_state['right_y'] = 0.0
+    joystick_state['lt'] = 0.0
+    joystick_state['rt'] = 0.0
+    joystick_state['fast'] = False
     jid = joystick_state['joystick_id']
 
     # Check connection, try to reconnect if lost
@@ -129,21 +151,21 @@ def process_controller_input(controller_cam, joystick_state, dt):
         jid = find_joystick()
         joystick_state['joystick_id'] = jid
         if jid is None:
-            return
+            return actions
 
     # Get joystick state
     axes_raw = glfw.get_joystick_axes(jid)
     buttons_raw = glfw.get_joystick_buttons(jid)
 
     if axes_raw is None or buttons_raw is None:
-        return
+        return actions
 
     # GLFW returns (ctypes_pointer, count) tuple
     axes_ptr, axes_count = axes_raw
     buttons_ptr, buttons_count = buttons_raw
 
     if axes_count == 0 or buttons_count == 0:
-        return
+        return actions
 
     # Extract values from ctypes pointers
     axes = [axes_ptr[i] for i in range(axes_count)]
@@ -160,20 +182,26 @@ def process_controller_input(controller_cam, joystick_state, dt):
     # Button edge detection
     prev = joystick_state['prev_buttons']
 
-    # Start button: reset camera
-    if len(prev) > BUTTON_START:
-        if buttons[BUTTON_START] and not prev[BUTTON_START]:
-            print("Controller: Reset camera!")
-            controller_cam.reset()
+    if prev:
+        for button, action_name in BUTTON_ACTIONS.items():
+            if len(prev) > button and buttons[button] and not prev[button]:
+                actions.add(action_name)
+
+    if "reset_controller_camera" in actions:
+        print("Controller: Reset camera!")
+        controller_cam.reset()
 
     joystick_state['prev_buttons'] = buttons.copy()
 
     # Right bumper held = fast mode
     speed_mult = FAST_MULTIPLIER if buttons[BUTTON_RB] else 1.0
+    joystick_state['fast'] = bool(buttons[BUTTON_RB])
 
     # Left stick - XZ movement
     left_x = apply_deadzone(axes[AXIS_LEFT_X])
     left_y = apply_deadzone(axes[AXIS_LEFT_Y])
+    joystick_state['left_x'] = left_x
+    joystick_state['left_y'] = left_y
 
     if left_x != 0 or left_y != 0:
         move_speed = MOVE_SPEED * speed_mult * dt
@@ -183,6 +211,8 @@ def process_controller_input(controller_cam, joystick_state, dt):
     # Right stick - rotation
     right_x = apply_deadzone(axes[AXIS_RIGHT_X])
     right_y = apply_deadzone(axes[AXIS_RIGHT_Y])
+    joystick_state['right_x'] = right_x
+    joystick_state['right_y'] = right_y
 
     if right_x != 0 or right_y != 0:
         rotate_speed = ROTATE_SPEED * dt
@@ -195,7 +225,33 @@ def process_controller_input(controller_cam, joystick_state, dt):
     # Normalize triggers: convert from [-1, 1] to [0, 1] if needed
     lt_normalized = (lt + 1.0) / 2.0 if lt < 0 else lt
     rt_normalized = (rt + 1.0) / 2.0 if rt < 0 else rt
+    joystick_state['lt'] = max(0.0, min(1.0, lt_normalized))
+    joystick_state['rt'] = max(0.0, min(1.0, rt_normalized))
 
     y_movement = (rt_normalized - lt_normalized) * MOVE_SPEED * speed_mult * dt
     if abs(y_movement) > 0.01:
         controller_cam.move_y(y_movement)
+
+    return actions
+
+
+def apply_controller_to_2d_camera(ui_state, joystick_state, dt):
+    """Apply Steam Deck/Xbox continuous controls to the 2D Fluoddity camera."""
+    fast_mult = FAST_MULTIPLIER if joystick_state.get('fast') else 1.0
+    move_speed = 2.0 * dt * ui_state.camera.zoom * fast_mult
+    zoom_speed = 2.2 * dt * fast_mult
+
+    left_x = joystick_state.get('left_x', 0.0)
+    left_y = joystick_state.get('left_y', 0.0)
+    right_y = joystick_state.get('right_y', 0.0)
+    trigger_zoom = joystick_state.get('rt', 0.0) - joystick_state.get('lt', 0.0)
+
+    if left_x != 0.0 or left_y != 0.0:
+        ui_state.camera.position[0] += left_x * move_speed
+        ui_state.camera.position[1] += left_y * move_speed
+
+    zoom_input = trigger_zoom - right_y
+    if abs(zoom_input) > 0.01:
+        zoom_factor = 1.0 - zoom_input * zoom_speed
+        zoom_factor = max(0.25, min(4.0, zoom_factor))
+        ui_state.camera.zoom *= zoom_factor

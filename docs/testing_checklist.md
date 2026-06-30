@@ -2,6 +2,17 @@
 
 Use this after large refactors or significant new features. Items roughly ordered by breakage risk.
 
+## 0. Steam Deck Verified Readiness
+- [ ] Run `python main.py --steam-deck` or the packaged `run_steam_deck.sh`
+- [ ] App launches directly at Deck-native `1280x800` fullscreen with no launcher or setup prompt
+- [ ] Default settings hold 30 FPS or better at 800p
+- [ ] Smallest UI text is legible at handheld distance
+- [ ] Controller can pause/resume, reset, toggle sidebar, toggle mouse mode, randomize mutations, navigate UI, load a preset, and exit
+- [ ] Controller can pan with the left stick, zoom with triggers/right stick, and use right bumper as a fast modifier
+- [ ] No normal play path requires keyboard, mouse, touchscreen, or manual controller configuration
+- [ ] Text entry is either avoided in normal play or opens a controller-safe on-screen keyboard path
+- [ ] See `docs/steam_deck_verified.md` for the release-blocking checklist
+
 ## 1. Config Save/Load System
 - [ ] **a.** File → Save: enter name, verify JSON appears in Custom folder
 - [ ] **b.** File → Save existing name: overwrite confirmation dialog works
