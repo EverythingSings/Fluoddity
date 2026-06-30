@@ -454,6 +454,12 @@ class OptiXSphereRenderer:
         self._d_aabbs[:self._entity_count, 0:3] = pos - rad
         self._d_aabbs[:self._entity_count, 3:6] = pos + rad
 
+        # Invalidate AABBs for zero-size entities (min > max tells OptiX to cull)
+        dead = (rad <= 0.0).ravel()
+        if dead.any():
+            self._d_aabbs[:self._entity_count][dead, 0:3] = 1.0
+            self._d_aabbs[:self._entity_count][dead, 3:6] = -1.0
+
         # Append SDF AABB as the last primitive
         if sdf_enabled and sdf_aabb_min is not None:
             sdf_row = cp.array([[

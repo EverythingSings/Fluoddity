@@ -872,6 +872,12 @@ class PathTracerRenderer:
         self._d_aabbs[:self._entity_count, 0:3] = pos - rad
         self._d_aabbs[:self._entity_count, 3:6] = pos + rad
 
+        # Invalidate AABBs for zero-size entities (min > max tells OptiX to cull)
+        dead = (rad <= 0.0).ravel()
+        if dead.any():
+            self._d_aabbs[:self._entity_count][dead, 0:3] = 1.0
+            self._d_aabbs[:self._entity_count][dead, 3:6] = -1.0
+
         # Append SDF AABB as the last primitive
         if sdf_enabled and sdf_aabb_min is not None:
             sdf_row = cp.array([[
@@ -919,9 +925,17 @@ class PathTracerRenderer:
         cp1 = pos + vel_norm * half_extent  # (N, 3) end
 
         # Widths (OptiX curves use diameter, not radius — multiply by 2)
-        # Clamp to a small minimum to avoid degenerate zero-width curves
-        w0 = cp.maximum((size * curve_r0 * 2.0).ravel(), 1e-6)  # (N,)
-        w1 = cp.maximum((size * curve_r1 * 2.0).ravel(), 1e-6)  # (N,)
+        w0 = (size * curve_r0 * 2.0).ravel()  # (N,)
+        w1 = (size * curve_r1 * 2.0).ravel()  # (N,)
+
+        # Zero-size entities: collapse control points and set widths to 0
+        # so OptiX builds a zero-volume degenerate curve (never intersected)
+        dead = (size <= 0.0).ravel()
+        if dead.any():
+            cp0[dead] = 0.0
+            cp1[dead] = 0.0
+            w0[dead] = 0.0
+            w1[dead] = 0.0
 
         # Interleave into vertex buffer: [cp0_0, cp1_0, cp0_1, cp1_1, ...]
         n = self._entity_count
