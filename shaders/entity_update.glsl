@@ -872,7 +872,13 @@ void main() {
         e.pz = 0.0;
         e.vz = 0.0;
     }
-
+    vec4 bonk = collider(vec3(e.px,e.py,e.pz));
+    if(bonk.x<0){
+        vec3 n = bonk.x*-bonk.yzw*.1;
+        e.px+=n.x;
+        e.py+=n.y;
+        e.pz+=n.z;
+    }
     //ADVANCED DRAWING force / strafe (still 2D, applied to XY only)
     vec4 draw_sample =get_field(vec2(e.px, e.py));
     e.vx += .01/CANVAS_SCALE*force_field_strength*draw_sample.x;

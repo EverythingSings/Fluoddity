@@ -295,3 +295,32 @@ vec3 eval_brdf_cos(vec3 incident, vec3 light_dir, vec3 normal, vec2 mat,vec3 p) 
     // MAT_DIFFUSE: Lambertian BRDF = albedo/pi
     return albedo * NdotL / 3.141592653589793;
 }
+
+
+// ====================================================================
+// Collider SDF — separate scene for particle collision
+//
+// collider_scene_sdf() defines the collision geometry (edit this).
+// collider_scene_norm() computes the normal via tetrahedral gradient.
+// collider() returns vec4(sdf, normal) for use in entity_update.
+// ====================================================================
+
+float collider_scene_sdf(vec3 p) {
+    // Simple sphere at origin — replace with your collision geometry
+    return -(length(p) - .95);
+}
+
+vec3 collider_scene_norm(vec3 p) {
+    const float h = 1e-4;
+    const vec2 k = vec2(1.0, -1.0);
+    return normalize(
+        k.xyy * collider_scene_sdf(p + k.xyy * h) +
+        k.yyx * collider_scene_sdf(p + k.yyx * h) +
+        k.yxy * collider_scene_sdf(p + k.yxy * h) +
+        k.xxx * collider_scene_sdf(p + k.xxx * h)
+    );
+}
+
+vec4 collider(vec3 p) {
+    return vec4(collider_scene_sdf(p), collider_scene_norm(p));
+}

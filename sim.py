@@ -383,6 +383,13 @@ class Sim:
         if state.current_view_option < len(self.view_options):
             self.view_tex = self.view_options[state.current_view_option]
 
+        # Set canvas texture wrap mode: GL_REPEAT for Wrap (2), clamp-to-edge otherwise
+        wrap = (state.boundary_conditions == 2)
+        for tex in self.can_3d:
+            tex.repeat_x = wrap
+            tex.repeat_y = wrap
+            tex.repeat_z = wrap
+
     def apply_camera_state(self, camera_state) -> None:
         """Apply camera state from Orchestrator before update."""
         self._camera_state = camera_state
