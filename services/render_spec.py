@@ -297,7 +297,7 @@ class RenderSpecService:
     def apply_state(self, spec: RenderSpec, gpu_buffers: dict,
                     sim, camera, controller_cam, ui_state,
                     config_saver: ConfigSaver, rule_manager,
-                    adv_draw_processor) -> None:
+                    adv_draw_processor) -> bool:
         """Apply a RenderSpec's state + GPU buffers to the running app.
 
         This restores the complete simulation state including physics, camera,
@@ -313,6 +313,10 @@ class RenderSpecService:
             config_saver: ConfigSaver for applying physics config
             rule_manager: RuleManager for pushing rule
             adv_draw_processor: AdvancedDrawingProcessor for field texture
+
+        Returns:
+            True if entity_count or canvas_resolution changed (GPU buffers
+            were reallocated), False otherwise.
         """
         # 1. Apply physics config (includes rule)
         physics_config = PhysicsConfig.from_dict(spec.physics_config_dict)
@@ -357,8 +361,23 @@ class RenderSpecService:
                 if key in valid_fields and hasattr(ui_state.preferences, key):
                     setattr(ui_state.preferences, key, value)
 
-        # 5. Apply sim metadata
+        # 4b. Detect and handle world size changes (must happen before GPU buffer writes)
         sim_metadata = spec.sim_metadata
+        spec_entity_count = sim_metadata.get('entity_count', sim.entity_count) if sim_metadata else sim.entity_count
+        spec_canvas_res = prefs_data.get('canvas_resolution', sim.canvas_resolution) if prefs_data else sim.canvas_resolution
+        world_size_changed = False
+
+        if spec_entity_count != sim.entity_count or spec_canvas_res != sim.canvas_resolution:
+            print(f"[RenderSpec] World size change: entities {sim.entity_count}->{spec_entity_count}, "
+                  f"canvas {sim.canvas_resolution}->{spec_canvas_res}")
+            sim._entity_count = spec_entity_count
+            sim.canvas_resolution = spec_canvas_res
+            sim.setup_simulation_state()  # Reallocate entity buffer + canvas textures
+            sim.setup_shaders()           # Recompile with new ENTITY_COUNT #define
+            sim.apply_rule(rule)          # Re-push rule to new shader program
+            world_size_changed = True
+
+        # 5. Apply sim metadata
         if sim_metadata:
             sim.frame_count = sim_metadata.get('frame_count', 0)
             sim.can_read_index = sim_metadata.get('can_read_index', 0)
@@ -391,6 +410,8 @@ class RenderSpecService:
         elif adv_draw_processor is not None and adv_draw_processor.field_texture is not None:
             # No field in render spec — clear existing field to match saved state
             adv_draw_processor.clear_fields()
+
+        return world_size_changed
 
     def list_available_specs(self) -> list[Path]:
         """List all .frs directories in the RenderSpecs folder.

@@ -457,6 +457,7 @@ void reset(uint index){
             -0.85,
             1.8 * ((float(gz) + 0.5) / float(grid_side) - 0.5)
         );
+        //cell_center.xz=vec2(0);
         // Rejection-sample a disk in XZ, thin spread in Y
         float cell_radius = 0.09 / float(grid_side) / CANVAS_SCALE;
         vec2 candidate_xz;

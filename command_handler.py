@@ -709,12 +709,16 @@ class CommandHandler:
             gpu_buffers = self.render_spec_service.load_gpu_buffers(dir_path)
             if gpu_buffers is None:
                 return
-            self.render_spec_service.apply_state(
+            world_size_changed = self.render_spec_service.apply_state(
                 spec, gpu_buffers,
                 self.sim, self.camera, self.controller_cam, ui_state,
                 self.config_saver, self.rule_manager,
                 self.field_handler.adv_draw if self.field_handler else None
             )
+            if world_size_changed:
+                self.entity_picker.update_buffer(self.sim.get_entity_buffer())
+                self.ui._last_applied_entity_count = ui_state.preferences.entity_count
+                self.ui._last_applied_canvas_resolution = ui_state.preferences.canvas_resolution
             # Re-sync tracer interface if it exists (preferences were updated
             # but the live TracerInterface still has stale values)
             if self.ui._tracer_interface is not None:
