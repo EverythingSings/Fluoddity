@@ -47,6 +47,22 @@ static __forceinline__ __device__ float sd_box(float3 p, float3 center, float3 h
     return outside + inside;
 }
 
+static __forceinline__ __device__ float sd_cut_hollow_sphere(float3 p, float r, float h, float t)
+{
+    float w = sqrtf(r * r - h * h);
+    float2 q = make_float2(sqrtf(p.x * p.x + p.z * p.z), p.y);
+    return ((h * q.x < w * q.y)
+        ? sqrtf((q.x - w) * (q.x - w) + (q.y - h) * (q.y - h))
+        : fabsf(sqrtf(q.x * q.x + q.y * q.y) - r)) - t;
+}
+
+// ---- Collider SDF ----
+
+static __forceinline__ __device__ float collider_scene_sdf(float3 p)
+{
+    return sd_cut_hollow_sphere(p-mk3(0.0f,0.5f,0.0f), 0.75f, -0.25f, 0.031f);
+}
+
 // ---- Boolean operations (vec2 = float2(distance, material_id)) ----
 
 static __forceinline__ __device__ float2 sdf_union(float2 a, float2 b)
@@ -77,7 +93,11 @@ static __forceinline__ __device__ float2 sdf_scene(float3 p)
     float dts = sd_box(p, mk3(0.0f, 0.0f, 0.0f), mk3(1.0f, 1.0f, 1.0f));
     dts = fmaxf(p.y + 0.725f, -dts);
     dts = fmaxf(dts, sd_box(p, mk3(0.0f, 0.0f, 0.0f), mk3(2.0f, 2.0f, 2.0f)));
-    return make_float2(dts, (float)MAT_DIFFUSE);
+    float2 platform = make_float2(dts, (float)MAT_DIFFUSE);
+
+    float2 collider = make_float2(collider_scene_sdf(p), (float)MAT_GLOSSY);
+
+    return collider;//sdf_union(platform, collider);
 }
 
 
@@ -120,7 +140,7 @@ static __forceinline__ __device__ float3 sdf_get_albedo(float2 mat, float3 p)
         // Checkerboard ground pattern
         float3 pp = mk3(p.x * 4.0f, p.y * 4.0f, p.z * 4.0f);
         float checker = fmodf(fabsf(floorf(pp.x) + floorf(pp.z)), 2.0f);
-        float grey = 0.02f + 0.6f * checker;//checker;
+        float grey = 0.02f + 0.6f *-0.02f;// checker;
         return mk3(grey, grey, grey);
     }
     return mk3(0.9f, 0.9f, 0.9f);  // bright reflector/glossy

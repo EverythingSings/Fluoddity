@@ -297,6 +297,13 @@ vec3 eval_brdf_cos(vec3 incident, vec3 light_dir, vec3 normal, vec2 mat,vec3 p) 
 }
 
 
+float sdCutHollowSphere( vec3 p, float r, float h, float t )
+{
+  float w = sqrt(r*r-h*h);
+  vec2 q = vec2( length(p.xz), p.y );
+  return ((h*q.x<w*q.y) ? length(q-vec2(w,h)) : 
+                          abs(length(q)-r) ) - t;
+}
 // ====================================================================
 // Collider SDF — separate scene for particle collision
 //
@@ -307,7 +314,7 @@ vec3 eval_brdf_cos(vec3 incident, vec3 light_dir, vec3 normal, vec2 mat,vec3 p) 
 
 float collider_scene_sdf(vec3 p) {
     // Simple sphere at origin — replace with your collision geometry
-    return -(length(p) - .95);
+    return sdCutHollowSphere(p-vec3(0,.5,0),.75,-.25,.03);//-(length(p) - .95);
 }
 
 vec3 collider_scene_norm(vec3 p) {
