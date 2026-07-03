@@ -60,7 +60,7 @@ static __forceinline__ __device__ float sd_cut_hollow_sphere(float3 p, float r, 
 
 static __forceinline__ __device__ float collider_scene_sdf(float3 p)
 {
-    return sd_cut_hollow_sphere(p-mk3(0.0f,0.5f,0.0f), 0.75f, -0.25f, 0.031f);
+    return sd_cut_hollow_sphere(p-mk3(0.0f,0.5f,0.0f), 01.5f, -01.25f, 0.031f);
 }
 
 // ---- Boolean operations (vec2 = float2(distance, material_id)) ----

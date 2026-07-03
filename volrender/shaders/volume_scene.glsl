@@ -314,7 +314,7 @@ float sdCutHollowSphere( vec3 p, float r, float h, float t )
 
 float collider_scene_sdf(vec3 p) {
     // Simple sphere at origin — replace with your collision geometry
-    return sdCutHollowSphere(p-vec3(0,.5,0),.75,-.25,.03);//-(length(p) - .95);
+    return sdCutHollowSphere(p-vec3(0,.5,0),1.5,-1.25,.03);//-(length(p) - .95);
 }
 
 vec3 collider_scene_norm(vec3 p) {

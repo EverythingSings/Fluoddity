@@ -154,7 +154,7 @@ void report(float val, uint plot_num) {
 // OUTPUT_PROJECTION true: 4 fourier outputs -> 2D force/strafe. false: 6 outputs -> 3D force/strafe
 #define INPUT_PROJECTION false
 #define OUTPUT_PROJECTION false
-//#define GRID_2D_MODE true
+#define GRID_2D_MODE true
 #define CRUNCH true
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
