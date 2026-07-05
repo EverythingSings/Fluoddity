@@ -358,6 +358,9 @@ class App:
             ui_state.preferences.speedmult = self.user_speedmult
             ui_state.preferences.motion_blur = self.user_motion_blur
             ui_state.preferences.blur_quality = self.user_blur_quality
+            # Invalidate cached texture — FrameAssembler will recreate resources
+            # when total_samples changes, releasing the old texture
+            self.camera.assembled_texture = None
             # Restore AO rays if we overrode them
             if hasattr(self, '_saved_ao_num_rays'):
                 ui_state.preferences.three_d_optix_ao_num_rays = self._saved_ao_num_rays
