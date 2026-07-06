@@ -155,7 +155,7 @@ void report(float val, uint plot_num) {
 #define INPUT_PROJECTION false
 #define OUTPUT_PROJECTION false
 #define GRID_2D_MODE true
-#define CRUNCH true
+//#define CRUNCH true
 // Multi-load helper: Calculate which config index this particle should use
 int get_particle_config_index() {
     if (MULTILOAD_COUNT == 0) return -1; // Not in multi-load mode
@@ -780,6 +780,7 @@ void sample_plane_physics(
     vec3 strafe_local = vec3(0);
     vec2 col_params = vec2(0);
     calculate_entity_behavior(ltap, rtap, orientation, current_rule, epos2, cohort, force_local, strafe_local, col_params);
+    if(gl_GlobalInvocationID%500==0){report(ltap.x,0);report(ltap.y,1);report(ltap.z,2);}
 
     // Rescale output forces
     force_local *= gfm / 400.;
@@ -846,7 +847,7 @@ void main() {
     vec3 strafe3 = strafe_accum / float(num_samples);
     vec2 col_params = col_accum / float(num_samples);
 
-    if(index%500==0){report(length(col_params),0);}//small sample
+    //if(index%500==0){report(length(col_params),0);}//small sample
 
     //Set entity hue (saturation/brightness/alpha are computed in vertex shaders)
     e.hue = abs(get_particle_hue_sensitivity()*col_params.x);
