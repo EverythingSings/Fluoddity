@@ -65,17 +65,7 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] **d.** File saved to Documents/Fluoddity/screenshots/ with timestamp
 - [ ] **e.** Supersample factor applied
 
-## 7. Multi-Load Mode
-- [ ] **a.** Extras → Multi Load Mode enables
-- [ ] **b.** File → Load adds configs (max 64), menu stays open
-- [ ] **c.** Physics window switches to multi-load layout
-- [ ] **d.** Mouse mode forced to Draw Trail
-- [ ] **e.** Parameter sweeps force-disabled
-- [ ] **f.** Simultaneous configs / Progression Pace / Current Progress sliders work
-- [ ] **g.** Remove buttons remove individual configs
-- [ ] **h.** Per-config toggles (Initial Conditions, Cohorts, Hazard Rate) grey out respective controls
-
-## 8. Appearance & View
+## 7. Appearance & View
 - [ ] **a.** Color by Cohort toggle (hides Hue Sensitivity when on)
 - [ ] **b.** Watercolor Mode toggle (V key), shows Ink Weight when on
 - [ ] **c.** Emboss Mode combo (Off/Canvas/Brush), shows Intensity + Smoothness when on
@@ -84,29 +74,29 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] **f.** View option dropdown cycles views
 - [ ] **g.** Tiling mode (view option 3): camera wraps, exiting wraps position back to center
 
-## 9. Preferences
+## 8. Preferences
 - [ ] **a.** World size change triggers full rebuild (expensive, console output)
 - [ ] **b.** Physics frequency slider (locked label during recording)
 - [ ] **c.** Motion blur toggle + blur quality slider
-- [ ] **d.** Mouse mode dropdown (locked text in multi-load)
+- [ ] **d.** Mouse mode dropdown
 - [ ] **e.** Draw size / Draw power visible only in Draw Trail mode
 - [ ] **f.** Debug arrows toggle + sensitivity slider
 - [ ] **g.** Preferences saved on exit, restored on next launch
 
-## 10. Menu Auto-Close
+## 9. Menu Auto-Close
 - [ ] **a.** Main menu bar: menus close when mouse moves far away
 - [ ] **b.** Physics settings menu bar: same behavior
 - [ ] **c.** Slider context menus: same behavior
 - [ ] **d.** Save dialog open prevents auto-close
 
-## 11. Camera & Input
+## 10. Camera & Input
 - [ ] **a.** WASD movement
 - [ ] **b.** QE zoom in/out
 - [ ] **c.** Scroll wheel zoom (centered on mouse pointer)
 - [ ] **d.** V key: reload shaders (hot reload)
 - [ ] **e.** Keybindings from keyboard_controls.json respected
 
-## 12. Help Windows
+## 11. Help Windows
 - [ ] **a.** Help → Controls: lists all shortcuts
 - [ ] **b.** Help → Tutorial: all collapsible sections open/close
 - [ ] **c.** Help → Parameter Sweeps: info window opens

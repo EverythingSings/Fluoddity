@@ -5,7 +5,7 @@ import numpy as np
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService, RenderSpecService
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, RenderSpecService
 from services.field_handler import FieldHandler
 from services.parameter_lock_service import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
@@ -82,11 +82,9 @@ class App:
         self.video_service = VideoRecorderService()
         self.config_saver = ConfigSaver()
         self.arrow_debug_service = ArrowDebugService(self.ctx)
-        self.multi_load_service = MultiLoadService()
         self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
         self.plotting_manager = PlottingManager(self.ctx)
         self.render_spec_service = RenderSpecService()
-        self.ui.multi_load_service = self.multi_load_service
         self.ui.advanced_drawing_processor = self.advanced_drawing_processor
         self.ui.plotting_manager = self.plotting_manager
         self.ui.render_spec_service = self.render_spec_service
@@ -105,7 +103,7 @@ class App:
         self.command_handler = CommandHandler(
             self.sim, self.camera, self.ui, self.rule_manager,
             self.entity_picker, self.video_service, self.config_saver,
-            self.multi_load_service, self.user_configs_dir,
+            self.user_configs_dir,
             field_handler=self.field_handler,
             param_lock_service=self.param_lock_service,
             render_spec_service=self.render_spec_service
@@ -403,7 +401,6 @@ class App:
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)
-        self.multi_load_service.apply_state(ui_state.multi_load)
         self.camera.BRIGHTNESS = ui_state.preferences.brightness
 
         # Release all OptiX VRAM when OptiX is toggled off
@@ -659,14 +656,6 @@ class App:
             else:
                 # Field texture not initialized yet — fall back to canvas view
                 ui_state.sim.current_view_option = 0
-
-        # 5.1. Multi-load conflict prevention
-        if ui_state.multi_load.multi_load_enabled:
-            ui_state.sim.parameter_sweeps_enabled = False
-            ui_state.preferences.mouse_mode = "Draw Trail"
-            if self.param_lock_service.enabled:
-                self.param_lock_service.reset()
-                ui_state.preferences.parameter_locks_enabled = False
 
         # 5.2. Sync parameter lock master toggle
         self.param_lock_service.enabled = ui_state.preferences.parameter_locks_enabled

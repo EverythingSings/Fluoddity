@@ -73,7 +73,7 @@ No additional wiring needed — the orchestrator pattern handles the rest.
 
 ## Important Caveats
 
-- **`sim.py` is user-owned** — do not restructure without asking. It has its own hardcoded param lists in `entity_update()` and `_write_multi_load_ssbo()`.
+- **`sim.py` is user-owned** — do not restructure without asking. It has its own hardcoded param lists in `entity_update()`.
 - **Windows platform** — use forward slashes or `os.path`; use `rm` not `del` in bash commands.
 - **No test suite** — changes must be verified manually.
 - **Shaders must be in `shaders/`** relative to the executable for builds to work.

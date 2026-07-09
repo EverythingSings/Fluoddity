@@ -63,11 +63,10 @@ class UI(
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
-    def __init__(self, window, ctx: moderngl.Context, view_option_labels: list[str], multi_load_service=None):
+    def __init__(self, window, ctx: moderngl.Context, view_option_labels: list[str]):
         self.window = window
         self.ctx = ctx
         self.view_option_labels = view_option_labels
-        self.multi_load_service = multi_load_service
         self.param_lock_service = None  # Set by App after construction
         self.plotting_manager = None  # Set by App after construction
 
@@ -225,7 +224,6 @@ class UI(
         self._request_clear_clipboard_preview = False
         self._request_load_clipboard_config = False
         self._request_delete_clipboard_config = False
-        self._request_import_clipboard_to_multiload = False
         self._clipboard_config_index = -1
 
         # Render spec flags
@@ -511,7 +509,6 @@ class UI(
         self.state.request_clear_clipboard_preview = self._request_clear_clipboard_preview
         self.state.request_load_clipboard_config = self._request_load_clipboard_config
         self.state.request_delete_clipboard_config = self._request_delete_clipboard_config
-        self.state.request_import_clipboard_to_multiload = self._request_import_clipboard_to_multiload
         self.state.clipboard_config_index = self._clipboard_config_index
 
         # Transfer render spec flags
@@ -578,7 +575,6 @@ class UI(
         self._request_clear_clipboard_preview = False
         self._request_load_clipboard_config = False
         self._request_delete_clipboard_config = False
-        self._request_import_clipboard_to_multiload = False
         self._clipboard_config_index = -1
 
         # Reset render spec flags (keep _save_render_spec_name — it's widget state)

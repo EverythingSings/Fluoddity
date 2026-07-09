@@ -134,7 +134,7 @@ class MenuBarMixin:
 
                     hovered_this_frame = self._render_load_submenu_content(current_menu_watercolor)
 
-                    # Handle preview on hover (works in both normal and multi-load modes)
+                    # Handle preview on hover
                     # hovered_this_frame is now a tuple (filename, category) or None
                     hovered_filename = hovered_this_frame[0] if hovered_this_frame else None
                     hovered_category = hovered_this_frame[1] if hovered_this_frame else None
@@ -349,17 +349,7 @@ class MenuBarMixin:
                     "brush modes, force fields, and strafe fields."
                 )
 
-                # Multi Load toggle
-                _, self.state.multi_load.multi_load_enabled = imgui.checkbox(
-                    "Multi Load - EXPERIMENTAL",
-                    self.state.multi_load.multi_load_enabled
-                )
-                self._delayed_tooltip("Load multiple files at once, so that particles\nfrom different saves can interact.")
-
-                # Parameter Locks checkbox (greyed out in multiload mode)
-                multiload_active = self.state.multi_load.multi_load_enabled
-                if multiload_active:
-                    imgui.begin_disabled()
+                # Parameter Locks checkbox
                 changed, new_val = imgui.checkbox(
                     "Parameter Locks - EXPERIMENTAL",
                     self.state.preferences.parameter_locks_enabled
@@ -374,8 +364,6 @@ class MenuBarMixin:
                 self._delayed_tooltip(
                     "Alt-Click on a parameter to freeze it and its value\n"
                     "won't change when loading new configs.")
-                if multiload_active:
-                    imgui.end_disabled()
 
                 imgui.separator()
 

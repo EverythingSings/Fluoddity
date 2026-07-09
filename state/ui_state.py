@@ -3,7 +3,6 @@ from .sim_state import SimState
 from .camera_state import CameraState
 from .recording_state import RecordingState
 from .preferences_state import PreferencesState
-from .multi_load_state import MultiLoadState
 
 
 @dataclass
@@ -13,7 +12,6 @@ class UIState:
     camera: CameraState = field(default_factory=CameraState)
     recording: RecordingState = field(default_factory=RecordingState)
     preferences: PreferencesState = field(default_factory=PreferencesState)
-    multi_load: MultiLoadState = field(default_factory=MultiLoadState)
 
     # Input state (updated by callbacks)
     keys_pressed: set = field(default_factory=set)
@@ -85,7 +83,6 @@ class UIState:
     request_clear_clipboard_preview: bool = False
     request_load_clipboard_config: bool = False
     request_delete_clipboard_config: bool = False
-    request_import_clipboard_to_multiload: bool = False
     clipboard_config_index: int = -1
 
     # Render spec save

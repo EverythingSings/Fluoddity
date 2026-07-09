@@ -127,18 +127,13 @@ class PreferencesWindowMixin:
             # === Mouse Interaction section ===
             imgui.text("Mouse Interaction (Press 'T' to toggle)")
 
-            # Mouse mode combo box (locked when multi-load enabled)
-            if self.state.multi_load.multi_load_enabled:
-                imgui.begin_disabled()
-                imgui.text_colored(imgui.ImVec4(0.8, 0.8, 0.2, 1.0), "Mouse Mode: Draw Trail (locked in Multi-Load)")
-                imgui.end_disabled()
-            else:
-                mouse_modes = ["Select Particle", "Draw Trail"]
-                current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
-                clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
-                if clicked:
-                    self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
-                self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
+            # Mouse mode combo box
+            mouse_modes = ["Select Particle", "Draw Trail"]
+            current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
+            clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
+            if clicked:
+                self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
+            self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
 
             # Draw mode sliders (only show when in Draw Trail mode)
             if self.state.preferences.mouse_mode == "Draw Trail":

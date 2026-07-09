@@ -58,20 +58,9 @@ class Sim:
         self.entities = self.ctx.buffer(reserve=self.entity_count * SIZE_OF_ENTITY_STRUCT)
         self.rule_buffer = self.ctx.buffer(reserve=RULE_BUFFER_SIZE * SIZE_OF_RULE_STRUCT)
 
-        # Multi-load config buffer (64 configs * 248 bytes per config)
-        # Each MultiLoadConfig struct: 9 PhysicsSetting (54 floats) + 6 ints + 2 floats = 248 bytes
-        MULTI_LOAD_CONFIG_SIZE = 248
-        MAX_MULTI_LOAD_CONFIGS = 64
-        self.multi_load_buffer = self.ctx.buffer(reserve=MAX_MULTI_LOAD_CONFIGS * MULTI_LOAD_CONFIG_SIZE)
-
-        # Multi-load rule buffer (64 rules * SIZE_OF_RULE_STRUCT bytes per rule)
-        self.multi_load_rule_buffer = self.ctx.buffer(reserve=MAX_MULTI_LOAD_CONFIGS * SIZE_OF_RULE_STRUCT)
-
         # Bind entity and rule buffers
         self.entities.bind_to_storage_buffer(0)
         self.rule_buffer.bind_to_storage_buffer(2)
-        self.multi_load_buffer.bind_to_storage_buffer(3)  # Binding 3 matches shader layout
-        self.multi_load_rule_buffer.bind_to_storage_buffer(4)  # Binding 4 for multi-load rules
 
         self.can_read_index = 0  # Index of texture pair to read from (write to the other)
 
@@ -145,7 +134,7 @@ class Sim:
             print(e)
             self.canvas_slice_program = None
 
-    def entity_update(self, ctx: moderngl.Context, multi_load_service=None,
+    def entity_update(self, ctx: moderngl.Context,
                       is_preview_active=False, field_texture_bound=False,
                       force_field_strength: float = 1.0,
                       strafe_field_strength: float = 1.0,
@@ -166,29 +155,22 @@ class Sim:
         # Only write rules to buffer when explicitly requested (avoids 192MB/frame cost)
         tryset(self.entity_update_program, 'WRITE_RULES', self._pending_rule_buffer_update)
 
-        # Multi-load mode: set uniform arrays for all loaded configs
-        if multi_load_service and multi_load_service.is_active() and not is_preview_active:
-            self._set_multi_load_uniforms(multi_load_service)
-        
-        # Normal mode: set single config uniforms
-        else:
-            tryset(self.entity_update_program, 'MULTILOAD_COUNT', 0)
-            self._assign_physics_setting('AXIAL_FORCE_SETTING', self._state.AXIAL_FORCE, 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
-            self._assign_physics_setting('LATERAL_FORCE_SETTING', self._state.LATERAL_FORCE, 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
-            self._assign_physics_setting('SENSOR_GAIN_SETTING', self._state.SENSOR_GAIN, 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
-            self._assign_physics_setting('MUTATION_SCALE_SETTING', self._state.MUTATION_SCALE, 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
-            self._assign_physics_setting('DRAG_SETTING', self._state.DRAG, 'Drag', 'DRAG', -1.0, 1.0)
-            self._assign_physics_setting('STRAFE_POWER_SETTING', self._state.STRAFE_POWER, 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
-            self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
-            self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
-            self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
-            tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
-            tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
-            tryset(self.entity_update_program, 'ORIENTATION_MIX', self._state.ORIENTATION_MIX)
-            # Rule seed from sim state (saved with physics configs)
-            tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
-        
-        #both modes: set global and conditionally global uniforms
+        self._assign_physics_setting('AXIAL_FORCE_SETTING', self._state.AXIAL_FORCE, 'Axial Force', 'AXIAL_FORCE', -1.0, 1.0)
+        self._assign_physics_setting('LATERAL_FORCE_SETTING', self._state.LATERAL_FORCE, 'Lateral Force', 'LATERAL_FORCE', -1.0, 1.0)
+        self._assign_physics_setting('SENSOR_GAIN_SETTING', self._state.SENSOR_GAIN, 'Sensor Gain', 'SENSOR_GAIN', 0.0, 5.0)
+        self._assign_physics_setting('MUTATION_SCALE_SETTING', self._state.MUTATION_SCALE, 'Mutation Scale', 'MUTATION_SCALE', -0.5, 0.5)
+        self._assign_physics_setting('DRAG_SETTING', self._state.DRAG, 'Drag', 'DRAG', -1.0, 1.0)
+        self._assign_physics_setting('STRAFE_POWER_SETTING', self._state.STRAFE_POWER, 'Strafe Power', 'STRAFE_POWER', 0.0, 0.5)
+        self._assign_physics_setting('SENSOR_ANGLE_SETTING', self._state.SENSOR_ANGLE, 'Sensor Angle', 'SENSOR_ANGLE', -1.0, 1.0)
+        self._assign_physics_setting('GLOBAL_FORCE_MULT_SETTING', self._state.GLOBAL_FORCE_MULT, 'Global Force Mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0)
+        self._assign_physics_setting('SENSOR_DISTANCE_SETTING', self._state.SENSOR_DISTANCE, 'Sensor Distance', 'SENSOR_DISTANCE', 0.0, 4.0)
+        tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
+        tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
+        tryset(self.entity_update_program, 'ORIENTATION_MIX', self._state.ORIENTATION_MIX)
+        # Rule seed from sim state (saved with physics configs)
+        tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
+
+        # set global and conditionally global uniforms
         tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
         tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
@@ -217,7 +199,7 @@ class Sim:
         ctx.memory_barrier()
         self.entity_update_program.run(num_workgroups)
 
-    def can_update_3d(self, multi_load_service=None, is_preview_active=False):
+    def can_update_3d(self):
         """Apply 3D canvas decay + diffusion via compute shader.
 
         Handles double-buffering: reads from can_read_index, writes to 1-can_read_index.
@@ -228,19 +210,15 @@ class Sim:
         tryset(prog, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(prog, 'frame_count', self.frame_count)
 
-        # Multi-load mode: calculate weighted average trail settings
-        if multi_load_service and multi_load_service.is_active() and not is_preview_active:
-            trail_persistence, trail_diffusion = self._calculate_weighted_trail_settings(multi_load_service)
-        else:
-            trail_persistence = self._state.TRAIL_PERSISTENCE
-            trail_diffusion = self._state.TRAIL_DIFFUSION
+        trail_persistence = self._state.TRAIL_PERSISTENCE
+        trail_diffusion = self._state.TRAIL_DIFFUSION
 
         # TRAIL_PERSISTENCE PhysicsSetting
         min_val, max_val = self._get_slider_range('Trail Persistence', 0.0, 1.0)
         tryset(prog, 'TRAIL_PERSISTENCE_SETTING.slider_value', trail_persistence)
         tryset(prog, 'TRAIL_PERSISTENCE_SETTING.min_value', min_val)
         tryset(prog, 'TRAIL_PERSISTENCE_SETTING.max_value', max_val)
-        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
+        if self._state.parameter_sweeps_enabled:
             tryset(prog, 'TRAIL_PERSISTENCE_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_PERSISTENCE', 0.0))
             tryset(prog, 'TRAIL_PERSISTENCE_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_PERSISTENCE', 0.0))
         else:
@@ -254,7 +232,7 @@ class Sim:
         tryset(prog, 'TRAIL_DIFFUSION_SETTING.slider_value', trail_diffusion)
         tryset(prog, 'TRAIL_DIFFUSION_SETTING.min_value', min_val)
         tryset(prog, 'TRAIL_DIFFUSION_SETTING.max_value', max_val)
-        if self._state.parameter_sweeps_enabled and not (multi_load_service and multi_load_service.is_active()):
+        if self._state.parameter_sweeps_enabled:
             tryset(prog, 'TRAIL_DIFFUSION_SETTING.x_sweep', self._state.x_sweeps.get('TRAIL_DIFFUSION', 0.0))
             tryset(prog, 'TRAIL_DIFFUSION_SETTING.y_sweep', self._state.y_sweeps.get('TRAIL_DIFFUSION', 0.0))
         else:
@@ -314,7 +292,7 @@ class Sim:
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-               multi_load_service=None, is_preview_active = False, tiling_mode: bool = False,
+               is_preview_active = False, tiling_mode: bool = False,
                strong_determinism: bool = False,
                brush_mode: int = 0, fixed_direction_heading: float = 0.0,
                erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
@@ -335,7 +313,7 @@ class Sim:
         self.time = current_time - self.start_time_stamp
 
         # 1. Entity physics + atomic splat (reads canvas for sensors, writes trails atomically)
-        self.entity_update(ctx, multi_load_service, is_preview_active,
+        self.entity_update(ctx, is_preview_active,
                            field_texture_bound=field_texture is not None,
                            force_field_strength=force_field_strength,
                            strafe_field_strength=strafe_field_strength,
@@ -346,13 +324,9 @@ class Sim:
         ctx.disable(moderngl.BLEND)
 
         # 3. Canvas decay + diffusion (3D compute shader path)
-        self.can_update_3d(multi_load_service, is_preview_active)
+        self.can_update_3d()
 
         self.frame_count += 1
-
-        # Increment multi-load progress if active
-        if multi_load_service and multi_load_service.is_active():
-            multi_load_service.increment_progress()
 
     def _clear_3d_textures(self):
         """Clear all 3D canvas textures to zero."""
@@ -491,215 +465,6 @@ class Sim:
             tryset(self.entity_update_program, f'{uniform_name}.cohort_sweep', 0.0)
         # Always apply jitter (independent of parameter_sweeps_enabled)
         tryset(self.entity_update_program, f'{uniform_name}.jitter', self._state.jitters.get(param_name, 0.0))
-
-    def _calculate_weighted_trail_settings(self, multi_load_service) -> tuple[float, float]:
-        """Calculate weighted average trail settings based on multi-load window.
-
-        The window is defined by current_progress (position in circular buffer, 0-1)
-        and simultaneous_configs (span width in number of configs). We calculate
-        which configs the window touches and their weights, then return weighted averages.
-
-        Args:
-            multi_load_service: MultiLoadService instance
-
-        Returns:
-            (trail_persistence, trail_diffusion) tuple of weighted averages
-        """
-        config_count = multi_load_service.get_config_count()
-        if config_count == 0:
-            return (0.938, 1.0)  # Default values
-
-        current_progress = multi_load_service.current_progress
-        simultaneous = multi_load_service.simultaneous_configs
-
-        # Calculate window center and half-width in config index space
-        # Each config occupies unit width [i, i+1) in index space
-        half_width = simultaneous / 2.0 + 1e-3
-        center = current_progress * config_count + half_width
-        
-        # Calculate weighted sum
-        total_weight = 0.0
-        weighted_persistence = 0.0
-        weighted_diffusion = 0.0
-
-        for i in range(config_count):
-            # Calculate overlap between window and config i
-            # Config i occupies space [i, i+1) in index space
-            overlap = self._calculate_circular_overlap(
-                center - half_width,  # window start
-                center + half_width,  # window end
-                float(i),              # config start
-                float(i + 1),          # config end
-                float(config_count)    # total configs for wrapping
-            )
-
-            if overlap > 0:
-                config = multi_load_service.get_config(i)
-                if config:
-                    weighted_persistence += overlap * config.trail_persistence
-                    weighted_diffusion += overlap * config.trail_diffusion
-                    total_weight += overlap
-
-        # Return weighted averages
-        if total_weight > 0:
-            return (weighted_persistence / total_weight, weighted_diffusion / total_weight)
-        else:
-            # Fallback to first config if no overlap (shouldn't happen)
-            config = multi_load_service.get_config(0)
-            if config:
-                return (config.trail_persistence, config.trail_diffusion)
-            return (0.938, 1.0)
-
-    def _calculate_circular_overlap(self, win_start: float, win_end: float,
-                                     cfg_start: float, cfg_end: float,
-                                     total_count: float) -> float:
-        """Calculate overlap between window and config in circular buffer.
-
-        Args:
-            win_start, win_end: Window bounds in index space (can be negative or > total_count)
-            cfg_start, cfg_end: Config bounds in index space [i, i+1)
-            total_count: Total number of configs
-
-        Returns:
-            Overlap amount (0 to 1.0 representing fraction of window)
-        """
-        # Normalize window bounds to [0, total_count) range with wrapping
-        win_start = win_start % total_count
-        win_end = win_end % total_count
-
-        overlap = 0.0
-
-        # Case 1: Window doesn't wrap (win_start < win_end)
-        if win_start <= win_end:
-            # Simple overlap calculation
-            overlap_start = max(win_start, cfg_start)
-            overlap_end = min(win_end, cfg_end)
-            overlap = max(0.0, overlap_end - overlap_start)
-        else:
-            # Case 2: Window wraps around (win_start > win_end in normalized space)
-            # The window consists of two segments: [win_start, total_count) and [0, win_end)
-
-            # Check overlap with first segment [win_start, total_count)
-            if cfg_end > win_start:
-                overlap_start = max(win_start, cfg_start)
-                overlap_end = min(total_count, cfg_end)
-                overlap += max(0.0, overlap_end - overlap_start)
-
-            # Check overlap with second segment [0, win_end)
-            if cfg_start < win_end:
-                overlap_start = max(0.0, cfg_start)
-                overlap_end = min(win_end, cfg_end)
-                overlap += max(0.0, overlap_end - overlap_start)
-
-        return overlap
-
-    def _set_multiload_physics_param(self, array_name: str, index: int, config, param_attr: str, slider_label: str, param_name: str, default_min: float, default_max: float):
-        """Helper to set a single PhysicsSetting struct in an array for multi-load mode."""
-        slider_value = getattr(config, param_attr)
-        min_val, max_val = self._get_slider_range(slider_label, default_min, default_max)
-
-        tryset(self.entity_update_program, f'{array_name}[{index}].slider_value', slider_value)
-        tryset(self.entity_update_program, f'{array_name}[{index}].min_value', min_val)
-        tryset(self.entity_update_program, f'{array_name}[{index}].max_value', max_val)
-        # Include sweep data from config
-        tryset(self.entity_update_program, f'{array_name}[{index}].x_sweep', config.x_sweeps.get(param_name, 0.0))
-        tryset(self.entity_update_program, f'{array_name}[{index}].y_sweep', config.y_sweeps.get(param_name, 0.0))
-        tryset(self.entity_update_program, f'{array_name}[{index}].cohort_sweep', config.cohort_sweeps.get(param_name, 0.0))
-
-    def _set_multi_load_uniforms(self, multi_load_service):
-        """Set uniforms and SSBO for multi-load mode."""
-        config_count = multi_load_service.get_config_count()
-
-        # Set multi-load control uniforms (small, not expensive)
-        tryset(self.entity_update_program, 'MULTILOAD_COUNT', config_count)
-        tryset(self.entity_update_program, 'MULTI_LOAD_CURRENT_PROGRESS', multi_load_service.current_progress)
-        tryset(self.entity_update_program, 'MULTI_LOAD_SIMULTANEOUS_CONFIGS', multi_load_service.simultaneous_configs)
-
-        # Set assignment mode and per-config flags
-        assignment_mode_int = 1 if multi_load_service.assignment_mode == "Random" else 0
-        tryset(self.entity_update_program, 'MULTI_LOAD_ASSIGNMENT_MODE', assignment_mode_int)
-        tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_INITIAL_CONDITIONS', multi_load_service.per_config_initial_conditions)
-        tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_COHORTS', multi_load_service.per_config_cohorts)
-        tryset(self.entity_update_program, 'MULTI_LOAD_PER_CONFIG_HAZARD_RATE', multi_load_service.per_config_hazard_rate)
-
-        # Write config data to SSBO only when dirty (expensive operation)
-        if multi_load_service.is_ssbo_dirty():
-            self._write_multi_load_ssbo(multi_load_service)
-            multi_load_service.clear_ssbo_dirty()
-
-    def _write_multi_load_ssbo(self, multi_load_service):
-        """Pack config data and write to SSBO."""
-        import struct
-
-        config_count = multi_load_service.get_config_count()
-        data = bytearray()
-
-        for i in range(config_count):
-            config = multi_load_service.get_config(i)
-            if config is None:
-                # Write zeros for missing configs (10×7 floats + 6 ints + 3 floats = 316 bytes)
-                data.extend(bytes(316))
-                continue
-
-            # Pack physics parameters (10 PhysicsSetting structs, each 7 floats)
-            params = [
-                ('axial_force', 'AXIAL_FORCE', -1.0, 1.0),
-                ('lateral_force', 'LATERAL_FORCE', -1.0, 1.0),
-                ('sensor_gain', 'SENSOR_GAIN', 0.0, 5.0),
-                ('mutation_scale', 'MUTATION_SCALE', -0.5, 0.5),
-                ('drag', 'DRAG', -1.0, 1.0),
-                ('strafe_power', 'STRAFE_POWER', 0.0, 0.5),
-                ('sensor_angle', 'SENSOR_ANGLE', -1.0, 1.0),
-                ('global_force_mult', 'GLOBAL_FORCE_MULT', 0.0, 2.0),
-                ('sensor_distance', 'SENSOR_DISTANCE', 0.0, 4.0),
-                ('hazard_rate', 'HAZARD_RATE', 0.0, 0.05),
-            ]
-
-            for attr_name, param_name, default_min, default_max in params:
-                slider_value = getattr(config, attr_name)
-                min_val, max_val = self._get_slider_range(attr_name.replace('_', ' ').title(), default_min, default_max)
-                if config.parameter_sweeps_enabled:
-                    x_sweep = config.x_sweeps.get(param_name, 0.0)
-                    y_sweep = config.y_sweeps.get(param_name, 0.0)
-                else:
-                    x_sweep = 0
-                    y_sweep = 0
-                cohort_sweep = config.cohort_sweeps.get(param_name, 0.0)
-                jitter = config.jitters.get(param_name, 0.0)
-                data.extend(struct.pack('7f', slider_value, min_val, max_val, x_sweep, y_sweep, cohort_sweep, jitter))
-
-            # Pack simulation settings (6 ints)
-            data.extend(struct.pack('6i',
-                int(config.disable_symmetry),
-                int(config.absolute_orientation),
-                config.boundary_conditions,
-                config.initial_conditions,
-                config.num_cohorts,
-                int(config.color_by_cohort)
-            ))
-
-            # Pack appearance, orientation_mix, and rule seed (3 floats)
-            data.extend(struct.pack('3f',
-                config.hue_sensitivity,
-                config.orientation_mix,
-                config.rule_seed
-            ))
-
-        # Write config data to SSBO
-        self.multi_load_buffer.write(bytes(data))
-
-        # Write rules to separate rule buffer
-        rule_data = bytearray()
-        for i in range(config_count):
-            config = multi_load_service.get_config(i)
-            if config is None or config.rule is None:
-                # Write zeros for missing rules
-                rule_data.extend(bytes(SIZE_OF_RULE_STRUCT))
-            else:
-                # Write rule as flat float32 array (10 centers * 12 floats = 120 floats)
-                rule_data.extend(config.rule.astype(np.float32).tobytes())
-
-        self.multi_load_rule_buffer.write(bytes(rule_data))
 
     def apply_rule(self, rule: np.ndarray | None) -> None:
         """Apply a rule to the shader."""

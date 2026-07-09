@@ -12,7 +12,7 @@ ImGui is immediate-mode: every frame, all widgets are re-rendered by calling fun
 |------|-------------|-----------------|
 | `core.py` | `UI` (inherits all) | `__init__`, GLFW callbacks, `get_state()`, render dispatch, cleanup |
 | `menu_bar.py` | `MenuBarMixin` | File/Reset/Help/Extras menus, load submenu with live preview, auto-close |
-| `physics_window.py` | `PhysicsWindowMixin` | Physics settings: Basics/Forces/Advanced slider groups, multi-load mode |
+| `physics_window.py` | `PhysicsWindowMixin` | Physics settings: Basics/Forces/Advanced slider groups |
 | `slider_widgets.py` | `SliderWidgetsMixin` | `slider_float_with_range_menu()`, context menus, jitter, sweep/range buttons |
 | `preferences_window.py` | `PreferencesWindowMixin` | World size, physics frequency, mouse mode, view options, appearance |
 | `help_windows.py` | `HelpWindowsMixin` | Controls, tutorial, parameter sweeps, performance, video recording windows |

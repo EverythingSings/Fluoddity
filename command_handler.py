@@ -15,7 +15,7 @@ class CommandHandler:
     """
 
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
-                 video_service, config_saver, multi_load_service, user_configs_dir,
+                 video_service, config_saver, user_configs_dir,
                  field_handler=None, param_lock_service=None, render_spec_service=None):
         self.sim = sim
         self.camera = camera
@@ -24,7 +24,6 @@ class CommandHandler:
         self.entity_picker = entity_picker
         self.video_service = video_service
         self.config_saver = config_saver
-        self.multi_load_service = multi_load_service
         self.user_configs_dir = user_configs_dir
         self.field_handler = field_handler
         self.param_lock_service = param_lock_service
@@ -419,28 +418,13 @@ class CommandHandler:
         self.ui.update_physics_defaults(filename)
 
     def _handle_file_load(self, ui_state):
-        """Handle file load from menu, including multi-load and preview modes."""
+        """Handle file load from menu, including preview mode."""
         filename = ui_state.load_filename
         category = ui_state.load_category
         if not filename:
             return
 
         fh = self.field_handler
-
-        # Multi-load mode (ignores fields entirely)
-        if ui_state.multi_load.multi_load_enabled:
-            filepath = self.ui._get_config_path(filename, category)
-            config = self.config_saver.load_from_file(filepath)
-            if config is not None:
-                success = self.multi_load_service.add_config(config, filename)
-                if success:
-                    print(f"Config added to multi-load: {filename}")
-                else:
-                    print(f"Failed to add config: multi-load list is full "
-                          f"({self.multi_load_service.get_config_count()}/64)")
-            else:
-                print(f"Failed to load config from {filepath}")
-            return
 
         # Normal mode
         if self.preview_rule_active:
@@ -513,7 +497,7 @@ class CommandHandler:
                         fh.apply_for_config(config, filepath, ui_state)
 
     def _handle_clipboard_commands(self, ui_state):
-        """Handle config clipboard preview, load, delete, and import-to-multiload."""
+        """Handle config clipboard preview, load, and delete."""
         fh = self.field_handler
 
         # Clear clipboard preview (must happen before new preview)
@@ -566,10 +550,6 @@ class CommandHandler:
         if ui_state.request_delete_clipboard_config:
             self._delete_clipboard_config(ui_state)
 
-        # Import clipboard to multi-load
-        if ui_state.request_import_clipboard_to_multiload:
-            self._import_clipboard_to_multiload()
-
     def _load_clipboard_config(self, ui_state):
         """Load a config from the clipboard (apply it permanently)."""
         fh = self.field_handler
@@ -621,18 +601,6 @@ class CommandHandler:
         idx = ui_state.clipboard_config_index
         if 0 <= idx < len(self.ui.config_clipboard):
             self.ui.config_clipboard.pop(idx)
-
-    def _import_clipboard_to_multiload(self):
-        """Replace multi-load configs with contents of config clipboard."""
-        # Clear existing multi-load configs
-        while self.multi_load_service.get_config_count() > 0:
-            self.multi_load_service.remove_config(0)
-
-        # Add each clipboard entry
-        for config, label, _field in self.ui.config_clipboard:
-            self.multi_load_service.add_config(config, label)
-
-        print(f"Imported {len(self.ui.config_clipboard)} configs from clipboard to multi-load")
 
     def _sync_tracer_to_preferences(self, ui_state):
         """Sync live TracerInterface values into PreferencesState.

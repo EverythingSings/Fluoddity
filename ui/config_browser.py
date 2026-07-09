@@ -201,32 +201,20 @@ class ConfigBrowserMixin:
                         hovered_this_frame = (filename, category_name)
 
                     if clicked:
-                        # Multi-load mode: add to service directly without closing menu
-                        if self.state.multi_load.multi_load_enabled:
-                            # Get config from cache or load it
-                            if cache_key in self.cached_configs:
-                                config = self.cached_configs[cache_key]
-                                if self.multi_load_service:
-                                    success = self.multi_load_service.add_config(config, filename)
-                                    if success:
-                                        print(f"Config added to multi-load: {filename}")
-                                    else:
-                                        print(f"Failed to add config: multi-load list is full ({self.multi_load_service.get_config_count()}/64)")
-                        # Normal mode: finalize selection (closes menu)
-                        else:
-                            self._load_filename = filename
-                            self._load_category = category_name
-                            self._request_load_file = True
-                            self._load_watercolor_override = menu_watercolor_mode
-                            self.currently_open_project = filename
-                            # Clear everything to prevent hover code from re-applying
-                            self.cached_config = None
-                            self.cached_configs = {}
-                            self.currently_previewing = None
-                            self.currently_previewing_category = None
-                            self.preview_rule_pushed = False
-                            # Clear cached field strengths so menu-close doesn't overwrite
-                            self._cached_field_strengths = None
-                            imgui.close_current_popup()
+                        # Finalize selection (closes menu)
+                        self._load_filename = filename
+                        self._load_category = category_name
+                        self._request_load_file = True
+                        self._load_watercolor_override = menu_watercolor_mode
+                        self.currently_open_project = filename
+                        # Clear everything to prevent hover code from re-applying
+                        self.cached_config = None
+                        self.cached_configs = {}
+                        self.currently_previewing = None
+                        self.currently_previewing_category = None
+                        self.preview_rule_pushed = False
+                        # Clear cached field strengths so menu-close doesn't overwrite
+                        self._cached_field_strengths = None
+                        imgui.close_current_popup()
 
         return hovered_this_frame

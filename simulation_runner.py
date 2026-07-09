@@ -315,10 +315,6 @@ class SimulationRunner:
             prev_mouse_pos=self.prev_mouse_tex_coords,
             draw_size=ui_state.preferences.draw_size,
             draw_power=effective_draw_power,
-            multi_load_service=(
-                self.command_handler.multi_load_service
-                if ui_state.multi_load.multi_load_enabled else None
-            ),
             is_preview_active=self.command_handler.preview_rule_active,
             tiling_mode=tiling_mode,
             strong_determinism=ui_state.preferences.strong_determinism,
