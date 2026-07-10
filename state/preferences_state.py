@@ -136,6 +136,7 @@ class OptixPrefs:
     ao_num_rays: int = 2
     ao_radius: float = 0.5
     ambient_color: list = field(default_factory=lambda: [1.0, 1.0, 1.0])  # Rasterize ambient tint (scaled by `ambient`)
+    rz_depth_of_field: bool = False  # Use thin-lens DOF in rasterize mode (nearly free with denoiser)
     albedo_saturation: float = 0.8
     albedo_brightness: float = 1.0
     sphere_size_jitter: float = 0.0  # Per-sphere radius jitter to reduce banding (0-1)
@@ -149,6 +150,7 @@ class OptixPrefs:
     # OptiX RT mode and path tracer settings
     rt_mode: int = 0  # 0=Rasterize, 1=X spp, 2=Accumulate
     rt_realtime_samples: int = 1  # Samples/frame for RT: X spp mode (1-8)
+    rz_samples: int = 1  # Samples/frame for RT: Rasterize mode (1-8)
     rt_preview_spp: int = 64  # Target SPP for Re-render Preview
     pt_sun_sampling: bool = True
     pt_max_bounces: int = 8
@@ -335,6 +337,7 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_optix_ao_num_rays": ("optix", "ao_num_rays"),
     "three_d_optix_ao_radius": ("optix", "ao_radius"),
     "three_d_optix_ambient_color": ("optix", "ambient_color"),
+    "three_d_optix_rz_depth_of_field": ("optix", "rz_depth_of_field"),
     "three_d_optix_albedo_saturation": ("optix", "albedo_saturation"),
     "three_d_optix_albedo_brightness": ("optix", "albedo_brightness"),
     "three_d_optix_sphere_size_jitter": ("optix", "sphere_size_jitter"),
@@ -347,6 +350,7 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     # OptixPrefs (RT/PT)
     "three_d_rt_mode": ("optix", "rt_mode"),
     "three_d_rt_realtime_samples": ("optix", "rt_realtime_samples"),
+    "three_d_rz_samples": ("optix", "rz_samples"),
     "three_d_rt_preview_spp": ("optix", "rt_preview_spp"),
     "three_d_pt_sun_sampling": ("optix", "pt_sun_sampling"),
     "three_d_pt_max_bounces": ("optix", "pt_max_bounces"),

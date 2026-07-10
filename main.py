@@ -745,7 +745,11 @@ class App:
         pt.ambient = p.optix.ambient
         pt.ambient_color = tuple(p.optix.ambient_color)
         pt.rz_denoise_enabled = p.optix.rz_denoise_enabled
-        # RT mode controls (1 = X spp, 2 = accumulate; rasterize uses X-spp path)
+        pt.rz_depth_of_field = p.optix.rz_depth_of_field
+        pt.rasterize_samples = p.optix.rz_samples
+        # RT mode controls (0 = rasterize, 1 = X spp, 2 = accumulate).
+        # In rasterize the render_mode is unused (pt.rasterize drives dispatch),
+        # but keep it at 1 so the reset-each-frame semantics are consistent.
         pt.render_mode = 1 if p.optix.rt_mode == 0 else p.optix.rt_mode
         pt.realtime_samples = p.optix.rt_realtime_samples
 

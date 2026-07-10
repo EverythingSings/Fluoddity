@@ -1,5 +1,6 @@
 """OptiX Controls window: raytracing settings for rasterize and path trace modes."""
 from imgui_bundle import imgui
+from camera_input import sync_orbit_angles_from_camera
 
 
 class OptiXWindowMixin:
@@ -35,8 +36,15 @@ class OptiXWindowMixin:
         if imgui.button(mode_labels[rt_mode]):
             p.optix.rt_mode = (rt_mode + 1) % 3
 
-        # Realtime samples slider (only for X spp mode)
-        if p.optix.rt_mode == 1:
+        # Samples slider (per-mode: rasterize and X-spp each keep their own value)
+        if p.optix.rt_mode == 0:
+            imgui.same_line()
+            imgui.set_next_item_width(100)
+            _, p.optix.rz_samples = imgui.slider_int(
+                "##rz_samples", p.optix.rz_samples, 1, 8)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Rasterize samples per frame (averaged before denoise)")
+        elif p.optix.rt_mode == 1:
             imgui.same_line()
             imgui.set_next_item_width(100)
             _, p.optix.rt_realtime_samples = imgui.slider_int(
@@ -87,35 +95,58 @@ class OptiXWindowMixin:
         rasterize = (p.optix.rt_mode == 0)
         default_open = imgui.TreeNodeFlags_.default_open.value
 
-        # ---- Shared controls ----
-        _, p.optix.sphere_radius_scale = imgui.slider_float(
-            "Sphere Scale", p.optix.sphere_radius_scale,
-            0.1, 10.0, format="%.1fx")
-        _, p.optix.sphere_size_jitter = imgui.slider_float(
-            "Sphere Jitter", p.optix.sphere_size_jitter,
-            0.0, 1.0, format="%.2f")
-        if imgui.is_item_hovered():
-            imgui.set_tooltip("Per-sphere radius jitter to reduce banding artifacts")
+        # ---- Camera (mirrors the 3D Controls "Camera" section; same values) ----
+        if imgui.collapsing_header("Camera", default_open):
+            cam = self.state.camera
+            _, cam.fov = imgui.slider_float(
+                "FOV", cam.fov, 10.0, 120.0, format="%.0f deg")
+            _, cam.aperture = imgui.slider_float(
+                "Aperture", cam.aperture, 0.0, 0.2, format="%.3f")
+            _, cam.focal_plane_depth = imgui.slider_float(
+                "Focal Depth", cam.focal_plane_depth, 0.1, 50.0, format="%.1f")
+            _, cam.move_speed = imgui.slider_float(
+                "Move Speed", cam.move_speed, 0.1, 10.0, format="%.1f")
+            _, cam.rotate_speed = imgui.slider_float(
+                "Rotate Speed", cam.rotate_speed, 0.1, 10.0, format="%.1f")
+            changed, values = imgui.drag_float3(
+                "Orbit Center", list(cam.orbit_center), 0.01, format="%.2f")
+            if changed:
+                cam.orbit_center[0], cam.orbit_center[1], cam.orbit_center[2] = values
+                if self.tracer_controller_cam is not None:
+                    sync_orbit_angles_from_camera(cam, self.tracer_controller_cam)
+            _, cam.orbit_rate = imgui.slider_float(
+                "Orbit Rate", cam.orbit_rate, -0.05, 0.05, format="%.4f")
 
-        # Curve primitives
-        _, p.optix.use_curves = imgui.checkbox(
-            "Curves", p.optix.use_curves)
-        if imgui.is_item_hovered():
-            imgui.set_tooltip("Render entities as round linear curves oriented along velocity")
-        if p.optix.use_curves:
-            _, p.optix.curve_length = imgui.slider_float(
-                "Curve Length", p.optix.curve_length,
-                0.0, 10.0, format="%.2f")
-            _, p.optix.curve_r0 = imgui.slider_float(
-                "Curve R0", p.optix.curve_r0,
-                0.01, 5.0, format="%.2f")
-            _, p.optix.curve_r1 = imgui.slider_float(
-                "Curve R1", p.optix.curve_r1,
-                0.01, 5.0, format="%.2f")
+        # ---- Geometry (shared) ----
+        if imgui.collapsing_header("Geometry", default_open):
+            _, p.optix.sphere_radius_scale = imgui.slider_float(
+                "Sphere Scale", p.optix.sphere_radius_scale,
+                0.1, 10.0, format="%.1fx")
+            _, p.optix.sphere_size_jitter = imgui.slider_float(
+                "Sphere Jitter", p.optix.sphere_size_jitter,
+                0.0, 1.0, format="%.2f")
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Per-sphere radius jitter to reduce banding artifacts")
 
-        # SDF scene
-        _, p.optix.sdf_enabled = imgui.checkbox(
-            "Enable SDF", p.optix.sdf_enabled)
+            # Curve primitives
+            _, p.optix.use_curves = imgui.checkbox(
+                "Curves", p.optix.use_curves)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Render entities as round linear curves oriented along velocity")
+            if p.optix.use_curves:
+                _, p.optix.curve_length = imgui.slider_float(
+                    "Curve Length", p.optix.curve_length,
+                    0.0, 10.0, format="%.2f")
+                _, p.optix.curve_r0 = imgui.slider_float(
+                    "Curve R0", p.optix.curve_r0,
+                    0.01, 5.0, format="%.2f")
+                _, p.optix.curve_r1 = imgui.slider_float(
+                    "Curve R1", p.optix.curve_r1,
+                    0.01, 5.0, format="%.2f")
+
+            # SDF scene
+            _, p.optix.sdf_enabled = imgui.checkbox(
+                "Enable SDF", p.optix.sdf_enabled)
 
         # ---- Lighting (shared: applies in both modes) ----
         if imgui.collapsing_header("Lighting", default_open):
@@ -151,7 +182,8 @@ class OptiXWindowMixin:
                     "Use equirectangular environment map for the sky\n"
                     "(queried on primary-ray miss, i.e. the background).")
 
-            # Sky gradient colors
+        # ---- Sky (shared) ----
+        if imgui.collapsing_header("Sky", default_open):
             _, p.optix.sky_color_top = imgui.color_edit3(
                 "Sky Top", p.optix.sky_color_top)
             _, p.optix.sky_color_bottom = imgui.color_edit3(
@@ -182,6 +214,13 @@ class OptiXWindowMixin:
                 "Ambient Color", p.optix.ambient_color)
             if imgui.is_item_hovered():
                 imgui.set_tooltip("Ambient tint (scaled by Ambient), modulated by AO")
+
+            _, p.optix.rz_depth_of_field = imgui.checkbox(
+                "Depth of Field", p.optix.rz_depth_of_field)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Use the thin-lens camera (Aperture / Focal Depth in 3D\n"
+                    "Controls) in rasterize mode. Nearly free with the denoiser on.")
 
             # Ambient Occlusion
             _, p.optix.ao_enabled = imgui.checkbox(

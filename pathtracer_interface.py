@@ -84,6 +84,8 @@ class PathTracerInterface:
         self.ao_radius: float = 0.5
         self.ambient: float = 0.12
         self.ambient_color: tuple[float, float, float] = (1.0, 1.0, 1.0)
+        self.rz_depth_of_field: bool = False  # allow thin-lens DOF in rasterize mode
+        self.rasterize_samples: int = 1  # samples/frame accumulated in rasterize mode
         self._ao_frame_index: int = 0
 
         # Emissive particles
@@ -229,8 +231,15 @@ class PathTracerInterface:
         )
 
     def _effective_aperture(self) -> float:
-        """Aperture to use this frame: forced to 0 (pinhole) in rasterize mode."""
-        return 0.0 if self.rasterize else self.aperture
+        """Aperture to use this frame.
+
+        Path-trace modes always honor the camera aperture. Rasterize mode is
+        pinhole by default (aperture 0), unless its Depth of Field toggle is on
+        — then it uses the full thin-lens raygen like path-trace mode.
+        """
+        if self.rasterize and not self.rz_depth_of_field:
+            return 0.0
+        return self.aperture
 
     def _effective_denoise(self) -> bool:
         """Denoise toggle for the active lighting model."""
@@ -371,9 +380,18 @@ class PathTracerInterface:
             **self._rasterize_kwargs(),
         )
 
-        # 6. Dispatch based on render mode
-        reset = (self.render_mode == 1)
-        num_samples = self.realtime_samples if self.render_mode == 1 else 1
+        # 6. Dispatch based on render mode.
+        # Rasterize and X-spp both reset each frame and accumulate N samples;
+        # accumulate mode (2) keeps accumulating a single sample per frame.
+        if self.rasterize:
+            reset = True
+            num_samples = self.rasterize_samples
+        elif self.render_mode == 1:
+            reset = True
+            num_samples = self.realtime_samples
+        else:
+            reset = False
+            num_samples = 1
 
         self._display_tex = self._renderer.render_realtime(
             width, height, eye, U, V, W,
