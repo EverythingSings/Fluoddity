@@ -46,7 +46,7 @@ class PathTracerInterface:
 
         # --- Public attributes (wired to UI via preferences) ---
 
-        # Lighting (shared with OptiXInterface via unified preferences)
+        # Lighting (shared across rasterize + path-trace modes via unified preferences)
         self.sun_direction: tuple[float, float, float] = (0.577, 0.577, 0.577)
         self.sun_color: tuple[float, float, float] = (1.0, 1.0, 1.0)
         self.sun_intensity: float = 1.0
@@ -72,8 +72,19 @@ class PathTracerInterface:
         self.global_material: int = 0  # 0=Lambert, 1=Glossy, 2=Mirror
         self.glossy_ior: float = 1.5
 
-        # Denoiser
-        self.denoise_enabled: bool = False
+        # Denoiser (separate toggle per lighting model)
+        self.denoise_enabled: bool = False       # path-trace modes
+        self.rz_denoise_enabled: bool = False     # rasterize mode
+
+        # Rasterize preset (merged sphere renderer): single-hit direct lighting
+        # + AO-modulated fake ambient. Active when rasterize is True (rt_mode 0).
+        self.rasterize: bool = False
+        self.ao_enabled: bool = False
+        self.ao_num_rays: int = 2
+        self.ao_radius: float = 0.5
+        self.ambient: float = 0.12
+        self.ambient_color: tuple[float, float, float] = (1.0, 1.0, 1.0)
+        self._ao_frame_index: int = 0
 
         # Emissive particles
         self.emission_intensity: float = 10.0
@@ -194,6 +205,37 @@ class PathTracerInterface:
         if self._renderer is not None and not self._renderer._photo_loaded:
             self._renderer.set_photosphere_texture(self._photosphere_image_data)
 
+    # ------------------------------------------------------------ rasterize helpers
+
+    def _rasterize_kwargs(self) -> dict:
+        """Render-kwargs fragment carrying the rasterize preset + AO settings.
+
+        The effective ambient tint folds the scalar `ambient` into the color
+        picker so both UI controls are live. `ao_frame_index` decorrelates AO
+        jitter across frames.
+        """
+        amb = (
+            self.ambient_color[0] * self.ambient,
+            self.ambient_color[1] * self.ambient,
+            self.ambient_color[2] * self.ambient,
+        )
+        return dict(
+            rasterize=self.rasterize,
+            ao_enabled=self.ao_enabled,
+            ao_num_rays=self.ao_num_rays,
+            ao_radius=self.ao_radius,
+            ao_frame_index=self._ao_frame_index,
+            ambient_color=amb,
+        )
+
+    def _effective_aperture(self) -> float:
+        """Aperture to use this frame: forced to 0 (pinhole) in rasterize mode."""
+        return 0.0 if self.rasterize else self.aperture
+
+    def _effective_denoise(self) -> bool:
+        """Denoise toggle for the active lighting model."""
+        return self.rz_denoise_enabled if self.rasterize else self.denoise_enabled
+
     # ------------------------------------------------------------------ core API
 
     def render_frame(
@@ -300,7 +342,7 @@ class PathTracerInterface:
             exposure=1.0,  # fixed; brightness controlled via frame_assembly
             sky_color_top=self.sky_color_top,
             sky_color_bottom=self.sky_color_bottom,
-            aperture=self.aperture,
+            aperture=self._effective_aperture(),
             focal_plane_depth=self.focal_plane_depth,
             cam_right=cam_right_vec,
             cam_up=cam_up_vec,
@@ -326,6 +368,7 @@ class PathTracerInterface:
             photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
             photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
             photosphere_avg_b=self._photosphere_avg_color[2] if self.photosphere else 0.0,
+            **self._rasterize_kwargs(),
         )
 
         # 6. Dispatch based on render mode
@@ -335,12 +378,13 @@ class PathTracerInterface:
         self._display_tex = self._renderer.render_realtime(
             width, height, eye, U, V, W,
             radius_scale=self.radius_scale,
-            denoise_enabled=self.denoise_enabled,
+            denoise_enabled=self._effective_denoise(),
             reset=reset,
             num_samples=num_samples,
             physics_steps=self.physics_steps,
             **render_kwargs,
         )
+        self._ao_frame_index += 1
 
         # 7. Read timing from renderer
         self._gas_time_ms = self._renderer.last_gas_ms
@@ -441,7 +485,7 @@ class PathTracerInterface:
             exposure=1.0,
             sky_color_top=self.sky_color_top,
             sky_color_bottom=self.sky_color_bottom,
-            aperture=self.aperture,
+            aperture=self._effective_aperture(),
             focal_plane_depth=self.focal_plane_depth,
             cam_right=c['cam_right'],
             cam_up=c['cam_up'],
@@ -467,6 +511,7 @@ class PathTracerInterface:
             photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
             photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
             photosphere_avg_b=self._photosphere_avg_color[2] if self.photosphere else 0.0,
+            **self._rasterize_kwargs(),
         )
 
         done = self._renderer._sample_count >= self._preview_target_spp
@@ -482,11 +527,12 @@ class PathTracerInterface:
                 flip_y=False,  # Preview displayed directly, no intermediate blit
                 **render_kwargs,
             )
+            self._ao_frame_index += 1
             done = self._renderer._sample_count >= self._preview_target_spp
 
         if done:
             # Final frame: denoise if enabled, then tonemap
-            if self.denoise_enabled:
+            if self._effective_denoise():
                 self._display_tex = self._renderer.render_realtime(
                     w, h, c['eye'], c['U'], c['V'], c['W'],
                     radius_scale=self.radius_scale,
@@ -597,7 +643,7 @@ class PathTracerInterface:
         # Begin offline accumulation
         self._renderer.render_offline_begin(
             width, height, total_substeps, spp_per_substep,
-            denoise_enabled=self.denoise_enabled,
+            denoise_enabled=self._effective_denoise(),
         )
 
     def offline_substep(
@@ -649,7 +695,7 @@ class PathTracerInterface:
             exposure=1.0,
             sky_color_top=self.sky_color_top,
             sky_color_bottom=self.sky_color_bottom,
-            aperture=self.aperture,
+            aperture=self._effective_aperture(),
             focal_plane_depth=self.focal_plane_depth,
             cam_right=cam_right_vec,
             cam_up=cam_up_vec,
@@ -675,7 +721,9 @@ class PathTracerInterface:
             photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
             photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
             photosphere_avg_b=self._photosphere_avg_color[2] if self.photosphere else 0.0,
+            **self._rasterize_kwargs(),
         )
+        self._ao_frame_index += 1
 
         # Read timing
         self._gas_time_ms = self._renderer.last_gas_ms

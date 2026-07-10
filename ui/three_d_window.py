@@ -1,7 +1,7 @@
 """3D Controls window: FPS camera settings and 3D simulation parameters."""
 from imgui_bundle import imgui
 from camera_input import sync_orbit_angles_from_camera
-from optix_interface import OptiXInterface
+from pathtracer_interface import PathTracerInterface
 
 
 class ThreeDWindowMixin:
@@ -19,12 +19,12 @@ class ThreeDWindowMixin:
                 "3D View", self.state.camera.render_3d
             )
 
-            # OptiX Spheres toggle
-            optix_available = OptiXInterface.is_available()
+            # OptiX toggle (routes the 3D view through the OptiX path tracer)
+            optix_available = PathTracerInterface.is_available()
             if not optix_available:
                 imgui.begin_disabled()
             _, self.state.camera.optix_enabled = imgui.checkbox(
-                "OptiX Spheres (RTX)", self.state.camera.optix_enabled
+                "OptiX (RTX)", self.state.camera.optix_enabled
             )
             if not optix_available:
                 imgui.end_disabled()

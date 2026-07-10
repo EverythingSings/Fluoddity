@@ -24,7 +24,7 @@ class Camera:
         self.render_3d = False
         self.fov_3d = 50.0
         self.controller_cam = None  # Set by orchestrator for 3D FPS rendering
-        self.optix_interface = None  # Set by orchestrator for OptiX sphere rendering
+        self.optix_interface = None  # Set by orchestrator: the OptiX path tracer (or None)
         self.optix_enabled = False   # Toggle between GL_POINTS and OptiX
         self.optix_resolution_scale = 1.0  # Render resolution multiplier for OptiX
 

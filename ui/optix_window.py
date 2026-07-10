@@ -81,6 +81,12 @@ class OptiXWindowMixin:
 
         imgui.separator()
 
+        # Active lighting model: rasterize (rt_mode 0) vs path trace (rt_mode > 0).
+        # Both run on the single OptiX path tracer; the "Rasterize" and
+        # "Path Trace" subheadings grey out when the other model is active.
+        rasterize = (p.optix.rt_mode == 0)
+        default_open = imgui.TreeNodeFlags_.default_open.value
+
         # ---- Shared controls ----
         _, p.optix.sphere_radius_scale = imgui.slider_float(
             "Sphere Scale", p.optix.sphere_radius_scale,
@@ -107,18 +113,12 @@ class OptiXWindowMixin:
                 "Curve R1", p.optix.curve_r1,
                 0.01, 5.0, format="%.2f")
 
-        # Albedo color controls
-        _, p.optix.albedo_saturation = imgui.slider_float(
-            "Albedo Saturation", p.optix.albedo_saturation, 0.0, 1.0)
-        _, p.optix.albedo_brightness = imgui.slider_float(
-            "Albedo Brightness", p.optix.albedo_brightness, 0.0, 1.0)
-
         # SDF scene
         _, p.optix.sdf_enabled = imgui.checkbox(
             "Enable SDF", p.optix.sdf_enabled)
 
-        # ---- Lighting (shared) ----
-        if imgui.collapsing_header("Lighting", imgui.TreeNodeFlags_.default_open.value):
+        # ---- Lighting (shared: applies in both modes) ----
+        if imgui.collapsing_header("Lighting", default_open):
             changed, vals = imgui.drag_float3(
                 "Light Dir", list(p.optix.light_direction),
                 0.01, -1.0, 1.0)
@@ -129,19 +129,59 @@ class OptiXWindowMixin:
             _, p.optix.light_intensity = imgui.slider_float(
                 "Intensity", p.optix.light_intensity, 0.0, 20.0)
 
-        # ---- Sky (shared) ----
-        if imgui.collapsing_header("Sky", imgui.TreeNodeFlags_.default_open.value):
+            _, p.optix.pt_sun_sampling = imgui.checkbox(
+                "Enable NEE", p.optix.pt_sun_sampling)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Next Event Estimation: trace a shadow ray toward the\n"
+                    "light for direct lighting. In rasterize mode, turning\n"
+                    "this off leaves only the ambient + AO term.")
+            _, p.optix.pt_env_sky_nee = imgui.checkbox(
+                "Cos-lobe Sky", p.optix.pt_env_sky_nee)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Replace legacy directional sun + gradient sky\n"
+                    "with a cosine-lobe environment model.\n"
+                    "Sky color controls hemisphere glow,\n"
+                    "sun direction/color/intensity control sun disk.")
+            _, p.optix.pt_photosphere = imgui.checkbox(
+                "Photosphere", p.optix.pt_photosphere)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Use equirectangular environment map for the sky\n"
+                    "(queried on primary-ray miss, i.e. the background).")
+
+            # Sky gradient colors
             _, p.optix.sky_color_top = imgui.color_edit3(
                 "Sky Top", p.optix.sky_color_top)
             _, p.optix.sky_color_bottom = imgui.color_edit3(
                 "Sky Bottom", p.optix.sky_color_bottom)
 
-        # ---- Rasterize-specific (always visible) ----
-        if imgui.collapsing_header("Rasterize", imgui.TreeNodeFlags_.default_open.value):
+        # ---- Material (shared) ----
+        if imgui.collapsing_header("Material", default_open):
+            mat_labels = ["Lambert", "Glossy", "Mirror"]
+            _, p.optix.pt_global_material = imgui.combo(
+                "BRDF", p.optix.pt_global_material, mat_labels)
+            if p.optix.pt_global_material == 1:  # Glossy
+                _, p.optix.pt_glossy_ior = imgui.slider_float(
+                    "Glossy IOR", p.optix.pt_glossy_ior, 1.0, 3.0, format="%.2f")
+            _, p.optix.albedo_saturation = imgui.slider_float(
+                "Albedo Saturation", p.optix.albedo_saturation, 0.0, 1.0)
+            _, p.optix.albedo_brightness = imgui.slider_float(
+                "Albedo Brightness", p.optix.albedo_brightness, 0.0, 1.0)
+
+        # ---- Rasterize-specific (greyed out in path-trace modes) ----
+        if imgui.collapsing_header("Rasterize", default_open):
+            if not rasterize:
+                imgui.begin_disabled()
             _, p.optix.shadows_enabled = imgui.checkbox(
                 "Shadows (rasterize)", p.optix.shadows_enabled)
             _, p.optix.ambient = imgui.slider_float(
                 "Ambient (rasterize)", p.optix.ambient, 0.0, 1.0)
+            _, p.optix.ambient_color = imgui.color_edit3(
+                "Ambient Color", p.optix.ambient_color)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Ambient tint (scaled by Ambient), modulated by AO")
 
             # Ambient Occlusion
             _, p.optix.ao_enabled = imgui.checkbox(
@@ -152,72 +192,46 @@ class OptiXWindowMixin:
                 _, p.optix.ao_radius = imgui.slider_float(
                     "AO Radius", p.optix.ao_radius,
                     0.01, 5.0, format="%.2f")
+            if not rasterize:
+                imgui.end_disabled()
 
-        # ---- Path trace-specific (always visible) ----
-        if imgui.collapsing_header("Path Trace", imgui.TreeNodeFlags_.default_open.value):
-            _, p.optix.pt_sun_sampling = imgui.checkbox(
-                "Enable NEE", p.optix.pt_sun_sampling)
-            if imgui.is_item_hovered():
-                imgui.set_tooltip(
-                    "Next Event Estimation: trace shadow rays\n"
-                    "toward the light each bounce for faster\n"
-                    "convergence. Uses MIS with cos-lobe sky,\n"
-                    "delta PDF with legacy directional light.")
-            _, p.optix.pt_env_sky_nee = imgui.checkbox(
-                "Cos-lobe Sky", p.optix.pt_env_sky_nee)
-            if imgui.is_item_hovered():
-                imgui.set_tooltip(
-                    "Replace legacy directional sun + gradient sky\n"
-                    "with a cosine-lobe environment model.\n"
-                    "Sky color controls hemisphere glow,\n"
-                    "sun direction/color/intensity control sun disk.\n"
-                    "Works with or without NEE enabled.")
-            _, p.optix.pt_photosphere = imgui.checkbox(
-                "Photosphere", p.optix.pt_photosphere)
-            if imgui.is_item_hovered():
-                imgui.set_tooltip(
-                    "Use equirectangular environment map for sky.\n"
-                    "When Cos-lobe Sky is also checked, the sun\n"
-                    "lobe is added on top of the photosphere.")
-
-            # Material
-            mat_labels = ["Lambert", "Glossy", "Mirror"]
-            _, p.optix.pt_global_material = imgui.combo(
-                "Material (path trace)", p.optix.pt_global_material, mat_labels)
-            if p.optix.pt_global_material == 1:  # Glossy
-                _, p.optix.pt_glossy_ior = imgui.slider_float(
-                    "Glossy IOR", p.optix.pt_glossy_ior, 1.0, 3.0, format="%.2f")
-
-            # Render settings
+        # ---- Path trace-specific (greyed out in rasterize mode) ----
+        if imgui.collapsing_header("Path Trace", default_open):
+            if rasterize:
+                imgui.begin_disabled()
             _, p.optix.pt_max_bounces = imgui.drag_int(
-                "Max Bounces (path trace)", p.optix.pt_max_bounces, 0.1, 0, 64)
+                "Max Bounces", p.optix.pt_max_bounces, 0.1, 0, 64)
             if imgui.is_item_hovered():
                 imgui.set_tooltip("0 = unbounded (Russian roulette only)")
             _, p.optix.pt_rr_start_depth = imgui.slider_int(
-                "RR Start Depth (path trace)", p.optix.pt_rr_start_depth, 1, 16)
-            _, p.optix.pt_firefly_clamp = imgui.checkbox(
-                "Firefly Clamp (path trace)", p.optix.pt_firefly_clamp)
-            if p.optix.pt_firefly_clamp:
-                imgui.same_line()
-                imgui.set_next_item_width(imgui.get_content_region_avail().x)
-                _, p.optix.pt_firefly_clamp_max = imgui.drag_float(
-                    "##pt_clamp_max", p.optix.pt_firefly_clamp_max,
-                    0.1, 0.1, 1000.0, "Max: %.1f")
+                "RR Start Depth", p.optix.pt_rr_start_depth, 1, 16)
             _, p.optix.pt_emission_intensity = imgui.slider_float(
                 "Emission Intensity", p.optix.pt_emission_intensity,
                 0.0, 100.0, format="%.1f")
             if imgui.is_item_hovered():
                 imgui.set_tooltip("Radiance multiplier for emissive entities (negative hue)")
+            if rasterize:
+                imgui.end_disabled()
+
+        # ---- Post-Process (shared) ----
+        if imgui.collapsing_header("Post-Process", default_open):
+            _, p.optix.pt_firefly_clamp = imgui.checkbox(
+                "Firefly Clamp", p.optix.pt_firefly_clamp)
+            if p.optix.pt_firefly_clamp:
+                imgui.set_next_item_width(imgui.get_content_region_avail().x)
+                _, p.optix.pt_firefly_clamp_max = imgui.drag_float(
+                    "##pt_clamp_max", p.optix.pt_firefly_clamp_max,
+                    0.1, 0.1, 1000.0, "Max: %.1f")
+
+            # Denoise: separate toggles per lighting model
             _, p.optix.pt_denoise_enabled = imgui.checkbox(
                 "Denoise (path trace)", p.optix.pt_denoise_enabled)
+            _, p.optix.rz_denoise_enabled = imgui.checkbox(
+                "Denoise (rasterize)", p.optix.rz_denoise_enabled)
 
         # ---- Timing display ----
-        if p.optix.rt_mode > 0:
-            gas_ms = self.state.camera.pathtracer_gas_time_ms
-            render_ms = self.state.camera.pathtracer_render_time_ms
-        else:
-            gas_ms = self.state.camera.optix_gas_time_ms
-            render_ms = self.state.camera.optix_render_time_ms
+        gas_ms = self.state.camera.pathtracer_gas_time_ms
+        render_ms = self.state.camera.pathtracer_render_time_ms
         imgui.text_colored(
             imgui.ImVec4(0.6, 0.6, 0.6, 1.0),
             f"GAS {gas_ms:.1f}ms  Render {render_ms:.1f}ms")

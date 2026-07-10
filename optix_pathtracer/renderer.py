@@ -17,7 +17,7 @@ from cuda.bindings import runtime as cudart
 
 import moderngl
 
-from optix_renderer.interop import (
+from .interop import (
     check_cuda,
     register_gl_buffer,
     map_resource,
@@ -129,7 +129,11 @@ PARAMS_DTYPE = np.dtype({
         "photosphere_avg_r",
         "photosphere_avg_g",
         "photosphere_avg_b",
-        "_pad_photo2",
+        # Rasterize preset (merged sphere renderer)
+        "rasterize",
+        "ao_enabled", "ao_num_rays", "ao_radius", "ao_frame_index",
+        "ambient_color_r", "ambient_color_g", "ambient_color_b",
+        "_pad_end",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -184,6 +188,10 @@ PARAMS_DTYPE = np.dtype({
         "f4",
         "f4",
         "f4",
+        # Rasterize preset
+        "i4",
+        "i4", "i4", "f4", "u4",
+        "f4", "f4", "f4",
         "u4",
     ],
     "offsets": [
@@ -239,9 +247,13 @@ PARAMS_DTYPE = np.dtype({
         336,
         340,
         344,
+        # Rasterize preset
         348,
+        352, 356, 360, 364,
+        368, 372, 376,
+        380,
     ],
-    "itemsize": 352,
+    "itemsize": 384,
 })
 
 
@@ -1179,7 +1191,11 @@ class PathTracerRenderer:
                                 photosphere=False,
                                 photosphere_avg_r=0.0,
                                 photosphere_avg_g=0.0,
-                                photosphere_avg_b=0.0):
+                                photosphere_avg_b=0.0,
+                                rasterize=False,
+                                ao_enabled=False, ao_num_rays=2,
+                                ao_radius=0.5, ao_frame_index=0,
+                                ambient_color=(0.12, 0.12, 0.12)):
         """Fill launch params and trace one sample (1 SPP) into the HDR buffer.
 
         The entity buffer must already be mapped (entities_ptr is the device
@@ -1319,7 +1335,18 @@ class PathTracerRenderer:
         h_params["photosphere_avg_r"] = photosphere_avg_r
         h_params["photosphere_avg_g"] = photosphere_avg_g
         h_params["photosphere_avg_b"] = photosphere_avg_b
-        h_params["_pad_photo2"] = 0
+
+        # Rasterize preset (merged sphere renderer)
+        amb = np.asarray(ambient_color, dtype=np.float32)
+        h_params["rasterize"] = 1 if rasterize else 0
+        h_params["ao_enabled"] = 1 if ao_enabled else 0
+        h_params["ao_num_rays"] = ao_num_rays
+        h_params["ao_radius"] = ao_radius
+        h_params["ao_frame_index"] = ao_frame_index
+        h_params["ambient_color_r"] = amb[0]
+        h_params["ambient_color_g"] = amb[1]
+        h_params["ambient_color_b"] = amb[2]
+        h_params["_pad_end"] = 0
 
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
@@ -1410,7 +1437,11 @@ class PathTracerRenderer:
                photosphere=False,
                photosphere_avg_r=0.0,
                photosphere_avg_g=0.0,
-               photosphere_avg_b=0.0):
+               photosphere_avg_b=0.0,
+               rasterize=False,
+               ao_enabled=False, ao_num_rays=2,
+               ao_radius=0.5, ao_frame_index=0,
+               ambient_color=(0.12, 0.12, 0.12)):
         """Render one sample and accumulate into the HDR buffer.
 
         Each call adds one sample-per-pixel. The displayed result is the
@@ -1508,6 +1539,12 @@ class PathTracerRenderer:
                     photosphere_avg_r=photosphere_avg_r,
                     photosphere_avg_g=photosphere_avg_g,
                     photosphere_avg_b=photosphere_avg_b,
+                    rasterize=rasterize,
+                    ao_enabled=ao_enabled,
+                    ao_num_rays=ao_num_rays,
+                    ao_radius=ao_radius,
+                    ao_frame_index=ao_frame_index,
+                    ambient_color=ambient_color,
                 )
 
                 self._resolve_accum_to_pbo(

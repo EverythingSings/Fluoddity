@@ -1,6 +1,6 @@
 # Fluoddity Architecture
 
-Fluoddity is a GPU-accelerated particle simulation for generative art. Thousands to millions of particles follow neural-net-like "Rules" that govern how they respond to trail density, producing emergent patterns ranging from flowing rivers to branching lightning. The physics engine is a generalization of [Sage Jenson's physarum transport model](https://cargocollective.com/sagejenson/physarum), extended into a 3D voxel canvas with multiple 3D rendering backends (GL points, OptiX raytraced spheres, an OptiX path tracer, and a volumetric path tracer). Built with Python 3.12, ModernGL (OpenGL 4.3 compute), GLFW, Dear ImGui (imgui_bundle), NumPy, FFmpeg, and — for the RTX renderers — OptiX / CUDA.
+Fluoddity is a GPU-accelerated particle simulation for generative art. Thousands to millions of particles follow neural-net-like "Rules" that govern how they respond to trail density, producing emergent patterns ranging from flowing rivers to branching lightning. The physics engine is a generalization of [Sage Jenson's physarum transport model](https://cargocollective.com/sagejenson/physarum), extended into a 3D voxel canvas with multiple 3D rendering backends (GL points, an OptiX path tracer with a rasterize preset, and a volumetric path tracer). Built with Python 3.12, ModernGL (OpenGL 4.3 compute), GLFW, Dear ImGui (imgui_bundle), NumPy, FFmpeg, and — for the RTX renderers — OptiX / CUDA.
 
 > **This document is the high-level overview.** For an exhaustive, classified catalogue of every component (with coupling flags and recommended target homes for the ongoing modularity refactor), see [`docs/component_inventory.md`](docs/component_inventory.md).
 
@@ -72,18 +72,19 @@ Then, to display, `Camera.generate_view_texture()` produces the view texture (2D
 
 ## 3D Rendering Backends (Swappable)
 
-There are **four** implementations of the "render the particle cloud in 3D" role, plus the 2D `cam_brush` path. Exactly one 3D backend is active at a time:
+There are **three** implementations of the "render the particle cloud in 3D" role, plus the 2D `cam_brush` path. Exactly one 3D backend is active at a time:
 
 | Backend | Module | App-facing wrapper | Selected by |
 |---------|--------|--------------------|-------------|
 | GL_POINTS (baseline) | `camera.py` (`_generate_3d_view_texture`), `shaders/points_3d.*` | — (inline in Camera) | `render_3d` on, no OptiX |
-| OptiX raytraced spheres | `optix_renderer/` | `optix_interface.py` (`OptiXInterface`) | `camera_state.optix_enabled`, `three_d_rt_mode == 0` |
-| OptiX path tracer | `optix_pathtracer/` | `pathtracer_interface.py` (`PathTracerInterface`) | `optix_enabled` + `three_d_rt_mode > 0` |
+| OptiX path tracer | `optix_pathtracer/` | `pathtracer_interface.py` (`PathTracerInterface`) | `camera_state.optix_enabled` |
 | Volumetric path tracer | `volrender/` | `tracer_interface.py` (`TracerInterface`) | `tracer_realtime_mode > 0` (realtime) or `tracer_mode` (video) |
 
-The active OptiX/path-tracer wrapper is routed to the camera through the single `camera.optix_interface` slot; `Camera` calls `.render_frame()` on whichever is set. The volumetric tracer is dispatched separately (fullscreen blit for preview, its own realtime tick, and its own video path).
+The OptiX path tracer is the **single OptiX renderer**. Its `three_d_rt_mode` preference selects a mode: **0 = Rasterize** (a single-hit direct-lighting preset that mimics the old sphere raytracer — pinhole camera, one NEE shadow ray toward the sun, plus an AO-modulated fake-ambient term), **1 = X spp** (reset-per-frame realtime path tracing), **2 = Accumulate** (progressive path tracing). Rasterize and path-trace modes share one BRDF/tonemap/denoise pipeline and one `PathTracerInterface`; the mode only changes raygen (aperture), the bounce loop (single hit), and the ambient term. The sphere renderer (`optix_renderer/` + `optix_interface.py`) was merged into the path tracer and deleted.
 
-**There is currently no common renderer interface.** The three wrapper classes (`OptiXInterface`, `PathTracerInterface`, `TracerInterface`) independently re-implement the same informal contract (`is_available()`, `cleanup()`, `display_texture`, timing props, entity-buffer change detection) by copy-paste. Their ~220-line create/sync/release lifecycle lives inline in `orchestrate_frame()`. Unifying this behind one `Renderer` protocol with one owner is a primary goal of the refactor — see the inventory's Swappable section.
+The active OptiX renderer is routed to the camera through the single `camera.optix_interface` slot; `Camera` calls `.render_frame()` on it. The volumetric tracer is dispatched separately (fullscreen blit for preview, its own realtime tick, and its own video path).
+
+**There is still no common renderer interface.** The two surviving wrapper classes (`PathTracerInterface`, `TracerInterface`) independently re-implement the same informal contract (`is_available()`, `cleanup()`, `display_texture`, timing props, entity-buffer change detection). Their create/sync/release lifecycle lives inline in `orchestrate_frame()`. Unifying this behind one `Renderer` protocol with one owner is a primary goal of the refactor — see the inventory's Swappable section.
 
 ## File Map
 
@@ -101,17 +102,14 @@ Line counts are approximate and will drift; treat them as size signals.
 ### 3D Renderer Wrappers (root)
 | File | Lines | Description |
 |------|-------|-------------|
-| `optix_interface.py` | 277 | App-facing wrapper over the OptiX sphere renderer |
-| `pathtracer_interface.py` | 784 | App-facing wrapper over the OptiX path tracer (realtime, preview, offline video) |
+| `pathtracer_interface.py` | ~830 | App-facing wrapper over the OptiX path tracer (rasterize + path-trace modes, realtime, preview, offline video) |
 | `tracer_interface.py` | 497 | App-facing wrapper over the volumetric path tracer |
 | `plotting_manager.py` | 138 | GPU histogram reporting manager (lives at root; see inventory) |
-| `compile_ptx.py` | 41 | Offline PTX build helper (dev tool) |
 
 ### Renderer Packages
 | Package | Lines | Description |
 |---------|-------|-------------|
-| `optix_renderer/` | ~1470 | Standalone OptiX raytraced-sphere renderer (`renderer.py`, `cuda_src.py`, `interop.py`) |
-| `optix_pathtracer/` | ~3600 (excl. tests) | Standalone OptiX path tracer (`renderer.py`, `cuda_src.py`, `sdf_scene.py`) + step tests |
+| `optix_pathtracer/` | ~3700 (excl. tests) | The single OptiX renderer (`renderer.py`, `cuda_src.py`, `sdf_scene.py`, `interop.py`) + step tests. `rt_mode` selects rasterize (0) / X-spp (1) / accumulate (2). |
 | `volrender/` | ~1096 | Standalone volumetric path tracer (`renderer.py`, `grid.py`, `majorant.py`, `camera.py`, `params.py`) + `shaders/`, `example/`, `tests/` |
 
 ### UI Package (`ui/`)
@@ -129,12 +127,12 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 | `tracer_window.py` | 253 | Volumetric path tracer controls |
 | `advanced_drawing_window.py` | 246 | Force/strafe field brush controls, shader-driven field |
 | `config_browser.py` | 232 | Config file scan/cache + hierarchical Load submenu |
-| `optix_window.py` | 227 | OptiX sphere + path tracer controls, preview |
+| `optix_window.py` | ~245 | OptiX renderer controls: rt-mode, Lighting/Material/Rasterize/Path Trace/Post-Process sections, preview |
 | `history_window.py` | 219 | **Config Clipboard** window (misnamed) + physics tooltip shader rendering |
 | `physics_params.py` | 139 | Data-driven single source of truth for physics slider defs |
 | `plotting.py` | 108 | Plotting/histogram window |
 | `popup_modals.py` | 85 | Save/Overwrite/Delete confirmation dialogs |
-| `three_d_window.py` | 84 | 3D camera + 3D sim params + OptiX-spheres toggle |
+| `three_d_window.py` | 80 | 3D camera + 3D sim params + OptiX (RTX) toggle |
 | `field_loader_window.py` | 69 | Load image as force/strafe field |
 | `radio_window.py` | 38 | Radio (frequency-band visibility filter) window |
 | `generics_window.py` | 26 | Live-coding scratch uniform sliders |
@@ -287,4 +285,4 @@ State machine (idle → optional pending wait → recording → finished) split 
 - **imgui_bundle** (Dear ImGui) — immediate-mode GUI
 - **NumPy** — CPU-side array operations
 - **FFmpeg** — video encoding (subprocess pipe)
-- **OptiX 9.1 / CUDA** (optional) — RTX sphere renderer and path tracer
+- **OptiX 9.1 / CUDA** (optional) — RTX path tracer (with a rasterize preset)

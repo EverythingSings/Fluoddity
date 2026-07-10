@@ -119,7 +119,16 @@ struct Params
     float          photosphere_avg_r;  // offset 336: pre-computed average color R (for NEE)
     float          photosphere_avg_g;  // offset 340: pre-computed average color G
     float          photosphere_avg_b;  // offset 344: pre-computed average color B
-    // _pad_photo2                      // offset 348: pad to 352
+
+    // Rasterize preset (merged sphere renderer): single-hit direct lighting +
+    // AO-modulated fake ambient. Active when rasterize != 0.
+    int            rasterize;          // offset 348: bool: rasterize (single-hit) mode
+    int            ao_enabled;         // offset 352: bool: enable AO term
+    int            ao_num_rays;        // offset 356: AO samples per hit
+    float          ao_radius;          // offset 360: AO ray max length
+    unsigned int   ao_frame_index;     // offset 364: AO jitter decorrelation counter
+    float3         ambient_color;      // offset 368: rasterize ambient tint (scaled by `ambient`)
+    // _pad_end                        // offset 380: pad to 384
 };
 __constant__ Params params;
 }
@@ -792,6 +801,38 @@ extern "C" __global__ void __raygen__rg()
                              * params.sun_color * params.sun_intensity;
                 }
             }
+        }
+
+        // 4d'. Rasterize preset (merged sphere renderer): single-hit shading.
+        // Add an AO-modulated fake-ambient term on top of the direct (NEE)
+        // lighting above, then terminate — no secondary GI bounce. With NEE
+        // off, only this ambient+AO term lights the hit.
+        if (params.rasterize) {
+            float ao_factor = 1.0f;
+            if (params.ao_enabled && params.ao_num_rays > 0) {
+                float3 ao_origin = P + 1e-4f * N;
+                int ao_hits = 0;
+                for (int ao_i = 0; ao_i < params.ao_num_rays; ao_i++) {
+                    float3 ao_dir = sample_cosine_hemisphere(N, rng);
+                    unsigned int ao_occluded = 1u;
+                    optixTrace(
+                        (OptixTraversableHandle)params.handle,
+                        ao_origin, ao_dir,
+                        0.0f, params.ao_radius, 0.0f,
+                        OptixVisibilityMask(255),
+                        OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+                        | OPTIX_RAY_FLAG_DISABLE_ANYHIT
+                        | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+                        0, 0,
+                        1,          // miss index: occlusion
+                        ao_occluded);
+                    ao_hits += ao_occluded ? 1 : 0;
+                }
+                ao_factor = 1.0f - (float)ao_hits / (float)params.ao_num_rays;
+            }
+            radiance = radiance
+                     + throughput * albedo * params.ambient_color * ao_factor;
+            break;
         }
 
         // 4e. Depth and max_bounces check

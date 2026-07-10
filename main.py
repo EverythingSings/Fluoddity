@@ -116,11 +116,10 @@ class App:
         self.command_handler.controller_cam = self.controller_cam
         self.command_handler.plotting_manager = self.plotting_manager
 
-        # OptiX sphere renderer (lazy — created on first use when toggled on)
-        self._optix_interface = None
-        # OptiX path tracer (lazy — created on first use when toggled on)
+        # OptiX path tracer (lazy — created on first use when toggled on).
+        # The single OptiX renderer; rt_mode 0 (rasterize) is a preset on it.
         self._pathtracer_interface = None
-        # Track previous mode to detect transitions and release VRAM
+        # Track previous OptiX-enabled state to detect toggle-off and release VRAM
         self._prev_optix_enabled: bool = False
         self._prev_rt_mode: int = 0
 
@@ -243,8 +242,6 @@ class App:
             or self.command_handler.config_applied_this_frame
         )
         if needs_gas_rebuild:
-            if self._optix_interface is not None:
-                self._optix_interface.force_rebuild()
             if self._pathtracer_interface is not None:
                 self._pathtracer_interface.force_rebuild()
 
@@ -343,8 +340,9 @@ class App:
                 self.sim_runner.init_optix_pt_video_state()
             elif (ui_state.camera.optix_enabled
                   and ui_state.preferences.optix.rt_mode == 0
-                  and self._optix_interface is not None):
-                # Rasterize mode: override AO rays with Capture SPP
+                  and self._pathtracer_interface is not None):
+                # Rasterize mode: override AO rays with Capture SPP for a
+                # high-quality AO term during video capture.
                 self._saved_ao_num_rays = ui_state.preferences.optix.ao_num_rays
                 ui_state.preferences.optix.ao_num_rays = ui_state.preferences.optix.rt_preview_spp
         elif not is_recording and self.was_recording:
@@ -398,63 +396,20 @@ class App:
         self.camera.apply_state(ui_state.camera)
         self.camera.BRIGHTNESS = ui_state.preferences.rendering.brightness
 
-        # Release all OptiX VRAM when OptiX is toggled off
-        if not ui_state.camera.optix_enabled and self._prev_optix_enabled and not is_recording:
-            if self._optix_interface is not None:
-                print("Releasing rasterizer VRAM (OptiX disabled)")
-                self._optix_interface.cleanup()
-                self._optix_interface = None
-            if self._pathtracer_interface is not None:
-                print("Releasing path tracer VRAM (OptiX disabled)")
-                self._pathtracer_interface.cleanup()
-                self._pathtracer_interface = None
-                self.ui._pathtracer_interface = None
-
-        # OptiX interface lifecycle: lazy creation when toggled on (skip if PT mode active)
-        if ui_state.camera.optix_enabled and self._optix_interface is None and ui_state.preferences.optix.rt_mode == 0:
-            try:
-                from optix_interface import OptiXInterface
-                if OptiXInterface.is_available():
-                    self._optix_interface = OptiXInterface(self.ctx)
-                    print("OptiX sphere renderer initialized")
-                else:
-                    ui_state.camera.optix_enabled = False
-                    print("OptiX not available — disabling")
-            except Exception as e:
-                ui_state.camera.optix_enabled = False
-                print(f"OptiX init failed: {e}")
-
-        # Sync OptiX settings from preferences
-        if self._optix_interface is not None:
-            # Check for per-frame error recovery (auto-disable on crash)
-            if self._optix_interface.failed:
-                print(f"OptiX auto-disabled: {self._optix_interface.fail_reason}")
-                self._optix_interface = None
-                ui_state.camera.optix_enabled = False
-            else:
-                self._optix_interface.radius_scale = ui_state.preferences.optix.sphere_radius_scale
-                self._optix_interface.light_dir = tuple(ui_state.preferences.optix.light_direction)
-                self._optix_interface.light_color = tuple(ui_state.preferences.optix.light_color)
-                self._optix_interface.light_intensity = ui_state.preferences.optix.light_intensity
-                self._optix_interface.shadows_enabled = ui_state.preferences.optix.shadows_enabled
-                self._optix_interface.ambient = ui_state.preferences.optix.ambient
-                self._optix_interface.sky_color_top = tuple(ui_state.preferences.optix.sky_color_top)
-                self._optix_interface.sky_color_bottom = tuple(ui_state.preferences.optix.sky_color_bottom)
-                self._optix_interface.ao_enabled = ui_state.preferences.optix.ao_enabled
-                self._optix_interface.ao_num_rays = ui_state.preferences.optix.ao_num_rays
-                self._optix_interface.ao_radius = ui_state.preferences.optix.ao_radius
-                self._optix_interface.albedo_saturation = ui_state.preferences.optix.albedo_saturation
-                self._optix_interface.albedo_brightness = ui_state.preferences.optix.albedo_brightness
-                self._optix_interface.sphere_size_jitter = ui_state.preferences.optix.sphere_size_jitter
-                self._optix_interface.sdf_enabled = ui_state.preferences.optix.sdf_enabled
-                # Copy timing for UI display
-                ui_state.camera.optix_gas_time_ms = self._optix_interface.gas_time_ms
-                ui_state.camera.optix_render_time_ms = self._optix_interface.render_time_ms
-
-        # Path tracer lifecycle: lazy creation when RT mode uses path tracing
+        # OptiX renderer lifecycle. The path tracer is the single OptiX renderer;
+        # rt_mode 0 (rasterize) is a preset on it, so all modes share one interface.
         rt_mode = ui_state.preferences.optix.rt_mode
-        pt_active = ui_state.camera.optix_enabled and rt_mode > 0
+        pt_active = ui_state.camera.optix_enabled
 
+        # Release OptiX VRAM when toggled off (unless a preview result is pending)
+        if (not pt_active and self._prev_optix_enabled and not is_recording
+                and self._pathtracer_interface is not None):
+            print("Releasing path tracer VRAM (OptiX disabled)")
+            self._pathtracer_interface.cleanup()
+            self._pathtracer_interface = None
+            self.ui._pathtracer_interface = None
+
+        # Lazy creation when toggled on
         if pt_active and self._pathtracer_interface is None:
             try:
                 from pathtracer_interface import PathTracerInterface
@@ -462,62 +417,24 @@ class App:
                     self._pathtracer_interface = PathTracerInterface(self.ctx)
                     print("OptiX path tracer initialized")
                 else:
-                    ui_state.preferences.optix.rt_mode = 0
+                    ui_state.camera.optix_enabled = False
                     pt_active = False
-                    print("OptiX path tracer not available — falling back to sphere renderer")
+                    print("OptiX not available — disabling")
             except Exception as e:
-                ui_state.preferences.optix.rt_mode = 0
+                ui_state.camera.optix_enabled = False
                 pt_active = False
-                print(f"Path tracer init failed: {e}")
+                print(f"OptiX init failed: {e}")
 
-        # Release rasterizer VRAM when path tracer takes over
-        if pt_active and self._optix_interface is not None and self._prev_rt_mode == 0:
-            print("Releasing rasterizer VRAM (switched to path tracer)")
-            self._optix_interface.cleanup()
-            self._optix_interface = None
-
-        # Sync path tracer settings from preferences (shared + PT-only)
+        # Sync settings from preferences (+ per-frame error recovery)
         if self._pathtracer_interface is not None:
             if self._pathtracer_interface.failed:
-                print(f"Path tracer auto-disabled: {self._pathtracer_interface.fail_reason}")
+                print(f"OptiX auto-disabled: {self._pathtracer_interface.fail_reason}")
                 self._pathtracer_interface = None
-                ui_state.preferences.optix.rt_mode = 0
+                ui_state.camera.optix_enabled = False
                 pt_active = False
             elif pt_active:
-                p = ui_state.preferences
                 pt = self._pathtracer_interface
-                # Shared settings (same as rasterize)
-                pt.radius_scale = p.optix.sphere_radius_scale
-                pt.sun_direction = tuple(p.optix.light_direction)
-                pt.sun_color = tuple(p.optix.light_color)
-                pt.sun_intensity = p.optix.light_intensity
-                pt.sky_color_top = tuple(p.optix.sky_color_top)
-                pt.sky_color_bottom = tuple(p.optix.sky_color_bottom)
-                pt.albedo_saturation = p.optix.albedo_saturation
-                pt.albedo_brightness = p.optix.albedo_brightness
-                pt.sphere_size_jitter = p.optix.sphere_size_jitter
-                pt.use_curves = p.optix.use_curves
-                pt.curve_length = p.optix.curve_length
-                pt.curve_r0 = p.optix.curve_r0
-                pt.curve_r1 = p.optix.curve_r1
-                pt.sdf_enabled = p.optix.sdf_enabled
-                # Path-tracer-only settings
-                pt.sun_sampling = p.optix.pt_sun_sampling
-                pt.env_sky_nee = p.optix.pt_env_sky_nee
-                pt.photosphere = p.optix.pt_photosphere
-                pt.max_bounces = p.optix.pt_max_bounces
-                pt.rr_start_depth = p.optix.pt_rr_start_depth
-                pt.firefly_clamp = p.optix.pt_firefly_clamp
-                pt.firefly_clamp_max = p.optix.pt_firefly_clamp_max
-                pt.global_material = p.optix.pt_global_material
-                pt.glossy_ior = p.optix.pt_glossy_ior
-                pt.emission_intensity = p.optix.pt_emission_intensity
-                pt.denoise_enabled = p.optix.pt_denoise_enabled
-                pt.aperture = ui_state.camera.aperture
-                pt.focal_plane_depth = ui_state.camera.focal_plane_depth
-                # RT mode controls
-                pt.render_mode = rt_mode
-                pt.realtime_samples = p.optix.rt_realtime_samples
+                self._sync_pathtracer_prefs(pt, ui_state)
                 # Copy timing for UI display
                 ui_state.camera.pathtracer_gas_time_ms = pt.gas_time_ms
                 ui_state.camera.pathtracer_render_time_ms = pt.render_time_ms
@@ -531,12 +448,12 @@ class App:
         # Expose path tracer to UI for preview progress display
         self.ui._pathtracer_interface = self._pathtracer_interface
 
-        # Clear preview result on camera move, mode change, or sim reset
+        # Clear preview result on mode change, camera move, or sim reset
         if self._pathtracer_interface is not None:
             pt_preview = self._pathtracer_interface
             if pt_preview.preview_active or pt_preview.preview_has_result:
                 if rt_mode > 0:
-                    # Switched away from rasterize mode
+                    # Preview is a rasterize feature; switched to a realtime PT mode
                     pt_preview.cancel_preview()
                     pt_preview._preview_has_result = False
                 elif self._camera_moved() or needs_gas_rebuild:
@@ -547,7 +464,7 @@ class App:
         if getattr(self.ui, '_request_optix_preview', False):
             self.ui._request_optix_preview = False
             if self._pathtracer_interface is None:
-                # Lazy-create path tracer for preview (rasterize mode)
+                # Lazy-create the path tracer for preview
                 try:
                     from pathtracer_interface import PathTracerInterface
                     if PathTracerInterface.is_available():
@@ -559,45 +476,18 @@ class App:
 
             if self._pathtracer_interface is not None:
                 # Sync settings before starting preview
-                p = ui_state.preferences
                 pt = self._pathtracer_interface
-                pt.radius_scale = p.optix.sphere_radius_scale
-                pt.sun_direction = tuple(p.optix.light_direction)
-                pt.sun_color = tuple(p.optix.light_color)
-                pt.sun_intensity = p.optix.light_intensity
-                pt.sky_color_top = tuple(p.optix.sky_color_top)
-                pt.sky_color_bottom = tuple(p.optix.sky_color_bottom)
-                pt.albedo_saturation = p.optix.albedo_saturation
-                pt.albedo_brightness = p.optix.albedo_brightness
-                pt.sphere_size_jitter = p.optix.sphere_size_jitter
-                pt.use_curves = p.optix.use_curves
-                pt.curve_length = p.optix.curve_length
-                pt.curve_r0 = p.optix.curve_r0
-                pt.curve_r1 = p.optix.curve_r1
-                pt.sdf_enabled = p.optix.sdf_enabled
-                pt.sun_sampling = p.optix.pt_sun_sampling
-                pt.env_sky_nee = p.optix.pt_env_sky_nee
-                pt.photosphere = p.optix.pt_photosphere
-                pt.max_bounces = p.optix.pt_max_bounces
-                pt.rr_start_depth = p.optix.pt_rr_start_depth
-                pt.firefly_clamp = p.optix.pt_firefly_clamp
-                pt.firefly_clamp_max = p.optix.pt_firefly_clamp_max
-                pt.global_material = p.optix.pt_global_material
-                pt.glossy_ior = p.optix.pt_glossy_ior
-                pt.emission_intensity = p.optix.pt_emission_intensity
-                pt.denoise_enabled = p.optix.pt_denoise_enabled
-                pt.aperture = ui_state.camera.aperture
-                pt.focal_plane_depth = ui_state.camera.focal_plane_depth
+                self._sync_pathtracer_prefs(pt, ui_state)
 
                 cam = self.controller_cam
                 width_px, height_px = glfw.get_framebuffer_size(self.window)
-                scale = max(0.1, p.optix.resolution_scale)
+                scale = max(0.1, ui_state.preferences.optix.resolution_scale)
                 width_px = max(1, int(width_px * scale))
                 height_px = max(1, int(height_px * scale))
                 entity_buffer = self.sim.get_entity_buffer()
                 entity_count = self.sim.entity_count
                 pt.start_preview(
-                    target_spp=p.optix.rt_preview_spp,
+                    target_spp=ui_state.preferences.optix.rt_preview_spp,
                     entity_buffer=entity_buffer,
                     entity_count=entity_count,
                     cam_pos=cam.pos,
@@ -613,26 +503,12 @@ class App:
                 and self._pathtracer_interface.preview_active):
             self._pathtracer_interface.tick_preview()
 
-        # Release path tracer VRAM when not in use and no preview active
-        if (not pt_active
-                and self._pathtracer_interface is not None
-                and not self._pathtracer_interface.preview_active
-                and not self._pathtracer_interface.preview_has_result
-                and not is_recording):
-            print("Releasing path tracer VRAM (switched to rasterize mode)")
-            self._pathtracer_interface.cleanup()
-            self._pathtracer_interface = None
-            self.ui._pathtracer_interface = None
-
         # Update mode tracking for transition detection
         self._prev_optix_enabled = ui_state.camera.optix_enabled
         self._prev_rt_mode = rt_mode
 
-        # Route the active renderer interface to camera
-        if pt_active and self._pathtracer_interface is not None:
-            self.camera.optix_interface = self._pathtracer_interface
-        else:
-            self.camera.optix_interface = self._optix_interface
+        # Route the single OptiX renderer to the camera
+        self.camera.optix_interface = self._pathtracer_interface if pt_active else None
         self.camera.optix_resolution_scale = ui_state.preferences.optix.resolution_scale
 
         # Sync tracer SDF toggle to preferences for 3D preview
@@ -666,6 +542,18 @@ class App:
         # 6. Run simulation if going
         ti = self.ui._tracer_interface
         rt_active = ti is not None and ti.realtime_mode > 0 and not is_recording
+
+        # OptiX preview owns the path tracer while accumulating/displaying, so
+        # the normal per-frame OptiX render must be skipped (it would reset the
+        # preview's accumulation). The preview is shown fullscreen in
+        # _render_camera_view instead.
+        pt_preview = self._pathtracer_interface
+        optix_preview_display = (
+            pt_preview is not None
+            and (pt_preview.preview_active or pt_preview.preview_has_result)
+            and ui_state.preferences.optix.rt_mode == 0
+            and not is_recording
+        )
 
         if tracer_video_active and ui_state.sim.going:
             # Tracer video mode: progressive path tracing with interleaved physics
@@ -712,7 +600,7 @@ class App:
                 ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
                 screen_aspect, ui_state.sim.watercolor_mode,
                 screenshot_in_progress=self.screenshot_in_progress,
-                skip_view_generation=rt_active
+                skip_view_generation=rt_active or optix_preview_display
             )
 
         # 6.2. Frame-synced orbit stepping (deterministic with physics)
@@ -758,8 +646,6 @@ class App:
         current_frame = self.sim.frame_count
         physics_steps = max(0, current_frame - self._prev_sim_frame_count)
         self._prev_sim_frame_count = current_frame
-        if self._optix_interface is not None:
-            self._optix_interface.physics_steps = physics_steps
         if self._pathtracer_interface is not None:
             self._pathtracer_interface.physics_steps = physics_steps
 
@@ -813,6 +699,55 @@ class App:
             'video_max_frames': ui_state.preferences.recording.max_frames,
         })
         self.ui.render()
+
+    def _sync_pathtracer_prefs(self, pt, ui_state):
+        """Push OptiX preferences onto the path tracer interface.
+
+        Feeds the shared geometry/lighting/material settings, the path-trace-only
+        controls, and the rasterize-preset (rt_mode 0) AO/ambient/denoise settings.
+        `pt.rasterize` selects the single-hit direct-lighting + AO-ambient preset.
+        """
+        p = ui_state.preferences
+        # Shared geometry + lighting
+        pt.radius_scale = p.optix.sphere_radius_scale
+        pt.sun_direction = tuple(p.optix.light_direction)
+        pt.sun_color = tuple(p.optix.light_color)
+        pt.sun_intensity = p.optix.light_intensity
+        pt.sky_color_top = tuple(p.optix.sky_color_top)
+        pt.sky_color_bottom = tuple(p.optix.sky_color_bottom)
+        pt.albedo_saturation = p.optix.albedo_saturation
+        pt.albedo_brightness = p.optix.albedo_brightness
+        pt.sphere_size_jitter = p.optix.sphere_size_jitter
+        pt.use_curves = p.optix.use_curves
+        pt.curve_length = p.optix.curve_length
+        pt.curve_r0 = p.optix.curve_r0
+        pt.curve_r1 = p.optix.curve_r1
+        pt.sdf_enabled = p.optix.sdf_enabled
+        pt.sun_sampling = p.optix.pt_sun_sampling
+        pt.env_sky_nee = p.optix.pt_env_sky_nee
+        pt.photosphere = p.optix.pt_photosphere
+        # Path-trace-only
+        pt.max_bounces = p.optix.pt_max_bounces
+        pt.rr_start_depth = p.optix.pt_rr_start_depth
+        pt.firefly_clamp = p.optix.pt_firefly_clamp
+        pt.firefly_clamp_max = p.optix.pt_firefly_clamp_max
+        pt.global_material = p.optix.pt_global_material
+        pt.glossy_ior = p.optix.pt_glossy_ior
+        pt.emission_intensity = p.optix.pt_emission_intensity
+        pt.denoise_enabled = p.optix.pt_denoise_enabled
+        pt.aperture = ui_state.camera.aperture
+        pt.focal_plane_depth = ui_state.camera.focal_plane_depth
+        # Rasterize preset (rt_mode 0)
+        pt.rasterize = (p.optix.rt_mode == 0)
+        pt.ao_enabled = p.optix.ao_enabled
+        pt.ao_num_rays = p.optix.ao_num_rays
+        pt.ao_radius = p.optix.ao_radius
+        pt.ambient = p.optix.ambient
+        pt.ambient_color = tuple(p.optix.ambient_color)
+        pt.rz_denoise_enabled = p.optix.rz_denoise_enabled
+        # RT mode controls (1 = X spp, 2 = accumulate; rasterize uses X-spp path)
+        pt.render_mode = 1 if p.optix.rt_mode == 0 else p.optix.rt_mode
+        pt.realtime_samples = p.optix.rt_realtime_samples
 
     def _camera_moved(self):
         """Check if the camera has moved since last frame (3D or 2D)."""
@@ -1106,9 +1041,6 @@ class App:
 
         save_preferences(ui_state.preferences)
 
-        if self._optix_interface is not None:
-            self._optix_interface.cleanup()
-            self._optix_interface = None
         if self._pathtracer_interface is not None:
             self._pathtracer_interface.cleanup()
             self._pathtracer_interface = None

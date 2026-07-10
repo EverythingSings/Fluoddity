@@ -65,14 +65,8 @@ if shader_dir.exists():
         if shader_file.is_file():
             shader_files.append((str(shader_file), 'shaders'))
 
-# Pre-compiled OptiX PTX (if available from compile_ptx.py)
-ptx_path = Path(project_root) / 'optix_renderer' / 'spheres.ptx'
-ptx_files = [(str(ptx_path), 'optix_renderer')] if ptx_path.exists() else []
-if ptx_files:
-    print("Found pre-compiled OptiX PTX")
-
 # Additional data files
-datas = shader_files + ptx_files + [
+datas = shader_files + [
     # Add any other data files here if needed
 ]
 

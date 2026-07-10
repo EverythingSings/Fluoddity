@@ -21,9 +21,7 @@ class CameraState:
     focal_plane_depth: float = 5.0 # DOF focal plane distance
     move_speed: float = 2.0        # Joystick movement speed
     rotate_speed: float = 2.0      # Joystick rotation speed
-    optix_enabled: bool = False    # Use OptiX sphere raytracer instead of GL_POINTS
-    optix_gas_time_ms: float = 0.0   # Last GAS build/refit time (for UI display)
-    optix_render_time_ms: float = 0.0  # Last OptiX render time (for UI display)
+    optix_enabled: bool = False    # Route the 3D view through the OptiX renderer instead of GL_POINTS
     pathtracer_gas_time_ms: float = 0.0    # Path tracer GAS timing (for UI display)
     pathtracer_render_time_ms: float = 0.0 # Path tracer render timing (for UI display)
     pathtracer_sample_count: int = 0       # Current accumulation sample count (for UI display)

@@ -135,6 +135,7 @@ class OptixPrefs:
     ao_enabled: bool = False
     ao_num_rays: int = 2
     ao_radius: float = 0.5
+    ambient_color: list = field(default_factory=lambda: [1.0, 1.0, 1.0])  # Rasterize ambient tint (scaled by `ambient`)
     albedo_saturation: float = 0.8
     albedo_brightness: float = 1.0
     sphere_size_jitter: float = 0.0  # Per-sphere radius jitter to reduce banding (0-1)
@@ -158,6 +159,7 @@ class OptixPrefs:
     pt_glossy_ior: float = 1.5
     pt_emission_intensity: float = 10.0  # Emissive radiance multiplier for negative-hue entities
     pt_denoise_enabled: bool = False
+    rz_denoise_enabled: bool = False  # Denoise in rasterize mode (separate beauty pass)
     pt_env_sky_nee: bool = False  # Use cosine-lobe environment sky for NEE instead of directional sun
     pt_photosphere: bool = False  # Use equirectangular environment map for sky
 
@@ -332,6 +334,7 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_optix_ao_enabled": ("optix", "ao_enabled"),
     "three_d_optix_ao_num_rays": ("optix", "ao_num_rays"),
     "three_d_optix_ao_radius": ("optix", "ao_radius"),
+    "three_d_optix_ambient_color": ("optix", "ambient_color"),
     "three_d_optix_albedo_saturation": ("optix", "albedo_saturation"),
     "three_d_optix_albedo_brightness": ("optix", "albedo_brightness"),
     "three_d_optix_sphere_size_jitter": ("optix", "sphere_size_jitter"),
@@ -354,6 +357,7 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_pt_glossy_ior": ("optix", "pt_glossy_ior"),
     "three_d_pt_emission_intensity": ("optix", "pt_emission_intensity"),
     "three_d_pt_denoise_enabled": ("optix", "pt_denoise_enabled"),
+    "three_d_rz_denoise_enabled": ("optix", "rz_denoise_enabled"),
     "three_d_pt_env_sky_nee": ("optix", "pt_env_sky_nee"),
     "three_d_pt_photosphere": ("optix", "pt_photosphere"),
     # Camera3DPrefs
