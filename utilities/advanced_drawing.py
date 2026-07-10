@@ -46,7 +46,7 @@ class AdvancedDrawingProcessor:
                 draw_size, draw_power,
                 brush_mode, fixed_direction_heading,
                 force_field_active, strafe_field_active,
-                tiling_mode, erase_mode,
+                erase_mode,
                 fill_mode=False, fill_direction_type=0):
         """Draw to the force/strafe field texture. Called once per render frame.
 
@@ -68,7 +68,6 @@ class AdvancedDrawingProcessor:
         tryset(r["program"], "fixed_direction_heading", fixed_direction_heading)
         tryset(r["program"], "force_field_active", force_field_active)
         tryset(r["program"], "strafe_field_active", strafe_field_active)
-        tryset(r["program"], "tiling_mode", tiling_mode)
 
         # Pass 1: Erase (if right-click held) - no blending
         if erase_mode:
@@ -94,7 +93,6 @@ class AdvancedDrawingProcessor:
                          frame_count, mouse_pos, prev_mouse_pos,
                          draw_size, draw_power,
                          brush_mode, fixed_direction_heading,
-                         tiling_mode,
                          camera_pos=(0.0, 0.0, 0.0),
                          camera_dir=(0.0, 0.0, 1.0),
                          generics=None,
@@ -123,7 +121,6 @@ class AdvancedDrawingProcessor:
         tryset(ovr["program"], "fixed_direction_heading", fixed_direction_heading)
         tryset(ovr["program"], "force_field_active", True)
         tryset(ovr["program"], "strafe_field_active", True)
-        tryset(ovr["program"], "tiling_mode", tiling_mode)
         tryset(ovr["program"], "frame_count", frame_count)
         tryset(ovr["program"], "erase_mode", False)
         tryset(ovr["program"], "draw_mode", False)

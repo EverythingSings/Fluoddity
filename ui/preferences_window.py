@@ -154,31 +154,6 @@ class PreferencesWindowMixin:
 
             imgui.separator()
 
-            # === View section ===
-            imgui.text("View")
-
-            # View dropdown - conditionally show Force/Strafe field views
-            view_items = self.view_option_labels + ['Camera (Particles rendered as dots)', 'Camera [Tiled]']
-            adp = getattr(self, 'advanced_drawing_processor', None)
-            if adp is not None and adp.field_texture is not None:
-                view_items = view_items + ['DEBUG - Force Field', 'DEBUG - Strafe Field']
-
-            changed, self.state.sim.current_view_option = imgui.combo(
-                label="Current View",
-                current_item=self.state.sim.current_view_option,
-                items=view_items
-            )
-
-            if changed:
-                # cam_brush_mode is True for Camera (index 1) and Tiled (index 2)
-                # Force Field (3) and Strafe Field (4) are raw texture views like canvas
-                if self.state.sim.current_view_option in (1, 2):
-                    self.state.camera.cam_brush_mode = True
-                else:
-                    self.state.camera.cam_brush_mode = False
-                    # Watercolor is unsupported in non-camera views
-                    self.state.sim.watercolor_mode = False
-
             # Physics tooltips checkbox
             _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
                 "Physics Tooltips",

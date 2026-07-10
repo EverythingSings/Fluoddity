@@ -63,10 +63,9 @@ class UI(
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
-    def __init__(self, window, ctx: moderngl.Context, view_option_labels: list[str]):
+    def __init__(self, window, ctx: moderngl.Context):
         self.window = window
         self.ctx = ctx
-        self.view_option_labels = view_option_labels
         self.param_lock_service = None  # Set by App after construction
         self.plotting_manager = None  # Set by App after construction
 
@@ -385,9 +384,7 @@ class UI(
             elif ctrl_pressed and key == self.keybindings.get_key("paste_config_with_ctrl"):
                 self._request_load_config = True
             elif key == self.keybindings.get_key("toggle_watercolor"):
-                # Toggle watercolor mode (only in camera views, not field views)
-                if self.state.sim.current_view_option in (1, 2):
-                    self.state.sim.watercolor_mode = not self.state.sim.watercolor_mode
+                self.state.sim.watercolor_mode = not self.state.sim.watercolor_mode
             elif key == self.keybindings.get_key("reload_shaders"):
                 # Reload shaders
                 self._request_reload = True

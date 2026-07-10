@@ -28,7 +28,7 @@ class SimulationRunner:
 
     def run_simulation_frame(self, ui_state, sweep_mode, sweep_reticle_pos,
                               sweep_reticle_visible, screen_aspect,
-                              watercolor_mode=False, tiling_mode=False,
+                              watercolor_mode=False,
                               screenshot_in_progress=False,
                               skip_view_generation=False):
         """Run simulation step(s) with frame assembly and video recording."""
@@ -43,13 +43,8 @@ class SimulationRunner:
         mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
         mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
 
-        # Compute view bounds for tiling mode
-        view_min, view_max = self._compute_view_bounds(tiling_mode, screen_aspect)
-
         # Calculate draw mode parameters
-        draw_mode, mouse_tex_coords, draw_power_value = self._compute_draw_params(
-            ui_state, tiling_mode
-        )
+        draw_mode, mouse_tex_coords, draw_power_value = self._compute_draw_params(ui_state)
 
         # Compute erase mode (right-click drag in Draw Trail mode)
         erase_mode = (draw_mode and ui_state.mouse_right_held
@@ -77,7 +72,6 @@ class SimulationRunner:
                     draw_power=adv_prefs.draw_power,
                     brush_mode=adv_prefs.brush_mode,
                     fixed_direction_heading=adv_prefs.fixed_direction_heading,
-                    tiling_mode=tiling_mode,
                     camera_pos=tuple(cam.pos) if cam else (0.0, 0.0, 0.0),
                     camera_dir=tuple(cam.dir) if cam else (0.0, 0.0, 1.0),
                     generics=generics_tuple,
@@ -104,7 +98,6 @@ class SimulationRunner:
                     fixed_direction_heading=adv_prefs.fixed_direction_heading,
                     force_field_active=adv_prefs.advanced_draw_force_field,
                     strafe_field_active=adv_prefs.advanced_draw_strafe_field,
-                    tiling_mode=tiling_mode,
                     erase_mode=field_erase,
                     fill_mode=ui_state.request_fill_operation,
                     fill_direction_type=ui_state.fill_direction_type,
@@ -128,19 +121,19 @@ class SimulationRunner:
         # Build shared frame assembly kwargs (used by both paths)
         assemble_kwargs = self._build_assemble_kwargs(
             ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
-            screen_aspect, mouse_screen_coords, tiling_mode, view_min, view_max
+            screen_aspect, mouse_screen_coords
         )
 
         if motion_blur:
             self._run_with_motion_blur(
                 ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, assemble_kwargs, erase_mode=erase_mode,
+                assemble_kwargs, erase_mode=erase_mode,
                 skip_view_generation=skip_view_generation
             )
         else:
             self._run_without_motion_blur(
                 ui_state, speedmult, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, assemble_kwargs, erase_mode=erase_mode,
+                assemble_kwargs, erase_mode=erase_mode,
                 skip_view_generation=skip_view_generation
             )
 
@@ -148,18 +141,7 @@ class SimulationRunner:
         if draw_mode or erase_mode:
             self.prev_mouse_tex_coords = mouse_tex_coords
 
-    def _compute_view_bounds(self, tiling_mode, screen_aspect):
-        """Compute view bounds for tiling mode.
-
-        Delegates to camera.compute_tiling_view_bounds() which properly inverts
-        the vertex shader transform accounting for both canvas and window aspect.
-        """
-        if not tiling_mode:
-            return (0.0, 0.0), (0.0, 0.0)
-        view_min, view_max = self.camera.compute_tiling_view_bounds()
-        return tuple(view_min), tuple(view_max)
-
-    def _compute_draw_params(self, ui_state, tiling_mode):
+    def _compute_draw_params(self, ui_state):
         """Calculate draw mode parameters."""
         # Disable trail drawing when parameter sweeps are active
         draw_mode = (ui_state.preferences.mouse_mode == "Draw Trail" and
@@ -171,11 +153,6 @@ class SimulationRunner:
             mouse_tex_coords = self.camera.screen_to_tex(
                 ui_state.mouse_pos, self.sim.can.size
             )
-            if tiling_mode:
-                mouse_tex_coords = (
-                    np.fmod(mouse_tex_coords[0] + 10.0, 1.0),
-                    np.fmod(mouse_tex_coords[1] + 10.0, 1.0)
-                )
             if ui_state.mouse_left_held or ui_state.request_fill_operation:
                 draw_power_value = ui_state.preferences.draw_power
 
@@ -195,7 +172,7 @@ class SimulationRunner:
 
     def _build_assemble_kwargs(self, ui_state, sweep_mode, sweep_reticle_pos,
                                 sweep_reticle_visible, screen_aspect,
-                                mouse_screen_coords, tiling_mode, view_min, view_max):
+                                mouse_screen_coords):
         """Build the kwargs dict for frame_assembler.assemble_frame().
 
         These are shared between motion-blur and non-motion-blur paths.
@@ -236,7 +213,6 @@ class SimulationRunner:
                 sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         return dict(
-            view_mode=ui_state.sim.current_view_option,
             sweep_mode=sweep_mode,
             sweep_reticle_pos=sweep_reticle_pos,
             sweep_reticle_visible=sweep_reticle_visible,
@@ -249,10 +225,6 @@ class SimulationRunner:
             camera_zoom=self.camera.zoom,
             trail_draw_radius=self._get_trail_draw_radius(ui_state),
             mouse_screen_coords=mouse_screen_coords,
-            tiling_mode=tiling_mode,
-            view_min=tuple(view_min),
-            view_max=tuple(view_max),
-            tiling_scale=self.camera.compute_tiling_scale(),
             canvas_resolution=self.sim.get_canvas_dimensions(),
             tonemap_softness=ui_state.preferences.tonemap_softness,
             brush_mode=adv_prefs.brush_mode if advanced_active else 0,
@@ -273,7 +245,7 @@ class SimulationRunner:
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
-                           draw_power_value, tiling_mode, step_index,
+                           draw_power_value, step_index,
                            erase_mode=False):
         """Run a single physics step and handle deferred entity selection.
 
@@ -316,7 +288,6 @@ class SimulationRunner:
             draw_size=ui_state.preferences.draw_size,
             draw_power=effective_draw_power,
             is_preview_active=self.command_handler.preview_rule_active,
-            tiling_mode=tiling_mode,
             strong_determinism=ui_state.preferences.strong_determinism,
             brush_mode=brush_mode,
             fixed_direction_heading=fixed_heading,
@@ -362,7 +333,7 @@ class SimulationRunner:
 
     def _run_with_motion_blur(self, ui_state, speedmult, draw_mode,
                                mouse_tex_coords, draw_power_value,
-                               tiling_mode, assemble_kwargs, erase_mode=False,
+                               assemble_kwargs, erase_mode=False,
                                skip_view_generation=False):
         """Motion blur path: temporal accumulation with multiple render calls."""
         if self.plotting_manager is not None:
@@ -375,7 +346,7 @@ class SimulationRunner:
         for step in range(speedmult):
             self._run_physics_step(
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, step, erase_mode=erase_mode
+                step, erase_mode=erase_mode
             )
             if self.plotting_manager is not None:
                 self.plotting_manager.notify_physics_step()
@@ -385,7 +356,7 @@ class SimulationRunner:
                 continue
 
             if not skip_view_generation:
-                raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
+                raw_view_tex = self.camera.generate_view_texture()
 
                 assembled_tex = self.camera.frame_assembler.assemble_frame(
                     raw_view_tex,
@@ -402,7 +373,7 @@ class SimulationRunner:
 
     def _run_without_motion_blur(self, ui_state, speedmult, draw_mode,
                                   mouse_tex_coords, draw_power_value,
-                                  tiling_mode, assemble_kwargs, erase_mode=False,
+                                  assemble_kwargs, erase_mode=False,
                                   skip_view_generation=False):
         """Non-motion-blur path: multiple physics steps, single render call."""
         if self.plotting_manager is not None:
@@ -411,13 +382,13 @@ class SimulationRunner:
         for step in range(speedmult):
             self._run_physics_step(
                 ui_state, draw_mode, mouse_tex_coords, draw_power_value,
-                tiling_mode, step, erase_mode=erase_mode
+                step, erase_mode=erase_mode
             )
             if self.plotting_manager is not None:
                 self.plotting_manager.notify_physics_step()
 
         if not skip_view_generation:
-            raw_view_tex = self.camera.generate_view_texture(tiling_mode=tiling_mode)
+            raw_view_tex = self.camera.generate_view_texture()
 
             assembled_tex = self.camera.frame_assembler.assemble_frame(
                 raw_view_tex,
@@ -441,7 +412,7 @@ class SimulationRunner:
         self._tracer_frame_started = False
         self._tracer_physics_steps_done = 0
 
-    def run_tracer_video_frame(self, ui_state, tracer_interface, tiling_mode=False):
+    def run_tracer_video_frame(self, ui_state, tracer_interface):
         """Run one app-frame of tracer video recording.
 
         Accumulates 1 SPP per call. Runs physics steps at the correct cadence
@@ -474,8 +445,7 @@ class SimulationRunner:
             self._tracer_schedule[0] = max(self._tracer_schedule[0], 1)
 
             # Run initial physics step to advance simulation
-            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                   tiling_mode, 0)
+            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0, 0)
 
             # Compute view_proj from the FPS camera
             view_proj = self._tracer_compute_view_proj()
@@ -501,7 +471,7 @@ class SimulationRunner:
         target_steps = self._tracer_schedule[self._tracer_samples_done]
         while self._tracer_physics_steps_done < target_steps:
             self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                   tiling_mode, self._tracer_physics_steps_done)
+                                   self._tracer_physics_steps_done)
             self._tracer_physics_steps_done += 1
 
             # Re-splat entities with updated positions (keeps accumulation)
@@ -542,7 +512,7 @@ class SimulationRunner:
         self._optix_pt_total_substeps = 0
         self._optix_pt_physics_per_substep = 0
 
-    def run_optix_pt_video_frame(self, ui_state, pt_interface, tiling_mode=False):
+    def run_optix_pt_video_frame(self, ui_state, pt_interface):
         """Run one app-frame of OptiX path tracer video recording.
 
         Uses the PathTracerInterface's offline API to produce high-SPP frames
@@ -576,8 +546,7 @@ class SimulationRunner:
 
             # Run initial physics steps to advance simulation
             for i in range(physics_per_substep):
-                self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                       tiling_mode, i)
+                self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0, i)
 
             # Start offline render at (optionally scaled) window resolution
             width, height = glfw.get_framebuffer_size(self.window)
@@ -606,7 +575,7 @@ class SimulationRunner:
         if self._optix_pt_substeps_done < self._optix_pt_total_substeps:
             for i in range(self._optix_pt_physics_per_substep):
                 self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                       tiling_mode, self._optix_pt_physics_steps_done)
+                                       self._optix_pt_physics_steps_done)
                 self._optix_pt_physics_steps_done += 1
 
             cam = self.controller_cam

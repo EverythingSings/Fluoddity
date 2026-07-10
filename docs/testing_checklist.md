@@ -71,8 +71,6 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] **c.** Emboss Mode combo (Off/Canvas/Brush), shows Intensity + Smoothness when on
 - [ ] **d.** Brightness slider affects output
 - [ ] **e.** Exposure slider works
-- [ ] **f.** View option dropdown cycles views
-- [ ] **g.** Tiling mode (view option 3): camera wraps, exiting wraps position back to center
 
 ## 8. Preferences
 - [ ] **a.** World size change triggers full rebuild (expensive, console output)

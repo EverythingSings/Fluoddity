@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 class SimState:
     """State for simulation parameters that UI controls."""
     going: bool = True
-    current_view_option: int = 1  # 0=can, 1=cam_brush, 2=tiled, 3=force, 4=strafe
 
     # Physics parameters
     AXIAL_FORCE: float = 0.371
@@ -101,7 +100,6 @@ class SimState:
     canvas_3d_depth: int = 256       # Z-depth of 3D canvas (256 = full 3D resolution)
     TESTING_MODE: bool = False       # Lock z=0, XY plane only, 4-neighbor blur
     PLANE_SAMPLES: int = 1           # Number of random plane samples per entity per frame
-    canvas_3d_view_slice: int = 0    # Which z-slice to show in the debug canvas view
 
     # Jitter settings: per-parameter temporal randomness (0.0-2.0)
     # Jitter is proportional: 0.5 means ±50% random variation per frame

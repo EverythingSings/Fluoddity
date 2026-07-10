@@ -15,7 +15,6 @@ uniform vec2 mouse;
 uniform vec2 previous_mouse;
 uniform float draw_size;
 uniform float draw_power;
-uniform bool tiling_mode;
 
 // Advanced drawing uniforms
 // brush_mode codes: 0=mouse_dir, 1=inverse, 2=fixed, 3=attract, 4=repel
@@ -68,27 +67,11 @@ vec2 calculate_draw_vector(int mode, vec2 mouse_vel, float heading,
     return vec2(0.0);
 }
 
-// Tiling-corrected distance to mouse (returns distance and best mouse velocity)
-void tiling_distance(vec2 frag_pos, vec2 mouse_p, vec2 prev_mouse_p, bool tiling,
+// Distance to mouse (returns distance and mouse velocity)
+void mouse_distance(vec2 frag_pos, vec2 mouse_p, vec2 prev_mouse_p,
                      out float dist, out vec2 best_velocity) {
-    if (tiling) {
-        float min_distance = 999.0;
-        vec2 min_velocity = vec2(999.0);
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                vec2 wrapped_mouse = mouse_p + vec2(dx, dy);
-                float d = length(aspect_correct_uv(frag_pos - wrapped_mouse));
-                min_distance = min(min_distance, d);
-                vec2 vel = wrapped_mouse - prev_mouse_p;
-                min_velocity = length(vel) < length(min_velocity) ? vel : min_velocity;
-            }
-        }
-        dist = min_distance;
-        best_velocity = min_velocity;
-    } else {
-        dist = length(aspect_correct_uv(frag_pos - mouse_p));
-        best_velocity = mouse_p - prev_mouse_p;
-    }
+    dist = length(aspect_correct_uv(frag_pos - mouse_p));
+    best_velocity = mouse_p - prev_mouse_p;
 }
 
 void main() {
@@ -96,7 +79,7 @@ void main() {
     if (erase_mode) {
         float distance_to_mouse;
         vec2 unused_vel;
-        tiling_distance(texcoord, mouse, previous_mouse, tiling_mode,
+        mouse_distance(texcoord, mouse, previous_mouse,
                         distance_to_mouse, unused_vel);
 
         // Hard circle erase within draw_size radius (doubled to match reticle)
@@ -151,7 +134,7 @@ void main() {
 
     float distance_to_mouse;
     vec2 mouse_velocity;
-    tiling_distance(texcoord, mouse, previous_mouse, tiling_mode,
+    mouse_distance(texcoord, mouse, previous_mouse,
                     distance_to_mouse, mouse_velocity);
 
     // Calculate draw vector based on brush mode

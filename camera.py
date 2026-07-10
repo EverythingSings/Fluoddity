@@ -162,12 +162,8 @@ class Camera:
         true_up = np.cross(right, f)
         return right, true_up
 
-    def generate_view_texture(self, tiling_mode: bool = False):
-        """Generate raw view texture (PRE-gamma correction) based on current mode.
-
-        Args:
-            tiling_mode: Whether tiling mode is enabled
-        """
+    def generate_view_texture(self):
+        """Generate raw view texture (PRE-gamma correction) based on current mode."""
 
         if self.render_3d and self.points_3d_program is not None:
             return self._generate_3d_view_texture()
@@ -184,13 +180,6 @@ class Camera:
             self.cam_brush_program['canvas_resolution'].value = self.sim.view_tex.size
             self.cam_brush_program['window_size'].value = (width, height)
             tryset(self.cam_brush_program, 'WATERCOLOR_MODE', self.watercolor_mode)
-
-            # Tiling mode uniforms
-            tryset(self.cam_brush_program, 'tiling_mode_enabled', tiling_mode)
-            if tiling_mode:
-                view_min, view_max = self.compute_tiling_view_bounds()
-                tryset(self.cam_brush_program, 'view_min', tuple(view_min))
-                tryset(self.cam_brush_program, 'view_max', tuple(view_max))
 
             # Particles need additive blending
             self.ctx.enable(moderngl.BLEND)
@@ -279,60 +268,6 @@ class Camera:
         self.fov_3d = state.fov
         self.optix_enabled = state.optix_enabled
 
-    def compute_tiling_view_bounds(self):
-        """Compute entity-space view bounds for tiling mode.
-
-        Inverts the cam_brush vertex shader transform to find the rectangle
-        of entity positions visible on screen. Accounts for both canvas and
-        window aspect ratios with area-preserving entity space bounds.
-        """
-        import math
-        width, height = glfw.get_framebuffer_size(self.window)
-        window_aspect = width / max(height, 1)
-        tex_w, tex_h = self.sim.view_tex.size
-        tex_aspect = tex_w / max(tex_h, 1)
-        x_edge = math.sqrt(tex_aspect)
-        y_edge = 1.0 / math.sqrt(tex_aspect)
-
-        if tex_aspect > window_aspect:
-            scale_x = 1.0 / self.zoom
-            scale_y = window_aspect / (tex_aspect * self.zoom)
-        else:
-            scale_x = tex_aspect / (window_aspect * self.zoom)
-            scale_y = 1.0 / self.zoom
-
-        cx, cy = self.position[0], self.position[1]
-        view_min = np.array([
-            (-1.0 + cx / self.zoom) * x_edge / scale_x,
-            (-1.0 - cy / self.zoom) * y_edge / scale_y,
-        ])
-        view_max = np.array([
-            (1.0 + cx / self.zoom) * x_edge / scale_x,
-            (1.0 - cy / self.zoom) * y_edge / scale_y,
-        ])
-        return view_min, view_max
-
-    def compute_tiling_scale(self):
-        """Compute tiling_scale that converts frame_assembly world_pos to entity space.
-
-        tiling_scale = (x_edge, y_edge) / (scale * zoom) where scale is the
-        letterbox scaling factor from the vertex shader.
-        """
-        import math
-        tex_w, tex_h = self.sim.view_tex.size
-        tex_aspect = tex_w / max(tex_h, 1)
-        width, height = glfw.get_framebuffer_size(self.window)
-        window_aspect = max(width,1) / max(height, 1)
-        x_edge = math.sqrt(tex_aspect)
-        y_edge = 1.0 / math.sqrt(tex_aspect)
-
-        if tex_aspect > window_aspect:
-            # scale * zoom = (1, window_aspect / tex_aspect)
-            return (x_edge, y_edge * tex_aspect / window_aspect)
-        else:
-            # scale * zoom = (tex_aspect / window_aspect, 1)
-            return (x_edge * window_aspect / tex_aspect, y_edge)
-
     def apply_bloom(self, texture, threshold, intensity, radius,
                     tonemap_softness=3.0):
         """Apply bloom post-processing. Lazily initializes GPU resources."""
@@ -344,13 +279,13 @@ class Camera:
             tonemap_softness=tonemap_softness,
         )
 
-    def render(self, sim_going: bool = True, current_view_option: int = 1,
+    def render(self, sim_going: bool = True,
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
                 sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
                 watercolor_mode: bool = False, ink_weight: float = 1.0,
                 draw_trail_mode: bool = False, draw_size: float = 0.0,
                 mouse_screen_coords: tuple = (0.5, 0.5), exposure: float = 0.0,
-                tiling_mode: bool = False, tonemap_softness: float = 1.0,
+                tonemap_softness: float = 1.0,
                 bloom_enabled: bool = False, bloom_threshold: float = 0.8,
                 bloom_intensity: float = 0.5, bloom_radius: float = 1.0,
                 sdf_enabled: bool = False, inv_view_proj=None,
@@ -360,19 +295,13 @@ class Camera:
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
 
-        # Compute view bounds for tiling mode
-        view_min = (0.0, 0.0)
-        view_max = (0.0, 0.0)
-        if tiling_mode:
-            view_min, view_max = self.compute_tiling_view_bounds()
-
         # ALWAYS use assembled texture when simulation is running
         # When paused, regenerate view to allow camera panning/zooming
         if sim_going and self.assembled_texture is not None:
             TEX_TO_VIEW = self.assembled_texture
         else:
             # When paused or no assembled texture yet, generate fresh frame and apply gamma
-            raw_tex = self.generate_view_texture(tiling_mode=tiling_mode)
+            raw_tex = self.generate_view_texture()
             # Apply gamma correction via frame assembler (single sample mode)
             # Pass draw_size only when in draw trail mode
             trail_draw_radius = draw_size if draw_trail_mode else 0.0
@@ -380,7 +309,6 @@ class Camera:
                 raw_tex,
                 total_samples=1,
                 current_sample_index=0,
-                view_mode=current_view_option,
                 sweep_mode=sweep_mode,
                 sweep_reticle_pos=sweep_reticle_pos,
                 sweep_reticle_visible=sweep_reticle_visible,
@@ -393,10 +321,6 @@ class Camera:
                 camera_zoom=self.zoom,
                 trail_draw_radius=trail_draw_radius,
                 mouse_screen_coords=mouse_screen_coords,
-                tiling_mode=tiling_mode,
-                view_min=tuple(view_min),
-                view_max=tuple(view_max),
-                tiling_scale=self.compute_tiling_scale(),
                 canvas_resolution=self.sim.get_canvas_dimensions(),
                 tonemap_softness=tonemap_softness,
                 sdf_enabled=sdf_enabled,

@@ -56,7 +56,7 @@ class App:
                        entity_count=loaded_prefs.entity_count,
                        canvas_resolution=loaded_prefs.canvas_resolution)
         self.camera = Camera(self.ctx, self.sim, self.window)
-        self.ui = UI(self.window, self.ctx, self.sim.view_option_labels)
+        self.ui = UI(self.window, self.ctx)
 
         # Apply loaded preferences to UI
         self.ui.state.preferences = loaded_prefs
@@ -152,9 +152,6 @@ class App:
         self.screenshot_in_progress = False
         self.screenshot_saved_settings = {}
 
-        # Track previous view option for camera repositioning when leaving tiling mode
-        self.prev_view_option = 0
-
         # Camera movement tracking for realtime tracer accumulation reset
         self._prev_controller_pos = self.controller_cam.pos.copy()
         self._prev_controller_yaw = self.controller_cam.yaw
@@ -215,7 +212,6 @@ class App:
 
         # 1. Get current UI state
         ui_state = self.ui.get_state()
-        tiling_mode = (ui_state.sim.current_view_option == 2)
         self.plotting_manager.enabled = ui_state.preferences.show_plotting_window
 
         # 1.5. Poll gamepad and inject one-shot flags before command processing
@@ -236,7 +232,7 @@ class App:
             ui_state.request_randomize_mutations = True
 
         # 2. Process one-shot commands
-        result = self.command_handler.process_commands(ui_state, tiling_mode)
+        result = self.command_handler.process_commands(ui_state)
         if result == 'screenshot_pending' and not self.screenshot_pending and not self.screenshot_in_progress:
             self.screenshot_pending = True
 
@@ -648,15 +644,6 @@ class App:
         if ti is not None:
             ui_state.preferences.tracer_sdf_enabled = ti.sdf_enabled
 
-        # 5.0.1 Force/Strafe field view modes: override view_tex with field texture
-        if ui_state.sim.current_view_option in (3, 4):
-            field_tex = self.advanced_drawing_processor.field_texture
-            if field_tex is not None:
-                self.sim.view_tex = field_tex
-            else:
-                # Field texture not initialized yet — fall back to canvas view
-                ui_state.sim.current_view_option = 0
-
         # 5.2. Sync parameter lock master toggle
         self.param_lock_service.enabled = ui_state.preferences.parameter_locks_enabled
 
@@ -680,12 +667,6 @@ class App:
         sweep_mode = ui_state.sim.parameter_sweeps_enabled
         sweep_reticle_pos = (sweep_reticle_x, sweep_reticle_y)
 
-        # Reposition camera when leaving tiling mode
-        if self.prev_view_option == 2 and ui_state.sim.current_view_option != 2:
-            ui_state.camera.position[0] = np.fmod(ui_state.camera.position[0] + 100.0, 2.0) - 1.0
-            ui_state.camera.position[1] = np.fmod(ui_state.camera.position[1] + 100.0, 2.0) - 1.0
-        self.prev_view_option = ui_state.sim.current_view_option
-
         # 6. Run simulation if going
         ti = self.ui._tracer_interface
         rt_active = ti is not None and ti.realtime_mode > 0 and not is_recording
@@ -693,7 +674,7 @@ class App:
         if tracer_video_active and ui_state.sim.going:
             # Tracer video mode: progressive path tracing with interleaved physics
             tracer_frame = self.sim_runner.run_tracer_video_frame(
-                ui_state, self.ui._tracer_interface, tiling_mode=tiling_mode
+                ui_state, self.ui._tracer_interface
             )
             if tracer_frame is not None:
                 # A complete output frame is ready — send to video recorder
@@ -707,7 +688,7 @@ class App:
         elif optix_pt_video_active and ui_state.sim.going:
             # OptiX path tracer video mode: offline rendering with motion blur
             pt_frame_hdr = self.sim_runner.run_optix_pt_video_frame(
-                ui_state, self._pathtracer_interface, tiling_mode=tiling_mode
+                ui_state, self._pathtracer_interface
             )
             if pt_frame_hdr is not None:
                 # Tonemap HDR frame through frame assembler
@@ -735,7 +716,6 @@ class App:
             self.sim_runner.run_simulation_frame(
                 ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
                 screen_aspect, ui_state.sim.watercolor_mode,
-                tiling_mode=tiling_mode,
                 screenshot_in_progress=self.screenshot_in_progress,
                 skip_view_generation=rt_active
             )
@@ -803,7 +783,7 @@ class App:
 
         # 7. Render camera view
         self._render_camera_view(ui_state, sweep_mode, sweep_reticle_pos,
-                                  sweep_reticle_visible, screen_aspect, tiling_mode,
+                                  sweep_reticle_visible, screen_aspect,
                                   rt_active=rt_active)
 
         # 7.5. Render arrow debug overlay if enabled
@@ -872,7 +852,7 @@ class App:
         self._prev_camera_zoom = self.ui.state.camera.zoom
 
     def _render_camera_view(self, ui_state, sweep_mode, sweep_reticle_pos,
-                             sweep_reticle_visible, screen_aspect, tiling_mode,
+                             sweep_reticle_visible, screen_aspect,
                              rt_active=False):
         """Render the camera view to screen."""
         # Realtime tracer mode: render path-traced image fullscreen
@@ -957,7 +937,6 @@ class App:
 
         self.camera.render(
             sim_going=ui_state.sim.going,
-            current_view_option=ui_state.sim.current_view_option,
             sweep_mode=sweep_mode,
             sweep_reticle_pos=sweep_reticle_pos,
             sweep_reticle_visible=sweep_reticle_visible,
@@ -968,7 +947,6 @@ class App:
             draw_size=ui_state.preferences.draw_size,
             mouse_screen_coords=mouse_screen_coords,
             exposure=ui_state.preferences.exposure,
-            tiling_mode=tiling_mode,
             tonemap_softness=ui_state.preferences.tonemap_softness,
             bloom_enabled=ui_state.preferences.bloom_enabled,
             bloom_threshold=ui_state.preferences.bloom_threshold,

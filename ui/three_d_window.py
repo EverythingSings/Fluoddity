@@ -76,9 +76,4 @@ class ThreeDWindowMixin:
                 "Plane Samples", self.state.sim.PLANE_SAMPLES, 1, 8
             )
 
-            max_slice = max(0, self.state.sim.canvas_3d_depth - 1)
-            _, self.state.sim.canvas_3d_view_slice = imgui.slider_int(
-                "Debug View Slice", self.state.sim.canvas_3d_view_slice, 0, max_slice
-            )
-
         imgui.end()

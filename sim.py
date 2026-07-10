@@ -24,9 +24,6 @@ class Sim:
         self.setup_simulation_state()
         self.setup_shaders()
 
-        # View options (for UI combo box) — set by setup_simulation_state
-        self.view_option_labels = self.view_option_labels_base.copy()
-
         # Current state (will be updated by apply_state each frame)
         self._state = SimState()
         self._camera_state = None  # Will be set by apply_camera_state
@@ -45,7 +42,7 @@ class Sim:
 
     @property
     def can(self):
-        """2D view-slice of the 3D canvas X channel (for debug views, arrow overlays, etc.)."""
+        """2D reference texture matching canvas dimensions (arrow overlays, field drawing, aspect-ratio queries)."""
         return self.view_slice_tex
 
     def setup_simulation_state(self):
@@ -81,17 +78,14 @@ class Sim:
         for tex in self.can_3d:
             tex.write(zero_data)
 
-        # 2D view-slice texture: shows one z-slice of the 3D canvas X channel
-        # Used for debug views, arrow overlays, and as view_tex for aspect ratio queries
+        # 2D reference texture matching canvas dimensions.
+        # Used for arrow overlays, field drawing dimensions, and aspect ratio queries.
         self.view_slice_tex = self.ctx.texture(canvas_shape, 1, dtype='f4')
         self.view_slice_tex.repeat_x = True
         self.view_slice_tex.repeat_y = True
-        self.canvas_3d_view_slice = 0  # Which z-slice to display (0-based)
 
         # For camera/UI to use
         self.view_tex = self.view_slice_tex
-        self.view_options = [self.view_slice_tex]
-        self.view_option_labels_base = ['DEBUG - Canvas X (z-slice)']
 
     def setup_shaders(self):
         # 1. Entity update compute shader
@@ -124,15 +118,6 @@ class Sim:
         except Exception as e:
             print('Canvas Update 3D Compilation Failed:')
             print(e)
-
-        # 4. Canvas slice compute shader (extracts a z-slice from 3D texture for debug view)
-        try:
-            self.canvas_slice_source = read_shader('shaders/canvas_slice.glsl')
-            self.canvas_slice_program = self.ctx.compute_shader(self.canvas_slice_source)
-        except Exception as e:
-            print('Canvas Slice Compilation Failed:')
-            print(e)
-            self.canvas_slice_program = None
 
     def entity_update(self, ctx: moderngl.Context,
                       is_preview_active=False, field_texture_bound=False,
@@ -258,41 +243,9 @@ class Sim:
         # Swap buffers
         self.can_read_index = write_index
 
-        # Copy selected z-slice from 3D canvas X channel into view_slice_tex for debug views
-        self._update_view_slice()
-
-    def _update_view_slice(self):
-        """Copy one z-slice of the 3D canvas X channel into the 2D view_slice_tex.
-
-        Uses a GPU compute shader to avoid expensive CPU readback.
-        Only runs when the debug canvas view is selected (current_view_option == 0).
-        """
-        if self._state is None or self._state.current_view_option != 0:
-            return
-        if not hasattr(self, 'canvas_slice_program') or self.canvas_slice_program is None:
-            return
-
-        slice_z = min(self.canvas_3d_view_slice, self.canvas_resolution - 1)
-
-        # Bind source 3D texture as sampler
-        self.can_3d[self.can_read_index].use(location=0)
-        tryset(self.canvas_slice_program, 'source_3d', 0)
-        tryset(self.canvas_slice_program, 'slice_z', slice_z)
-        tryset(self.canvas_slice_program, 'canvas_3d_size',
-               (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
-
-        # Bind destination 2D texture as image
-        self.view_slice_tex.bind_to_image(0, read=False, write=True)
-
-        # Dispatch compute shader
-        gx = (self.canvas_resolution + 15) // 16
-        gy = (self.canvas_resolution + 15) // 16
-        self.canvas_slice_program.run(gx, gy, 1)
-        self.ctx.memory_barrier()
-
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-               is_preview_active = False, tiling_mode: bool = False,
+               is_preview_active = False,
                strong_determinism: bool = False,
                brush_mode: int = 0, fixed_direction_heading: float = 0.0,
                erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
@@ -351,11 +304,6 @@ class Sim:
     def apply_state(self, state: SimState) -> None:
         """Apply state from Orchestrator before update."""
         self._state = state
-        # Sync z-slice view setting
-        self.canvas_3d_view_slice = state.canvas_3d_view_slice
-        # Update view_tex based on current_view_option
-        if state.current_view_option < len(self.view_options):
-            self.view_tex = self.view_options[state.current_view_option]
 
         # Set canvas texture wrap mode: GL_REPEAT for Wrap (2), clamp-to-edge otherwise
         wrap = (state.boundary_conditions == 2)

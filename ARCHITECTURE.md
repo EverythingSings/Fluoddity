@@ -143,7 +143,7 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 | File | Lines | Description |
 |------|-------|-------------|
 | `sim.py` | 914 | GPU particle simulation: buffers, compute dispatch, physics→uniform mapping, sweeps, rules (**user-owned**) |
-| `camera.py` | 557 | Camera state, coordinate transforms, view-texture generation (2D/3D), tiling, bloom hookup, screen rendering; owns `FrameAssembler` |
+| `camera.py` | 557 | Camera state, coordinate transforms, view-texture generation (2D/3D), bloom hookup, screen rendering; owns `FrameAssembler` |
 
 ### Services (`services/`)
 | File | Lines | Description |
@@ -189,7 +189,6 @@ Plain dataclasses.
 | `entity_update.glsl` | **Core physics** compute shader; `fourier6_6.glsl` + volrender includes prepended |
 | `canvas_update_3d.glsl` | Trail decay + diffusion into the 3D canvas |
 | `fourier6_6.glsl` | Diffusion / Fourier feature helper (prepended into `entity_update.glsl`) |
-| `canvas_slice.glsl` | Extract a Z-slice of the 3D canvas for the debug canvas view |
 | `canvas.vert/.frag` | (Legacy 2D trail rendering path) |
 | `camera.vert/.frag` | View texture → screen |
 | `cam_brush.vert/.frag` | Camera-space instanced particle rendering (2D view) |

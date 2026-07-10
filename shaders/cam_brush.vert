@@ -5,15 +5,6 @@ uniform vec2 cam_pos;
 uniform float cam_zoom;
 uniform vec2 window_size;
 
-// Tiling mode uniforms
-uniform bool tiling_mode_enabled;
-uniform vec2 view_min;  // World-space minimum of view rectangle
-uniform vec2 view_max;  // World-space maximum of view rectangle
-
-// Tiling margin: controls how much particles are shrunk inward to allow sprite overhang.
-// Must match the value in frame_assembly.frag. Smaller = more margin for edge blending.
-const float TILING_MARGIN = 0.993;
-
 //SYNC WITH ENTITY_UPDATE.GLSL
 struct Entity {
     float px, py, pz;    // position (3D)
@@ -49,26 +40,6 @@ void main() {
     float ca = canvas_resolution.x / canvas_resolution.y;
     vec2 entity_to_ndc = vec2(1.0/sqrt(ca), sqrt(ca));
 
-    // Tiling mode: find which periodic cell to render this particle in
-    bool should_cull = false;
-    if (tiling_mode_enabled) {
-        vec2 p = entity_pos;
-        // Cell period: X tiles every 2*x_edge, Y tiles every 2*y_edge
-        vec2 cell_size = vec2(2.0 * sqrt(ca), 2.0 / sqrt(ca));
-        vec2 n_min = ceil((view_min - p) / cell_size);
-        vec2 n_max = floor((view_max - p) / cell_size);
-
-        // Check if ANY valid cell exists (with epsilon for floating point precision)
-        const float epsilon = 0.0001;
-        if (n_min.x <= n_max.x + epsilon && n_min.y <= n_max.y + epsilon) {
-            // Visible! Render at the smallest valid cell offset
-            entity_pos = p + n_min * cell_size;
-        } else {
-            // Not visible in any cell - cull
-            should_cull = true;
-        }
-    }
-
     // Calculate particle center in viewport coordinates for culling
     vec2 canvas_ndc_center = entity_pos * entity_to_ndc;
 
@@ -94,7 +65,7 @@ void main() {
     float max_size = max(particle_size_in_viewport.x, particle_size_in_viewport.y);
     
     // Check if particle bounding box overlaps viewport
-    bool is_visible = !should_cull && (center_pos.x + max_size >= -1.0 && center_pos.x - max_size <= 1.0 &&
+    bool is_visible = (center_pos.x + max_size >= -1.0 && center_pos.x - max_size <= 1.0 &&
                        center_pos.y + max_size >= -1.0 && center_pos.y - max_size <= 1.0);
     //is_visible = is_visible&&length(floor(entities[instance_id].cohort*4)-1) <.5;
     // Generate quad vertices - collapse to center if not visible
@@ -140,7 +111,6 @@ void main() {
 
     vec2 pos = canvas_ndc * scale;
     pos -= cam_pos * vec2(1.0, -1.0) / cam_zoom;
-    if(tiling_mode_enabled){pos*=TILING_MARGIN;}//make sure particles that are hanging off the edge still get rendered fully
     gl_Position = vec4(pos, 0.0, 1.0);
     // Pass through vertex data
     uv = uv_coords[vertex_id];

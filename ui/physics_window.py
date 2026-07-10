@@ -288,10 +288,7 @@ class PhysicsWindowMixin:
 
                 imgui.separator()
 
-                # Watercolor Mode checkbox (only available in camera views, not field views)
-                watercolor_disabled = self.state.sim.current_view_option not in (1, 2)
-                if watercolor_disabled:
-                    imgui.begin_disabled()
+                # Watercolor Mode checkbox
                 _, self.state.sim.watercolor_mode = imgui.checkbox(
                     "Watercolor Mode (V)",
                     self.state.sim.watercolor_mode
@@ -303,9 +300,7 @@ class PhysicsWindowMixin:
                         "Ink Weight", self.state.sim.ink_weight, 0.0, 20.0
                     )
                     self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
-                self._delayed_tooltip("Enable watercolor rendering effect." + ("\nSwitch to Camera view to enable." if watercolor_disabled else ""))
-                if watercolor_disabled:
-                    imgui.end_disabled()
+                self._delayed_tooltip("Enable watercolor rendering effect.")
 
                 imgui.end_menu()
 
