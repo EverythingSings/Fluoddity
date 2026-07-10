@@ -533,65 +533,6 @@ class OptiXSphereRenderer:
         finally:
             unmap_resource(self._entity_res)
 
-    def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
-                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None):
-        """Refit existing GAS with updated AABBs (faster, lower BVH quality).
-
-        Requires a prior build_accel() call. The GAS is updated in-place
-        without reallocation.
-
-        Args:
-            radius_scale: Multiplier on entity size for AABB computation.
-            sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
-            sdf_enabled: If True, append SDF AABB as an extra primitive.
-            sdf_aabb_min: SDF bounding box min (3-tuple).
-            sdf_aabb_max: SDF bounding box max (3-tuple).
-        """
-        if self._gas_handle is None:
-            self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max)
-            return
-
-        self._ctx.finish()
-        entities_ptr, _ = map_resource(self._entity_res)
-
-        try:
-            self._compute_aabbs(entities_ptr, radius_scale, sphere_size_jitter,
-                                sdf_enabled, sdf_aabb_min, sdf_aabb_max)
-
-            build_input = optix.BuildInputCustomPrimitiveArray(
-                aabbBuffers=[self._d_aabbs.data.ptr],
-                numPrimitives=self._total_prims,
-                flags=[optix.GEOMETRY_FLAG_DISABLE_ANYHIT],
-                numSbtRecords=1,
-            )
-            accel_opts = optix.AccelBuildOptions(
-                buildFlags=int(
-                    optix.BUILD_FLAG_PREFER_FAST_TRACE
-                    | optix.BUILD_FLAG_ALLOW_UPDATE
-                ),
-                operation=optix.BUILD_OPERATION_UPDATE,
-            )
-
-            check_cuda(cudart.cudaEventRecord(self._evt_gas_start, self._stream_obj))
-            self._gas_handle = self._octx.accelBuild(
-                self._stream,
-                [accel_opts],
-                [build_input],
-                self._d_temp.ptr,
-                self._temp_size,
-                self._d_gas.ptr,
-                self._gas_size,
-                [],
-            )
-            check_cuda(cudart.cudaEventRecord(self._evt_gas_end, self._stream_obj))
-            check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
-            self.last_gas_ms = check_cuda(
-                cudart.cudaEventElapsedTime(self._evt_gas_start, self._evt_gas_end)
-            )
-        finally:
-            unmap_resource(self._entity_res)
-
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------

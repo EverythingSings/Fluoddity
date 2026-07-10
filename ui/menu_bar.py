@@ -332,13 +332,6 @@ class MenuBarMixin:
                     self._delayed_tooltip("Load a PNG/JPEG image as a strafe field.\nR=magnitude, G=angle (polar coordinates).")
                     imgui.end_menu()
 
-                # Strong Determinism toggle
-                _, self.state.preferences.strong_determinism = imgui.checkbox(
-                    "Strong Determinism",
-                    self.state.preferences.strong_determinism
-                )
-                self._delayed_tooltip("Enables double buffering for the canvas. When checked,\nevents will unfold exactly the same way after every\nsimulation reset. Comes with a small ~3% performance penalty.")
-
                 # Advanced Drawing toggle
                 _, self.state.preferences.advanced_drawing_enabled = imgui.checkbox(
                     "Advanced Drawing - EXPERIMENTAL",

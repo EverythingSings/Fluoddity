@@ -288,7 +288,6 @@ class SimulationRunner:
             draw_size=ui_state.preferences.draw_size,
             draw_power=effective_draw_power,
             is_preview_active=self.command_handler.preview_rule_active,
-            strong_determinism=ui_state.preferences.strong_determinism,
             brush_mode=brush_mode,
             fixed_direction_heading=fixed_heading,
             erase_mode=canvas_erase,

@@ -115,7 +115,6 @@ def main():
         tex = renderer.render_realtime(
             width, height, eye, U, V, W,
             radius_scale=1.0,
-            gas_rebuild_interval=30,
             denoise_enabled=False,
             **common_kwargs,
         )

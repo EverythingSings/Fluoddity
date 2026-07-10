@@ -74,9 +74,6 @@ class PreferencesState:
     video_end_frame: int = 0  # Target frame for video to end on (0 = disabled, start immediately)
     tracer_mode: bool = False  # Use volumetric path tracer for video recording instead of normal frame assembly
 
-    # Simulation determinism
-    strong_determinism: bool = False  # Double-buffer canvas for fully deterministic simulation
-
     # Parameter locks
     parameter_locks_enabled: bool = False  # Master toggle for parameter lock feature
 
@@ -136,7 +133,6 @@ class PreferencesState:
 
     # OptiX raytracer settings
     three_d_optix_enabled: bool = False
-    three_d_optix_gas_rebuild_interval: int = 30
     three_d_optix_sphere_radius_scale: float = 1.0
     three_d_optix_light_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
     three_d_optix_light_color: list = field(default_factory=lambda: [1.0, 1.0, 1.0])

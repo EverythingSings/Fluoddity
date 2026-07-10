@@ -355,9 +355,6 @@ class PathTracerRenderer:
         self._d_resolved = None
         self._d_denoised = None
 
-        # GAS scheduling (for render_realtime)
-        self._physics_steps_since_rebuild = 0
-
         # Monotonic frame counter for RNG decorrelation (never resets)
         self._global_frame_counter = 0
 
@@ -482,7 +479,6 @@ class PathTracerRenderer:
         self._traversable_handle = None
         self._sdf_gas_handle = None
         self._ias_handle = None
-        self._physics_steps_since_rebuild = 0
 
         print("PathTracer: hot reload complete")
 
@@ -655,7 +651,6 @@ class PathTracerRenderer:
         self._traversable_handle = None
         self._sdf_gas_handle = None
         self._ias_handle = None
-        self._physics_steps_since_rebuild = 0
 
     # ------------------------------------------------------------------
     # Display resources (PBO + texture)
@@ -1156,110 +1151,6 @@ class PathTracerRenderer:
         finally:
             unmap_resource(self._entity_res)
 
-    def refit_accel(self, radius_scale=1.0, sphere_size_jitter=0.0,
-                    sdf_enabled=False, sdf_aabb_min=None, sdf_aabb_max=None,
-                    use_curves=False, curve_length=1.0, curve_r0=1.0,
-                    curve_r1=0.5):
-        """Refit existing GAS with updated geometry (faster, lower BVH quality).
-
-        Requires a prior build_accel() call. The GAS is updated in-place
-        without reallocation. When curves + SDF use an IAS, only the curve
-        GAS is refitted (SDF AABB is static).
-
-        Args:
-            radius_scale: Multiplier on entity size for AABB computation.
-            sphere_size_jitter: Per-sphere radius jitter magnitude (0-1).
-            sdf_enabled: If True, include SDF geometry.
-            sdf_aabb_min: SDF bounding box min (3-tuple).
-            sdf_aabb_max: SDF bounding box max (3-tuple).
-            use_curves: If True, update entity geometry as round linear curves.
-            curve_length: Curve control point distance multiplier.
-            curve_r0: Curve start radius multiplier.
-            curve_r1: Curve end radius multiplier.
-        """
-        if self._gas_handle is None:
-            self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
-                             use_curves, curve_length, curve_r0, curve_r1)
-            return
-
-        # If SDF state changed (enabled but no SDF GAS, or vice versa),
-        # fall back to a full rebuild to create/remove the IAS.
-        if use_curves:
-            sdf_state_mismatch = (
-                (sdf_enabled and self._sdf_gas_handle is None)
-                or (not sdf_enabled and self._sdf_gas_handle is not None)
-            )
-            if sdf_state_mismatch:
-                self.build_accel(radius_scale, sphere_size_jitter,
-                                 sdf_enabled, sdf_aabb_min, sdf_aabb_max,
-                                 use_curves, curve_length, curve_r0, curve_r1)
-                return
-
-        self._ensure_pipeline(use_curves)
-        self._ctx.finish()
-        entities_ptr, _ = map_resource(self._entity_res)
-
-        try:
-            check_cuda(cudart.cudaEventRecord(self._evt_gas_start, self._stream_obj))
-
-            if use_curves:
-                self._compute_curve_data(entities_ptr, radius_scale,
-                                         curve_length, curve_r0, curve_r1)
-                # Refit curve GAS in place
-                curve_input = self._build_curve_input()
-                build_flags = int(
-                    optix.BUILD_FLAG_PREFER_FAST_TRACE
-                    | optix.BUILD_FLAG_ALLOW_UPDATE
-                    | optix.BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS
-                )
-                accel_opts = optix.AccelBuildOptions(
-                    buildFlags=build_flags,
-                    operation=optix.BUILD_OPERATION_UPDATE,
-                )
-                self._gas_handle = self._octx.accelBuild(
-                    self._stream, [accel_opts], [curve_input],
-                    self._d_temp.ptr, self._temp_size,
-                    self._d_gas.ptr, self._gas_size, [],
-                )
-
-                if sdf_enabled and self._sdf_gas_handle is not None:
-                    # IAS needs rebuild since curve GAS was updated in-place
-                    # (the IAS references the same GAS buffer, so just rebuild IAS)
-                    self._traversable_handle = self._build_ias(
-                        [self._gas_handle, self._sdf_gas_handle],
-                        [0, 1],
-                    )
-                else:
-                    self._traversable_handle = self._gas_handle
-            else:
-                self._compute_aabbs(entities_ptr, radius_scale,
-                                    sphere_size_jitter, sdf_enabled,
-                                    sdf_aabb_min, sdf_aabb_max)
-                sphere_input = self._build_sphere_input()
-                build_flags = int(
-                    optix.BUILD_FLAG_PREFER_FAST_TRACE
-                    | optix.BUILD_FLAG_ALLOW_UPDATE
-                )
-                accel_opts = optix.AccelBuildOptions(
-                    buildFlags=build_flags,
-                    operation=optix.BUILD_OPERATION_UPDATE,
-                )
-                self._gas_handle = self._octx.accelBuild(
-                    self._stream, [accel_opts], [sphere_input],
-                    self._d_temp.ptr, self._temp_size,
-                    self._d_gas.ptr, self._gas_size, [],
-                )
-                self._traversable_handle = self._gas_handle
-
-            check_cuda(cudart.cudaEventRecord(self._evt_gas_end, self._stream_obj))
-            check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
-            self.last_gas_ms = check_cuda(
-                cudart.cudaEventElapsedTime(self._evt_gas_start, self._evt_gas_end)
-            )
-        finally:
-            unmap_resource(self._entity_res)
-
     # ------------------------------------------------------------------
     # Rendering helpers (Step 6: extracted for realtime/offline reuse)
     # ------------------------------------------------------------------
@@ -1725,7 +1616,7 @@ class PathTracerRenderer:
     # ------------------------------------------------------------------
 
     def render_realtime(self, width, height, eye, U, V, W,
-                        radius_scale=1.0, gas_rebuild_interval=30,
+                        radius_scale=1.0,
                         denoise_enabled=False, reset=True,
                         num_samples=1, flip_y=True,
                         physics_steps=0, **render_kwargs):
@@ -1738,15 +1629,13 @@ class PathTracerRenderer:
             width, height: Output dimensions.
             eye, U, V, W: Camera basis vectors.
             radius_scale: Entity size multiplier.
-            gas_rebuild_interval: Full GAS rebuild every N physics steps
-                (refit between). Set to 1 to rebuild every physics step.
             denoise_enabled: Run AI denoiser on this frame.
             reset: If True, reset accumulation each frame (default).
                 Set False for accumulate mode.
             num_samples: Number of samples to trace this frame (default 1).
             physics_steps: Number of physics steps since last render.
                 Entities only move on physics steps, so GAS only needs
-                updating when steps > 0.
+                rebuilding when steps > 0.
             **render_kwargs: All other render params (sun, sky, materials,
                 DOF, bounce control, etc.).
 
@@ -1765,25 +1654,13 @@ class PathTracerRenderer:
         curve_r0 = render_kwargs.get('curve_r0', 1.0)
         curve_r1 = render_kwargs.get('curve_r1', 0.5)
 
-        # GAS scheduling: tied to physics steps, not render frames.
-        # Entities only move when physics runs, so skip GAS update when paused.
-        # Exception: geometry type change (curves <-> spheres) forces an
-        # immediate rebuild so pipeline/SBT/GAS stay consistent even when paused.
-        self._physics_steps_since_rebuild += physics_steps
-        if use_curves != self._use_curves:
+        # GAS scheduling: always do a full rebuild when entities have moved
+        # (physics_steps > 0), the GAS doesn't exist yet, or geometry type
+        # changed (curves <-> spheres). Entities only move when physics
+        # runs, so skip GAS work entirely when paused.
+        if (physics_steps > 0 or self._gas_handle is None
+                or use_curves != self._use_curves):
             self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
-                             use_curves, curve_length, curve_r0, curve_r1)
-            self._physics_steps_since_rebuild = 0
-        elif (self._gas_handle is None
-                or (physics_steps > 0
-                    and self._physics_steps_since_rebuild >= gas_rebuild_interval)):
-            self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
-                             use_curves, curve_length, curve_r0, curve_r1)
-            self._physics_steps_since_rebuild = 0
-        elif physics_steps > 0:
-            self.refit_accel(radius_scale, sphere_size_jitter,
                              sdf_enabled, sdf_aabb_min, sdf_aabb_max,
                              use_curves, curve_length, curve_r0, curve_r1)
 
@@ -1874,14 +1751,14 @@ class PathTracerRenderer:
             self._setup_denoiser(width, height)
 
     def render_offline_substep(self, eye, U, V, W,
-                               radius_scale=1.0, gas_rebuild_interval=0,
+                               radius_scale=1.0,
                                **render_kwargs):
         """Trace spp_per_substep samples for one temporal sub-step.
 
         The caller must update entity positions (via physics step) and
         ensure the entity buffer reflects the new state BEFORE calling.
-        The GAS is refitted (or rebuilt) to match the updated positions.
-        Samples accumulate into the same HDR buffer across all sub-steps,
+        The GAS is rebuilt to match the updated positions. Samples
+        accumulate into the same HDR buffer across all sub-steps,
         producing motion blur via temporal integration.
 
         Does NOT tonemap or denoise — those happen in render_offline_finish().
@@ -1889,8 +1766,6 @@ class PathTracerRenderer:
         Args:
             eye, U, V, W: Camera basis (constant across sub-steps).
             radius_scale: Entity size multiplier.
-            gas_rebuild_interval: Full GAS rebuild every N sub-steps
-                (0 = refit only, never rebuild during this frame).
             **render_kwargs: All other render params (sun, sky, materials,
                 DOF, bounce control, etc.).
         """
@@ -1902,7 +1777,7 @@ class PathTracerRenderer:
         w = self._offline_width
         h = self._offline_height
 
-        # GAS update: refit or periodic rebuild
+        # GAS update: full rebuild every sub-step (entities moved).
         sphere_size_jitter = render_kwargs.get('sphere_size_jitter', 0.0)
         sdf_enabled = render_kwargs.get('sdf_enabled', False)
         sdf_aabb_min = render_kwargs.get('sdf_aabb_min', None)
@@ -1911,16 +1786,9 @@ class PathTracerRenderer:
         curve_length = render_kwargs.get('curve_length', 1.0)
         curve_r0 = render_kwargs.get('curve_r0', 1.0)
         curve_r1 = render_kwargs.get('curve_r1', 0.5)
-        if (gas_rebuild_interval > 0
-                and self._offline_substeps_done > 0
-                and self._offline_substeps_done % gas_rebuild_interval == 0):
-            self.build_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
-                             use_curves, curve_length, curve_r0, curve_r1)
-        else:
-            self.refit_accel(radius_scale, sphere_size_jitter,
-                             sdf_enabled, sdf_aabb_min, sdf_aabb_max,
-                             use_curves, curve_length, curve_r0, curve_r1)
+        self.build_accel(radius_scale, sphere_size_jitter,
+                         sdf_enabled, sdf_aabb_min, sdf_aabb_max,
+                         use_curves, curve_length, curve_r0, curve_r1)
 
         # Map entity buffer for all SPP in this substep
         self._ctx.finish()

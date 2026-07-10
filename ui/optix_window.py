@@ -82,8 +82,6 @@ class OptiXWindowMixin:
         imgui.separator()
 
         # ---- Shared controls ----
-        _, p.three_d_optix_gas_rebuild_interval = imgui.slider_int(
-            "GAS Rebuild", p.three_d_optix_gas_rebuild_interval, 1, 120)
         _, p.three_d_optix_sphere_radius_scale = imgui.slider_float(
             "Sphere Scale", p.three_d_optix_sphere_radius_scale,
             0.1, 10.0, format="%.1fx")

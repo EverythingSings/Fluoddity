@@ -56,7 +56,6 @@ class PathTracerInterface:
 
         # Geometry (shared)
         self.radius_scale: float = 1.0
-        self.gas_rebuild_interval: int = 30
         self.sphere_size_jitter: float = 0.0
 
         # Camera
@@ -336,7 +335,6 @@ class PathTracerInterface:
         self._display_tex = self._renderer.render_realtime(
             width, height, eye, U, V, W,
             radius_scale=self.radius_scale,
-            gas_rebuild_interval=self.gas_rebuild_interval,
             denoise_enabled=self.denoise_enabled,
             reset=reset,
             num_samples=num_samples,
@@ -478,7 +476,6 @@ class PathTracerInterface:
             self._display_tex = self._renderer.render_realtime(
                 w, h, c['eye'], c['U'], c['V'], c['W'],
                 radius_scale=self.radius_scale,
-                gas_rebuild_interval=999999,  # no rebuild during preview
                 denoise_enabled=False,
                 reset=False,
                 num_samples=1,
@@ -493,7 +490,6 @@ class PathTracerInterface:
                 self._display_tex = self._renderer.render_realtime(
                     w, h, c['eye'], c['U'], c['V'], c['W'],
                     radius_scale=self.radius_scale,
-                    gas_rebuild_interval=999999,
                     denoise_enabled=True,
                     reset=False,
                     num_samples=0,  # no additional samples, just denoise+tonemap
@@ -646,7 +642,6 @@ class PathTracerInterface:
         self._renderer.render_offline_substep(
             eye, U, V, W,
             radius_scale=self.radius_scale,
-            gas_rebuild_interval=self.gas_rebuild_interval,
             sun_direction=sun_dir_norm,
             sun_intensity=self.sun_intensity,
             sun_color=self.sun_color,
@@ -731,7 +726,6 @@ class PathTracerInterface:
         """
         if self._renderer is not None:
             self._renderer._gas_handle = None
-            self._renderer._physics_steps_since_rebuild = 0
 
     # ---------------------------------------------------------------- properties
 

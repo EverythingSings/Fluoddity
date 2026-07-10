@@ -53,7 +53,7 @@ Physics runs entirely on the GPU via GLSL compute shaders. `Sim` manages shader 
 
 ## The GPU Pipeline
 
-The simulation canvas is a **cubic 3D voxel texture** (`W = H = D`), double-buffered for optional strong determinism. One physics step (`Sim.update()`) runs:
+The simulation canvas is a **cubic 3D voxel texture** (`W = H = D`), double-buffered (ping-ponged) since the compute-shader diffusion pass needs separate read/write buffers. One physics step (`Sim.update()`) runs:
 
 ```
 entity_update.glsl   (compute)  — particle sense → rule eval → forces/strafe → boundaries;

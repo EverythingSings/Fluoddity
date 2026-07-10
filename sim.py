@@ -246,7 +246,6 @@ class Sim:
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
                is_preview_active = False,
-               strong_determinism: bool = False,
                brush_mode: int = 0, fixed_direction_heading: float = 0.0,
                erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
                canvas_draw_active: bool = True,

@@ -1,6 +1,6 @@
 """OptiX interface: bridges Fluoddity's entity buffer and camera to the OptiX sphere renderer.
 
-Manages OptiXSphereRenderer lifecycle (lazy creation, cleanup), GAS rebuild/refit
+Manages OptiXSphereRenderer lifecycle (lazy creation, cleanup), GAS rebuild
 scheduling, entity buffer change detection, and per-frame error recovery.
 """
 from __future__ import annotations
@@ -32,7 +32,6 @@ class OptiXInterface:
 
         # GAS scheduling state
         self._gas_dirty: bool = True  # True = needs full rebuild
-        self._physics_steps_since_rebuild: int = 0
         self._gas_exists: bool = False
 
         # Error recovery state
@@ -44,7 +43,6 @@ class OptiXInterface:
         self._render_time_ms: float = 0.0
 
         # --- Public attributes (wired to UI via preferences) ---
-        self.gas_rebuild_interval: int = 30
         self.light_dir: tuple[float, float, float] = (0.577, 0.577, 0.577)
         self.ambient: float = 0.12
         self.radius_scale: float = 1.0
@@ -134,7 +132,6 @@ class OptiXInterface:
             self._entity_count = entity_count
             self._gas_exists = False
             self._gas_dirty = True
-            self._physics_steps_since_rebuild = 0
 
         # 2. Entity buffer change detection
         current_glo = int(entity_buffer.glo)
@@ -145,7 +142,6 @@ class OptiXInterface:
             self._entity_count = entity_count
             self._gas_exists = False
             self._gas_dirty = True
-            self._physics_steps_since_rebuild = 0
             self._ao_frame_index = 0
 
         # 3. GAS scheduling (radius_scale must match intersection shader)
@@ -153,30 +149,22 @@ class OptiXInterface:
         if self.sdf_enabled != self._prev_sdf_enabled:
             self._gas_exists = False
             self._gas_dirty = True
-            self._physics_steps_since_rebuild = 0
             self._prev_sdf_enabled = self.sdf_enabled
 
         # Track physics steps to know when entities have moved.
         # self.physics_steps is set by the orchestrator each frame.
         steps = self.physics_steps
-        self._physics_steps_since_rebuild += steps
-        if steps > 0 and self._physics_steps_since_rebuild >= self.gas_rebuild_interval:
-            self._gas_dirty = True
 
         sdf_kw = dict(
             sdf_enabled=self.sdf_enabled,
             sdf_aabb_min=SDF_AABB_MIN,
             sdf_aabb_max=SDF_AABB_MAX,
         )
-        if not self._gas_exists or self._gas_dirty:
-            # Full GAS rebuild
+        if not self._gas_exists or self._gas_dirty or steps > 0:
+            # Always do a full GAS rebuild when entities have moved (or first build)
             self._renderer.build_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
             self._gas_exists = True
             self._gas_dirty = False
-            self._physics_steps_since_rebuild = 0
-        elif steps > 0:
-            # Entities moved but not enough steps for rebuild: fast refit
-            self._renderer.refit_accel(self.radius_scale, self.sphere_size_jitter, **sdf_kw)
 
         # 4. Render (delegates camera basis conversion to renderer)
         # Normalize light direction (UI drag_float3 can produce non-unit vectors)
@@ -219,10 +207,8 @@ class OptiXInterface:
         """Force a full GAS rebuild on the next frame.
 
         Call after sim reset or any event that moves all entities at once.
-        Avoids the slow refit path on scrambled BVH data.
         """
         self._gas_dirty = True
-        self._physics_steps_since_rebuild = 0
 
     # ---------------------------------------------------------------- properties
 
@@ -264,7 +250,6 @@ class OptiXInterface:
         self._display_tex = None
         self._gas_exists = False
         self._gas_dirty = True
-        self._physics_steps_since_rebuild = 0
         self._entity_buffer_glo = 0
         self._entity_count = 0
         self._ao_frame_index = 0

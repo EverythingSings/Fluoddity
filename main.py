@@ -161,7 +161,6 @@ class App:
 
         # Physics step tracking for GAS rebuild scheduling
         self._prev_sim_frame_count = 0
-        self._was_sim_going = False  # for detecting running→paused transition
 
         # Render queue execution state machine
         self.render_queue_executing = False
@@ -433,7 +432,6 @@ class App:
                 self._optix_interface = None
                 ui_state.camera.optix_enabled = False
             else:
-                self._optix_interface.gas_rebuild_interval = ui_state.preferences.three_d_optix_gas_rebuild_interval
                 self._optix_interface.radius_scale = ui_state.preferences.three_d_optix_sphere_radius_scale
                 self._optix_interface.light_dir = tuple(ui_state.preferences.three_d_optix_light_direction)
                 self._optix_interface.light_color = tuple(ui_state.preferences.three_d_optix_light_color)
@@ -489,7 +487,6 @@ class App:
                 p = ui_state.preferences
                 pt = self._pathtracer_interface
                 # Shared settings (same as rasterize)
-                pt.gas_rebuild_interval = p.three_d_optix_gas_rebuild_interval
                 pt.radius_scale = p.three_d_optix_sphere_radius_scale
                 pt.sun_direction = tuple(p.three_d_optix_light_direction)
                 pt.sun_color = tuple(p.three_d_optix_light_color)
@@ -564,7 +561,6 @@ class App:
                 # Sync settings before starting preview
                 p = ui_state.preferences
                 pt = self._pathtracer_interface
-                pt.gas_rebuild_interval = p.three_d_optix_gas_rebuild_interval
                 pt.radius_scale = p.three_d_optix_sphere_radius_scale
                 pt.sun_direction = tuple(p.three_d_optix_light_direction)
                 pt.sun_color = tuple(p.three_d_optix_light_color)
@@ -696,7 +692,6 @@ class App:
                     pt_frame_hdr,
                     total_samples=1,
                     current_sample_index=0,
-                    view_mode=1,  # cam_brush (3D view)
                     brightness=ui_state.preferences.brightness,
                     tonemap_softness=ui_state.preferences.tonemap_softness,
                 )
@@ -767,19 +762,6 @@ class App:
             self._optix_interface.physics_steps = physics_steps
         if self._pathtracer_interface is not None:
             self._pathtracer_interface.physics_steps = physics_steps
-
-        # 6.7. Force GAS rebuild when pausing with motion blur enabled.
-        # During motion blur, the GAS is refitted (not rebuilt) between render
-        # samples, so BVH quality degrades over the speedmult cycle. When the
-        # sim pauses, the stale BVH can miss intersections, showing only a
-        # subset of particles. A full rebuild on the pause transition fixes this.
-        sim_going = ui_state.sim.going
-        if self._was_sim_going and not sim_going and ui_state.preferences.motion_blur:
-            if self._optix_interface is not None:
-                self._optix_interface.force_rebuild()
-            if self._pathtracer_interface is not None:
-                self._pathtracer_interface.force_rebuild()
-        self._was_sim_going = sim_going
 
         # 7. Render camera view
         self._render_camera_view(ui_state, sweep_mode, sweep_reticle_pos,
@@ -882,7 +864,6 @@ class App:
                 pt.display_texture,
                 total_samples=1,
                 current_sample_index=0,
-                view_mode=1,  # cam_brush (3D view)
                 brightness=ui_state.preferences.brightness,
                 tonemap_softness=ui_state.preferences.tonemap_softness,
             )
