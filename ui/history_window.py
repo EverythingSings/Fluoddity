@@ -142,7 +142,7 @@ class HistoryWindowMixin:
     def render_physics_tooltip(self):
         """Render the tooltip if mouse is over the Physics Settings window."""
         # Early exit if tooltips are disabled
-        if not self.state.preferences.physics_tooltips_enabled:
+        if not self.state.preferences.ui_windows.physics_tooltips_enabled:
             self.last_hovered_slider = None
             self.physics_window_interaction = False
             return

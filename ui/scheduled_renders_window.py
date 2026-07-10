@@ -40,7 +40,7 @@ class ScheduledRendersWindowMixin:
         """Render the Scheduled Renders window."""
         expanded, opened = imgui.begin("Scheduled Renders", True)
         if not opened:
-            self.state.preferences.show_scheduled_renders_window = False
+            self.state.preferences.ui_windows.show_scheduled_renders_window = False
             imgui.end()
             return
 

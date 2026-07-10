@@ -194,7 +194,7 @@ class CommandHandler:
 
         # Handle mouse clicks
         if not restored_sweep_preview:
-            canvas_aspect_ratio = ui_state.preferences.canvas_aspect_ratio
+            canvas_aspect_ratio = ui_state.preferences.rendering.canvas_aspect_ratio
             #convert aspect string to tuple of floats
             canvas_aspect_ratio = tuple(float(x) for x in canvas_aspect_ratio.split(":"))
             #convert to ratio
@@ -230,8 +230,8 @@ class CommandHandler:
 
     def _handle_world_size_change(self, ui_state):
         """Handle entity count / canvas resolution change."""
-        self.sim._entity_count = ui_state.preferences.entity_count
-        self.sim.canvas_resolution = ui_state.preferences.canvas_resolution
+        self.sim._entity_count = ui_state.preferences.rendering.entity_count
+        self.sim.canvas_resolution = ui_state.preferences.rendering.canvas_resolution
         self.sim.setup_simulation_state()
         self.sim.setup_shaders()
         self.entity_picker.update_buffer(self.sim.get_entity_buffer())
@@ -242,8 +242,8 @@ class CommandHandler:
         if self.field_handler and self.field_handler._has_field_tex:
             canvas_dim_x, canvas_dim_y = self.sim.get_canvas_dimensions()
             self.field_handler.adv_draw.ensure_initialized(canvas_dim_x, canvas_dim_y)
-        self.ui._last_applied_entity_count = ui_state.preferences.entity_count
-        self.ui._last_applied_canvas_resolution = ui_state.preferences.canvas_resolution
+        self.ui._last_applied_entity_count = ui_state.preferences.rendering.entity_count
+        self.ui._last_applied_canvas_resolution = ui_state.preferences.rendering.canvas_resolution
         print(f"World size changed "
               f"(entity_count: {self.sim.entity_count}, "
               f"canvas: {self.sim.get_canvas_dimensions()[0]}x{self.sim.get_canvas_dimensions()[1]})")
@@ -256,8 +256,8 @@ class CommandHandler:
         elif self.video_service.is_active():
             self.video_service.stop()
         else:
-            video_end_frame = ui_state.preferences.video_end_frame
-            video_simulation_frames = ui_state.preferences.max_frames * ui_state.preferences.motion_blur_samples
+            video_end_frame = ui_state.preferences.recording.video_end_frame
+            video_simulation_frames = ui_state.preferences.recording.max_frames * ui_state.preferences.recording.motion_blur_samples
             scheduled_start_frame = video_end_frame - video_simulation_frames
 
             if video_end_frame == 0 or scheduled_start_frame <= self.sim.frame_count:
@@ -311,7 +311,7 @@ class CommandHandler:
         if ui_state.left_click_this_frame:
             if ui_state.sim.parameter_sweeps_enabled:
                 self._handle_sweep_click(ui_state, canvas_aspect_ratio)
-            elif ui_state.preferences.mouse_mode == "Select Particle":
+            elif ui_state.preferences.ui_windows.mouse_mode == "Select Particle":
                 self._handle_entity_pick(ui_state, canvas_aspect_ratio)
 
         elif ui_state.right_click_this_frame:
@@ -319,7 +319,7 @@ class CommandHandler:
                 if self.sim.has_active_xy_sweep() or self.sim.has_active_cohort_sweep():
                     ui_state.sim.parameter_sweeps_enabled = False
                     ui_state.sim.sweep_preview_pending_restore = True
-            elif ui_state.preferences.mouse_mode == "Select Particle":
+            elif ui_state.preferences.ui_windows.mouse_mode == "Select Particle":
                 if self.rule_manager.length() > 1:
                     prev_rule, prev_seed = self.rule_manager.pop_rule()
                     if prev_seed is not None:
@@ -533,8 +533,8 @@ class CommandHandler:
         current_rule = self.rule_manager.get_current_rule()
         field_snapshot = fh.snapshot_field_only(ui_state) if fh else None
         field_strengths = (
-            ui_state.preferences.force_field_strength,
-            ui_state.preferences.strafe_field_strength,
+            ui_state.preferences.advanced_drawing.force_field_strength,
+            ui_state.preferences.advanced_drawing.strafe_field_strength,
         )
         config = self.config_saver.create_config(
             ui_state.sim, current_rule, field_strengths=field_strengths)
@@ -657,31 +657,31 @@ class CommandHandler:
         if ti is None:
             return
         p = ui_state.preferences
-        p.tracer_sdf_enabled = ti.sdf_enabled
-        p.tracer_colored_extinction = ti.colored_extinction
-        p.tracer_extinction_rgb = list(ti.extinction_rgb)
-        p.tracer_albedo_saturation = ti.albedo_saturation
-        p.tracer_albedo_brightness = ti.albedo_brightness
-        p.tracer_density_scale = ti.density_scale
-        p.tracer_hg_g = ti.hg_g
-        p.tracer_emission_strength = ti.emission_strength
-        p.tracer_sun_direction = list(ti.sun_direction)
-        p.tracer_sun_color = list(ti.sun_color)
-        p.tracer_sun_intensity = ti.sun_intensity
-        p.tracer_sky_color = list(ti.sky_color)
-        p.tracer_sky_intensity = ti.sky_intensity
-        p.tracer_num_samples = ti.num_samples
-        p.tracer_exposure = ti.exposure
-        p.tracer_realtime_mode = ti.realtime_mode
-        p.tracer_max_bounces = ti.max_bounces
-        p.tracer_firefly_clamp = ti.firefly_clamp
-        p.tracer_firefly_clamp_max = ti.firefly_clamp_max
-        p.tracer_resolution_scale = ti.resolution_scale
-        p.tracer_density_resolution_log2 = ti.density_resolution_log2
-        p.tracer_color_resolution_log2 = ti.color_resolution_log2
-        p.tracer_majorant_resolution_log2 = ti.majorant_resolution_log2
-        p.tracer_sun_sampling = ti.sun_sampling
-        p.tracer_photosphere = ti.photosphere
+        p.tracer.sdf_enabled = ti.sdf_enabled
+        p.tracer.colored_extinction = ti.colored_extinction
+        p.tracer.extinction_rgb = list(ti.extinction_rgb)
+        p.tracer.albedo_saturation = ti.albedo_saturation
+        p.tracer.albedo_brightness = ti.albedo_brightness
+        p.tracer.density_scale = ti.density_scale
+        p.tracer.hg_g = ti.hg_g
+        p.tracer.emission_strength = ti.emission_strength
+        p.tracer.sun_direction = list(ti.sun_direction)
+        p.tracer.sun_color = list(ti.sun_color)
+        p.tracer.sun_intensity = ti.sun_intensity
+        p.tracer.sky_color = list(ti.sky_color)
+        p.tracer.sky_intensity = ti.sky_intensity
+        p.tracer.num_samples = ti.num_samples
+        p.tracer.exposure = ti.exposure
+        p.tracer.realtime_mode = ti.realtime_mode
+        p.tracer.max_bounces = ti.max_bounces
+        p.tracer.firefly_clamp = ti.firefly_clamp
+        p.tracer.firefly_clamp_max = ti.firefly_clamp_max
+        p.tracer.resolution_scale = ti.resolution_scale
+        p.tracer.density_resolution_log2 = ti.density_resolution_log2
+        p.tracer.color_resolution_log2 = ti.color_resolution_log2
+        p.tracer.majorant_resolution_log2 = ti.majorant_resolution_log2
+        p.tracer.sun_sampling = ti.sun_sampling
+        p.tracer.photosphere = ti.photosphere
 
     def _handle_save_render_spec(self, ui_state):
         """Capture current state and save as a render spec to disk."""
@@ -729,8 +729,8 @@ class CommandHandler:
             )
             if world_size_changed:
                 self.entity_picker.update_buffer(self.sim.get_entity_buffer())
-                self.ui._last_applied_entity_count = ui_state.preferences.entity_count
-                self.ui._last_applied_canvas_resolution = ui_state.preferences.canvas_resolution
+                self.ui._last_applied_entity_count = ui_state.preferences.rendering.entity_count
+                self.ui._last_applied_canvas_resolution = ui_state.preferences.rendering.canvas_resolution
             # Re-sync tracer interface if it exists (preferences were updated
             # but the live TracerInterface still has stale values)
             if self.ui._tracer_interface is not None:

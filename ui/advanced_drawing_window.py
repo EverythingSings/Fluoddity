@@ -12,7 +12,7 @@ class AdvancedDrawingWindowMixin:
         expanded, opened = imgui.begin("Drawing Controls", True)
 
         if not opened:
-            self.state.preferences.advanced_drawing_enabled = False
+            self.state.preferences.advanced_drawing.enabled = False
             imgui.end()
             return
 
@@ -20,11 +20,11 @@ class AdvancedDrawingWindowMixin:
             prefs = self.state.preferences
 
             # === 1. Draw Size + Draw Power sliders ===
-            _, prefs.draw_size = imgui.slider_float(
-                "Draw Size##adv", prefs.draw_size, 0.01, 0.5, format="%.3f"
+            _, prefs.ui_windows.draw_size = imgui.slider_float(
+                "Draw Size##adv", prefs.ui_windows.draw_size, 0.01, 0.5, format="%.3f"
             )
-            _, prefs.draw_power = imgui.slider_float(
-                "Draw Power##adv", prefs.draw_power, 0.1, 5.0, format="%.2f"
+            _, prefs.ui_windows.draw_power = imgui.slider_float(
+                "Draw Power##adv", prefs.ui_windows.draw_power, 0.1, 5.0, format="%.2f"
             )
 
             # === 2. Brush Mode Combo ===
@@ -35,12 +35,12 @@ class AdvancedDrawingWindowMixin:
                 "In - Attract",
                 "Out - Repel",
             ]
-            _, prefs.brush_mode = imgui.combo("Brush Mode", prefs.brush_mode, brush_modes)
+            _, prefs.advanced_drawing.brush_mode = imgui.combo("Brush Mode", prefs.advanced_drawing.brush_mode, brush_modes)
 
             # === 3. Fixed Direction Heading slider ===
-            _, prefs.fixed_direction_heading = imgui.slider_float(
+            _, prefs.advanced_drawing.fixed_direction_heading = imgui.slider_float(
                 "Fixed Direction Heading",
-                prefs.fixed_direction_heading,
+                prefs.advanced_drawing.fixed_direction_heading,
                 -math.pi,
                 math.pi,
                 format="%.3f",
@@ -56,9 +56,9 @@ class AdvancedDrawingWindowMixin:
             imgui.text("Active Draw Target")
 
             # Determine current selection: 0=canvas, 1=force, 2=strafe
-            if prefs.advanced_draw_force_field:
+            if prefs.advanced_drawing.draw_force_field:
                 target = 1
-            elif prefs.advanced_draw_strafe_field:
+            elif prefs.advanced_drawing.draw_strafe_field:
                 target = 2
             else:
                 target = 0
@@ -82,9 +82,9 @@ class AdvancedDrawingWindowMixin:
             )
 
             # Apply mutually exclusive selection back to prefs
-            prefs.advanced_draw_canvas = (target == 0)
-            prefs.advanced_draw_force_field = (target == 1)
-            prefs.advanced_draw_strafe_field = (target == 2)
+            prefs.advanced_drawing.draw_canvas = (target == 0)
+            prefs.advanced_drawing.draw_force_field = (target == 1)
+            prefs.advanced_drawing.draw_strafe_field = (target == 2)
 
             # === 5. Fill Popup ===
             if imgui.button("Fill..."):
@@ -131,8 +131,8 @@ class AdvancedDrawingWindowMixin:
             ffs_lock_colors = pls.push_locked_style('force_field_strength') if pls else 0
             ffs_label = pls.get_display_label('force_field_strength', "Force Field Strength") if pls else "Force Field Strength"
 
-            if prefs.force_field_strength > 0:
-                fslider = (math.log10(prefs.force_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
+            if prefs.advanced_drawing.force_field_strength > 0:
+                fslider = (math.log10(prefs.advanced_drawing.force_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
             else:
                 fslider = 0.0
             fslider = max(0.0, min(1.0, fslider))
@@ -141,12 +141,12 @@ class AdvancedDrawingWindowMixin:
                 fslider,
                 0.0,
                 1.0,
-                f"{prefs.force_field_strength:.4f}",
+                f"{prefs.advanced_drawing.force_field_strength:.4f}",
             )
             if pls and pls.handle_alt_click('force_field_strength'):
                 pass  # alt-click intercepted; discard value change
             else:
-                prefs.force_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_fpos)
+                prefs.advanced_drawing.force_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_fpos)
             if pls:
                 pls.pop_locked_style(ffs_lock_colors)
             self._delayed_tooltip(
@@ -158,8 +158,8 @@ class AdvancedDrawingWindowMixin:
             sfs_lock_colors = pls.push_locked_style('strafe_field_strength') if pls else 0
             sfs_label = pls.get_display_label('strafe_field_strength', "Strafe Field Strength") if pls else "Strafe Field Strength"
 
-            if prefs.strafe_field_strength > 0:
-                sslider = (math.log10(prefs.strafe_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
+            if prefs.advanced_drawing.strafe_field_strength > 0:
+                sslider = (math.log10(prefs.advanced_drawing.strafe_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
             else:
                 sslider = 0.0
             sslider = max(0.0, min(1.0, sslider))
@@ -168,12 +168,12 @@ class AdvancedDrawingWindowMixin:
                 sslider,
                 0.0,
                 1.0,
-                f"{prefs.strafe_field_strength:.4f}",
+                f"{prefs.advanced_drawing.strafe_field_strength:.4f}",
             )
             if pls and pls.handle_alt_click('strafe_field_strength'):
                 pass  # alt-click intercepted; discard value change
             else:
-                prefs.strafe_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_spos)
+                prefs.advanced_drawing.strafe_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_spos)
             if pls:
                 pls.pop_locked_style(sfs_lock_colors)
             self._delayed_tooltip(
@@ -184,17 +184,17 @@ class AdvancedDrawingWindowMixin:
             imgui.separator()
 
             # === 9. View Draw Target Arrows (coupled to preferences debug_arrows) ===
-            _, prefs.debug_arrows = imgui.checkbox(
-                "View Draw Target Arrows", prefs.debug_arrows
+            _, prefs.ui_windows.debug_arrows = imgui.checkbox(
+                "View Draw Target Arrows", prefs.ui_windows.debug_arrows
             )
             self._delayed_tooltip(
                 "Render a grid of arrows to help visualize the active draw target's vector field."
             )
 
             # === 10. Draw Target Overlay Opacity ===
-            _, prefs.draw_target_overlay_opacity = imgui.slider_float(
+            _, prefs.advanced_drawing.draw_target_overlay_opacity = imgui.slider_float(
                 "Draw Target Overlay Opacity",
-                prefs.draw_target_overlay_opacity,
+                prefs.advanced_drawing.draw_target_overlay_opacity,
                 0.0,
                 1.0,
                 format="%.2f",
@@ -207,38 +207,38 @@ class AdvancedDrawingWindowMixin:
             imgui.separator()
 
             # === 11. Shader Driven Field ===
-            changed, prefs.shader_driven_field = imgui.checkbox(
-                "Shader Driven Field", prefs.shader_driven_field
+            changed, prefs.advanced_drawing.shader_driven_field = imgui.checkbox(
+                "Shader Driven Field", prefs.advanced_drawing.shader_driven_field
             )
             self._delayed_tooltip(
                 "Use a frag shader to override the field texture."
             )
 
             # When enabling, switch draw target to canvas if on force/strafe
-            if changed and prefs.shader_driven_field:
-                if prefs.advanced_draw_force_field or prefs.advanced_draw_strafe_field:
-                    prefs.advanced_draw_canvas = True
-                    prefs.advanced_draw_force_field = False
-                    prefs.advanced_draw_strafe_field = False
+            if changed and prefs.advanced_drawing.shader_driven_field:
+                if prefs.advanced_drawing.draw_force_field or prefs.advanced_drawing.draw_strafe_field:
+                    prefs.advanced_drawing.draw_canvas = True
+                    prefs.advanced_drawing.draw_force_field = False
+                    prefs.advanced_drawing.draw_strafe_field = False
 
-            if prefs.shader_driven_field:
+            if prefs.advanced_drawing.shader_driven_field:
                 available = AdvancedDrawingProcessor.get_available_override_shaders()
                 # Find current selection index among non-divider entries
                 shader_names = [name for name, is_div in available if not is_div]
                 current_idx = 0
-                if prefs.field_override_shader in shader_names:
-                    current_idx = shader_names.index(prefs.field_override_shader)
+                if prefs.advanced_drawing.field_override_shader in shader_names:
+                    current_idx = shader_names.index(prefs.advanced_drawing.field_override_shader)
 
-                preview = prefs.field_override_shader
+                preview = prefs.advanced_drawing.field_override_shader
                 imgui.set_next_item_width(-1)
                 if imgui.begin_combo("##field_override_shader", preview):
                     for name, is_divider in available:
                         if is_divider:
                             imgui.separator()
                             continue
-                        is_selected = (name == prefs.field_override_shader)
+                        is_selected = (name == prefs.advanced_drawing.field_override_shader)
                         if imgui.selectable(name, is_selected)[0]:
-                            prefs.field_override_shader = name
+                            prefs.advanced_drawing.field_override_shader = name
                         if is_selected:
                             imgui.set_item_default_focus()
                     imgui.end_combo()

@@ -12,7 +12,7 @@ class OptiXWindowMixin:
         """Render the OptiX Controls window."""
         visible, opened = imgui.begin("OptiX Controls", True)
         if not opened:
-            self.state.preferences.show_optix_window = False
+            self.state.preferences.ui_windows.show_optix_window = False
             imgui.end()
             return
         if not visible:
@@ -29,23 +29,23 @@ class OptiXWindowMixin:
             return
 
         # ---- RT Mode cycling button ----
-        rt_mode = p.three_d_rt_mode
-        spp_label = str(p.three_d_rt_realtime_samples)
+        rt_mode = p.optix.rt_mode
+        spp_label = str(p.optix.rt_realtime_samples)
         mode_labels = ["RT: Rasterize", f"RT: {spp_label} spp", "RT: Accumulate"]
         if imgui.button(mode_labels[rt_mode]):
-            p.three_d_rt_mode = (rt_mode + 1) % 3
+            p.optix.rt_mode = (rt_mode + 1) % 3
 
         # Realtime samples slider (only for X spp mode)
-        if p.three_d_rt_mode == 1:
+        if p.optix.rt_mode == 1:
             imgui.same_line()
             imgui.set_next_item_width(100)
-            _, p.three_d_rt_realtime_samples = imgui.slider_int(
-                "##rt_samples", p.three_d_rt_realtime_samples, 1, 8)
+            _, p.optix.rt_realtime_samples = imgui.slider_int(
+                "##rt_samples", p.optix.rt_realtime_samples, 1, 8)
 
         # Capture SPP + Re-render button
-        _, p.three_d_rt_preview_spp = imgui.slider_int(
-            "Capture SPP", p.three_d_rt_preview_spp, 1, 512)
-        rt_active = p.three_d_rt_mode > 0
+        _, p.optix.rt_preview_spp = imgui.slider_int(
+            "Capture SPP", p.optix.rt_preview_spp, 1, 512)
+        rt_active = p.optix.rt_mode > 0
         if rt_active:
             imgui.begin_disabled()
         if imgui.button("Re-render Preview"):
@@ -55,10 +55,10 @@ class OptiXWindowMixin:
 
         # Progress / status indicator
         pt_interface = getattr(self, '_pathtracer_interface', None)
-        if p.three_d_rt_mode == 1:
+        if p.optix.rt_mode == 1:
             imgui.same_line()
-            imgui.text(f"  [RT {p.three_d_rt_realtime_samples} spp]")
-        elif p.three_d_rt_mode == 2:
+            imgui.text(f"  [RT {p.optix.rt_realtime_samples} spp]")
+        elif p.optix.rt_mode == 2:
             imgui.same_line()
             count = self.state.camera.pathtracer_sample_count
             imgui.text(f"  [accum: {count} spp]")
@@ -74,97 +74,97 @@ class OptiXWindowMixin:
         # Resolution scale (applied on Enter key)
         imgui.set_next_item_width(100)
         changed, new_scale = imgui.input_float(
-            "Resolution Scale##optix", p.three_d_optix_resolution_scale, 0.0, 0.0, "%.2f"
+            "Resolution Scale##optix", p.optix.resolution_scale, 0.0, 0.0, "%.2f"
         )
         if imgui.is_item_deactivated_after_edit():
-            p.three_d_optix_resolution_scale = max(0.1, min(4.0, new_scale))
+            p.optix.resolution_scale = max(0.1, min(4.0, new_scale))
 
         imgui.separator()
 
         # ---- Shared controls ----
-        _, p.three_d_optix_sphere_radius_scale = imgui.slider_float(
-            "Sphere Scale", p.three_d_optix_sphere_radius_scale,
+        _, p.optix.sphere_radius_scale = imgui.slider_float(
+            "Sphere Scale", p.optix.sphere_radius_scale,
             0.1, 10.0, format="%.1fx")
-        _, p.three_d_optix_sphere_size_jitter = imgui.slider_float(
-            "Sphere Jitter", p.three_d_optix_sphere_size_jitter,
+        _, p.optix.sphere_size_jitter = imgui.slider_float(
+            "Sphere Jitter", p.optix.sphere_size_jitter,
             0.0, 1.0, format="%.2f")
         if imgui.is_item_hovered():
             imgui.set_tooltip("Per-sphere radius jitter to reduce banding artifacts")
 
         # Curve primitives
-        _, p.three_d_optix_use_curves = imgui.checkbox(
-            "Curves", p.three_d_optix_use_curves)
+        _, p.optix.use_curves = imgui.checkbox(
+            "Curves", p.optix.use_curves)
         if imgui.is_item_hovered():
             imgui.set_tooltip("Render entities as round linear curves oriented along velocity")
-        if p.three_d_optix_use_curves:
-            _, p.three_d_optix_curve_length = imgui.slider_float(
-                "Curve Length", p.three_d_optix_curve_length,
+        if p.optix.use_curves:
+            _, p.optix.curve_length = imgui.slider_float(
+                "Curve Length", p.optix.curve_length,
                 0.0, 10.0, format="%.2f")
-            _, p.three_d_optix_curve_r0 = imgui.slider_float(
-                "Curve R0", p.three_d_optix_curve_r0,
+            _, p.optix.curve_r0 = imgui.slider_float(
+                "Curve R0", p.optix.curve_r0,
                 0.01, 5.0, format="%.2f")
-            _, p.three_d_optix_curve_r1 = imgui.slider_float(
-                "Curve R1", p.three_d_optix_curve_r1,
+            _, p.optix.curve_r1 = imgui.slider_float(
+                "Curve R1", p.optix.curve_r1,
                 0.01, 5.0, format="%.2f")
 
         # Albedo color controls
-        _, p.three_d_optix_albedo_saturation = imgui.slider_float(
-            "Albedo Saturation", p.three_d_optix_albedo_saturation, 0.0, 1.0)
-        _, p.three_d_optix_albedo_brightness = imgui.slider_float(
-            "Albedo Brightness", p.three_d_optix_albedo_brightness, 0.0, 1.0)
+        _, p.optix.albedo_saturation = imgui.slider_float(
+            "Albedo Saturation", p.optix.albedo_saturation, 0.0, 1.0)
+        _, p.optix.albedo_brightness = imgui.slider_float(
+            "Albedo Brightness", p.optix.albedo_brightness, 0.0, 1.0)
 
         # SDF scene
-        _, p.three_d_optix_sdf_enabled = imgui.checkbox(
-            "Enable SDF", p.three_d_optix_sdf_enabled)
+        _, p.optix.sdf_enabled = imgui.checkbox(
+            "Enable SDF", p.optix.sdf_enabled)
 
         # ---- Lighting (shared) ----
         if imgui.collapsing_header("Lighting", imgui.TreeNodeFlags_.default_open.value):
             changed, vals = imgui.drag_float3(
-                "Light Dir", list(p.three_d_optix_light_direction),
+                "Light Dir", list(p.optix.light_direction),
                 0.01, -1.0, 1.0)
             if changed:
-                p.three_d_optix_light_direction = list(vals)
-            _, p.three_d_optix_light_color = imgui.color_edit3(
-                "Light Color", p.three_d_optix_light_color)
-            _, p.three_d_optix_light_intensity = imgui.slider_float(
-                "Intensity", p.three_d_optix_light_intensity, 0.0, 20.0)
+                p.optix.light_direction = list(vals)
+            _, p.optix.light_color = imgui.color_edit3(
+                "Light Color", p.optix.light_color)
+            _, p.optix.light_intensity = imgui.slider_float(
+                "Intensity", p.optix.light_intensity, 0.0, 20.0)
 
         # ---- Sky (shared) ----
         if imgui.collapsing_header("Sky", imgui.TreeNodeFlags_.default_open.value):
-            _, p.three_d_optix_sky_color_top = imgui.color_edit3(
-                "Sky Top", p.three_d_optix_sky_color_top)
-            _, p.three_d_optix_sky_color_bottom = imgui.color_edit3(
-                "Sky Bottom", p.three_d_optix_sky_color_bottom)
+            _, p.optix.sky_color_top = imgui.color_edit3(
+                "Sky Top", p.optix.sky_color_top)
+            _, p.optix.sky_color_bottom = imgui.color_edit3(
+                "Sky Bottom", p.optix.sky_color_bottom)
 
         # ---- Rasterize-specific (always visible) ----
         if imgui.collapsing_header("Rasterize", imgui.TreeNodeFlags_.default_open.value):
-            _, p.three_d_optix_shadows_enabled = imgui.checkbox(
-                "Shadows (rasterize)", p.three_d_optix_shadows_enabled)
-            _, p.three_d_optix_ambient = imgui.slider_float(
-                "Ambient (rasterize)", p.three_d_optix_ambient, 0.0, 1.0)
+            _, p.optix.shadows_enabled = imgui.checkbox(
+                "Shadows (rasterize)", p.optix.shadows_enabled)
+            _, p.optix.ambient = imgui.slider_float(
+                "Ambient (rasterize)", p.optix.ambient, 0.0, 1.0)
 
             # Ambient Occlusion
-            _, p.three_d_optix_ao_enabled = imgui.checkbox(
-                "Ambient Occlusion (rasterize)", p.three_d_optix_ao_enabled)
-            if p.three_d_optix_ao_enabled:
-                _, p.three_d_optix_ao_num_rays = imgui.slider_int(
-                    "AO Rays", p.three_d_optix_ao_num_rays, 1, 16)
-                _, p.three_d_optix_ao_radius = imgui.slider_float(
-                    "AO Radius", p.three_d_optix_ao_radius,
+            _, p.optix.ao_enabled = imgui.checkbox(
+                "Ambient Occlusion (rasterize)", p.optix.ao_enabled)
+            if p.optix.ao_enabled:
+                _, p.optix.ao_num_rays = imgui.slider_int(
+                    "AO Rays", p.optix.ao_num_rays, 1, 16)
+                _, p.optix.ao_radius = imgui.slider_float(
+                    "AO Radius", p.optix.ao_radius,
                     0.01, 5.0, format="%.2f")
 
         # ---- Path trace-specific (always visible) ----
         if imgui.collapsing_header("Path Trace", imgui.TreeNodeFlags_.default_open.value):
-            _, p.three_d_pt_sun_sampling = imgui.checkbox(
-                "Enable NEE", p.three_d_pt_sun_sampling)
+            _, p.optix.pt_sun_sampling = imgui.checkbox(
+                "Enable NEE", p.optix.pt_sun_sampling)
             if imgui.is_item_hovered():
                 imgui.set_tooltip(
                     "Next Event Estimation: trace shadow rays\n"
                     "toward the light each bounce for faster\n"
                     "convergence. Uses MIS with cos-lobe sky,\n"
                     "delta PDF with legacy directional light.")
-            _, p.three_d_pt_env_sky_nee = imgui.checkbox(
-                "Cos-lobe Sky", p.three_d_pt_env_sky_nee)
+            _, p.optix.pt_env_sky_nee = imgui.checkbox(
+                "Cos-lobe Sky", p.optix.pt_env_sky_nee)
             if imgui.is_item_hovered():
                 imgui.set_tooltip(
                     "Replace legacy directional sun + gradient sky\n"
@@ -172,8 +172,8 @@ class OptiXWindowMixin:
                     "Sky color controls hemisphere glow,\n"
                     "sun direction/color/intensity control sun disk.\n"
                     "Works with or without NEE enabled.")
-            _, p.three_d_pt_photosphere = imgui.checkbox(
-                "Photosphere", p.three_d_pt_photosphere)
+            _, p.optix.pt_photosphere = imgui.checkbox(
+                "Photosphere", p.optix.pt_photosphere)
             if imgui.is_item_hovered():
                 imgui.set_tooltip(
                     "Use equirectangular environment map for sky.\n"
@@ -182,37 +182,37 @@ class OptiXWindowMixin:
 
             # Material
             mat_labels = ["Lambert", "Glossy", "Mirror"]
-            _, p.three_d_pt_global_material = imgui.combo(
-                "Material (path trace)", p.three_d_pt_global_material, mat_labels)
-            if p.three_d_pt_global_material == 1:  # Glossy
-                _, p.three_d_pt_glossy_ior = imgui.slider_float(
-                    "Glossy IOR", p.three_d_pt_glossy_ior, 1.0, 3.0, format="%.2f")
+            _, p.optix.pt_global_material = imgui.combo(
+                "Material (path trace)", p.optix.pt_global_material, mat_labels)
+            if p.optix.pt_global_material == 1:  # Glossy
+                _, p.optix.pt_glossy_ior = imgui.slider_float(
+                    "Glossy IOR", p.optix.pt_glossy_ior, 1.0, 3.0, format="%.2f")
 
             # Render settings
-            _, p.three_d_pt_max_bounces = imgui.drag_int(
-                "Max Bounces (path trace)", p.three_d_pt_max_bounces, 0.1, 0, 64)
+            _, p.optix.pt_max_bounces = imgui.drag_int(
+                "Max Bounces (path trace)", p.optix.pt_max_bounces, 0.1, 0, 64)
             if imgui.is_item_hovered():
                 imgui.set_tooltip("0 = unbounded (Russian roulette only)")
-            _, p.three_d_pt_rr_start_depth = imgui.slider_int(
-                "RR Start Depth (path trace)", p.three_d_pt_rr_start_depth, 1, 16)
-            _, p.three_d_pt_firefly_clamp = imgui.checkbox(
-                "Firefly Clamp (path trace)", p.three_d_pt_firefly_clamp)
-            if p.three_d_pt_firefly_clamp:
+            _, p.optix.pt_rr_start_depth = imgui.slider_int(
+                "RR Start Depth (path trace)", p.optix.pt_rr_start_depth, 1, 16)
+            _, p.optix.pt_firefly_clamp = imgui.checkbox(
+                "Firefly Clamp (path trace)", p.optix.pt_firefly_clamp)
+            if p.optix.pt_firefly_clamp:
                 imgui.same_line()
                 imgui.set_next_item_width(imgui.get_content_region_avail().x)
-                _, p.three_d_pt_firefly_clamp_max = imgui.drag_float(
-                    "##pt_clamp_max", p.three_d_pt_firefly_clamp_max,
+                _, p.optix.pt_firefly_clamp_max = imgui.drag_float(
+                    "##pt_clamp_max", p.optix.pt_firefly_clamp_max,
                     0.1, 0.1, 1000.0, "Max: %.1f")
-            _, p.three_d_pt_emission_intensity = imgui.slider_float(
-                "Emission Intensity", p.three_d_pt_emission_intensity,
+            _, p.optix.pt_emission_intensity = imgui.slider_float(
+                "Emission Intensity", p.optix.pt_emission_intensity,
                 0.0, 100.0, format="%.1f")
             if imgui.is_item_hovered():
                 imgui.set_tooltip("Radiance multiplier for emissive entities (negative hue)")
-            _, p.three_d_pt_denoise_enabled = imgui.checkbox(
-                "Denoise (path trace)", p.three_d_pt_denoise_enabled)
+            _, p.optix.pt_denoise_enabled = imgui.checkbox(
+                "Denoise (path trace)", p.optix.pt_denoise_enabled)
 
         # ---- Timing display ----
-        if p.three_d_rt_mode > 0:
+        if p.optix.rt_mode > 0:
             gas_ms = self.state.camera.pathtracer_gas_time_ms
             render_ms = self.state.camera.pathtracer_render_time_ms
         else:

@@ -67,8 +67,8 @@ class RenderSpecService:
         field_strengths = None
         if adv_draw_processor and adv_draw_processor.snapshot_field_data() is not None:
             field_strengths = (
-                ui_state.preferences.force_field_strength,
-                ui_state.preferences.strafe_field_strength,
+                ui_state.preferences.advanced_drawing.force_field_strength,
+                ui_state.preferences.advanced_drawing.strafe_field_strength,
             )
         physics_config = config_saver.create_config(ui_state.sim, rule, field_strengths)
         physics_config_dict = physics_config.to_dict()
@@ -99,8 +99,9 @@ class RenderSpecService:
             'fov': controller_cam.fov,
         }
 
-        # 4. Preferences (full snapshot)
-        preferences = asdict(ui_state.preferences)
+        # 4. Preferences (full snapshot, flat-key dict for stable .frs format)
+        from state.preferences_state import to_flat_dict
+        preferences = to_flat_dict(ui_state.preferences)
 
         # 5. Sim metadata
         sim_metadata = {
@@ -353,13 +354,12 @@ class RenderSpecService:
         # 4. Apply preferences (skip window visibility flags — don't close/open windows)
         prefs_data = spec.preferences
         if prefs_data:
-            from state.preferences_state import PreferencesState
-            valid_fields = set(PreferencesState.__dataclass_fields__.keys())
+            from state.preferences_state import _FLAT_KEY_MAP, set_flat
             for key, value in prefs_data.items():
                 if key.startswith('show_') and key.endswith('_window'):
                     continue  # Don't override which windows are open
-                if key in valid_fields and hasattr(ui_state.preferences, key):
-                    setattr(ui_state.preferences, key, value)
+                if key in _FLAT_KEY_MAP:
+                    set_flat(ui_state.preferences, key, value)
 
         # 4b. Detect and handle world size changes (must happen before GPU buffer writes)
         sim_metadata = spec.sim_metadata

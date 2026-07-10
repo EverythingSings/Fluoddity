@@ -125,17 +125,18 @@ class ConfigBrowserMixin:
             ("Advanced", self.config_files_by_category["Advanced"], "load_menu_advanced_open")
         ]
 
+        ui_windows_prefs = self.state.preferences.ui_windows
         for category_name, category_files, pref_attr in categories:
             if len(category_files) == 0:
                 continue  # Skip empty categories
 
             # Set collapse state from preferences
-            imgui.set_next_item_open(getattr(self.state.preferences, pref_attr))
+            imgui.set_next_item_open(getattr(ui_windows_prefs, pref_attr))
             category_open = imgui.collapsing_header(category_name)
 
             # Update preference to match actual header state (handles user clicks)
             if imgui.is_item_toggled_open():
-                setattr(self.state.preferences, pref_attr, category_open)
+                setattr(ui_windows_prefs, pref_attr, category_open)
 
             if category_open:
                 # Render configs in this category

@@ -37,37 +37,37 @@ class PhysicsWindowMixin:
         imgui.separator()
 
         # === Basics Group (Trail sensors and rule mutation) ===
-        imgui.set_next_item_open(self.state.preferences.physics_group_basics)
+        imgui.set_next_item_open(self.state.preferences.ui_windows.physics_group_basics)
         basics_open = imgui.collapsing_header("Basics - Trail sensors and rule mutation")
         if imgui.is_item_toggled_open():
-            self.state.preferences.physics_group_basics = basics_open
+            self.state.preferences.ui_windows.physics_group_basics = basics_open
         if basics_open:
             for pdef in PARAM_GROUPS['basics']:
                 self.render_physics_slider(pdef)
 
         # === Forces Group ===
-        imgui.set_next_item_open(self.state.preferences.physics_group_forces)
+        imgui.set_next_item_open(self.state.preferences.ui_windows.physics_group_forces)
         forces_open = imgui.collapsing_header("Forces")
         if imgui.is_item_toggled_open():
-            self.state.preferences.physics_group_forces = forces_open
+            self.state.preferences.ui_windows.physics_group_forces = forces_open
         if forces_open:
             for pdef in PARAM_GROUPS['forces']:
                 self.render_physics_slider(pdef)
 
         # === Advanced Group ===
-        imgui.set_next_item_open(self.state.preferences.physics_group_advanced)
+        imgui.set_next_item_open(self.state.preferences.ui_windows.physics_group_advanced)
         advanced_open = imgui.collapsing_header("Advanced")
         if imgui.is_item_toggled_open():
-            self.state.preferences.physics_group_advanced = advanced_open
+            self.state.preferences.ui_windows.physics_group_advanced = advanced_open
         if advanced_open:
             for pdef in PARAM_GROUPS['advanced']:
                 self.render_physics_slider(pdef)
 
         # === Additional Settings Group ===
-        imgui.set_next_item_open(self.state.preferences.physics_group_additional)
+        imgui.set_next_item_open(self.state.preferences.ui_windows.physics_group_additional)
         additional_open = imgui.collapsing_header("Additional Settings")
         if imgui.is_item_toggled_open():
-            self.state.preferences.physics_group_additional = additional_open
+            self.state.preferences.ui_windows.physics_group_additional = additional_open
         if additional_open:
             # Boundary Conditions (with per-option tooltips)
             boundary_options = ["Bounce", "Reset", "Wrap"]
@@ -204,10 +204,10 @@ class PhysicsWindowMixin:
             self._delayed_tooltip(f"Enable parameter sweeps to vary physics across the canvas.\nPress {sweep_key} to toggle. See Help -> Parameter Sweeps for details.")
 
         # === Notes Group ===
-        imgui.set_next_item_open(self.state.preferences.physics_group_notes)
+        imgui.set_next_item_open(self.state.preferences.ui_windows.physics_group_notes)
         notes_open = imgui.collapsing_header("Notes")
         if imgui.is_item_toggled_open():
-            self.state.preferences.physics_group_notes = notes_open
+            self.state.preferences.ui_windows.physics_group_notes = notes_open
         if notes_open:
             imgui.set_next_item_width(-1)
             changed, new_notes = imgui.input_text_multiline(
@@ -318,7 +318,7 @@ class PhysicsWindowMixin:
                     min_distance = min(min_distance, distance)
 
                 # If mouse is too far away from all rectangles, signal to close menus
-                if min_distance > self.state.preferences.menu_close_threshold:
+                if min_distance > self.state.preferences.ui_windows.menu_close_threshold:
                     self.force_close_physics_menus = True
 
             imgui.end_menu_bar()

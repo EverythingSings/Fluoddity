@@ -75,9 +75,9 @@ class FieldHandler:
         """Write field strength scalars, respecting individual param locks."""
         pls = self.param_lock_service
         if not (pls and pls.is_locked('force_field_strength')):
-            ui_state.preferences.force_field_strength = force_val
+            ui_state.preferences.advanced_drawing.force_field_strength = force_val
         if not (pls and pls.is_locked('strafe_field_strength')):
-            ui_state.preferences.strafe_field_strength = strafe_val
+            ui_state.preferences.advanced_drawing.strafe_field_strength = strafe_val
 
     # --- Snapshot / query ---
 
@@ -94,16 +94,16 @@ class FieldHandler:
         if not self._has_field_tex:
             self._last_copied_field_data = None
             self._last_copied_field_strengths = (
-                ui_state.preferences.force_field_strength,
-                ui_state.preferences.strafe_field_strength,
+                ui_state.preferences.advanced_drawing.force_field_strength,
+                ui_state.preferences.advanced_drawing.strafe_field_strength,
             )
             return None, None
 
         field_data = self.adv_draw.snapshot_field_data()
         if field_data is not None and is_field_nonzero(field_data):
             field_strengths = (
-                ui_state.preferences.force_field_strength,
-                ui_state.preferences.strafe_field_strength,
+                ui_state.preferences.advanced_drawing.force_field_strength,
+                ui_state.preferences.advanced_drawing.strafe_field_strength,
             )
             self._last_copied_field_data = field_data
             self._last_copied_field_strengths = field_strengths
@@ -111,8 +111,8 @@ class FieldHandler:
 
         self._last_copied_field_data = None
         self._last_copied_field_strengths = (
-            ui_state.preferences.force_field_strength,
-            ui_state.preferences.strafe_field_strength,
+            ui_state.preferences.advanced_drawing.force_field_strength,
+            ui_state.preferences.advanced_drawing.strafe_field_strength,
         )
         return None, None
 
@@ -224,8 +224,8 @@ class FieldHandler:
         else:
             self._clipboard_cached_field_data = None
         self._clipboard_cached_field_strengths = (
-            ui_state.preferences.force_field_strength,
-            ui_state.preferences.strafe_field_strength,
+            ui_state.preferences.advanced_drawing.force_field_strength,
+            ui_state.preferences.advanced_drawing.strafe_field_strength,
         )
 
     def restore_from_clipboard_preview(self, ui_state):
@@ -235,8 +235,8 @@ class FieldHandler:
         self._clipboard_cached_field_data = None
 
         if self._clipboard_cached_field_strengths is not None:
-            ui_state.preferences.force_field_strength = self._clipboard_cached_field_strengths[0]
-            ui_state.preferences.strafe_field_strength = self._clipboard_cached_field_strengths[1]
+            ui_state.preferences.advanced_drawing.force_field_strength = self._clipboard_cached_field_strengths[0]
+            ui_state.preferences.advanced_drawing.strafe_field_strength = self._clipboard_cached_field_strengths[1]
             self._clipboard_cached_field_strengths = None
 
     def discard_clipboard_preview_cache(self):

@@ -34,7 +34,7 @@ MyRender.frs/
 | Physics config + rule | `ConfigSaver.create_config()` -> `PhysicsConfig.to_dict()` | `metadata.json -> physics_config` |
 | Camera state | `CameraState` fields | `metadata.json -> camera_state` |
 | Controller cam state | `ControllerCam.pos/yaw/pitch/fov` | `metadata.json -> controller_cam_state` |
-| Preferences | `dataclasses.asdict(PreferencesState)` | `metadata.json -> preferences` |
+| Preferences | `to_flat_dict(PreferencesState)` (flat-key dict; PreferencesState is now composed of per-module slices) | `metadata.json -> preferences` |
 | Sim metadata | `frame_count`, `can_read_index`, entity_count | `metadata.json -> sim_metadata` |
 | Entity buffer | `sim.entities.read()` -> numpy uint8 | `entities.npz` (compressed) |
 | 3D canvas (3 channels) | `sim.can_x/y/z_3d[read_idx].read()` -> numpy float32 | `canvas.npz` (compressed) |

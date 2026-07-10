@@ -9,7 +9,7 @@ class RadioWindowMixin:
         """Render the Radio window with enable checkbox and two sliders."""
         visible, opened = imgui.begin("Radio", True)
         if not opened:
-            self.state.preferences.show_radio_window = False
+            self.state.preferences.ui_windows.show_radio_window = False
             imgui.end()
             return
         if visible:

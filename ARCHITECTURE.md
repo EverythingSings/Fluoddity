@@ -46,7 +46,7 @@ The UI renders ImGui widgets and exposes state via `get_state()`. It does not ru
 UI sets boolean flags (e.g. `request_reset`, `request_save_file`, `toggle_recording`) that the orchestrator reads and clears each frame. These flags all live on `UIState` and are marshalled in `UI.get_state()`.
 
 ### State Containers
-All mutable state lives in dataclasses in `state/`. The UI modifies these via widget bindings; the orchestrator reads them and applies to components. Note that `PreferencesState` and `UIState` have grown into monoliths (see [State](#state-state) below).
+All mutable state lives in dataclasses in `state/`. The UI modifies these via widget bindings; the orchestrator reads them and applies to components. `PreferencesState` is now composed of per-module slices (accessed nested, e.g. `preferences.tracer.sdf_enabled`); `UIState` is still a flag monolith (see [State](#state-state) below).
 
 ### GPU Compute Pipeline
 Physics runs entirely on the GPU via GLSL compute shaders. `Sim` manages shader programs, buffers, and textures. The CPU-side code dispatches compute calls and reads back results only when needed (e.g. entity picking, rule readback).
@@ -163,7 +163,7 @@ Plain dataclasses.
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `preferences_state.py` | 218 | **Persistent user prefs (~150 fields spanning ~10 subsystems)** + `save/load_preferences`. The single biggest coupling hotspot |
+| `preferences_state.py` | ~470 | Persistent user prefs, now split into **10 per-module slice dataclasses** (`RenderingPrefs`, `BloomPrefs`, `RecordingPrefs`, `AdvancedDrawingPrefs`, `GenericsPrefs`, `ParameterLocksPrefs`, `TracerPrefs`, `OptixPrefs`, `Camera3DPrefs`, `UIWindowsPrefs`) composed into `PreferencesState`. Accessed nested (`preferences.tracer.sdf_enabled`). `save_preferences` writes nested JSON; `load_preferences` also reads legacy flat-key JSON via `_FLAT_KEY_MAP`. `to_flat_dict`/`set_flat` back the flat snapshot used by `render_spec` |
 | `sim_state.py` | 121 | Physics params (ALL_CAPS), sweeps/jitter dicts, radio fields, appearance, notes, slider ranges |
 | `ui_state.py` | 103 | **Aggregate frame snapshot** nesting Sim/Camera/Recording/Preferences + ~60 one-shot flags |
 | `camera_state.py` | 29 | 2D + 3D camera state + OptiX/path-tracer enable and timing readouts |

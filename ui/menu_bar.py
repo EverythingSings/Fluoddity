@@ -126,8 +126,8 @@ class MenuBarMixin:
                 imgui.separator()
 
                 # Preferences toggle
-                if imgui.menu_item("Preferences", "", self.state.preferences.show_preferences_window)[0]:
-                    self.state.preferences.show_preferences_window = not self.state.preferences.show_preferences_window
+                if imgui.menu_item("Preferences", "", self.state.preferences.ui_windows.show_preferences_window)[0]:
+                    self.state.preferences.ui_windows.show_preferences_window = not self.state.preferences.ui_windows.show_preferences_window
 
                 imgui.end_menu()
 
@@ -190,7 +190,7 @@ class MenuBarMixin:
 
             # Parameter Locks menu (only visible when enabled)
             pls = self.param_lock_service
-            if pls and self.state.preferences.parameter_locks_enabled:
+            if pls and self.state.preferences.parameter_locks.enabled:
                 if imgui.begin_menu("Locks", not self.force_close_main_menus):
                     any_menu_open_this_frame = True
                     locks_menu_min = imgui.get_window_pos()
@@ -234,14 +234,14 @@ class MenuBarMixin:
                                        help_menu_min.x + help_menu_size.x,
                                        help_menu_min.y + help_menu_size.y))
 
-                if imgui.menu_item("Guide", "", self.state.preferences.show_tutorial_window)[0]:
-                    self.state.preferences.show_tutorial_window = not self.state.preferences.show_tutorial_window
-                if imgui.menu_item("Controls", "", self.state.preferences.show_controls_window)[0]:
-                    self.state.preferences.show_controls_window = not self.state.preferences.show_controls_window
-                if imgui.menu_item("Performance", "", self.state.preferences.show_performance_window)[0]:
-                    self.state.preferences.show_performance_window = not self.state.preferences.show_performance_window
-                if imgui.menu_item("Parameter Sweeps", "", self.state.preferences.show_parameter_sweeps_window)[0]:
-                    self.state.preferences.show_parameter_sweeps_window = not self.state.preferences.show_parameter_sweeps_window
+                if imgui.menu_item("Guide", "", self.state.preferences.ui_windows.show_tutorial_window)[0]:
+                    self.state.preferences.ui_windows.show_tutorial_window = not self.state.preferences.ui_windows.show_tutorial_window
+                if imgui.menu_item("Controls", "", self.state.preferences.ui_windows.show_controls_window)[0]:
+                    self.state.preferences.ui_windows.show_controls_window = not self.state.preferences.ui_windows.show_controls_window
+                if imgui.menu_item("Performance", "", self.state.preferences.ui_windows.show_performance_window)[0]:
+                    self.state.preferences.ui_windows.show_performance_window = not self.state.preferences.ui_windows.show_performance_window
+                if imgui.menu_item("Parameter Sweeps", "", self.state.preferences.ui_windows.show_parameter_sweeps_window)[0]:
+                    self.state.preferences.ui_windows.show_parameter_sweeps_window = not self.state.preferences.ui_windows.show_parameter_sweeps_window
                 imgui.end_menu()
 
             # Extras menu
@@ -262,9 +262,9 @@ class MenuBarMixin:
                 self._delayed_tooltip("Set restorable checkpoints with Ctrl-C")
 
                 # Screen Recording Controls
-                _, self.state.preferences.show_video_recording_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_video_recording_window = imgui.checkbox(
                     "Screen Recording Controls",
-                    self.state.preferences.show_video_recording_window
+                    self.state.preferences.ui_windows.show_video_recording_window
                 )
 
                 # Load Field submenu
@@ -278,9 +278,9 @@ class MenuBarMixin:
                     imgui.end_menu()
 
                 # Advanced Drawing toggle
-                _, self.state.preferences.advanced_drawing_enabled = imgui.checkbox(
+                _, self.state.preferences.advanced_drawing.enabled = imgui.checkbox(
                     "Advanced Drawing - EXPERIMENTAL",
-                    self.state.preferences.advanced_drawing_enabled
+                    self.state.preferences.advanced_drawing.enabled
                 )
                 self._delayed_tooltip(
                     "Open the Drawing Controls window for advanced\n"
@@ -290,10 +290,10 @@ class MenuBarMixin:
                 # Parameter Locks checkbox
                 changed, new_val = imgui.checkbox(
                     "Parameter Locks - EXPERIMENTAL",
-                    self.state.preferences.parameter_locks_enabled
+                    self.state.preferences.parameter_locks.enabled
                 )
                 if changed:
-                    self.state.preferences.parameter_locks_enabled = new_val
+                    self.state.preferences.parameter_locks.enabled = new_val
                     if self.param_lock_service:
                         if new_val:
                             self.param_lock_service.enabled = True
@@ -306,51 +306,51 @@ class MenuBarMixin:
                 imgui.separator()
 
                 # Generics window toggle
-                _, self.state.preferences.show_generics_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_generics_window = imgui.checkbox(
                     "Generics",
-                    self.state.preferences.show_generics_window
+                    self.state.preferences.ui_windows.show_generics_window
                 )
                 self._delayed_tooltip("8 scratch sliders sent as uniforms to\nentity_update and field_override shaders.\nUseful for live-coding shader experiments.")
 
                 # Plotting window toggle
-                _, self.state.preferences.show_plotting_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_plotting_window = imgui.checkbox(
                     "Plotting",
-                    self.state.preferences.show_plotting_window
+                    self.state.preferences.ui_windows.show_plotting_window
                 )
                 self._delayed_tooltip("GPU histogram visualization from report()\ncalls in entity_update.glsl.")
 
                 # 3D Controls window toggle
-                _, self.state.preferences.show_three_d_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_three_d_window = imgui.checkbox(
                     "3D Controls",
-                    self.state.preferences.show_three_d_window
+                    self.state.preferences.ui_windows.show_three_d_window
                 )
                 self._delayed_tooltip("FPS camera settings, orbit rate, and\n3D simulation parameters.")
 
                 # OptiX Controls window toggle
-                _, self.state.preferences.show_optix_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_optix_window = imgui.checkbox(
                     "OptiX Controls",
-                    self.state.preferences.show_optix_window
+                    self.state.preferences.ui_windows.show_optix_window
                 )
                 self._delayed_tooltip("OptiX sphere raytracing settings:\nRT mode, lighting, materials, and rendering.")
 
                 # Tracer window toggle
-                _, self.state.preferences.show_tracer_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_tracer_window = imgui.checkbox(
                     "Tracer",
-                    self.state.preferences.show_tracer_window
+                    self.state.preferences.ui_windows.show_tracer_window
                 )
                 self._delayed_tooltip("Volumetric path tracer.\nSplats entities into a voxel grid and\npath-traces with adjustable medium/lighting.")
 
                 # Radio window toggle
-                _, self.state.preferences.show_radio_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_radio_window = imgui.checkbox(
                     "Radio",
-                    self.state.preferences.show_radio_window
+                    self.state.preferences.ui_windows.show_radio_window
                 )
                 self._delayed_tooltip("Filter particle visibility by frequency band.\nOnly particles within the target frequency\n+/- bandwidth are visible.")
 
                 # Scheduled Renders window toggle
-                _, self.state.preferences.show_scheduled_renders_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_scheduled_renders_window = imgui.checkbox(
                     "Scheduled Renders",
-                    self.state.preferences.show_scheduled_renders_window
+                    self.state.preferences.ui_windows.show_scheduled_renders_window
                 )
                 self._delayed_tooltip("Queue multiple render specs for\nunattended batch video rendering.")
 
@@ -370,7 +370,7 @@ class MenuBarMixin:
                     min_distance = min(min_distance, distance)
 
                 # If mouse is too far away from all rectangles, signal to close menus
-                if min_distance > self.state.preferences.menu_close_threshold:
+                if min_distance > self.state.preferences.ui_windows.menu_close_threshold:
                     self.force_close_main_menus = True
 
             imgui.end_main_menu_bar()

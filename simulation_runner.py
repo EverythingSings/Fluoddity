@@ -34,8 +34,8 @@ class SimulationRunner:
         """Run simulation step(s) with frame assembly and video recording."""
         self._screenshot_in_progress = screenshot_in_progress
         self.camera.watercolor_mode = watercolor_mode
-        speedmult = ui_state.preferences.speedmult
-        motion_blur = ui_state.preferences.motion_blur
+        speedmult = ui_state.preferences.rendering.speedmult
+        motion_blur = ui_state.preferences.rendering.motion_blur
 
         # Calculate mouse screen coordinates for draw overlay
         width, height = glfw.get_framebuffer_size(self.window)
@@ -54,37 +54,37 @@ class SimulationRunner:
         if self.advanced_drawing_processor is not None:
             adv_prefs = ui_state.preferences
 
-            if adv_prefs.advanced_drawing_enabled and adv_prefs.shader_driven_field:
+            if adv_prefs.advanced_drawing.enabled and adv_prefs.advanced_drawing.shader_driven_field:
                 # Shader-driven field: run override shader every render frame
                 cam = self.controller_cam
-                generics_tuple = (adv_prefs.generic0, adv_prefs.generic1,
-                                  adv_prefs.generic2, adv_prefs.generic3,
-                                  adv_prefs.generic4, adv_prefs.generic5,
-                                  adv_prefs.generic6, adv_prefs.generic7)
+                generics_tuple = (adv_prefs.generics.generic0, adv_prefs.generics.generic1,
+                                  adv_prefs.generics.generic2, adv_prefs.generics.generic3,
+                                  adv_prefs.generics.generic4, adv_prefs.generics.generic5,
+                                  adv_prefs.generics.generic6, adv_prefs.generics.generic7)
                 self.advanced_drawing_processor.process_override(
                     canvas_width=self.sim.can.size[0],
                     canvas_height=self.sim.can.size[1],
-                    shader_name=adv_prefs.field_override_shader,
+                    shader_name=adv_prefs.advanced_drawing.field_override_shader,
                     frame_count=self.sim.frame_count,
                     mouse_pos=mouse_tex_coords,
                     prev_mouse_pos=self.prev_mouse_tex_coords,
-                    draw_size=adv_prefs.draw_size,
-                    draw_power=adv_prefs.draw_power,
-                    brush_mode=adv_prefs.brush_mode,
-                    fixed_direction_heading=adv_prefs.fixed_direction_heading,
+                    draw_size=adv_prefs.ui_windows.draw_size,
+                    draw_power=adv_prefs.ui_windows.draw_power,
+                    brush_mode=adv_prefs.advanced_drawing.brush_mode,
+                    fixed_direction_heading=adv_prefs.advanced_drawing.fixed_direction_heading,
                     camera_pos=tuple(cam.pos) if cam else (0.0, 0.0, 0.0),
                     camera_dir=tuple(cam.dir) if cam else (0.0, 0.0, 1.0),
                     generics=generics_tuple,
                 )
-            elif adv_prefs.advanced_drawing_enabled and (
-                adv_prefs.advanced_draw_force_field or adv_prefs.advanced_draw_strafe_field
+            elif adv_prefs.advanced_drawing.enabled and (
+                adv_prefs.advanced_drawing.draw_force_field or adv_prefs.advanced_drawing.draw_strafe_field
             ):
                 # Normal drawing mode: draw/erase to field texture
                 field_draw_active = (draw_mode and ui_state.mouse_left_held
                                      and draw_power_value > 0.0)
                 # Erase scope: only erase fields that are checked as draw targets
                 field_erase = (erase_mode and (
-                    adv_prefs.advanced_draw_force_field or adv_prefs.advanced_draw_strafe_field
+                    adv_prefs.advanced_drawing.draw_force_field or adv_prefs.advanced_drawing.draw_strafe_field
                 ))
                 self.advanced_drawing_processor.process(
                     canvas_width=self.sim.can.size[0],
@@ -92,12 +92,12 @@ class SimulationRunner:
                     draw_mode=field_draw_active,
                     mouse_pos=mouse_tex_coords,
                     prev_mouse_pos=self.prev_mouse_tex_coords,
-                    draw_size=adv_prefs.draw_size,
-                    draw_power=adv_prefs.draw_power,
-                    brush_mode=adv_prefs.brush_mode,
-                    fixed_direction_heading=adv_prefs.fixed_direction_heading,
-                    force_field_active=adv_prefs.advanced_draw_force_field,
-                    strafe_field_active=adv_prefs.advanced_draw_strafe_field,
+                    draw_size=adv_prefs.ui_windows.draw_size,
+                    draw_power=adv_prefs.ui_windows.draw_power,
+                    brush_mode=adv_prefs.advanced_drawing.brush_mode,
+                    fixed_direction_heading=adv_prefs.advanced_drawing.fixed_direction_heading,
+                    force_field_active=adv_prefs.advanced_drawing.draw_force_field,
+                    strafe_field_active=adv_prefs.advanced_drawing.draw_strafe_field,
                     erase_mode=field_erase,
                     fill_mode=ui_state.request_fill_operation,
                     fill_direction_type=ui_state.fill_direction_type,
@@ -144,7 +144,7 @@ class SimulationRunner:
     def _compute_draw_params(self, ui_state):
         """Calculate draw mode parameters."""
         # Disable trail drawing when parameter sweeps are active
-        draw_mode = (ui_state.preferences.mouse_mode == "Draw Trail" and
+        draw_mode = (ui_state.preferences.ui_windows.mouse_mode == "Draw Trail" and
                      not ui_state.sim.parameter_sweeps_enabled)
         mouse_tex_coords = (0.0, 0.0)
         draw_power_value = 0.0
@@ -154,13 +154,13 @@ class SimulationRunner:
                 ui_state.mouse_pos, self.sim.can.size
             )
             if ui_state.mouse_left_held or ui_state.request_fill_operation:
-                draw_power_value = ui_state.preferences.draw_power
+                draw_power_value = ui_state.preferences.ui_windows.draw_power
 
         return draw_mode, mouse_tex_coords, draw_power_value
 
     def _get_trail_draw_radius(self, ui_state):
         """Calculate trail draw radius (0 when recording, screenshotting, sweeping, or not in Draw Trail mode)."""
-        if ui_state.preferences.mouse_mode != "Draw Trail":
+        if ui_state.preferences.ui_windows.mouse_mode != "Draw Trail":
             return 0
         if self.video_service.is_active():
             return 0
@@ -168,7 +168,7 @@ class SimulationRunner:
             return 0
         if ui_state.sim.parameter_sweeps_enabled:
             return 0
-        return ui_state.preferences.draw_size
+        return ui_state.preferences.ui_windows.draw_size
 
     def _build_assemble_kwargs(self, ui_state, sweep_mode, sweep_reticle_pos,
                                 sweep_reticle_visible, screen_aspect,
@@ -179,7 +179,7 @@ class SimulationRunner:
         Only total_samples and current_sample_index differ between the two.
         """
         adv_prefs = ui_state.preferences
-        advanced_active = adv_prefs.advanced_drawing_enabled
+        advanced_active = adv_prefs.advanced_drawing.enabled
 
         # SDF preview params (for 3D mode)
         sdf_enabled = False
@@ -189,7 +189,7 @@ class SimulationRunner:
         sdf_sky_color = (0.5, 0.7, 1.0)
 
         if self.camera.render_3d:
-            sdf_enabled = ui_state.preferences.tracer_sdf_enabled
+            sdf_enabled = ui_state.preferences.tracer.sdf_enabled
             if sdf_enabled:
                 cam = self.controller_cam
                 width, height = glfw.get_framebuffer_size(self.window)
@@ -202,14 +202,14 @@ class SimulationRunner:
                 ).astype(np.float32)
 
                 p = ui_state.preferences
-                sun_d = np.array(p.tracer_sun_direction, dtype=np.float64)
+                sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
                 sun_len = max(np.linalg.norm(sun_d), 1e-8)
                 sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-                sc = p.tracer_sun_color
-                si = p.tracer_sun_intensity
+                sc = p.tracer.sun_color
+                si = p.tracer.sun_intensity
                 sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-                skc = p.tracer_sky_color
-                ski = p.tracer_sky_intensity
+                skc = p.tracer.sky_color
+                ski = p.tracer.sky_intensity
                 sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         return dict(
@@ -218,7 +218,7 @@ class SimulationRunner:
             sweep_reticle_visible=sweep_reticle_visible,
             screen_aspect=screen_aspect,
             brightness=self.camera.BRIGHTNESS,
-            exposure=ui_state.preferences.exposure,
+            exposure=ui_state.preferences.rendering.exposure,
             ink_weight=ui_state.sim.ink_weight,
             watercolor_mode=ui_state.sim.watercolor_mode,
             camera_position=tuple(self.camera.position),
@@ -226,17 +226,17 @@ class SimulationRunner:
             trail_draw_radius=self._get_trail_draw_radius(ui_state),
             mouse_screen_coords=mouse_screen_coords,
             canvas_resolution=self.sim.get_canvas_dimensions(),
-            tonemap_softness=ui_state.preferences.tonemap_softness,
-            brush_mode=adv_prefs.brush_mode if advanced_active else 0,
-            fixed_direction_heading=adv_prefs.fixed_direction_heading if advanced_active else 0.0,
+            tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
+            brush_mode=adv_prefs.advanced_drawing.brush_mode if advanced_active else 0,
+            fixed_direction_heading=adv_prefs.advanced_drawing.fixed_direction_heading if advanced_active else 0.0,
             field_texture=(self.advanced_drawing_processor.field_texture
                            if self.advanced_drawing_processor is not None else None),
             advanced_drawing_resources_initialized=(
                 self.advanced_drawing_processor is not None
                 and self.advanced_drawing_processor.field_texture is not None),
-            force_field_checked=adv_prefs.advanced_draw_force_field if advanced_active else False,
-            strafe_field_checked=adv_prefs.advanced_draw_strafe_field if advanced_active else False,
-            draw_target_overlay_opacity=adv_prefs.draw_target_overlay_opacity if advanced_active else 0.0,
+            force_field_checked=adv_prefs.advanced_drawing.draw_force_field if advanced_active else False,
+            strafe_field_checked=adv_prefs.advanced_drawing.draw_strafe_field if advanced_active else False,
+            draw_target_overlay_opacity=adv_prefs.advanced_drawing.draw_target_overlay_opacity if advanced_active else 0.0,
             sdf_enabled=sdf_enabled,
             inv_view_proj=inv_view_proj,
             sdf_sun_dir=sdf_sun_dir,
@@ -255,15 +255,15 @@ class SimulationRunner:
             erase_mode: Whether right-click eraser is active.
         """
         adv_prefs = ui_state.preferences
-        advanced_active = adv_prefs.advanced_drawing_enabled
+        advanced_active = adv_prefs.advanced_drawing.enabled
 
         # Brush mode and heading (only apply when advanced drawing is open)
-        brush_mode = adv_prefs.brush_mode if advanced_active else 0
-        fixed_heading = adv_prefs.fixed_direction_heading if advanced_active else 0.0
+        brush_mode = adv_prefs.advanced_drawing.brush_mode if advanced_active else 0
+        fixed_heading = adv_prefs.advanced_drawing.fixed_direction_heading if advanced_active else 0.0
 
         # Canvas draw active: when advanced drawing is closed, canvas always gets drawn.
         # When open, only if canvas checkbox is checked.
-        canvas_draw_active = (not advanced_active) or adv_prefs.advanced_draw_canvas
+        canvas_draw_active = (not advanced_active) or adv_prefs.advanced_drawing.draw_canvas
 
         # Canvas erase scope: erase canvas if it's a draw target
         canvas_erase = erase_mode and canvas_draw_active
@@ -277,15 +277,15 @@ class SimulationRunner:
 
         # Build generics tuple from preferences
         p = adv_prefs
-        generics = (p.generic0, p.generic1, p.generic2, p.generic3,
-                     p.generic4, p.generic5, p.generic6, p.generic7)
+        generics = (p.generics.generic0, p.generics.generic1, p.generics.generic2, p.generics.generic3,
+                     p.generics.generic4, p.generics.generic5, p.generics.generic6, p.generics.generic7)
 
         self.sim.update(
             self.camera.ctx,
             draw_mode=draw_mode,
             mouse_pos=mouse_tex_coords,
             prev_mouse_pos=self.prev_mouse_tex_coords,
-            draw_size=ui_state.preferences.draw_size,
+            draw_size=ui_state.preferences.ui_windows.draw_size,
             draw_power=effective_draw_power,
             brush_mode=brush_mode,
             fixed_direction_heading=fixed_heading,
@@ -294,8 +294,8 @@ class SimulationRunner:
             fill_direction_type=ui_state.fill_direction_type,
             canvas_draw_active=canvas_draw_active,
             field_texture=self.advanced_drawing_processor.field_texture,
-            force_field_strength=adv_prefs.force_field_strength,
-            strafe_field_strength=adv_prefs.strafe_field_strength,
+            force_field_strength=adv_prefs.advanced_drawing.force_field_strength,
+            strafe_field_strength=adv_prefs.advanced_drawing.strafe_field_strength,
             generics=generics,
         )
 
@@ -307,13 +307,13 @@ class SimulationRunner:
         """Handle a completed assembled frame: store it and feed to video recorder."""
         if assembled_tex is None:
             return
-        if ui_state.preferences.bloom_enabled and not ui_state.sim.watercolor_mode:
+        if ui_state.preferences.bloom.enabled and not ui_state.sim.watercolor_mode:
             assembled_tex = self.camera.apply_bloom(
                 assembled_tex,
-                ui_state.preferences.bloom_threshold,
-                ui_state.preferences.bloom_intensity,
-                ui_state.preferences.bloom_radius,
-                tonemap_softness=ui_state.preferences.tonemap_softness,
+                ui_state.preferences.bloom.threshold,
+                ui_state.preferences.bloom.intensity,
+                ui_state.preferences.bloom.radius,
+                tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
             )
         self.camera.assembled_texture = assembled_tex
         if self.video_service.is_active():
@@ -323,9 +323,9 @@ class SimulationRunner:
             self.video_service.process_frame(
                 self.camera.ctx,
                 assembled_tex,
-                ui_state.preferences.max_frames,
-                ui_state.preferences.supersample_k,
-                ui_state.preferences.filename_prefix,
+                ui_state.preferences.recording.max_frames,
+                ui_state.preferences.recording.supersample_k,
+                ui_state.preferences.recording.filename_prefix,
                 flip_y=flip_y
             )
 
@@ -337,7 +337,7 @@ class SimulationRunner:
         if self.plotting_manager is not None:
             self.plotting_manager.pre_physics_frame(self.sim.entity_update_program)
 
-        motion_blur_render_cadence = ui_state.preferences.blur_quality
+        motion_blur_render_cadence = ui_state.preferences.rendering.blur_quality
         total_render_samples = (speedmult + motion_blur_render_cadence - 1) // motion_blur_render_cadence
         render_sample_index = 0
 
@@ -427,7 +427,7 @@ class SimulationRunner:
         """
         ti = tracer_interface
         spp = ti.num_samples
-        physics_rate = ui_state.preferences.motion_blur_samples
+        physics_rate = ui_state.preferences.recording.motion_blur_samples
 
         # --- Start a new output frame if needed ---
         if not self._tracer_frame_started:
@@ -521,11 +521,11 @@ class SimulationRunner:
         Returns the tonemapped display texture when an output frame is complete,
         or None if still accumulating.
         """
-        capture_spp = ui_state.preferences.three_d_rt_preview_spp
-        physics_rate = ui_state.preferences.motion_blur_samples  # total physics steps per output frame
+        capture_spp = ui_state.preferences.optix.rt_preview_spp
+        physics_rate = ui_state.preferences.recording.motion_blur_samples  # total physics steps per output frame
 
-        if ui_state.preferences.recording_motion_blur:
-            blur_quality = ui_state.preferences.recording_blur_quality
+        if ui_state.preferences.recording.recording_motion_blur:
+            blur_quality = ui_state.preferences.recording.recording_blur_quality
             # Render every blur_quality physics steps
             total_substeps = max(1, physics_rate // max(blur_quality, 1))
             physics_per_substep = blur_quality
@@ -548,7 +548,7 @@ class SimulationRunner:
 
             # Start offline render at (optionally scaled) window resolution
             width, height = glfw.get_framebuffer_size(self.window)
-            scale = max(0.1, ui_state.preferences.three_d_optix_resolution_scale)
+            scale = max(0.1, ui_state.preferences.optix.resolution_scale)
             width = max(1, int(width * scale))
             height = max(1, int(height * scale))
             pt_interface.start_offline_render(

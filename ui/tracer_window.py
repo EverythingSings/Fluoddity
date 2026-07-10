@@ -9,7 +9,7 @@ class TracerWindowMixin:
         """Render the Tracer window with volrender controls and image display."""
         visible, opened = imgui.begin("Tracer", True)
         if not opened:
-            self.state.preferences.show_tracer_window = False
+            self.state.preferences.ui_windows.show_tracer_window = False
             imgui.end()
             return
         if not visible:
@@ -27,7 +27,7 @@ class TracerWindowMixin:
         # Tick progressive render if active (1 SPP per app frame)
         # Skip during tracer video recording — the orchestrator drives accumulation
         recording_tracer = (self._display_info.get('recording_active', False)
-                            and self.state.preferences.tracer_mode)
+                            and self.state.preferences.recording.tracer_mode)
         if ti.is_rendering and not recording_tracer and ti.realtime_mode == 0:
             ti.tick()
 
@@ -191,35 +191,35 @@ class TracerWindowMixin:
     def _apply_tracer_preferences(self, ti):
         """Apply saved tracer preferences to a newly created TracerInterface."""
         p = self.state.preferences
-        ti.colored_extinction = p.tracer_colored_extinction
-        ti.sdf_enabled = p.tracer_sdf_enabled
-        ti.extinction_rgb = list(p.tracer_extinction_rgb)
-        ti.albedo_saturation = p.tracer_albedo_saturation
-        ti.albedo_brightness = p.tracer_albedo_brightness
-        ti.density_scale = p.tracer_density_scale
-        ti.hg_g = p.tracer_hg_g
-        ti.emission_strength = p.tracer_emission_strength
-        ti.sun_direction = list(p.tracer_sun_direction)
-        ti.sun_color = list(p.tracer_sun_color)
-        ti.sun_intensity = p.tracer_sun_intensity
-        ti.sky_color = list(p.tracer_sky_color)
-        ti.sky_intensity = p.tracer_sky_intensity
-        ti.sun_sampling = p.tracer_sun_sampling
-        ti.photosphere = p.tracer_photosphere
+        ti.colored_extinction = p.tracer.colored_extinction
+        ti.sdf_enabled = p.tracer.sdf_enabled
+        ti.extinction_rgb = list(p.tracer.extinction_rgb)
+        ti.albedo_saturation = p.tracer.albedo_saturation
+        ti.albedo_brightness = p.tracer.albedo_brightness
+        ti.density_scale = p.tracer.density_scale
+        ti.hg_g = p.tracer.hg_g
+        ti.emission_strength = p.tracer.emission_strength
+        ti.sun_direction = list(p.tracer.sun_direction)
+        ti.sun_color = list(p.tracer.sun_color)
+        ti.sun_intensity = p.tracer.sun_intensity
+        ti.sky_color = list(p.tracer.sky_color)
+        ti.sky_intensity = p.tracer.sky_intensity
+        ti.sun_sampling = p.tracer.sun_sampling
+        ti.photosphere = p.tracer.photosphere
         if ti.photosphere:
             ti._skybox_tex = ti._load_skybox()
             if ti._skybox_tex is None:
                 ti.photosphere = False
-        ti.num_samples = p.tracer_num_samples
-        ti.exposure = p.tracer_exposure
-        ti.realtime_mode = p.tracer_realtime_mode
-        ti.max_bounces = p.tracer_max_bounces
-        ti.firefly_clamp = p.tracer_firefly_clamp
-        ti.firefly_clamp_max = p.tracer_firefly_clamp_max
-        ti.resolution_scale = p.tracer_resolution_scale
-        ti.density_resolution_log2 = p.tracer_density_resolution_log2
-        ti.color_resolution_log2 = p.tracer_color_resolution_log2
-        ti.majorant_resolution_log2 = p.tracer_majorant_resolution_log2
+        ti.num_samples = p.tracer.num_samples
+        ti.exposure = p.tracer.exposure
+        ti.realtime_mode = p.tracer.realtime_mode
+        ti.max_bounces = p.tracer.max_bounces
+        ti.firefly_clamp = p.tracer.firefly_clamp
+        ti.firefly_clamp_max = p.tracer.firefly_clamp_max
+        ti.resolution_scale = p.tracer.resolution_scale
+        ti.density_resolution_log2 = p.tracer.density_resolution_log2
+        ti.color_resolution_log2 = p.tracer.color_resolution_log2
+        ti.majorant_resolution_log2 = p.tracer.majorant_resolution_log2
 
     def _do_tracer_render(self, ti):
         """Start a progressive tracer render using the current entity buffer and camera."""

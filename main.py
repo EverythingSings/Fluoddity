@@ -53,27 +53,27 @@ class App:
 
         # Create components (no cross-references between UI and sim/camera)
         self.sim = Sim(self.ctx,
-                       entity_count=loaded_prefs.entity_count,
-                       canvas_resolution=loaded_prefs.canvas_resolution)
+                       entity_count=loaded_prefs.rendering.entity_count,
+                       canvas_resolution=loaded_prefs.rendering.canvas_resolution)
         self.camera = Camera(self.ctx, self.sim, self.window)
         self.ui = UI(self.window, self.ctx)
 
         # Apply loaded preferences to UI
         self.ui.state.preferences = loaded_prefs
-        self.ui._last_applied_entity_count = loaded_prefs.entity_count
-        self.ui._last_applied_canvas_resolution = loaded_prefs.canvas_resolution
+        self.ui._last_applied_entity_count = loaded_prefs.rendering.entity_count
+        self.ui._last_applied_canvas_resolution = loaded_prefs.rendering.canvas_resolution
 
         # Restore 3D camera settings from preferences
         cam = self.ui.state.camera
-        cam.render_3d = loaded_prefs.three_d_render_3d
-        cam.fov = loaded_prefs.three_d_fov
-        cam.aperture = loaded_prefs.three_d_aperture
-        cam.focal_plane_depth = loaded_prefs.three_d_focal_plane_depth
-        cam.move_speed = loaded_prefs.three_d_move_speed
-        cam.rotate_speed = loaded_prefs.three_d_rotate_speed
-        cam.orbit_center[:] = loaded_prefs.three_d_orbit_center
-        cam.orbit_rate = loaded_prefs.three_d_orbit_rate
-        cam.optix_enabled = loaded_prefs.three_d_optix_enabled
+        cam.render_3d = loaded_prefs.camera3d.render_3d
+        cam.fov = loaded_prefs.camera3d.fov
+        cam.aperture = loaded_prefs.camera3d.aperture
+        cam.focal_plane_depth = loaded_prefs.camera3d.focal_plane_depth
+        cam.move_speed = loaded_prefs.camera3d.move_speed
+        cam.rotate_speed = loaded_prefs.camera3d.rotate_speed
+        cam.orbit_center[:] = loaded_prefs.camera3d.orbit_center
+        cam.orbit_rate = loaded_prefs.camera3d.orbit_rate
+        cam.optix_enabled = loaded_prefs.optix.enabled
 
         # Create services (Orchestrator owns these)
         self.rule_manager = RuleManager()
@@ -211,7 +211,7 @@ class App:
 
         # 1. Get current UI state
         ui_state = self.ui.get_state()
-        self.plotting_manager.enabled = ui_state.preferences.show_plotting_window
+        self.plotting_manager.enabled = ui_state.preferences.ui_windows.show_plotting_window
 
         # 1.5. Poll gamepad and inject one-shot flags before command processing
         current_time = time.time()
@@ -222,7 +222,7 @@ class App:
                                  rotate_speed=ui_state.camera.rotate_speed)
         # Gamepad face buttons
         if self.joystick_state.get('cycle_rt_mode_pressed', False):
-            ui_state.preferences.three_d_rt_mode = (ui_state.preferences.three_d_rt_mode + 1) % 3
+            ui_state.preferences.optix.rt_mode = (ui_state.preferences.optix.rt_mode + 1) % 3
         if self.joystick_state.get('toggle_pause_pressed', False):
             ui_state.sim.going = not ui_state.sim.going
         if self.joystick_state.get('reset_pressed', False):
@@ -303,30 +303,30 @@ class App:
             self.screenshot_pending = False
             self.screenshot_in_progress = True
             self.screenshot_saved_settings = {
-                'speedmult': ui_state.preferences.speedmult,
-                'blur_quality': ui_state.preferences.blur_quality,
-                'motion_blur': ui_state.preferences.motion_blur,
+                'speedmult': ui_state.preferences.rendering.speedmult,
+                'blur_quality': ui_state.preferences.rendering.blur_quality,
+                'motion_blur': ui_state.preferences.rendering.motion_blur,
                 'going': ui_state.sim.going,
             }
-            ui_state.preferences.speedmult = ui_state.preferences.motion_blur_samples
-            ui_state.preferences.blur_quality = 1
-            ui_state.preferences.motion_blur = True
+            ui_state.preferences.rendering.speedmult = ui_state.preferences.recording.motion_blur_samples
+            ui_state.preferences.rendering.blur_quality = 1
+            ui_state.preferences.rendering.motion_blur = True
             if not ui_state.sim.going:
                 ui_state.sim.going = True
 
         # 4. Lock physics frequency to video recorder frequency if recording
         is_recording = self.video_service.is_active()
-        tracer_video_active = is_recording and ui_state.preferences.tracer_mode
+        tracer_video_active = is_recording and ui_state.preferences.recording.tracer_mode
         optix_pt_video_active = (is_recording
                                  and not tracer_video_active
                                  and ui_state.camera.optix_enabled
-                                 and ui_state.preferences.three_d_rt_mode > 0
+                                 and ui_state.preferences.optix.rt_mode > 0
                                  and self._pathtracer_interface is not None)
 
         if is_recording and not self.was_recording:
-            self.user_speedmult = ui_state.preferences.speedmult
-            self.user_motion_blur = ui_state.preferences.motion_blur
-            self.user_blur_quality = ui_state.preferences.blur_quality
+            self.user_speedmult = ui_state.preferences.rendering.speedmult
+            self.user_motion_blur = ui_state.preferences.rendering.motion_blur
+            self.user_blur_quality = ui_state.preferences.rendering.blur_quality
             # Initialize tracer video state when starting a tracer-mode recording
             if tracer_video_active:
                 self.sim_runner.init_tracer_video_state()
@@ -342,21 +342,21 @@ class App:
                 # Initialize OptiX path tracer video state
                 self.sim_runner.init_optix_pt_video_state()
             elif (ui_state.camera.optix_enabled
-                  and ui_state.preferences.three_d_rt_mode == 0
+                  and ui_state.preferences.optix.rt_mode == 0
                   and self._optix_interface is not None):
                 # Rasterize mode: override AO rays with Capture SPP
-                self._saved_ao_num_rays = ui_state.preferences.three_d_optix_ao_num_rays
-                ui_state.preferences.three_d_optix_ao_num_rays = ui_state.preferences.three_d_rt_preview_spp
+                self._saved_ao_num_rays = ui_state.preferences.optix.ao_num_rays
+                ui_state.preferences.optix.ao_num_rays = ui_state.preferences.optix.rt_preview_spp
         elif not is_recording and self.was_recording:
-            ui_state.preferences.speedmult = self.user_speedmult
-            ui_state.preferences.motion_blur = self.user_motion_blur
-            ui_state.preferences.blur_quality = self.user_blur_quality
+            ui_state.preferences.rendering.speedmult = self.user_speedmult
+            ui_state.preferences.rendering.motion_blur = self.user_motion_blur
+            ui_state.preferences.rendering.blur_quality = self.user_blur_quality
             # Invalidate cached texture — FrameAssembler will recreate resources
             # when total_samples changes, releasing the old texture
             self.camera.assembled_texture = None
             # Restore AO rays if we overrode them
             if hasattr(self, '_saved_ao_num_rays'):
-                ui_state.preferences.three_d_optix_ao_num_rays = self._saved_ao_num_rays
+                ui_state.preferences.optix.ao_num_rays = self._saved_ao_num_rays
                 del self._saved_ao_num_rays
             # Pause simulation when recording ended by reaching max_frames
             if self.video_service.finished_naturally():
@@ -369,16 +369,16 @@ class App:
         if is_recording:
             if tracer_video_active:
                 # Tracer mode: physics steps are managed by run_tracer_video_frame
-                ui_state.preferences.speedmult = 1
-                ui_state.preferences.motion_blur = False
+                ui_state.preferences.rendering.speedmult = 1
+                ui_state.preferences.rendering.motion_blur = False
             elif optix_pt_video_active:
                 # OptiX PT mode: physics steps managed by run_optix_pt_video_frame
-                ui_state.preferences.speedmult = 1
-                ui_state.preferences.motion_blur = False
+                ui_state.preferences.rendering.speedmult = 1
+                ui_state.preferences.rendering.motion_blur = False
             else:
-                ui_state.preferences.speedmult = ui_state.preferences.motion_blur_samples
-                ui_state.preferences.motion_blur = ui_state.preferences.recording_motion_blur
-                ui_state.preferences.blur_quality = ui_state.preferences.recording_blur_quality
+                ui_state.preferences.rendering.speedmult = ui_state.preferences.recording.motion_blur_samples
+                ui_state.preferences.rendering.motion_blur = ui_state.preferences.recording.recording_motion_blur
+                ui_state.preferences.rendering.blur_quality = ui_state.preferences.recording.recording_blur_quality
 
         self.was_recording = is_recording
 
@@ -396,7 +396,7 @@ class App:
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)
-        self.camera.BRIGHTNESS = ui_state.preferences.brightness
+        self.camera.BRIGHTNESS = ui_state.preferences.rendering.brightness
 
         # Release all OptiX VRAM when OptiX is toggled off
         if not ui_state.camera.optix_enabled and self._prev_optix_enabled and not is_recording:
@@ -411,7 +411,7 @@ class App:
                 self.ui._pathtracer_interface = None
 
         # OptiX interface lifecycle: lazy creation when toggled on (skip if PT mode active)
-        if ui_state.camera.optix_enabled and self._optix_interface is None and ui_state.preferences.three_d_rt_mode == 0:
+        if ui_state.camera.optix_enabled and self._optix_interface is None and ui_state.preferences.optix.rt_mode == 0:
             try:
                 from optix_interface import OptiXInterface
                 if OptiXInterface.is_available():
@@ -432,27 +432,27 @@ class App:
                 self._optix_interface = None
                 ui_state.camera.optix_enabled = False
             else:
-                self._optix_interface.radius_scale = ui_state.preferences.three_d_optix_sphere_radius_scale
-                self._optix_interface.light_dir = tuple(ui_state.preferences.three_d_optix_light_direction)
-                self._optix_interface.light_color = tuple(ui_state.preferences.three_d_optix_light_color)
-                self._optix_interface.light_intensity = ui_state.preferences.three_d_optix_light_intensity
-                self._optix_interface.shadows_enabled = ui_state.preferences.three_d_optix_shadows_enabled
-                self._optix_interface.ambient = ui_state.preferences.three_d_optix_ambient
-                self._optix_interface.sky_color_top = tuple(ui_state.preferences.three_d_optix_sky_color_top)
-                self._optix_interface.sky_color_bottom = tuple(ui_state.preferences.three_d_optix_sky_color_bottom)
-                self._optix_interface.ao_enabled = ui_state.preferences.three_d_optix_ao_enabled
-                self._optix_interface.ao_num_rays = ui_state.preferences.three_d_optix_ao_num_rays
-                self._optix_interface.ao_radius = ui_state.preferences.three_d_optix_ao_radius
-                self._optix_interface.albedo_saturation = ui_state.preferences.three_d_optix_albedo_saturation
-                self._optix_interface.albedo_brightness = ui_state.preferences.three_d_optix_albedo_brightness
-                self._optix_interface.sphere_size_jitter = ui_state.preferences.three_d_optix_sphere_size_jitter
-                self._optix_interface.sdf_enabled = ui_state.preferences.three_d_optix_sdf_enabled
+                self._optix_interface.radius_scale = ui_state.preferences.optix.sphere_radius_scale
+                self._optix_interface.light_dir = tuple(ui_state.preferences.optix.light_direction)
+                self._optix_interface.light_color = tuple(ui_state.preferences.optix.light_color)
+                self._optix_interface.light_intensity = ui_state.preferences.optix.light_intensity
+                self._optix_interface.shadows_enabled = ui_state.preferences.optix.shadows_enabled
+                self._optix_interface.ambient = ui_state.preferences.optix.ambient
+                self._optix_interface.sky_color_top = tuple(ui_state.preferences.optix.sky_color_top)
+                self._optix_interface.sky_color_bottom = tuple(ui_state.preferences.optix.sky_color_bottom)
+                self._optix_interface.ao_enabled = ui_state.preferences.optix.ao_enabled
+                self._optix_interface.ao_num_rays = ui_state.preferences.optix.ao_num_rays
+                self._optix_interface.ao_radius = ui_state.preferences.optix.ao_radius
+                self._optix_interface.albedo_saturation = ui_state.preferences.optix.albedo_saturation
+                self._optix_interface.albedo_brightness = ui_state.preferences.optix.albedo_brightness
+                self._optix_interface.sphere_size_jitter = ui_state.preferences.optix.sphere_size_jitter
+                self._optix_interface.sdf_enabled = ui_state.preferences.optix.sdf_enabled
                 # Copy timing for UI display
                 ui_state.camera.optix_gas_time_ms = self._optix_interface.gas_time_ms
                 ui_state.camera.optix_render_time_ms = self._optix_interface.render_time_ms
 
         # Path tracer lifecycle: lazy creation when RT mode uses path tracing
-        rt_mode = ui_state.preferences.three_d_rt_mode
+        rt_mode = ui_state.preferences.optix.rt_mode
         pt_active = ui_state.camera.optix_enabled and rt_mode > 0
 
         if pt_active and self._pathtracer_interface is None:
@@ -462,11 +462,11 @@ class App:
                     self._pathtracer_interface = PathTracerInterface(self.ctx)
                     print("OptiX path tracer initialized")
                 else:
-                    ui_state.preferences.three_d_rt_mode = 0
+                    ui_state.preferences.optix.rt_mode = 0
                     pt_active = False
                     print("OptiX path tracer not available — falling back to sphere renderer")
             except Exception as e:
-                ui_state.preferences.three_d_rt_mode = 0
+                ui_state.preferences.optix.rt_mode = 0
                 pt_active = False
                 print(f"Path tracer init failed: {e}")
 
@@ -481,43 +481,43 @@ class App:
             if self._pathtracer_interface.failed:
                 print(f"Path tracer auto-disabled: {self._pathtracer_interface.fail_reason}")
                 self._pathtracer_interface = None
-                ui_state.preferences.three_d_rt_mode = 0
+                ui_state.preferences.optix.rt_mode = 0
                 pt_active = False
             elif pt_active:
                 p = ui_state.preferences
                 pt = self._pathtracer_interface
                 # Shared settings (same as rasterize)
-                pt.radius_scale = p.three_d_optix_sphere_radius_scale
-                pt.sun_direction = tuple(p.three_d_optix_light_direction)
-                pt.sun_color = tuple(p.three_d_optix_light_color)
-                pt.sun_intensity = p.three_d_optix_light_intensity
-                pt.sky_color_top = tuple(p.three_d_optix_sky_color_top)
-                pt.sky_color_bottom = tuple(p.three_d_optix_sky_color_bottom)
-                pt.albedo_saturation = p.three_d_optix_albedo_saturation
-                pt.albedo_brightness = p.three_d_optix_albedo_brightness
-                pt.sphere_size_jitter = p.three_d_optix_sphere_size_jitter
-                pt.use_curves = p.three_d_optix_use_curves
-                pt.curve_length = p.three_d_optix_curve_length
-                pt.curve_r0 = p.three_d_optix_curve_r0
-                pt.curve_r1 = p.three_d_optix_curve_r1
-                pt.sdf_enabled = p.three_d_optix_sdf_enabled
+                pt.radius_scale = p.optix.sphere_radius_scale
+                pt.sun_direction = tuple(p.optix.light_direction)
+                pt.sun_color = tuple(p.optix.light_color)
+                pt.sun_intensity = p.optix.light_intensity
+                pt.sky_color_top = tuple(p.optix.sky_color_top)
+                pt.sky_color_bottom = tuple(p.optix.sky_color_bottom)
+                pt.albedo_saturation = p.optix.albedo_saturation
+                pt.albedo_brightness = p.optix.albedo_brightness
+                pt.sphere_size_jitter = p.optix.sphere_size_jitter
+                pt.use_curves = p.optix.use_curves
+                pt.curve_length = p.optix.curve_length
+                pt.curve_r0 = p.optix.curve_r0
+                pt.curve_r1 = p.optix.curve_r1
+                pt.sdf_enabled = p.optix.sdf_enabled
                 # Path-tracer-only settings
-                pt.sun_sampling = p.three_d_pt_sun_sampling
-                pt.env_sky_nee = p.three_d_pt_env_sky_nee
-                pt.photosphere = p.three_d_pt_photosphere
-                pt.max_bounces = p.three_d_pt_max_bounces
-                pt.rr_start_depth = p.three_d_pt_rr_start_depth
-                pt.firefly_clamp = p.three_d_pt_firefly_clamp
-                pt.firefly_clamp_max = p.three_d_pt_firefly_clamp_max
-                pt.global_material = p.three_d_pt_global_material
-                pt.glossy_ior = p.three_d_pt_glossy_ior
-                pt.emission_intensity = p.three_d_pt_emission_intensity
-                pt.denoise_enabled = p.three_d_pt_denoise_enabled
+                pt.sun_sampling = p.optix.pt_sun_sampling
+                pt.env_sky_nee = p.optix.pt_env_sky_nee
+                pt.photosphere = p.optix.pt_photosphere
+                pt.max_bounces = p.optix.pt_max_bounces
+                pt.rr_start_depth = p.optix.pt_rr_start_depth
+                pt.firefly_clamp = p.optix.pt_firefly_clamp
+                pt.firefly_clamp_max = p.optix.pt_firefly_clamp_max
+                pt.global_material = p.optix.pt_global_material
+                pt.glossy_ior = p.optix.pt_glossy_ior
+                pt.emission_intensity = p.optix.pt_emission_intensity
+                pt.denoise_enabled = p.optix.pt_denoise_enabled
                 pt.aperture = ui_state.camera.aperture
                 pt.focal_plane_depth = ui_state.camera.focal_plane_depth
                 # RT mode controls
                 pt.render_mode = rt_mode
-                pt.realtime_samples = p.three_d_rt_realtime_samples
+                pt.realtime_samples = p.optix.rt_realtime_samples
                 # Copy timing for UI display
                 ui_state.camera.pathtracer_gas_time_ms = pt.gas_time_ms
                 ui_state.camera.pathtracer_render_time_ms = pt.render_time_ms
@@ -561,43 +561,43 @@ class App:
                 # Sync settings before starting preview
                 p = ui_state.preferences
                 pt = self._pathtracer_interface
-                pt.radius_scale = p.three_d_optix_sphere_radius_scale
-                pt.sun_direction = tuple(p.three_d_optix_light_direction)
-                pt.sun_color = tuple(p.three_d_optix_light_color)
-                pt.sun_intensity = p.three_d_optix_light_intensity
-                pt.sky_color_top = tuple(p.three_d_optix_sky_color_top)
-                pt.sky_color_bottom = tuple(p.three_d_optix_sky_color_bottom)
-                pt.albedo_saturation = p.three_d_optix_albedo_saturation
-                pt.albedo_brightness = p.three_d_optix_albedo_brightness
-                pt.sphere_size_jitter = p.three_d_optix_sphere_size_jitter
-                pt.use_curves = p.three_d_optix_use_curves
-                pt.curve_length = p.three_d_optix_curve_length
-                pt.curve_r0 = p.three_d_optix_curve_r0
-                pt.curve_r1 = p.three_d_optix_curve_r1
-                pt.sdf_enabled = p.three_d_optix_sdf_enabled
-                pt.sun_sampling = p.three_d_pt_sun_sampling
-                pt.env_sky_nee = p.three_d_pt_env_sky_nee
-                pt.photosphere = p.three_d_pt_photosphere
-                pt.max_bounces = p.three_d_pt_max_bounces
-                pt.rr_start_depth = p.three_d_pt_rr_start_depth
-                pt.firefly_clamp = p.three_d_pt_firefly_clamp
-                pt.firefly_clamp_max = p.three_d_pt_firefly_clamp_max
-                pt.global_material = p.three_d_pt_global_material
-                pt.glossy_ior = p.three_d_pt_glossy_ior
-                pt.emission_intensity = p.three_d_pt_emission_intensity
-                pt.denoise_enabled = p.three_d_pt_denoise_enabled
+                pt.radius_scale = p.optix.sphere_radius_scale
+                pt.sun_direction = tuple(p.optix.light_direction)
+                pt.sun_color = tuple(p.optix.light_color)
+                pt.sun_intensity = p.optix.light_intensity
+                pt.sky_color_top = tuple(p.optix.sky_color_top)
+                pt.sky_color_bottom = tuple(p.optix.sky_color_bottom)
+                pt.albedo_saturation = p.optix.albedo_saturation
+                pt.albedo_brightness = p.optix.albedo_brightness
+                pt.sphere_size_jitter = p.optix.sphere_size_jitter
+                pt.use_curves = p.optix.use_curves
+                pt.curve_length = p.optix.curve_length
+                pt.curve_r0 = p.optix.curve_r0
+                pt.curve_r1 = p.optix.curve_r1
+                pt.sdf_enabled = p.optix.sdf_enabled
+                pt.sun_sampling = p.optix.pt_sun_sampling
+                pt.env_sky_nee = p.optix.pt_env_sky_nee
+                pt.photosphere = p.optix.pt_photosphere
+                pt.max_bounces = p.optix.pt_max_bounces
+                pt.rr_start_depth = p.optix.pt_rr_start_depth
+                pt.firefly_clamp = p.optix.pt_firefly_clamp
+                pt.firefly_clamp_max = p.optix.pt_firefly_clamp_max
+                pt.global_material = p.optix.pt_global_material
+                pt.glossy_ior = p.optix.pt_glossy_ior
+                pt.emission_intensity = p.optix.pt_emission_intensity
+                pt.denoise_enabled = p.optix.pt_denoise_enabled
                 pt.aperture = ui_state.camera.aperture
                 pt.focal_plane_depth = ui_state.camera.focal_plane_depth
 
                 cam = self.controller_cam
                 width_px, height_px = glfw.get_framebuffer_size(self.window)
-                scale = max(0.1, p.three_d_optix_resolution_scale)
+                scale = max(0.1, p.optix.resolution_scale)
                 width_px = max(1, int(width_px * scale))
                 height_px = max(1, int(height_px * scale))
                 entity_buffer = self.sim.get_entity_buffer()
                 entity_count = self.sim.entity_count
                 pt.start_preview(
-                    target_spp=p.three_d_rt_preview_spp,
+                    target_spp=p.optix.rt_preview_spp,
                     entity_buffer=entity_buffer,
                     entity_count=entity_count,
                     cam_pos=cam.pos,
@@ -633,15 +633,15 @@ class App:
             self.camera.optix_interface = self._pathtracer_interface
         else:
             self.camera.optix_interface = self._optix_interface
-        self.camera.optix_resolution_scale = ui_state.preferences.three_d_optix_resolution_scale
+        self.camera.optix_resolution_scale = ui_state.preferences.optix.resolution_scale
 
         # Sync tracer SDF toggle to preferences for 3D preview
         ti = self.ui._tracer_interface
         if ti is not None:
-            ui_state.preferences.tracer_sdf_enabled = ti.sdf_enabled
+            ui_state.preferences.tracer.sdf_enabled = ti.sdf_enabled
 
         # 5.2. Sync parameter lock master toggle
-        self.param_lock_service.enabled = ui_state.preferences.parameter_locks_enabled
+        self.param_lock_service.enabled = ui_state.preferences.parameter_locks.enabled
 
         # 5.5. Calculate sweep reticle info
         sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
@@ -677,9 +677,9 @@ class App:
                 self.video_service.process_frame(
                     self.ctx,
                     tracer_frame,
-                    ui_state.preferences.max_frames,
-                    ui_state.preferences.supersample_k,
-                    ui_state.preferences.filename_prefix
+                    ui_state.preferences.recording.max_frames,
+                    ui_state.preferences.recording.supersample_k,
+                    ui_state.preferences.recording.filename_prefix
                 )
         elif optix_pt_video_active and ui_state.sim.going:
             # OptiX path tracer video mode: offline rendering with motion blur
@@ -692,8 +692,8 @@ class App:
                     pt_frame_hdr,
                     total_samples=1,
                     current_sample_index=0,
-                    brightness=ui_state.preferences.brightness,
-                    tonemap_softness=ui_state.preferences.tonemap_softness,
+                    brightness=ui_state.preferences.rendering.brightness,
+                    tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
                 )
                 if pt_frame is not None:
                     # Display the completed frame in the camera view
@@ -702,9 +702,9 @@ class App:
                     self.video_service.process_frame(
                         self.ctx,
                         pt_frame,
-                        ui_state.preferences.max_frames,
-                        ui_state.preferences.supersample_k,
-                        ui_state.preferences.filename_prefix,
+                        ui_state.preferences.recording.max_frames,
+                        ui_state.preferences.recording.supersample_k,
+                        ui_state.preferences.recording.filename_prefix,
                         flip_y=False  # 3D path tracer: no flip needed
                     )
         elif ui_state.sim.going:
@@ -769,16 +769,16 @@ class App:
                                   rt_active=rt_active)
 
         # 7.5. Render arrow debug overlay if enabled
-        if ui_state.preferences.debug_arrows:
+        if ui_state.preferences.ui_windows.debug_arrows:
             width, height = glfw.get_framebuffer_size(self.window)
             adv_prefs = ui_state.preferences
-            adv_active = adv_prefs.advanced_drawing_enabled
+            adv_active = adv_prefs.advanced_drawing.enabled
             field_tex = self.advanced_drawing_processor.field_texture
             # Use field_texture for force/strafe targets, canvas for trails
-            if adv_active and not adv_prefs.advanced_draw_canvas and field_tex is not None:
+            if adv_active and not adv_prefs.advanced_drawing.draw_canvas and field_tex is not None:
                 arrow_texture = field_tex
                 arrow_resolution = field_tex.size
-                use_zw = adv_prefs.advanced_draw_strafe_field
+                use_zw = adv_prefs.advanced_drawing.draw_strafe_field
             else:
                 arrow_texture = self.sim.can
                 arrow_resolution = self.sim.can.size
@@ -789,7 +789,7 @@ class App:
                 cam_zoom=self.camera.zoom,
                 canvas_resolution=arrow_resolution,
                 window_size=(width, height),
-                arrow_sensitivity=ui_state.preferences.arrow_sensitivity,
+                arrow_sensitivity=ui_state.preferences.ui_windows.arrow_sensitivity,
                 use_zw_channels=use_zw,
             )
 
@@ -810,7 +810,7 @@ class App:
             'render_queue_phase': self.render_queue_phase,
             'render_queue_current_name': self.render_queue_names[self.render_queue_index] if self.render_queue_executing and self.render_queue_index < len(self.render_queue_names) else '',
             'video_current_frame': self.video_service.current_frame,
-            'video_max_frames': ui_state.preferences.max_frames,
+            'video_max_frames': ui_state.preferences.recording.max_frames,
         })
         self.ui.render()
 
@@ -858,14 +858,14 @@ class App:
         if (pt is not None
                 and (pt.preview_active or pt.preview_has_result)
                 and pt.display_texture is not None
-                and ui_state.preferences.three_d_rt_mode == 0):
+                and ui_state.preferences.optix.rt_mode == 0):
             # Run HDR preview texture through frame assembler for tonemapping
             tonemapped = self.camera.frame_assembler.assemble_frame(
                 pt.display_texture,
                 total_samples=1,
                 current_sample_index=0,
-                brightness=ui_state.preferences.brightness,
-                tonemap_softness=ui_state.preferences.tonemap_softness,
+                brightness=ui_state.preferences.rendering.brightness,
+                tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
             )
             if tonemapped is not None:
                 self.ctx.screen.use()
@@ -881,7 +881,7 @@ class App:
                 self.camera.vao.render()
             return
 
-        draw_trail_mode = ui_state.preferences.mouse_mode == "Draw Trail"
+        draw_trail_mode = ui_state.preferences.ui_windows.mouse_mode == "Draw Trail"
 
         width, height = glfw.get_framebuffer_size(self.window)
         mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
@@ -895,7 +895,7 @@ class App:
         sdf_sun_color = (3.0, 3.0, 3.0)
         sdf_sky_color = (0.5, 0.7, 1.0)
         if ui_state.camera.render_3d:
-            sdf_enabled = ui_state.preferences.tracer_sdf_enabled
+            sdf_enabled = ui_state.preferences.tracer.sdf_enabled
             if sdf_enabled:
                 cam = self.controller_cam
                 aspect = width / max(height, 1)
@@ -906,14 +906,14 @@ class App:
                     view_proj.astype(np.float64)
                 ).astype(np.float32)
                 p = ui_state.preferences
-                sun_d = np.array(p.tracer_sun_direction, dtype=np.float64)
+                sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
                 sun_len = max(np.linalg.norm(sun_d), 1e-8)
                 sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-                sc = p.tracer_sun_color
-                si = p.tracer_sun_intensity
+                sc = p.tracer.sun_color
+                si = p.tracer.sun_intensity
                 sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-                skc = p.tracer_sky_color
-                ski = p.tracer_sky_intensity
+                skc = p.tracer.sky_color
+                ski = p.tracer.sky_intensity
                 sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         self.camera.render(
@@ -925,14 +925,14 @@ class App:
             watercolor_mode=ui_state.sim.watercolor_mode,
             ink_weight=ui_state.sim.ink_weight,
             draw_trail_mode=draw_trail_mode,
-            draw_size=ui_state.preferences.draw_size,
+            draw_size=ui_state.preferences.ui_windows.draw_size,
             mouse_screen_coords=mouse_screen_coords,
-            exposure=ui_state.preferences.exposure,
-            tonemap_softness=ui_state.preferences.tonemap_softness,
-            bloom_enabled=ui_state.preferences.bloom_enabled,
-            bloom_threshold=ui_state.preferences.bloom_threshold,
-            bloom_intensity=ui_state.preferences.bloom_intensity,
-            bloom_radius=ui_state.preferences.bloom_radius,
+            exposure=ui_state.preferences.rendering.exposure,
+            tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
+            bloom_enabled=ui_state.preferences.bloom.enabled,
+            bloom_threshold=ui_state.preferences.bloom.threshold,
+            bloom_intensity=ui_state.preferences.bloom.intensity,
+            bloom_radius=ui_state.preferences.bloom.radius,
             sdf_enabled=sdf_enabled,
             inv_view_proj=inv_view_proj,
             sdf_sun_dir=sdf_sun_dir,
@@ -947,12 +947,12 @@ class App:
             import datetime
             import os
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            prefix = ui_state.preferences.filename_prefix or "screenshot"
+            prefix = ui_state.preferences.recording.filename_prefix or "screenshot"
             flip_y = not ui_state.camera.render_3d
             filename = save_frame_gpu(
                 self.camera.assembled_texture,
                 self.ctx,
-                supersample_k=ui_state.preferences.supersample_k,
+                supersample_k=ui_state.preferences.recording.supersample_k,
                 return_array=False,
                 flip_y=flip_y
             )
@@ -964,9 +964,9 @@ class App:
                 print(f"Screenshot saved: {new_filename}")
 
         # Restore saved settings
-        ui_state.preferences.speedmult = self.screenshot_saved_settings['speedmult']
-        ui_state.preferences.blur_quality = self.screenshot_saved_settings['blur_quality']
-        ui_state.preferences.motion_blur = self.screenshot_saved_settings['motion_blur']
+        ui_state.preferences.rendering.speedmult = self.screenshot_saved_settings['speedmult']
+        ui_state.preferences.rendering.blur_quality = self.screenshot_saved_settings['blur_quality']
+        ui_state.preferences.rendering.motion_blur = self.screenshot_saved_settings['motion_blur']
         ui_state.sim.going = self.screenshot_saved_settings['going']
         self.screenshot_in_progress = False
         self.screenshot_saved_settings = {}
@@ -1007,15 +1007,15 @@ class App:
             )
             if world_size_changed:
                 self.entity_picker.update_buffer(self.sim.get_entity_buffer())
-                self.ui._last_applied_entity_count = ui_state.preferences.entity_count
-                self.ui._last_applied_canvas_resolution = ui_state.preferences.canvas_resolution
+                self.ui._last_applied_entity_count = ui_state.preferences.rendering.entity_count
+                self.ui._last_applied_canvas_resolution = ui_state.preferences.rendering.canvas_resolution
 
             # Re-sync tracer interface if it exists
             if self.ui._tracer_interface is not None:
                 self.ui._apply_tracer_preferences(self.ui._tracer_interface)
 
             # Set filename_prefix so VidSaver uses the display name
-            ui_state.preferences.filename_prefix = display_name
+            ui_state.preferences.recording.filename_prefix = display_name
 
             # Unpause simulation (recording requires going = True)
             ui_state.sim.going = True
@@ -1065,44 +1065,44 @@ class App:
 
         # Sync 3D camera settings into preferences
         cam = ui_state.camera
-        ui_state.preferences.three_d_render_3d = cam.render_3d
-        ui_state.preferences.three_d_fov = cam.fov
-        ui_state.preferences.three_d_aperture = cam.aperture
-        ui_state.preferences.three_d_focal_plane_depth = cam.focal_plane_depth
-        ui_state.preferences.three_d_move_speed = cam.move_speed
-        ui_state.preferences.three_d_rotate_speed = cam.rotate_speed
-        ui_state.preferences.three_d_orbit_center = list(cam.orbit_center)
-        ui_state.preferences.three_d_orbit_rate = cam.orbit_rate
-        ui_state.preferences.three_d_optix_enabled = cam.optix_enabled
+        ui_state.preferences.camera3d.render_3d = cam.render_3d
+        ui_state.preferences.camera3d.fov = cam.fov
+        ui_state.preferences.camera3d.aperture = cam.aperture
+        ui_state.preferences.camera3d.focal_plane_depth = cam.focal_plane_depth
+        ui_state.preferences.camera3d.move_speed = cam.move_speed
+        ui_state.preferences.camera3d.rotate_speed = cam.rotate_speed
+        ui_state.preferences.camera3d.orbit_center = list(cam.orbit_center)
+        ui_state.preferences.camera3d.orbit_rate = cam.orbit_rate
+        ui_state.preferences.optix.enabled = cam.optix_enabled
 
         # Sync tracer settings into preferences
         ti = self.ui._tracer_interface
         if ti is not None:
-            ui_state.preferences.tracer_sdf_enabled = ti.sdf_enabled
-            ui_state.preferences.tracer_colored_extinction = ti.colored_extinction
-            ui_state.preferences.tracer_extinction_rgb = list(ti.extinction_rgb)
-            ui_state.preferences.tracer_albedo_saturation = ti.albedo_saturation
-            ui_state.preferences.tracer_albedo_brightness = ti.albedo_brightness
-            ui_state.preferences.tracer_density_scale = ti.density_scale
-            ui_state.preferences.tracer_hg_g = ti.hg_g
-            ui_state.preferences.tracer_emission_strength = ti.emission_strength
-            ui_state.preferences.tracer_sun_direction = list(ti.sun_direction)
-            ui_state.preferences.tracer_sun_color = list(ti.sun_color)
-            ui_state.preferences.tracer_sun_intensity = ti.sun_intensity
-            ui_state.preferences.tracer_sky_color = list(ti.sky_color)
-            ui_state.preferences.tracer_sky_intensity = ti.sky_intensity
-            ui_state.preferences.tracer_num_samples = ti.num_samples
-            ui_state.preferences.tracer_exposure = ti.exposure
-            ui_state.preferences.tracer_realtime_mode = ti.realtime_mode
-            ui_state.preferences.tracer_max_bounces = ti.max_bounces
-            ui_state.preferences.tracer_firefly_clamp = ti.firefly_clamp
-            ui_state.preferences.tracer_firefly_clamp_max = ti.firefly_clamp_max
-            ui_state.preferences.tracer_resolution_scale = ti.resolution_scale
-            ui_state.preferences.tracer_density_resolution_log2 = ti.density_resolution_log2
-            ui_state.preferences.tracer_color_resolution_log2 = ti.color_resolution_log2
-            ui_state.preferences.tracer_majorant_resolution_log2 = ti.majorant_resolution_log2
-            ui_state.preferences.tracer_sun_sampling = ti.sun_sampling
-            ui_state.preferences.tracer_photosphere = ti.photosphere
+            ui_state.preferences.tracer.sdf_enabled = ti.sdf_enabled
+            ui_state.preferences.tracer.colored_extinction = ti.colored_extinction
+            ui_state.preferences.tracer.extinction_rgb = list(ti.extinction_rgb)
+            ui_state.preferences.tracer.albedo_saturation = ti.albedo_saturation
+            ui_state.preferences.tracer.albedo_brightness = ti.albedo_brightness
+            ui_state.preferences.tracer.density_scale = ti.density_scale
+            ui_state.preferences.tracer.hg_g = ti.hg_g
+            ui_state.preferences.tracer.emission_strength = ti.emission_strength
+            ui_state.preferences.tracer.sun_direction = list(ti.sun_direction)
+            ui_state.preferences.tracer.sun_color = list(ti.sun_color)
+            ui_state.preferences.tracer.sun_intensity = ti.sun_intensity
+            ui_state.preferences.tracer.sky_color = list(ti.sky_color)
+            ui_state.preferences.tracer.sky_intensity = ti.sky_intensity
+            ui_state.preferences.tracer.num_samples = ti.num_samples
+            ui_state.preferences.tracer.exposure = ti.exposure
+            ui_state.preferences.tracer.realtime_mode = ti.realtime_mode
+            ui_state.preferences.tracer.max_bounces = ti.max_bounces
+            ui_state.preferences.tracer.firefly_clamp = ti.firefly_clamp
+            ui_state.preferences.tracer.firefly_clamp_max = ti.firefly_clamp_max
+            ui_state.preferences.tracer.resolution_scale = ti.resolution_scale
+            ui_state.preferences.tracer.density_resolution_log2 = ti.density_resolution_log2
+            ui_state.preferences.tracer.color_resolution_log2 = ti.color_resolution_log2
+            ui_state.preferences.tracer.majorant_resolution_log2 = ti.majorant_resolution_log2
+            ui_state.preferences.tracer.sun_sampling = ti.sun_sampling
+            ui_state.preferences.tracer.photosphere = ti.photosphere
 
         save_preferences(ui_state.preferences)
 

@@ -11,7 +11,7 @@ class ThreeDWindowMixin:
         """Render the 3D Controls window."""
         visible, opened = imgui.begin("3D Controls", True)
         if not opened:
-            self.state.preferences.show_three_d_window = False
+            self.state.preferences.ui_windows.show_three_d_window = False
             imgui.end()
             return
         if visible:

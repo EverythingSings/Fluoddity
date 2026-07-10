@@ -12,7 +12,7 @@ class PlottingWindowMixin:
         """Render the Plotting window with 4 histogram channels."""
         visible, opened = imgui.begin("Plotting", True)
         if not opened:
-            self.state.preferences.show_plotting_window = False
+            self.state.preferences.ui_windows.show_plotting_window = False
             imgui.end()
             return
         if not visible:

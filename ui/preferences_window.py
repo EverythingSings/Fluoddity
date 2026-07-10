@@ -15,7 +15,7 @@ class PreferencesWindowMixin:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
 
         # Use p_open to allow closing with X button
-        expanded, self.state.preferences.show_preferences_window = imgui.begin("Preferences", True)
+        expanded, self.state.preferences.ui_windows.show_preferences_window = imgui.begin("Preferences", True)
 
         if expanded:
             # === World Size section ===
@@ -24,35 +24,35 @@ class PreferencesWindowMixin:
             # Particle Count — commit on Enter
             changed, new_count = imgui.input_int(
                 "Particle Count",
-                self.state.preferences.entity_count,
+                self.state.preferences.rendering.entity_count,
                 step=0,
                 step_fast=0,
             )
             new_count = max(1000, min(new_count, 100_000_000))
-            self.state.preferences.entity_count = new_count
+            self.state.preferences.rendering.entity_count = new_count
             if imgui.is_item_deactivated_after_edit():
-                if self.state.preferences.entity_count != self._last_applied_entity_count:
+                if self.state.preferences.rendering.entity_count != self._last_applied_entity_count:
                     self._request_world_size_change = True
             self._delayed_tooltip("Number of active particles. Takes effect on Enter.\nMore particles = more VRAM (32 bytes each).")
 
             # Canvas Resolution — commit on Enter
             changed, new_res = imgui.input_int(
                 "Canvas Resolution",
-                self.state.preferences.canvas_resolution,
+                self.state.preferences.rendering.canvas_resolution,
                 step=0,
                 step_fast=0,
             )
             new_res = max(64, min(new_res, 1024))
-            self.state.preferences.canvas_resolution = new_res
+            self.state.preferences.rendering.canvas_resolution = new_res
             if imgui.is_item_deactivated_after_edit():
-                if self.state.preferences.canvas_resolution != self._last_applied_canvas_resolution:
+                if self.state.preferences.rendering.canvas_resolution != self._last_applied_canvas_resolution:
                     self._request_world_size_change = True
             self._delayed_tooltip("Cubic canvas dimension (W=H=D) for 3D trail textures.\nTakes effect on Enter. 6 textures at dim^3 * 4 bytes each.")
 
             # VRAM estimate
-            ent_mb = self.state.preferences.entity_count * 32 / (1024 * 1024)
+            ent_mb = self.state.preferences.rendering.entity_count * 32 / (1024 * 1024)
             rule_mb = 16384 * 480 / (1024 * 1024)  # fixed 2^14 entries * 480 bytes
-            dim = self.state.preferences.canvas_resolution
+            dim = self.state.preferences.rendering.canvas_resolution
             canvas_mb = 6 * dim * dim * dim * 4 / (1024 * 1024)
             total_mb = ent_mb + rule_mb + canvas_mb
             if total_mb >= 1024:
@@ -68,7 +68,7 @@ class PreferencesWindowMixin:
 
             # Lock speedmult to motion_blur_samples when recording video
             if recording_active:
-                locked_value = self.state.preferences.motion_blur_samples
+                locked_value = self.state.preferences.recording.motion_blur_samples
                 imgui.begin_disabled()
                 imgui.slider_int(
                     label="Rate",
@@ -80,10 +80,10 @@ class PreferencesWindowMixin:
                 imgui.end_disabled()
             else:
                 # Slider with custom format showing multiplier and hz
-                current_hz = self.state.preferences.speedmult * 60
-                _, self.state.preferences.speedmult = imgui.slider_int(
+                current_hz = self.state.preferences.rendering.speedmult * 60
+                _, self.state.preferences.rendering.speedmult = imgui.slider_int(
                     label="Rate",
-                    v=self.state.preferences.speedmult,
+                    v=self.state.preferences.rendering.speedmult,
                     v_min=1,
                     v_max=30,
                     format=f"x%d ({current_hz}hz)"
@@ -94,9 +94,9 @@ class PreferencesWindowMixin:
             if recording_active:
                 imgui.begin_disabled()
 
-            _, self.state.preferences.motion_blur = imgui.checkbox(
+            _, self.state.preferences.rendering.motion_blur = imgui.checkbox(
                 "Motion Blur",
-                self.state.preferences.motion_blur
+                self.state.preferences.rendering.motion_blur
             )
             self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
 
@@ -104,18 +104,18 @@ class PreferencesWindowMixin:
                 imgui.end_disabled()
 
             # Blur Quality slider (only shown when motion blur is enabled)
-            if self.state.preferences.motion_blur:
+            if self.state.preferences.rendering.motion_blur:
                 imgui.indent(20)
                 # Custom format for blur quality
-                blur_val = self.state.preferences.blur_quality
+                blur_val = self.state.preferences.rendering.blur_quality
                 if blur_val == 1:
                     blur_format = "1 : Every Frame"
                 else:
                     blur_format = f"{blur_val} : Every {blur_val} Frames"
 
-                _, self.state.preferences.blur_quality = imgui.slider_int(
+                _, self.state.preferences.rendering.blur_quality = imgui.slider_int(
                     "Blur Quality",
-                    self.state.preferences.blur_quality,
+                    self.state.preferences.rendering.blur_quality,
                     1, 20,
                     format=blur_format
                 )
@@ -129,24 +129,24 @@ class PreferencesWindowMixin:
 
             # Mouse mode combo box
             mouse_modes = ["Select Particle", "Draw Trail"]
-            current_mode_idx = mouse_modes.index(self.state.preferences.mouse_mode) if self.state.preferences.mouse_mode in mouse_modes else 0
+            current_mode_idx = mouse_modes.index(self.state.preferences.ui_windows.mouse_mode) if self.state.preferences.ui_windows.mouse_mode in mouse_modes else 0
             clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
             if clicked:
-                self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
+                self.state.preferences.ui_windows.mouse_mode = mouse_modes[new_mode_idx]
             self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
 
             # Draw mode sliders (only show when in Draw Trail mode)
-            if self.state.preferences.mouse_mode == "Draw Trail":
+            if self.state.preferences.ui_windows.mouse_mode == "Draw Trail":
                 imgui.indent(20)
-                _, self.state.preferences.draw_size = imgui.slider_float(
+                _, self.state.preferences.ui_windows.draw_size = imgui.slider_float(
                     "Draw Size",
-                    self.state.preferences.draw_size,
+                    self.state.preferences.ui_windows.draw_size,
                     0.01, 0.5,
                     format="%.3f"
                 )
-                _, self.state.preferences.draw_power = imgui.slider_float(
+                _, self.state.preferences.ui_windows.draw_power = imgui.slider_float(
                     "Draw Power",
-                    self.state.preferences.draw_power,
+                    self.state.preferences.ui_windows.draw_power,
                     0.1, 5.0,
                     format="%.2f"
                 )
@@ -155,28 +155,28 @@ class PreferencesWindowMixin:
             imgui.separator()
 
             # Physics tooltips checkbox
-            _, self.state.preferences.physics_tooltips_enabled = imgui.checkbox(
+            _, self.state.preferences.ui_windows.physics_tooltips_enabled = imgui.checkbox(
                 "Physics Tooltips",
-                self.state.preferences.physics_tooltips_enabled
+                self.state.preferences.ui_windows.physics_tooltips_enabled
             )
             self._delayed_tooltip("Enable verbose tooltip and vector diagram for physics sliders.")
 
             # Arrow debug checkbox - label changes when advanced drawing is open
             arrow_label = ("View Draw Target Arrows"
-                           if self.state.preferences.advanced_drawing_enabled
+                           if self.state.preferences.advanced_drawing.enabled
                            else "View Trail Arrows")
-            _, self.state.preferences.debug_arrows = imgui.checkbox(
+            _, self.state.preferences.ui_windows.debug_arrows = imgui.checkbox(
                 arrow_label,
-                self.state.preferences.debug_arrows
+                self.state.preferences.ui_windows.debug_arrows
             )
             self._delayed_tooltip("Render a grid of arrows to help visualize the active draw target's vector field.")
 
             # Arrow sensitivity slider (only show when debug arrows enabled)
-            if self.state.preferences.debug_arrows:
+            if self.state.preferences.ui_windows.debug_arrows:
                 imgui.indent(20)
-                _, self.state.preferences.arrow_sensitivity = imgui.slider_float(
+                _, self.state.preferences.ui_windows.arrow_sensitivity = imgui.slider_float(
                     "Arrow Sensitivity",
-                    self.state.preferences.arrow_sensitivity,
+                    self.state.preferences.ui_windows.arrow_sensitivity,
                     1.0, 20.0,
                     format="%.1f"
                 )
@@ -188,27 +188,27 @@ class PreferencesWindowMixin:
             imgui.text("Appearance")
 
             # Brightness slider
-            _, self.state.preferences.brightness = imgui.slider_float(
+            _, self.state.preferences.rendering.brightness = imgui.slider_float(
                 "Brightness",
-                self.state.preferences.brightness,
+                self.state.preferences.rendering.brightness,
                 0.01, 10.0,
                 format="%.2f"
             )
             self._delayed_tooltip("Global brightness multiplier for the output.")
 
             # Tonemap Softness slider
-            _, self.state.preferences.tonemap_softness = imgui.slider_float(
+            _, self.state.preferences.rendering.tonemap_softness = imgui.slider_float(
                 "Tonemap Softness",
-                self.state.preferences.tonemap_softness,
+                self.state.preferences.rendering.tonemap_softness,
                 0.1, 5.0,
                 format="%.2f"
             )
             self._delayed_tooltip("Controls highlight compression (asinh stretch).\nLow values = more linear (brighter highlights).\nHigh values = more logarithmic (reveals faint detail).")
 
             # Exposure / Cheap Blur slider
-            _, self.state.preferences.exposure = imgui.slider_float(
+            _, self.state.preferences.rendering.exposure = imgui.slider_float(
                 "Exposure / Cheap Blur",
-                self.state.preferences.exposure,
+                self.state.preferences.rendering.exposure,
                 0.0, 1.0,
                 format="%.2f"
             )
@@ -218,36 +218,36 @@ class PreferencesWindowMixin:
             watercolor_active = self.state.sim.watercolor_mode
             if watercolor_active:
                 imgui.begin_disabled()
-            _, self.state.preferences.bloom_enabled = imgui.checkbox(
+            _, self.state.preferences.bloom.enabled = imgui.checkbox(
                 "Bloom",
-                self.state.preferences.bloom_enabled
+                self.state.preferences.bloom.enabled
             )
             if watercolor_active:
                 self._delayed_tooltip("Bloom is disabled in Watercolor mode.")
             else:
                 self._delayed_tooltip("Add a glow effect around bright areas.")
 
-            if self.state.preferences.bloom_enabled and not watercolor_active:
+            if self.state.preferences.bloom.enabled and not watercolor_active:
                 imgui.indent(20)
-                _, self.state.preferences.bloom_threshold = imgui.slider_float(
+                _, self.state.preferences.bloom.threshold = imgui.slider_float(
                     "Threshold",
-                    self.state.preferences.bloom_threshold,
+                    self.state.preferences.bloom.threshold,
                     0.0, 2.0,
                     format="%.2f"
                 )
                 self._delayed_tooltip("Brightness cutoff for bloom extraction.\nLower = more glow everywhere.")
 
-                _, self.state.preferences.bloom_intensity = imgui.slider_float(
+                _, self.state.preferences.bloom.intensity = imgui.slider_float(
                     "Intensity",
-                    self.state.preferences.bloom_intensity,
+                    self.state.preferences.bloom.intensity,
                     0.0, 3.0,
                     format="%.2f"
                 )
                 self._delayed_tooltip("Strength of the bloom glow.")
 
-                _, self.state.preferences.bloom_radius = imgui.slider_float(
+                _, self.state.preferences.bloom.radius = imgui.slider_float(
                     "Radius",
-                    self.state.preferences.bloom_radius,
+                    self.state.preferences.bloom.radius,
                     0.1, 3.0,
                     format="%.2f"
                 )

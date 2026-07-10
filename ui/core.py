@@ -389,7 +389,7 @@ class UI(
                 self._request_reload = True
             elif key == self.keybindings.get_key("toggle_help"):
                 # Show tutorial
-                self.state.preferences.show_tutorial_window = not self.state.preferences.show_tutorial_window
+                self.state.preferences.ui_windows.show_tutorial_window = not self.state.preferences.ui_windows.show_tutorial_window
             elif shift_pressed and key == self.keybindings.get_key("record_screen"):
                 # Screenshot (Shift+P)
                 self._request_screenshot = True
@@ -401,10 +401,10 @@ class UI(
                 self._request_randomize_mutations = True
             elif key == self.keybindings.get_key("toggle_mouse_mode"):
                 # Toggle mouse mode between Select Particle and Draw Trail
-                if self.state.preferences.mouse_mode == "Select Particle":
-                    self.state.preferences.mouse_mode = "Draw Trail"
+                if self.state.preferences.ui_windows.mouse_mode == "Select Particle":
+                    self.state.preferences.ui_windows.mouse_mode = "Draw Trail"
                 else:
-                    self.state.preferences.mouse_mode = "Select Particle"
+                    self.state.preferences.ui_windows.mouse_mode = "Select Particle"
             elif key == self.keybindings.get_key("toggle_parameter_sweep"):
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
@@ -423,7 +423,7 @@ class UI(
                 self._request_pick_focal = True
             elif key == self.keybindings.get_key("cycle_rt_mode"):
                 p = self.state.preferences
-                p.three_d_rt_mode = (p.three_d_rt_mode + 1) % 3
+                p.optix.rt_mode = (p.optix.rt_mode + 1) % 3
             #elif key == self.keybindings.get_key("toggle_tooltips"):
             #    self.show_demo_window = not self.show_demo_window
 
@@ -701,27 +701,27 @@ class UI(
             self.render_physics_settings_window()
 
         # Render Preferences window if sidebar is visible AND preferences are enabled
-        if self.show_sidebar and self.state.preferences.show_preferences_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_preferences_window:
             self.render_preferences_window()
 
         # Render Controls help window if visible
-        if self.state.preferences.show_controls_window:
+        if self.state.preferences.ui_windows.show_controls_window:
             self.render_controls_window()
 
         # Render Parameter Sweeps help window if visible
-        if self.state.preferences.show_parameter_sweeps_window:
+        if self.state.preferences.ui_windows.show_parameter_sweeps_window:
             self.render_parameter_sweeps_window()
 
         # Render Tutorial help window if visible
-        if self.state.preferences.show_tutorial_window:
+        if self.state.preferences.ui_windows.show_tutorial_window:
             self.render_tutorial_window()
 
         # Render Performance help window if visible
-        if self.state.preferences.show_performance_window:
+        if self.state.preferences.ui_windows.show_performance_window:
             self.render_performance_window()
 
         # Render Screen Recording window if visible (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.show_video_recording_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_video_recording_window:
             self.render_video_recording_window()
 
         # Render history window if visible (hidden when windows toggled off)
@@ -729,35 +729,35 @@ class UI(
             self.render_history_window()
 
         # Render Advanced Drawing window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.advanced_drawing_enabled:
+        if self.show_sidebar and self.state.preferences.advanced_drawing.enabled:
             self.render_advanced_drawing_window()
 
         # Render Generics window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.show_generics_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_generics_window:
             self.render_generics_window()
 
         # Render Plotting window if enabled (not gated by sidebar — standalone data view)
-        if self.state.preferences.show_plotting_window:
+        if self.state.preferences.ui_windows.show_plotting_window:
             self.render_plotting_window()
 
         # Render 3D Controls window if enabled
-        if self.show_sidebar and self.state.preferences.show_three_d_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_three_d_window:
             self.render_three_d_window()
 
         # Render OptiX Controls window if enabled
-        if self.show_sidebar and self.state.preferences.show_optix_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_optix_window:
             self.render_optix_window()
 
         # Render Tracer window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.show_tracer_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_tracer_window:
             self.render_tracer_window()
 
         # Render Radio window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.show_radio_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_radio_window:
             self.render_radio_window()
 
         # Render Scheduled Renders window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.show_scheduled_renders_window:
+        if self.show_sidebar and self.state.preferences.ui_windows.show_scheduled_renders_window:
             self.render_scheduled_renders_window()
 
         # Render field loader window (transient, not gated by sidebar)

@@ -130,7 +130,7 @@ class SliderWidgetsMixin:
             dy = max(popup_min_y - mouse_pos.y, 0, mouse_pos.y - popup_max_y)
             distance = (dx * dx + dy * dy) ** 0.5
 
-            if distance > self.state.preferences.menu_close_threshold:
+            if distance > self.state.preferences.ui_windows.menu_close_threshold:
                 imgui.close_current_popup()
 
             # Jitter control at top (hidden for Hazard Rate and Mutation Scale)

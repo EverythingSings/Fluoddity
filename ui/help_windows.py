@@ -8,7 +8,7 @@ class HelpWindowsMixin:
 
     def render_controls_window(self):
         """Render the Controls help window (closeable)."""
-        expanded, self.state.preferences.show_controls_window = imgui.begin("Controls", True)
+        expanded, self.state.preferences.ui_windows.show_controls_window = imgui.begin("Controls", True)
 
         if expanded:            
             imgui.text("Mouse Controls")
@@ -68,7 +68,7 @@ class HelpWindowsMixin:
 
     def render_parameter_sweeps_window(self):
         """Render the Parameter Sweeps help window (closeable)."""
-        expanded, self.state.preferences.show_parameter_sweeps_window = imgui.begin("Parameter Sweeps", True)
+        expanded, self.state.preferences.ui_windows.show_parameter_sweeps_window = imgui.begin("Parameter Sweeps", True)
 
         if expanded:
             imgui.text_wrapped(
@@ -117,7 +117,7 @@ class HelpWindowsMixin:
 
     def render_tutorial_window(self):
         """Render the Tutorial help window (closeable)."""
-        expanded, self.state.preferences.show_tutorial_window = imgui.begin("Tutorial", True)
+        expanded, self.state.preferences.ui_windows.show_tutorial_window = imgui.begin("Tutorial", True)
 
         if expanded:
             imgui.text_wrapped(
@@ -207,7 +207,7 @@ class HelpWindowsMixin:
 
     def render_performance_window(self):
         """Render the Performance help window (closeable)."""
-        expanded, self.state.preferences.show_performance_window = imgui.begin("Performance", True)
+        expanded, self.state.preferences.ui_windows.show_performance_window = imgui.begin("Performance", True)
 
         if expanded:
             imgui.text_wrapped(
@@ -241,7 +241,7 @@ class HelpWindowsMixin:
         if recording_active or video_pending:
             imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.3, 0.1, 0.1, 1.0))
 
-        expanded, self.state.preferences.show_video_recording_window = imgui.begin("Screen Recording", True)
+        expanded, self.state.preferences.ui_windows.show_video_recording_window = imgui.begin("Screen Recording", True)
 
         if expanded:
             record_key = self.keybindings.get_key_display_name('record_screen')
@@ -267,15 +267,15 @@ class HelpWindowsMixin:
             imgui.spacing()
 
             # Video End Frame input
-            _, self.state.preferences.video_end_frame = imgui.input_int(
+            _, self.state.preferences.recording.video_end_frame = imgui.input_int(
                 'Video End Frame',
-                self.state.preferences.video_end_frame
+                self.state.preferences.recording.video_end_frame
             )
             self._delayed_tooltip("Target frame for video to end on.\nWhen set, recording will be delayed until the\ncalculated start frame is reached.\nSet to 0 to start recording immediately.")
             imgui.spacing()
 
             # Video Length (in seconds) - converts to/from max_frames internally
-            video_length_seconds = self.state.preferences.max_frames / 60.0
+            video_length_seconds = self.state.preferences.recording.max_frames / 60.0
             changed, new_length = imgui.drag_float(
                 'Video Length',
                 video_length_seconds,
@@ -285,7 +285,7 @@ class HelpWindowsMixin:
                 format="%.0f seconds"
             )
             if changed:
-                self.state.preferences.max_frames = int(new_length * 60)
+                self.state.preferences.recording.max_frames = int(new_length * 60)
             self._delayed_tooltip("After Video reaches this length, the recording will be stopped")
 
             # Lock motion_blur_samples during recording
@@ -293,10 +293,10 @@ class HelpWindowsMixin:
                 imgui.begin_disabled()
 
             # Capture Physics Frequency / Screenshot samples
-            current_hz = self.state.preferences.motion_blur_samples * 60
-            _, self.state.preferences.motion_blur_samples = imgui.slider_int(
+            current_hz = self.state.preferences.recording.motion_blur_samples * 60
+            _, self.state.preferences.recording.motion_blur_samples = imgui.slider_int(
                 'Capture Physics Frequency',
-                self.state.preferences.motion_blur_samples,
+                self.state.preferences.recording.motion_blur_samples,
                 v_min=1,
                 v_max=100,
                 format=f"x%d ({current_hz}hz)"
@@ -312,8 +312,8 @@ class HelpWindowsMixin:
 
             # Frame range display
             imgui.spacing()
-            total_sim_frames = self.state.preferences.max_frames * self.state.preferences.motion_blur_samples
-            video_end_frame = self.state.preferences.video_end_frame
+            total_sim_frames = self.state.preferences.recording.max_frames * self.state.preferences.recording.motion_blur_samples
+            video_end_frame = self.state.preferences.recording.video_end_frame
             if video_end_frame > 0 and video_end_frame - total_sim_frames >= current_frame:
                 start_frame = video_end_frame - total_sim_frames
                 end_frame = video_end_frame
@@ -324,29 +324,29 @@ class HelpWindowsMixin:
                 imgui.ImVec4(0.6, 0.8, 1.0, 1.0),
                 f"Frame Range: {start_frame} --- {end_frame}"
             )
-            self._delayed_tooltip(f"Estimated recording range based on current settings.\nTotal simulation frames: {total_sim_frames}\n({self.state.preferences.max_frames} output frames x {self.state.preferences.motion_blur_samples} physics steps)")
+            self._delayed_tooltip(f"Estimated recording range based on current settings.\nTotal simulation frames: {total_sim_frames}\n({self.state.preferences.recording.max_frames} output frames x {self.state.preferences.recording.motion_blur_samples} physics steps)")
             imgui.spacing()
 
             # Motion Blur checkbox (overrides preferences during recording)
-            _, self.state.preferences.recording_motion_blur = imgui.checkbox(
+            _, self.state.preferences.recording.recording_motion_blur = imgui.checkbox(
                 "Motion Blur (Recording)",
-                self.state.preferences.recording_motion_blur
+                self.state.preferences.recording.recording_motion_blur
             )
             self._delayed_tooltip("Enable motion blur during video recording.\nThis setting overrides the Motion Blur checkbox in Preferences while recording.")
 
             # Blur Quality slider (only shown when recording motion blur is enabled)
-            if self.state.preferences.recording_motion_blur:
+            if self.state.preferences.recording.recording_motion_blur:
                 imgui.indent(20)
                 # Custom format for blur quality
-                blur_val = self.state.preferences.recording_blur_quality
+                blur_val = self.state.preferences.recording.recording_blur_quality
                 if blur_val == 1:
                     blur_format = "1 : Every Frame"
                 else:
                     blur_format = f"{blur_val} : Every {blur_val} Frames"
 
-                _, self.state.preferences.recording_blur_quality = imgui.slider_int(
+                _, self.state.preferences.recording.recording_blur_quality = imgui.slider_int(
                     "Blur Quality (Recording)",
-                    self.state.preferences.recording_blur_quality,
+                    self.state.preferences.recording.recording_blur_quality,
                     1, 20,
                     format=blur_format
                 )
@@ -355,9 +355,9 @@ class HelpWindowsMixin:
 
             # Tracer Mode checkbox
             imgui.spacing()
-            _, self.state.preferences.tracer_mode = imgui.checkbox(
+            _, self.state.preferences.recording.tracer_mode = imgui.checkbox(
                 "Tracer Mode",
-                self.state.preferences.tracer_mode
+                self.state.preferences.recording.tracer_mode
             )
             self._delayed_tooltip(
                 "Use the volumetric path tracer for video recording.\n"
@@ -379,7 +379,7 @@ class HelpWindowsMixin:
             if imgui.button("Save Render Spec"):
                 name = self._save_render_spec_name.strip()
                 if not name:
-                    name = self.state.preferences.filename_prefix or "render"
+                    name = self.state.preferences.recording.filename_prefix or "render"
                 self._request_save_render_spec = True
                 self._save_render_spec_name = name
 
@@ -393,13 +393,13 @@ class HelpWindowsMixin:
                     self._render_spec_saved_time = 0
 
             # Downsample Resolution Factor (was Supersample Kernel Width)
-            _, self.state.preferences.supersample_k = imgui.input_int('Downsample Resolution Factor', self.state.preferences.supersample_k)
+            _, self.state.preferences.recording.supersample_k = imgui.input_int('Downsample Resolution Factor', self.state.preferences.recording.supersample_k)
             self._delayed_tooltip("Set to '2' to render a video at half resolution.")
 
             # Filename input
-            _, self.state.preferences.filename_prefix = imgui.input_text(
+            _, self.state.preferences.recording.filename_prefix = imgui.input_text(
                 'Filename',
-                self.state.preferences.filename_prefix,
+                self.state.preferences.recording.filename_prefix,
                 256
             )
             self._delayed_tooltip("Defaults to 'animation' if left empty. Saves to documents/Fluoddity/ All filenames get timestamps appended")
