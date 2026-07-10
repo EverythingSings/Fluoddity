@@ -67,11 +67,13 @@ class UIState:
     delete_category: str = ""  # Category for delete operation (Core, Custom, Advanced)
     load_watercolor_override: bool | None = None  # Override watercolor mode when loading
 
-    # Config preview (for Load submenu hover)
-    request_preview_config: bool = False  # Push rule for preview
-    request_clear_preview: bool = False  # Pop preview rule
+    # Config preview (for Load submenu hover). Preview loads a config to live
+    # state remembering the original to restore; it never touches the undo stack.
+    request_preview_config: bool = False  # Load hovered config as a preview
+    request_clear_preview: bool = False  # Restore the remembered original
     preview_filename: str = ""  # Filename to preview
     preview_category: str = ""  # Category for preview operation
+    preview_watercolor_override: bool | None = None  # Session watercolor mode for preview load/restore
 
     # Field loader (load image as force/strafe field)
     request_load_force_field_image: bool = False

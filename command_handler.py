@@ -33,8 +33,11 @@ class CommandHandler:
         self.plotting_manager = None  # Set by App after construction
 
         # Preview state
-        self.preview_rule_active = False  # File->load preview
-        self._preview_rule_was_pushed = False  # Whether we actually pushed a rule (vs blocked by lock)
+        # The "remembered original" for file/Load-menu preview: a (config, field_snapshot)
+        # tuple captured on preview-enter and reloaded verbatim on preview-leave.
+        # None when no file preview is active. Preview NEVER touches the RuleManager
+        # undo stack; restore re-applies the cached rule to the GPU directly.
+        self._preview_restore = None
         self.clipboard_preview_active = False  # Config clipboard preview
         self._clipboard_rule_was_pushed = False  # Whether clipboard preview actually pushed a rule
         self._clipboard_cached_config = None  # Full config saved before clipboard preview
@@ -63,6 +66,51 @@ class CommandHandler:
             return
         self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
         self.sim.apply_rule(rule)
+
+    def load_full_config(self, config, ui_state, *, json_filepath=None,
+                         field_snapshot=None, watercolor_override=None,
+                         push_rule=True):
+        """Load a whole PhysicsConfig to live state: params + rule + fields.
+
+        The single "load a full config" primitive. Composes the three steps that
+        were previously duplicated across fresh-load / clipboard-load / preview:
+          1. physics params + appearance + 3D settings (lock-aware) via apply_config
+          2. the rule to the GPU
+          3. the field texture + strengths (lock-aware)
+
+        Args:
+            config: PhysicsConfig to apply.
+            ui_state: Frame state (sim + preferences), mutated in place.
+            json_filepath: When loading from a file, path used to locate the
+                companion _fields.png (via field_handler's cache).
+            field_snapshot: When loading from an in-memory snapshot (preview
+                restore), the raw field texture data (np.ndarray or None).
+            watercolor_override: If not None, overrides config's watercolor_mode.
+            push_rule: True for real (undoable) loads -> pushes onto RuleManager.
+                False for preview -> applies the rule to the GPU directly without
+                ever touching the undo stack.
+        """
+        pls = self.param_lock_service
+        rule = self._apply_config_with_locks(config, ui_state, watercolor_override)
+
+        if push_rule:
+            self._push_and_apply_rule(rule, ui_state)
+        else:
+            # Preview: apply the rule straight to the GPU, never the undo stack.
+            if not (pls and pls.should_block_rule_push()):
+                if not (pls and pls.is_locked('rule_seed')):
+                    ui_state.sim.rule_seed = config.rule_seed
+                self.sim.apply_rule(rule)
+
+        fh = self.field_handler
+        if fh:
+            if json_filepath is not None:
+                fh.apply_for_config(config, json_filepath, ui_state)
+            else:
+                # In-memory snapshot path (preview restore). apply_snapshot handles
+                # a None snapshot by clearing/defaulting, and is lock-aware.
+                fh.apply_snapshot(field_snapshot, config, ui_state)
+        return rule
 
     @property
     def has_pending_entity_selection(self):
@@ -408,61 +456,60 @@ class CommandHandler:
         self.ui.update_physics_defaults(filename)
 
     def _handle_file_load(self, ui_state):
-        """Handle file load from menu, including preview mode."""
+        """Handle file load (menu click) — always a fresh, undoable load.
+
+        Under the simplified preview model, preview never pushes to the undo
+        stack, so a commit is always a normal fresh load. Committing discards the
+        remembered preview original and cancels any same-frame clear-preview
+        request so it cannot restore over the just-loaded config.
+        """
         filename = ui_state.load_filename
-        category = ui_state.load_category
         if not filename:
             return
 
-        fh = self.field_handler
+        # Commit: drop the remembered original and suppress a same-frame restore.
+        # (_handle_file_load runs before _handle_preview_commands within the frame.)
+        self._preview_restore = None
+        ui_state.request_clear_preview = False
 
-        # Normal mode
-        if self.preview_rule_active:
-            # Preview already applied config, rule, and field texture - just finalize
-            self.preview_rule_active = False
-            self._preview_rule_was_pushed = False
-            if fh:
-                fh.discard_preview_cache()
-            if ui_state.load_watercolor_override is not None:
-                ui_state.sim.watercolor_mode = ui_state.load_watercolor_override
-            print(f"Config loaded (from preview): {filename}")
+        filepath = self.ui._get_config_path(filename, ui_state.load_category)
+        config = self.config_saver.load_from_file(filepath)
+        if config is not None:
+            self.load_full_config(
+                config, ui_state,
+                json_filepath=filepath,
+                watercolor_override=ui_state.load_watercolor_override,
+                push_rule=True,
+            )
+            print(f"Config loaded from {filepath}")
             self.ui.update_physics_defaults(filename)
         else:
-            # No preview active - load fresh from file
-            filepath = self.ui._get_config_path(filename, ui_state.load_category)
-            config = self.config_saver.load_from_file(filepath)
-            if config is not None:
-                rule = self._apply_config_with_locks(
-                    config, ui_state,
-                    watercolor_override=ui_state.load_watercolor_override
-                )
-                self._push_and_apply_rule(rule, ui_state)
-                if fh:
-                    fh.apply_for_config(config, filepath, ui_state)
-                print(f"Config loaded from {filepath}")
-                self.ui.update_physics_defaults(filename)
-            else:
-                print(f"Failed to load config from {filepath}")
+            print(f"Failed to load config from {filepath}")
 
     def _handle_preview_commands(self, ui_state):
-        """Handle config preview (hover in Load submenu) and clear preview."""
-        fh = self.field_handler
+        """Handle config preview (hover in Load submenu) and clear preview.
 
-        # Clear preview must happen before new preview
-        if ui_state.request_clear_preview:
-            if self.preview_rule_active:
-                if self._preview_rule_was_pushed:
-                    prev_rule, prev_seed = self.rule_manager.pop_rule()
-                    if prev_seed is not None:
-                        ui_state.sim.rule_seed = prev_seed
-                    self.sim.apply_rule(prev_rule)
-                self.preview_rule_active = False
-                self._preview_rule_was_pushed = False
+        Model: enter -> cache current config, load preview; change -> load new
+        preview (cache untouched); leave -> load cached config. Preview never
+        touches the RuleManager undo stack.
+        """
+        # A "change" (both flags set this frame, e.g. hovering A -> B) must NOT
+        # restore-then-reload: that would re-capture the override-mutated live
+        # state as the "original". Only a genuine leave (clear with no new
+        # preview) restores. On a change we just load the new config over the
+        # top; the remembered original stays untouched.
+        if ui_state.request_clear_preview and not ui_state.request_preview_config:
+            if self._preview_restore is not None:
+                config, field_snapshot = self._preview_restore
+                self.load_full_config(
+                    config, ui_state,
+                    field_snapshot=field_snapshot,
+                    watercolor_override=ui_state.preview_watercolor_override,
+                    push_rule=False,
+                )
+                self._preview_restore = None
 
-                if fh:
-                    fh.restore_from_preview(ui_state)
-
-        # New preview
+        # New / changed preview
         if ui_state.request_preview_config:
             filename = ui_state.preview_filename
             category = ui_state.preview_category
@@ -470,21 +517,28 @@ class CommandHandler:
                 filepath = self.ui._get_config_path(filename, category)
                 config = self.config_saver.load_from_file(filepath)
                 if config and config.rule is not None:
-                    # Cache field texture on first preview entry
-                    if not self.preview_rule_active and fh:
-                        fh.cache_for_preview(ui_state)
+                    # Cache the current live config on first preview entry only.
+                    if self._preview_restore is None:
+                        self._capture_preview_restore(ui_state)
+                    self.load_full_config(
+                        config, ui_state,
+                        json_filepath=filepath,
+                        watercolor_override=ui_state.preview_watercolor_override,
+                        push_rule=False,
+                    )
 
-                    pls = self.param_lock_service
-                    if not (pls and pls.should_block_rule_push()):
-                        if not (pls and pls.is_locked('rule_seed')):
-                            ui_state.sim.rule_seed = config.rule_seed
-                        self.rule_manager.push_rule(config.rule, ui_state.sim.rule_seed)
-                        self.sim.apply_rule(config.rule)
-                        self._preview_rule_was_pushed = True
-                    self.preview_rule_active = True
-
-                    if fh:
-                        fh.apply_for_config(config, filepath, ui_state)
+    def _capture_preview_restore(self, ui_state):
+        """Snapshot the current live state as the preview's remembered original."""
+        fh = self.field_handler
+        current_rule = self.rule_manager.get_current_rule()
+        field_snapshot = fh.snapshot_field_only(ui_state) if fh else None
+        field_strengths = (
+            ui_state.preferences.force_field_strength,
+            ui_state.preferences.strafe_field_strength,
+        )
+        config = self.config_saver.create_config(
+            ui_state.sim, current_rule, field_strengths=field_strengths)
+        self._preview_restore = (config, field_snapshot)
 
     def _handle_clipboard_commands(self, ui_state):
         """Handle config clipboard preview, load, and delete."""

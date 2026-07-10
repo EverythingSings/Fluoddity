@@ -120,7 +120,7 @@ class Sim:
             print(e)
 
     def entity_update(self, ctx: moderngl.Context,
-                      is_preview_active=False, field_texture_bound=False,
+                      field_texture_bound=False,
                       force_field_strength: float = 1.0,
                       strafe_field_strength: float = 1.0,
                       generics: tuple = None):
@@ -245,7 +245,6 @@ class Sim:
 
     def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
                prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-               is_preview_active = False,
                brush_mode: int = 0, fixed_direction_heading: float = 0.0,
                erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
                canvas_draw_active: bool = True,
@@ -265,7 +264,7 @@ class Sim:
         self.time = current_time - self.start_time_stamp
 
         # 1. Entity physics + atomic splat (reads canvas for sensors, writes trails atomically)
-        self.entity_update(ctx, is_preview_active,
+        self.entity_update(ctx,
                            field_texture_bound=field_texture is not None,
                            force_field_strength=force_field_strength,
                            strafe_field_strength=strafe_field_strength,

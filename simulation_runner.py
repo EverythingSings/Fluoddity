@@ -287,7 +287,6 @@ class SimulationRunner:
             prev_mouse_pos=self.prev_mouse_tex_coords,
             draw_size=ui_state.preferences.draw_size,
             draw_power=effective_draw_power,
-            is_preview_active=self.command_handler.preview_rule_active,
             brush_mode=brush_mode,
             fixed_direction_heading=fixed_heading,
             erase_mode=canvas_erase,

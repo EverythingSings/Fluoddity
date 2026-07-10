@@ -129,10 +129,8 @@ class UI(
         # Load submenu preview state
         self.config_files: list[str] = []  # List of available config filenames (DEPRECATED: use config_files_by_category)
         self.config_files_by_category: dict[str, list[str]] = {}  # Config filenames organized by category (Core/Custom/Advanced)
-        self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs (keys: "Category/filename")
+        self.cached_configs: dict[str, PhysicsConfig] = {}  # Cached decoded configs (keys: "Category/filename") — display + hover validity only
         self.load_submenu_was_open = False  # Track submenu open state
-        self.cached_config: str | None = None  # JSON string of config when menu opened
-        self.preview_rule_pushed: bool = False  # Whether we pushed a preview rule
         self.currently_previewing: str | None = None  # Currently hovered config filename
         self.currently_previewing_category: str | None = None  # Category of currently hovered config
         self.currently_open_project: str = "_Default"  # Currently open project name
@@ -237,6 +235,7 @@ class UI(
         self._delete_category = ""  # Category for delete operation
         self._preview_filename = ""
         self._preview_category = ""  # Category for preview operation
+        self._preview_watercolor_override: bool | None = None  # Session watercolor mode for preview load/restore
 
         # Field loader one-shot flags
         self._request_load_force_field_image = False
@@ -499,6 +498,7 @@ class UI(
         self.state.delete_category = self._delete_category
         self.state.preview_filename = self._preview_filename
         self.state.preview_category = self._preview_category
+        self.state.preview_watercolor_override = self._preview_watercolor_override
         self.state.load_watercolor_override = self._load_watercolor_override
 
         # Transfer config clipboard flags
@@ -565,6 +565,7 @@ class UI(
         self._delete_category = ""
         self._preview_filename = ""
         self._preview_category = ""
+        self._preview_watercolor_override = None
         self._load_watercolor_override = None
 
         # Reset config clipboard flags

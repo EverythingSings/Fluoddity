@@ -23,10 +23,6 @@ class FieldHandler:
         self.param_lock_service = param_lock_service
         self.cache = FieldTextureCache(max_size=20)
 
-        # File preview cached state
-        self._cached_field_data = None
-        self._cached_field_strengths = None
-
         # Clipboard preview cached state
         self._clipboard_cached_field_data = None
         self._clipboard_cached_field_strengths = None
@@ -205,32 +201,19 @@ class FieldHandler:
         if self._has_field_tex:
             self.adv_draw.clear_fields()
 
-    # --- File preview cache/restore ---
+    # --- Preview snapshot (side-effect-free) ---
 
-    def cache_for_preview(self, ui_state):
-        """Cache current field state before starting file preview."""
+    def snapshot_field_only(self, ui_state):
+        """Snapshot the current field texture data for config preview.
+
+        Unlike snapshot_with_strengths(), this does NOT touch the Ctrl+C/Ctrl+V
+        clipboard cache. Returns the raw field data (np.ndarray) or None if the
+        field texture is uninitialized. Field strengths are captured separately
+        into the previewed config's force/strafe_field_strength.
+        """
         if self._has_field_tex:
-            self._cached_field_data = self.adv_draw.snapshot_field_data()
-        else:
-            self._cached_field_data = None
-        self._cached_field_strengths = (
-            ui_state.preferences.force_field_strength,
-            ui_state.preferences.strafe_field_strength,
-        )
-
-    def restore_from_preview(self, ui_state):
-        """Restore cached field state when clearing file preview."""
-        if self._has_field_tex and self._cached_field_data is not None:
-            self.adv_draw.write_field_data(self._cached_field_data)
-
-        if self._cached_field_strengths is not None:
-            ui_state.preferences.force_field_strength = self._cached_field_strengths[0]
-            ui_state.preferences.strafe_field_strength = self._cached_field_strengths[1]
-
-    def discard_preview_cache(self):
-        """Discard cached field state (preview was finalized via load)."""
-        self._cached_field_data = None
-        self._cached_field_strengths = None
+            return self.adv_draw.snapshot_field_data()
+        return None
 
     # --- Clipboard preview cache/restore ---
 
