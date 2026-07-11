@@ -155,6 +155,16 @@ class VoxelGrid:
         # Memory barrier so subsequent reads see the writes
         self.ctx.memory_barrier()
 
+    # ------------------------------------------------------------------ cleanup
+    def cleanup(self):
+        """Release all GPU resources (3D textures + compute programs)."""
+        for attr in ('density', 'color_x', 'color_y', 'majorant',
+                     '_clear_program', '_splat_program'):
+            obj = getattr(self, attr, None)
+            if obj is not None:
+                obj.release()
+                setattr(self, attr, None)
+
     # ------------------------------------------------------- shader loading
     @staticmethod
     def _read_shader(name: str) -> str:

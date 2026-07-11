@@ -118,6 +118,30 @@ class VolumeRenderer:
         except Exception as e:
             print(f"VolumeRenderer shader reload failed: {e}")
 
+    def cleanup(self):
+        """Release all owned GPU resources.
+
+        Releases the accumulation buffer and compute programs, then cascades
+        into the voxel grid and majorant builder. Does NOT release
+        ``_skybox_tex`` — that texture is owned externally (by
+        ``TracerInterface``) and set via ``set_skybox_texture``.
+        """
+        if getattr(self, '_accum_tex', None) is not None:
+            self._accum_tex.release()
+            self._accum_tex = None
+            self._accum_size = (0, 0)
+        for attr in ('_pathtrace_program', '_resolve_program'):
+            obj = getattr(self, attr, None)
+            if obj is not None:
+                obj.release()
+                setattr(self, attr, None)
+        if getattr(self, 'grid', None) is not None:
+            self.grid.cleanup()
+            self.grid = None
+        if getattr(self, 'majorant_builder', None) is not None:
+            self.majorant_builder.cleanup()
+            self.majorant_builder = None
+
     def set_skybox_texture(self, tex: moderngl.Texture | None):
         """Set the skybox texture for photosphere mode (or None to disable)."""
         self._skybox_tex = tex

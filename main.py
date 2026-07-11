@@ -1048,6 +1048,10 @@ class App:
         if self._pathtracer_interface is not None:
             self._pathtracer_interface.cleanup()
             self._pathtracer_interface = None
+        # Tear down the volumetric tracer's GPU resources (previously leaked at exit)
+        if ti is not None:
+            ti.cleanup()
+            self.ui._tracer_interface = None
         self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()
         self.ui.cleanup()

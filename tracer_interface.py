@@ -128,8 +128,17 @@ class TracerInterface:
             majorant_resolution=(m, m, m),
         )
 
+    def _ensure_tonemap_program(self):
+        """Recompile tonemap.comp if it was released by cleanup()."""
+        if getattr(self, '_tonemap_program', None) is None:
+            tonemap_path = os.path.join(_VOLRENDER_SHADER_DIR, "tonemap.comp")
+            with open(tonemap_path, 'r') as f:
+                tonemap_src = f.read()
+            self._tonemap_program = self.ctx.compute_shader(tonemap_src)
+
     def _ensure_renderer(self):
         """Lazily create the VolumeRenderer, or recreate if resolutions changed."""
+        self._ensure_tonemap_program()
         target_params = self._current_grid_params()
 
         if self._renderer is not None:
@@ -138,12 +147,17 @@ class TracerInterface:
                     and current.effective_color_resolution == target_params.effective_color_resolution
                     and current.majorant_resolution == target_params.majorant_resolution):
                 return  # No change needed
-            # Resolutions changed — destroy and recreate
+            # Resolutions changed — destroy and recreate.
+            # Release the old renderer's GPU resources before dropping it,
+            # otherwise its 3D textures + compute programs leak until GC.
+            self._renderer.cleanup()
             self._renderer = None
             self._rendering = False
             self._render_complete = False
 
         self._renderer = VolumeRenderer(self.ctx, target_params)
+        # (skybox/photosphere/DOF are re-pushed by _apply_renderer_state on
+        #  the next render, so no need to re-apply them to the fresh renderer here)
 
     def _ensure_textures(self, width: int, height: int):
         """Allocate or reallocate HDR target and LDR display textures."""
@@ -462,6 +476,34 @@ class TracerInterface:
         """
         self._tonemap_to_display()
         return self._display_tex
+
+    # ------------------------------------------------------------ lifecycle
+    @staticmethod
+    def is_available() -> bool:
+        """The volumetric tracer is pure GL compute — always available."""
+        return True
+
+    def cleanup(self):
+        """Release all owned GPU resources.
+
+        Cascades into the VolumeRenderer, then releases the tonemap program,
+        HDR/LDR textures, and the skybox texture (owned here). Safe to call
+        more than once. After cleanup the interface can lazily recreate its
+        renderer on the next render.
+        """
+        if self._renderer is not None:
+            self._renderer.cleanup()
+            self._renderer = None
+        for attr in ('_tonemap_program', '_target_tex', '_display_tex',
+                     '_skybox_tex'):
+            obj = getattr(self, attr, None)
+            if obj is not None:
+                obj.release()
+                setattr(self, attr, None)
+        self._display_size = (0, 0)
+        self._rendering = False
+        self._render_complete = False
+        self._samples_done = 0
 
     # ------------------------------------------------------------ properties
     @property

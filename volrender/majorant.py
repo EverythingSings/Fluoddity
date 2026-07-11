@@ -80,6 +80,12 @@ class MajorantBuilder:
 
         self.ctx.memory_barrier()
 
+    def cleanup(self):
+        """Release the compute program."""
+        if getattr(self, '_program', None) is not None:
+            self._program.release()
+            self._program = None
+
     def read_global_max(self, grid) -> float:
         """CPU readback of the global maximum majorant value (diagnostic).
 
