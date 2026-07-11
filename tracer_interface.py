@@ -505,6 +505,33 @@ class TracerInterface:
         self._render_complete = False
         self._samples_done = 0
 
+    # -------------------------------------------------- Renderer protocol shims
+    # These give TracerInterface the uniform names the `Renderer` protocol and
+    # `RendererHost` drive it through. They alias the volumetric-specific
+    # methods/state above so the host doesn't special-case this backend.
+    def reset_accumulation(self) -> None:
+        """Protocol alias for reset_realtime_accumulation()."""
+        self.reset_realtime_accumulation()
+
+    def force_rebuild(self) -> None:
+        """No-op: the volumetric tracer has no acceleration structure to rebuild."""
+        pass
+
+    @property
+    def gas_time_ms(self) -> float:
+        """No GAS in the volumetric tracer."""
+        return 0.0
+
+    @property
+    def render_time_ms(self) -> float:
+        """The volumetric tracer does not currently expose per-frame timing."""
+        return 0.0
+
+    @property
+    def sample_count(self) -> int:
+        """Samples accumulated so far (protocol alias for samples_done)."""
+        return self._samples_done
+
     # ------------------------------------------------------------ properties
     @property
     def display_texture(self) -> moderngl.Texture | None:
