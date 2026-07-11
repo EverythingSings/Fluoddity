@@ -2,5 +2,10 @@
 image pipeline / overlay compositor (Step 7 of the modularity refactor)."""
 from .renderer import Renderer, RenderCamera, VideoStrategy
 from .host import RendererHost
+from .image_pipeline import ImagePipeline, OverlayCompositor
+from .video_strategies import (VideoContext, TracerVideoStrategy,
+                               OptixPtVideoStrategy)
 
-__all__ = ['Renderer', 'RenderCamera', 'VideoStrategy', 'RendererHost']
+__all__ = ['Renderer', 'RenderCamera', 'VideoStrategy', 'RendererHost',
+           'ImagePipeline', 'OverlayCompositor', 'VideoContext',
+           'TracerVideoStrategy', 'OptixPtVideoStrategy']

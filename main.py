@@ -140,6 +140,9 @@ class App:
         self.last_update_time = time.time()
         self.last_orbit_frame_count = 0  # For frame-synced orbit stepping
 
+        # Active renderer video strategy (built at recording start, cleared at stop)
+        self.active_video_strategy = None
+
         # Track user's desired settings (for restoration after recording)
         self.user_speedmult = 1
         self.was_recording = False
@@ -334,9 +337,8 @@ class App:
             self.user_speedmult = ui_state.preferences.rendering.speedmult
             self.user_motion_blur = ui_state.preferences.rendering.motion_blur
             self.user_blur_quality = ui_state.preferences.rendering.blur_quality
-            # Initialize tracer video state when starting a tracer-mode recording
+            # Build the renderer's video strategy when starting a recording
             if tracer_video_active:
-                self.sim_runner.init_tracer_video_state()
                 # Ensure TracerInterface is created
                 if self.ui._tracer_interface is None:
                     from tracer_interface import TracerInterface
@@ -345,9 +347,12 @@ class App:
                 # Sync DOF from camera state
                 self.ui._tracer_interface.aperture = ui_state.camera.aperture
                 self.ui._tracer_interface.focal_plane_depth = ui_state.camera.focal_plane_depth
+                self.active_video_strategy = self.sim_runner.make_tracer_video_strategy(
+                    self.ui._tracer_interface)
             elif optix_pt_video_active:
-                # Initialize OptiX path tracer video state
-                self.sim_runner.init_optix_pt_video_state()
+                # Build OptiX path tracer offline video strategy
+                self.active_video_strategy = self.sim_runner.make_optix_pt_video_strategy(
+                    self._pathtracer_interface)
             elif (ui_state.camera.optix_enabled
                   and ui_state.preferences.optix.rt_mode == 0
                   and self._pathtracer_interface is not None):
@@ -359,7 +364,9 @@ class App:
             ui_state.preferences.rendering.speedmult = self.user_speedmult
             ui_state.preferences.rendering.motion_blur = self.user_motion_blur
             ui_state.preferences.rendering.blur_quality = self.user_blur_quality
-            # Invalidate cached texture — FrameAssembler will recreate resources
+            # Recording ended — drop the active video strategy
+            self.active_video_strategy = None
+            # Invalidate cached texture — the image pipeline recreates resources
             # when total_samples changes, releasing the old texture
             self.camera.assembled_texture = None
             # Restore AO rays if we overrode them
@@ -376,11 +383,11 @@ class App:
 
         if is_recording:
             if tracer_video_active:
-                # Tracer mode: physics steps are managed by run_tracer_video_frame
+                # Tracer mode: physics steps are managed by the video strategy
                 ui_state.preferences.rendering.speedmult = 1
                 ui_state.preferences.rendering.motion_blur = False
             elif optix_pt_video_active:
-                # OptiX PT mode: physics steps managed by run_optix_pt_video_frame
+                # OptiX PT mode: physics steps managed by the video strategy
                 ui_state.preferences.rendering.speedmult = 1
                 ui_state.preferences.rendering.motion_blur = False
             else:
@@ -502,9 +509,10 @@ class App:
 
         if tracer_video_active and ui_state.sim.going:
             # Tracer video mode: progressive path tracing with interleaved physics
-            tracer_frame = self.sim_runner.run_tracer_video_frame(
-                ui_state, self.ui._tracer_interface
-            )
+            if self.active_video_strategy is None:
+                self.active_video_strategy = self.sim_runner.make_tracer_video_strategy(
+                    self.ui._tracer_interface)
+            tracer_frame = self.active_video_strategy.run_frame(ui_state)
             if tracer_frame is not None:
                 # A complete output frame is ready — send to video recorder
                 self.video_service.process_frame(
@@ -516,12 +524,13 @@ class App:
                 )
         elif optix_pt_video_active and ui_state.sim.going:
             # OptiX path tracer video mode: offline rendering with motion blur
-            pt_frame_hdr = self.sim_runner.run_optix_pt_video_frame(
-                ui_state, self._pathtracer_interface
-            )
+            if self.active_video_strategy is None:
+                self.active_video_strategy = self.sim_runner.make_optix_pt_video_strategy(
+                    self._pathtracer_interface)
+            pt_frame_hdr = self.active_video_strategy.run_frame(ui_state)
             if pt_frame_hdr is not None:
-                # Tonemap HDR frame through frame assembler
-                pt_frame = self.camera.frame_assembler.assemble_frame(
+                # Tonemap HDR frame through the image pipeline
+                pt_frame = self.camera.image_pipeline.assemble_frame(
                     pt_frame_hdr,
                     total_samples=1,
                     current_sample_index=0,
@@ -690,8 +699,8 @@ class App:
                 and (pt.preview_active or pt.preview_has_result)
                 and pt.display_texture is not None
                 and ui_state.preferences.optix.rt_mode == 0):
-            # Run HDR preview texture through frame assembler for tonemapping
-            tonemapped = self.camera.frame_assembler.assemble_frame(
+            # Run HDR preview texture through the image pipeline for tonemapping
+            tonemapped = self.camera.image_pipeline.assemble_frame(
                 pt.display_texture,
                 total_samples=1,
                 current_sample_index=0,
@@ -747,16 +756,36 @@ class App:
                 ski = p.tracer.sky_intensity
                 sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
+        # Build overlay markup params (sweep reticle + draw ring + field overlay).
+        # These composite over the finished frame for DISPLAY only; the recorded
+        # frame stays markup-free. Draw ring is suppressed while recording/
+        # screenshotting/sweeping (matches the old _get_trail_draw_radius gating).
+        adv = ui_state.preferences.advanced_drawing
+        adv_active = adv.enabled
+        trail_draw_radius = 0.0
+        if (draw_trail_mode and not self.video_service.is_active()
+                and not self.screenshot_in_progress
+                and not ui_state.sim.parameter_sweeps_enabled):
+            trail_draw_radius = ui_state.preferences.ui_windows.draw_size
+        overlay_params = {
+            'sweep_mode': sweep_mode,
+            'sweep_reticle_pos': sweep_reticle_pos,
+            'sweep_reticle_visible': sweep_reticle_visible,
+            'trail_draw_radius': trail_draw_radius,
+            'field_texture': (self.advanced_drawing_processor.field_texture
+                              if self.advanced_drawing_processor is not None else None),
+            'advanced_drawing_resources_initialized': (
+                self.advanced_drawing_processor is not None
+                and self.advanced_drawing_processor.field_texture is not None),
+            'draw_target_overlay_opacity': (
+                adv.draw_target_overlay_opacity if adv_active else 0.0),
+        }
+
         self.camera.render(
             sim_going=ui_state.sim.going,
-            sweep_mode=sweep_mode,
-            sweep_reticle_pos=sweep_reticle_pos,
-            sweep_reticle_visible=sweep_reticle_visible,
             screen_aspect=screen_aspect,
             watercolor_mode=ui_state.sim.watercolor_mode,
             ink_weight=ui_state.sim.ink_weight,
-            draw_trail_mode=draw_trail_mode,
-            draw_size=ui_state.preferences.ui_windows.draw_size,
             mouse_screen_coords=mouse_screen_coords,
             exposure=ui_state.preferences.rendering.exposure,
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
@@ -768,7 +797,8 @@ class App:
             inv_view_proj=inv_view_proj,
             sdf_sun_dir=sdf_sun_dir,
             sdf_sun_color=sdf_sun_color,
-            sdf_sky_color=sdf_sky_color
+            sdf_sky_color=sdf_sky_color,
+            overlay_params=overlay_params,
         )
 
     def _save_screenshot(self, ui_state):

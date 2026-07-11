@@ -1,5 +1,8 @@
-"""Simulation runner: physics stepping, frame assembly, and video recording."""
-import math
+"""Simulation runner: physics stepping and frame assembly (normal render path).
+
+Renderer-specific offline video paths now live behind the VideoStrategy
+protocol (see rendering/video_strategies.py); this runner only builds them.
+"""
 import glfw
 import numpy as np
 
@@ -26,6 +29,31 @@ class SimulationRunner:
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
 
+    def make_video_context(self):
+        """Build the shared VideoContext used by renderer video strategies.
+
+        Carries this runner's sim/camera/controller-cam/window plus the
+        physics-step callback so a strategy can drive interleaved physics.
+        """
+        from rendering import VideoContext
+        return VideoContext(
+            sim=self.sim,
+            camera=self.camera,
+            controller_cam=self.controller_cam,
+            window=self.window,
+            run_physics_step=self._run_physics_step,
+        )
+
+    def make_tracer_video_strategy(self, tracer_interface):
+        """Create a volumetric-tracer video strategy bound to this runner."""
+        from rendering import TracerVideoStrategy
+        return TracerVideoStrategy(self.make_video_context(), tracer_interface)
+
+    def make_optix_pt_video_strategy(self, pt_interface):
+        """Create an OptiX path-tracer offline video strategy bound to this runner."""
+        from rendering import OptixPtVideoStrategy
+        return OptixPtVideoStrategy(self.make_video_context(), pt_interface)
+
     def run_simulation_frame(self, ui_state, sweep_mode, sweep_reticle_pos,
                               sweep_reticle_visible, screen_aspect,
                               watercolor_mode=False,
@@ -36,12 +64,6 @@ class SimulationRunner:
         self.camera.watercolor_mode = watercolor_mode
         speedmult = ui_state.preferences.rendering.speedmult
         motion_blur = ui_state.preferences.rendering.motion_blur
-
-        # Calculate mouse screen coordinates for draw overlay
-        width, height = glfw.get_framebuffer_size(self.window)
-        mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
-        mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
-        mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
 
         # Calculate draw mode parameters
         draw_mode, mouse_tex_coords, draw_power_value = self._compute_draw_params(ui_state)
@@ -118,11 +140,8 @@ class SimulationRunner:
             self.sim.clear_canvas()
             self.advanced_drawing_processor.clear_fields()
 
-        # Build shared frame assembly kwargs (used by both paths)
-        assemble_kwargs = self._build_assemble_kwargs(
-            ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
-            screen_aspect, mouse_screen_coords
-        )
+        # Build shared image-pipeline kwargs (used by both paths)
+        assemble_kwargs = self._build_assemble_kwargs(ui_state)
 
         if motion_blur:
             self._run_with_motion_blur(
@@ -158,30 +177,15 @@ class SimulationRunner:
 
         return draw_mode, mouse_tex_coords, draw_power_value
 
-    def _get_trail_draw_radius(self, ui_state):
-        """Calculate trail draw radius (0 when recording, screenshotting, sweeping, or not in Draw Trail mode)."""
-        if ui_state.preferences.ui_windows.mouse_mode != "Draw Trail":
-            return 0
-        if self.video_service.is_active():
-            return 0
-        if self._screenshot_in_progress:
-            return 0
-        if ui_state.sim.parameter_sweeps_enabled:
-            return 0
-        return ui_state.preferences.ui_windows.draw_size
+    def _build_assemble_kwargs(self, ui_state):
+        """Build the kwargs dict for image_pipeline.assemble_frame().
 
-    def _build_assemble_kwargs(self, ui_state, sweep_mode, sweep_reticle_pos,
-                                sweep_reticle_visible, screen_aspect,
-                                mouse_screen_coords):
-        """Build the kwargs dict for frame_assembler.assemble_frame().
-
-        These are shared between motion-blur and non-motion-blur paths.
-        Only total_samples and current_sample_index differ between the two.
+        Shared between motion-blur and non-motion-blur paths; only
+        total_samples / current_sample_index differ between them. Overlay
+        markup (sweep reticle, draw ring, field overlay) is NOT included here —
+        it is composited for display only, so recorded frames stay markup-free.
         """
-        adv_prefs = ui_state.preferences
-        advanced_active = adv_prefs.advanced_drawing.enabled
-
-        # SDF preview params (for 3D mode)
+        # SDF preview params (for 3D GL-points mode)
         sdf_enabled = False
         inv_view_proj = None
         sdf_sun_dir = (0.577, 0.577, 0.577)
@@ -213,35 +217,20 @@ class SimulationRunner:
                 sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         return dict(
-            sweep_mode=sweep_mode,
-            sweep_reticle_pos=sweep_reticle_pos,
-            sweep_reticle_visible=sweep_reticle_visible,
-            screen_aspect=screen_aspect,
             brightness=self.camera.BRIGHTNESS,
             exposure=ui_state.preferences.rendering.exposure,
             ink_weight=ui_state.sim.ink_weight,
             watercolor_mode=ui_state.sim.watercolor_mode,
-            camera_position=tuple(self.camera.position),
-            camera_zoom=self.camera.zoom,
-            trail_draw_radius=self._get_trail_draw_radius(ui_state),
-            mouse_screen_coords=mouse_screen_coords,
-            canvas_resolution=self.sim.get_canvas_dimensions(),
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
-            brush_mode=adv_prefs.advanced_drawing.brush_mode if advanced_active else 0,
-            fixed_direction_heading=adv_prefs.advanced_drawing.fixed_direction_heading if advanced_active else 0.0,
-            field_texture=(self.advanced_drawing_processor.field_texture
-                           if self.advanced_drawing_processor is not None else None),
-            advanced_drawing_resources_initialized=(
-                self.advanced_drawing_processor is not None
-                and self.advanced_drawing_processor.field_texture is not None),
-            force_field_checked=adv_prefs.advanced_drawing.draw_force_field if advanced_active else False,
-            strafe_field_checked=adv_prefs.advanced_drawing.draw_strafe_field if advanced_active else False,
-            draw_target_overlay_opacity=adv_prefs.advanced_drawing.draw_target_overlay_opacity if advanced_active else 0.0,
             sdf_enabled=sdf_enabled,
             inv_view_proj=inv_view_proj,
             sdf_sun_dir=sdf_sun_dir,
             sdf_sun_color=sdf_sun_color,
             sdf_sky_color=sdf_sky_color,
+            bloom_enabled=ui_state.preferences.bloom.enabled,
+            bloom_threshold=ui_state.preferences.bloom.threshold,
+            bloom_intensity=ui_state.preferences.bloom.intensity,
+            bloom_radius=ui_state.preferences.bloom.radius,
         )
 
     def _run_physics_step(self, ui_state, draw_mode, mouse_tex_coords,
@@ -304,17 +293,14 @@ class SimulationRunner:
             self.command_handler.try_complete_entity_selection(ui_state)
 
     def _process_assembled_frame(self, assembled_tex, ui_state):
-        """Handle a completed assembled frame: store it and feed to video recorder."""
+        """Handle a completed finished frame: store it and feed to video recorder.
+
+        The frame is markup-free (bloom applied inside the ImagePipeline;
+        overlays composited separately for display), so it is exactly what the
+        video recorder should capture.
+        """
         if assembled_tex is None:
             return
-        if ui_state.preferences.bloom.enabled and not ui_state.sim.watercolor_mode:
-            assembled_tex = self.camera.apply_bloom(
-                assembled_tex,
-                ui_state.preferences.bloom.threshold,
-                ui_state.preferences.bloom.intensity,
-                ui_state.preferences.bloom.radius,
-                tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
-            )
         self.camera.assembled_texture = assembled_tex
         if self.video_service.is_active():
             # 3D view has opposite Y orientation in the FBO compared to 2D;
@@ -356,7 +342,7 @@ class SimulationRunner:
             if not skip_view_generation:
                 raw_view_tex = self.camera.generate_view_texture()
 
-                assembled_tex = self.camera.frame_assembler.assemble_frame(
+                assembled_tex = self.camera.image_pipeline.assemble_frame(
                     raw_view_tex,
                     total_samples=total_render_samples,
                     current_sample_index=render_sample_index,
@@ -388,7 +374,7 @@ class SimulationRunner:
         if not skip_view_generation:
             raw_view_tex = self.camera.generate_view_texture()
 
-            assembled_tex = self.camera.frame_assembler.assemble_frame(
+            assembled_tex = self.camera.image_pipeline.assemble_frame(
                 raw_view_tex,
                 total_samples=1,
                 current_sample_index=0,
@@ -400,188 +386,3 @@ class SimulationRunner:
         if self.plotting_manager is not None:
             self.plotting_manager.post_assembly_frame()
 
-    # ============================================================
-    #  Tracer video mode
-    # ============================================================
-
-    def init_tracer_video_state(self):
-        """Initialize tracer video recording state. Called once when recording starts."""
-        self._tracer_samples_done = 0
-        self._tracer_frame_started = False
-        self._tracer_physics_steps_done = 0
-
-    def run_tracer_video_frame(self, ui_state, tracer_interface):
-        """Run one app-frame of tracer video recording.
-
-        Accumulates 1 SPP per call. Runs physics steps at the correct cadence
-        so that each output video frame contains num_samples SPP spread over
-        physics_rate physics steps (motion blur).
-
-        The total physics_rate steps are distributed evenly across spp samples.
-        When physics_rate > spp, multiple physics steps run before each sample.
-        When physics_rate <= spp, one physics step runs every
-        ceil(spp / physics_rate) samples.
-
-        Returns the tonemapped display texture when an output frame is complete,
-        or None if still accumulating.
-        """
-        ti = tracer_interface
-        spp = ti.num_samples
-        physics_rate = ui_state.preferences.recording.motion_blur_samples
-
-        # --- Start a new output frame if needed ---
-        if not self._tracer_frame_started:
-            # Build the schedule: for each sample index, how many total physics
-            # steps should have been run BEFORE that sample is accumulated.
-            # Distributes physics_rate steps as evenly as possible across spp
-            # samples, ensuring all steps complete by the last sample.
-            # Uses (i+1) so that schedule[spp-1] = physics_rate.
-            self._tracer_schedule = []
-            for i in range(spp):
-                self._tracer_schedule.append(((i + 1) * physics_rate) // spp)
-            # Ensure at least 1 step at the start (the initial physics step)
-            self._tracer_schedule[0] = max(self._tracer_schedule[0], 1)
-
-            # Run initial physics step to advance simulation
-            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0, 0)
-
-            # Compute view_proj from the FPS camera
-            view_proj = self._tracer_compute_view_proj()
-
-            # Start the tracer render at (optionally scaled) window resolution
-            width, height = glfw.get_framebuffer_size(self.window)
-            scale = max(0.1, ti.resolution_scale)
-            rt_width = max(1, int(width * scale))
-            rt_height = max(1, int(height * scale))
-            cam_right, cam_up = self.camera.compute_fps_camera_basis(
-                self.controller_cam.dir, self.controller_cam.up
-            )
-            ti.start_video_render(
-                self.sim.get_entity_buffer(), self.sim.entity_count,
-                view_proj, rt_width, rt_height,
-                camera_right=cam_right, camera_up=cam_up
-            )
-            self._tracer_frame_started = True
-            self._tracer_samples_done = 0
-            self._tracer_physics_steps_done = 1
-
-        # --- Run any physics steps needed before this sample ---
-        target_steps = self._tracer_schedule[self._tracer_samples_done]
-        while self._tracer_physics_steps_done < target_steps:
-            self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                   self._tracer_physics_steps_done)
-            self._tracer_physics_steps_done += 1
-
-            # Re-splat entities with updated positions (keeps accumulation)
-            view_proj = self._tracer_compute_view_proj()
-            ti.re_splat(self.sim.get_entity_buffer(), self.sim.entity_count,
-                        view_proj)
-
-        # --- Accumulate 1 SPP ---
-        frame_complete = ti.tick_video()
-        self._tracer_samples_done += 1
-
-        if frame_complete:
-            # Output frame is ready — tonemap and return for video capture
-            display_tex = ti.tonemap_for_video()
-            self._tracer_frame_started = False
-            return display_tex
-
-        return None
-
-    def _tracer_compute_view_proj(self):
-        """Compute view_proj from the FPS camera for tracer rendering."""
-        cam = self.controller_cam
-        width, height = glfw.get_framebuffer_size(self.window)
-        aspect = width / max(height, 1)
-        return self.camera.compute_fps_view_proj(
-            cam.pos, cam.dir, cam.up, cam.fov, aspect
-        )
-
-    # ============================================================
-    #  OptiX path tracer video mode
-    # ============================================================
-
-    def init_optix_pt_video_state(self):
-        """Initialize OptiX path tracer video recording state."""
-        self._optix_pt_frame_started = False
-        self._optix_pt_substeps_done = 0
-        self._optix_pt_physics_steps_done = 0
-        self._optix_pt_total_substeps = 0
-        self._optix_pt_physics_per_substep = 0
-
-    def run_optix_pt_video_frame(self, ui_state, pt_interface):
-        """Run one app-frame of OptiX path tracer video recording.
-
-        Uses the PathTracerInterface's offline API to produce high-SPP frames
-        for video capture. Respects recording_motion_blur and
-        recording_blur_quality to control temporal blur. One render substep
-        per app frame keeps the UI responsive.
-
-        Returns the tonemapped display texture when an output frame is complete,
-        or None if still accumulating.
-        """
-        capture_spp = ui_state.preferences.optix.rt_preview_spp
-        physics_rate = ui_state.preferences.recording.motion_blur_samples  # total physics steps per output frame
-
-        if ui_state.preferences.recording.recording_motion_blur:
-            blur_quality = ui_state.preferences.recording.recording_blur_quality
-            # Render every blur_quality physics steps
-            total_substeps = max(1, physics_rate // max(blur_quality, 1))
-            physics_per_substep = blur_quality
-        else:
-            # No motion blur: render once at a single moment, advance physics all at once
-            total_substeps = 1
-            physics_per_substep = physics_rate
-
-        spp_per_substep = max(1, capture_spp // max(total_substeps, 1))
-
-        # --- Start a new output frame if needed ---
-        if not self._optix_pt_frame_started:
-            # Store computed values for use across subsequent app frames
-            self._optix_pt_total_substeps = total_substeps
-            self._optix_pt_physics_per_substep = physics_per_substep
-
-            # Run initial physics steps to advance simulation
-            for i in range(physics_per_substep):
-                self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0, i)
-
-            # Start offline render at (optionally scaled) window resolution
-            width, height = glfw.get_framebuffer_size(self.window)
-            scale = max(0.1, ui_state.preferences.optix.resolution_scale)
-            width = max(1, int(width * scale))
-            height = max(1, int(height * scale))
-            pt_interface.start_offline_render(
-                entity_buffer=self.sim.get_entity_buffer(),
-                entity_count=self.sim.entity_count,
-                width=width,
-                height=height,
-                total_substeps=total_substeps,
-                spp_per_substep=spp_per_substep,
-            )
-
-            # First substep: trace samples at current entity positions
-            cam = self.controller_cam
-            pt_interface.offline_substep(cam.pos, cam.dir, cam.up, cam.fov)
-
-            self._optix_pt_frame_started = True
-            self._optix_pt_substeps_done = 1
-            self._optix_pt_physics_steps_done = physics_per_substep
-            return None  # Still accumulating
-
-        # --- Subsequent substeps: physics step(s) + offline_substep ---
-        if self._optix_pt_substeps_done < self._optix_pt_total_substeps:
-            for i in range(self._optix_pt_physics_per_substep):
-                self._run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                       self._optix_pt_physics_steps_done)
-                self._optix_pt_physics_steps_done += 1
-
-            cam = self.controller_cam
-            pt_interface.offline_substep(cam.pos, cam.dir, cam.up, cam.fov)
-            self._optix_pt_substeps_done += 1
-            return None  # Still accumulating
-
-        # --- All substeps done: finish and return ---
-        display_tex = pt_interface.finish_offline_render(flip_y=False)
-        self._optix_pt_frame_started = False
-        return display_tex

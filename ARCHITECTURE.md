@@ -18,7 +18,7 @@ Fluoddity is a GPU-accelerated particle simulation for generative art. Thousands
         │             │                  │           │           │
    ┌────┴───┐   ┌─────┴──┐   ┌───────────┴──┐  ┌─────┴────┐  ┌───┴────┐
    │   UI   │   │  Sim   │   │    Camera    │  │ Services │  │ State  │
-   │(imgui) │   │ (GPU)  │   │(+FrameAssembler)│ │          │  │(dataclasses)│
+   │(imgui) │   │ (GPU)  │   │(+ImagePipeline)│ │          │  │(dataclasses)│
    └────────┘   └────────┘   └──────────────┘  └──────────┘  └────────┘
 ```
 
@@ -66,7 +66,7 @@ entity_update.glsl   (compute)  — particle sense → rule eval → forces/stra
 canvas_update_3d.glsl (compute)  — trail decay + diffusion into the other canvas buffer
 ```
 
-Then, to display, `Camera.generate_view_texture()` produces the view texture (2D `cam_brush` path, or the 3D path — GL_POINTS or a routed OptiX/path-tracer interface), and `FrameAssembler.assemble_frame()` composites it (temporal motion-blur accumulation, tonemap, gamma, emboss, reticle overlays). Bloom is applied as a post step.
+Then, to display, `Camera.generate_view_texture()` produces the view texture (2D `cam_brush` path, or the 3D path — GL_POINTS or a routed OptiX/path-tracer interface), and the **`ImagePipeline`** (`rendering/image_pipeline.py`) composites it (temporal motion-blur accumulation, tonemap, gamma, emboss/watercolor, SDF preview) **and applies bloom internally**, returning a *finished, markup-free* frame. UI overlay markup (sweep reticle, draw-trail ring, advanced-drawing field overlay) is then composited **for display only** by the **`OverlayCompositor`** — so recorded video and screenshots capture the clean frame. (This split replaced the old monolithic `FrameAssembler` + `frame_assembly.frag` in Step 7 of the modularity refactor.)
 
 > **Note:** Older docs referenced `fourier4_4.glsl` and an `entity_update → fourier4_4 → frame_assembly` chain. That is out of date; the diffusion shader is `fourier6_6.glsl` and it is *prepended into* `entity_update.glsl`, not a separate dispatch stage.
 
@@ -84,7 +84,7 @@ The OptiX path tracer is the **single OptiX renderer**. Its `three_d_rt_mode` pr
 
 The active OptiX renderer is routed to the camera through the single `camera.optix_interface` slot; `Camera` calls `.render_frame()` on it. The volumetric tracer is dispatched separately (fullscreen blit for preview, its own realtime tick, and its own video path).
 
-**There is still no common renderer interface.** The two surviving wrapper classes (`PathTracerInterface`, `TracerInterface`) independently re-implement the same informal contract (`is_available()`, `cleanup()`, `display_texture`, timing props, entity-buffer change detection). Their create/sync/release lifecycle lives inline in `orchestrate_frame()`. Unifying this behind one `Renderer` protocol with one owner is a primary goal of the refactor — see the inventory's Swappable section.
+**Renderer lifecycle + contract (`rendering/` package, Step 7).** A structural `Renderer` protocol (`rendering/renderer.py`) defines the shared contract (`is_available()`, `cleanup()`, `display_texture`, `reset_accumulation`, `force_rebuild`, timing props); both `PathTracerInterface` and `TracerInterface` conform. A **`RendererHost`** (`rendering/host.py`) owns the OptiX interface's whole lifecycle — lazy create, VRAM release on toggle-off, per-frame error recovery, preference sync, and preview — replacing the ~300-line if/else chain that used to live in `orchestrate_frame()`. `App._pathtracer_interface` is now a property aliasing `renderer_host.optix`. The two renderer-specific offline video paths moved behind a **`VideoStrategy`** (`rendering/video_strategies.py`: `TracerVideoStrategy`, `OptixPtVideoStrategy`), built by `SimulationRunner` and driven each frame via `App.active_video_strategy`. The `VolumeRenderer` VRAM leak (dropped renderer on grid-resolution change) is fixed by a `cleanup()` cascade (`VolumeRenderer` → `VoxelGrid` + `MajorantBuilder`) plus `TracerInterface.cleanup()`.
 
 ## File Map
 
@@ -95,7 +95,7 @@ Line counts are approximate and will drift; treat them as size signals.
 |------|-------|-------------|
 | `main.py` | 1175 | App orchestrator: GL/window bootstrap, frame loop, four state machines (screenshot, recording, render-queue, renderer lifecycle) |
 | `command_handler.py` | 730 | Processes one-shot UI commands (resets, config save/load, clipboard, mouse picking, previews, render-spec, field-image load) |
-| `simulation_runner.py` | 624 | Physics stepping + frame assembly; motion-blur/non-blur paths; renderer-specific video paths (tracer, OptiX PT) |
+| `simulation_runner.py` | ~385 | Physics stepping + normal-path frame assembly; motion-blur/non-blur paths. Builds renderer video strategies (the offline video logic itself lives in `rendering/video_strategies.py`) |
 | `camera_input.py` | 196 | WASD/QE camera + scroll-zoom (2D); 3D orbit controls (standalone functions) |
 | `controller_input.py` | 236 | Xbox gamepad FPS camera + face-button one-shots |
 
@@ -109,8 +109,9 @@ Line counts are approximate and will drift; treat them as size signals.
 ### Renderer Packages
 | Package | Lines | Description |
 |---------|-------|-------------|
+| `rendering/` | ~700 | Renderer protocol + lifecycle (Step 7): `renderer.py` (`Renderer` protocol, `RenderCamera`, `VideoStrategy`), `host.py` (`RendererHost` — OptiX lifecycle/prefs-sync/preview), `image_pipeline.py` (`ImagePipeline` accumulation+tonemap+bloom, `OverlayCompositor` display markup), `video_strategies.py` (`TracerVideoStrategy`, `OptixPtVideoStrategy`) |
 | `optix_pathtracer/` | ~3700 (excl. tests) | The single OptiX renderer (`renderer.py`, `cuda_src.py`, `sdf_scene.py`, `interop.py`) + step tests. `rt_mode` selects rasterize (0) / X-spp (1) / accumulate (2). |
-| `volrender/` | ~1096 | Standalone volumetric path tracer (`renderer.py`, `grid.py`, `majorant.py`, `camera.py`, `params.py`) + `shaders/`, `example/`, `tests/` |
+| `volrender/` | ~1096 | Standalone volumetric path tracer (`renderer.py`, `grid.py`, `majorant.py`, `camera.py`, `params.py`) + `shaders/`, `example/`, `tests/`. `VolumeRenderer`/`VoxelGrid`/`MajorantBuilder` now have a `cleanup()` cascade. |
 
 ### UI Package (`ui/`)
 Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixins, so every render method shares `self`. See [`ui/README.md`](ui/README.md).
@@ -141,7 +142,7 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 | File | Lines | Description |
 |------|-------|-------------|
 | `sim.py` | 914 | GPU particle simulation: buffers, compute dispatch, physics→uniform mapping, sweeps, rules (**user-owned**) |
-| `camera.py` | 557 | Camera state, coordinate transforms, view-texture generation (2D/3D), bloom hookup, screen rendering; owns `FrameAssembler` |
+| `camera.py` | ~490 | Camera state, coordinate transforms, view-texture generation (2D/3D), screen rendering; owns an `ImagePipeline` + `OverlayCompositor` (renders a finished frame, then composites display-only overlays) |
 
 ### Services (`services/`)
 | File | Lines | Description |
@@ -173,8 +174,7 @@ Plain dataclasses.
 | `advanced_drawing.py` | 359 | `AdvancedDrawingProcessor`: force/strafe field GPU textures + brush ops |
 | `ffmpeg_recorder.py` | 272 | Subprocess-pipe FFmpeg H.264 encoder |
 | `save_frame_gpu.py` | 251 | GPU screenshot with spatial supersampling |
-| `bloom.py` | 229 | Mip-chain bloom post-process |
-| `frame_assembler.py` | 226 | Motion-blur temporal accumulation + final composite; inline SDF preview raymarch |
+| `bloom.py` | 229 | Mip-chain bloom post-process (now driven by `rendering/ImagePipeline`) |
 | `field_texture_io.py` | 192 | Save/load float32 field as 16-bit PNG with range metadata; polar loader; resize |
 | `keybinding_management.py` | 146 | Rebindable keyboard shortcuts from `keyboard_controls.json` |
 | `paths.py` | 123 | Platform-aware paths (app dir vs `Documents/Fluoddity`); first-run init |
@@ -191,7 +191,9 @@ Plain dataclasses.
 | `camera.vert/.frag` | View texture → screen |
 | `cam_brush.vert/.frag` | Camera-space instanced particle rendering (2D view) |
 | `points_3d.vert/.frag` | GL_POINTS 3D particle rendering (baseline 3D backend) |
-| `frame_assembly.vert/.frag` | Final composite: tonemap, gamma, emboss, reticle; inline SDF preview (volrender includes prepended) |
+| `frame_assembly.vert` | Fullscreen-quad vertex shader shared by `image_pipeline.frag`, `overlay.frag`, and bloom |
+| `image_pipeline.frag` | Image-pipeline core: temporal accumulation + tonemap + gamma + emboss/watercolor + inline SDF preview (volrender includes prepended). Markup-free. |
+| `overlay.frag` | Display-only overlay pass: sweep reticle, draw-trail ring, advanced-drawing field overlay (composited over a finished frame) |
 | `bloom_downsample.frag / bloom_upsample.frag` | Bloom mip chain |
 | `field_drawing.frag` | Force/strafe field painting |
 | `field_override/march.frag` | Shader-driven field override (raymarched procedural field) |
@@ -199,7 +201,7 @@ Plain dataclasses.
 | `histogram_render.vert/.frag` | Plotting histogram rendering |
 | `tooltip_graphic.frag` | Animated physics-tooltip visualization |
 
-`volrender/shaders/` (`clear3d.comp`, `splat.comp`, `majorant.comp`, `pathtrace.comp`, `resolve.comp`, `tonemap.comp`, `common.glsl`, `volume_scene.glsl`) belong to the volumetric tracer. Note `common.glsl` and `volume_scene.glsl` are also prepended into `entity_update.glsl` and `frame_assembly.frag` — a cross-tree shader coupling.
+`volrender/shaders/` (`clear3d.comp`, `splat.comp`, `majorant.comp`, `pathtrace.comp`, `resolve.comp`, `tonemap.comp`, `common.glsl`, `volume_scene.glsl`) belong to the volumetric tracer. Note `common.glsl` and `volume_scene.glsl` are also prepended into `entity_update.glsl` and `image_pipeline.frag` — a cross-tree shader coupling.
 
 ## Data Flow: Physics Parameter
 
@@ -258,10 +260,10 @@ Physics parameters can vary spatially (X/Y sweep), by particle cohort, or by per
 Freeze selected parameters so they survive config loads (snapshot before `apply_config`, restore after). Toggled via Alt-click on widgets; locked widgets render in red. The service is self-contained but its callers are woven through the menu bar, field handler, physics window, slider widgets, and `main.py`.
 
 ### Motion Blur
-Temporal accumulation: run `speedmult` physics steps per display frame, render every `blur_quality`-th step, and blend via `FrameAssembler`. `SimulationRunner` handles both motion-blur and non-blur paths through shared helpers.
+Temporal accumulation: run `speedmult` physics steps per display frame, render every `blur_quality`-th step, and blend via the `ImagePipeline`. `SimulationRunner` handles both motion-blur and non-blur paths through shared helpers.
 
 ### Video Recording
-State machine (idle → optional pending wait → recording → finished) split between `CommandHandler` (`video_pending`) and `App` (cadence lock, start check, restore). Three video sub-modes: normal (FrameAssembler), volumetric-tracer video, and OptiX path-tracer offline video. Encoding: `VideoRecorderService` → `VidSaver` → `ffmpeg_recorder`.
+State machine (idle → optional pending wait → recording → finished) split between `CommandHandler` (`video_pending`) and `App` (cadence lock, start check, restore). Three video sub-modes: normal (`ImagePipeline`), volumetric-tracer video, and OptiX path-tracer offline video. The two renderer-specific paths live behind `VideoStrategy` (`rendering/video_strategies.py`), driven per frame via `App.active_video_strategy`. Recorded frames are markup-free (overlays composite for display only). Encoding: `VideoRecorderService` → `VidSaver` → `ffmpeg_recorder`.
 
 ### Scheduled / Batch Renders
 `RenderSpecService` captures a full app + GPU-buffer snapshot as a `.frs` directory. The Scheduled Renders window queues specs; `App`'s render-queue state machine (`loading → start_recording → recording → done`) loads each, records a video, advances, and closes (optionally shuts down the PC) when done.

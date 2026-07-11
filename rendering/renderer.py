@@ -107,25 +107,22 @@ class RenderCamera:
 class VideoStrategy(Protocol):
     """Per-renderer offline video driver.
 
-    Each renderer that supports offline recording returns one of these from
-    ``Renderer.video_strategy()``. The orchestrator calls ``begin`` once per
-    output frame, then ``substep`` once per app-frame until it returns True
-    (output frame complete), then ``finish`` to get the finished texture.
+    Each renderer that supports offline recording supplies one of these. The
+    orchestrator calls ``run_frame`` once per app-frame; it advances the
+    renderer's progressive/offline accumulation (running interleaved physics
+    steps as needed) and returns a finished, tonemapped texture when an output
+    video frame is complete, or ``None`` while still accumulating.
 
-    This replaces the two renderer-specific paths currently living in
+    This replaces the two renderer-specific paths that lived in
     ``simulation_runner`` (``run_tracer_video_frame`` / ``run_optix_pt_video_frame``).
     """
 
-    def begin(self, ui_state, run_physics_step) -> None:
-        """Start a new output frame (may run initial physics steps)."""
+    def init_frame_state(self) -> None:
+        """Reset per-recording frame state (called once when recording starts)."""
         ...
 
-    def substep(self, ui_state, run_physics_step) -> bool:
-        """Advance one app-frame. Return True when the output frame is complete."""
-        ...
-
-    def finish(self):
-        """Return the finished (tonemapped) texture for the completed frame."""
+    def run_frame(self, ui_state):
+        """Advance one app-frame; return the finished texture or None."""
         ...
 
 

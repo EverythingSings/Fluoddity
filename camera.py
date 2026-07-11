@@ -4,7 +4,7 @@ import numpy as np
 from utilities.gl_helpers import read_shader, tryset, tryset_mat4
 import moderngl
 from state import CameraState
-from utilities.frame_assembler import FrameAssembler
+from rendering import ImagePipeline, OverlayCompositor
 
 class Camera:
     def __init__(self, ctx, sim, window):
@@ -102,12 +102,13 @@ class Camera:
         # Empty VAO for GL_POINTS rendering (reads from SSBO via gl_VertexID)
         self.points_3d_vao = self.ctx.vertex_array(self.points_3d_program, []) if self.points_3d_program else None
 
-        # Frame assembler (temporal accumulation + gamma correction)
-        self.frame_assembler = FrameAssembler(self.ctx, self.cam_brush_target)
+        # Image pipeline (temporal accumulation + tonemap + watercolor + SDF +
+        # bloom) and the overlay compositor (sweep/draw/field markup for display).
+        # The pipeline produces a markup-free finished frame; overlays are added
+        # only for on-screen display, so recorded frames stay clean.
+        self.image_pipeline = ImagePipeline(self.ctx)
+        self.overlay_compositor = OverlayCompositor(self.ctx)
         self.assembled_texture = None
-
-        # Bloom processor (lazily initialized on first use)
-        self._bloom_processor = None
 
     @staticmethod
     def _look_at(eye, target, up):
@@ -190,7 +191,7 @@ class Camera:
 
             self.ctx.disable(moderngl.BLEND)
 
-            # Return raw texture (NO gamma correction - that happens in FrameAssembler)
+            # Return raw texture (NO gamma correction - that happens in ImagePipeline)
             return self.cam_brush_target
         else:
             return self.sim.view_tex
@@ -268,15 +269,42 @@ class Camera:
         self.fov_3d = state.fov
         self.optix_enabled = state.optix_enabled
 
-    def apply_bloom(self, texture, threshold, intensity, radius,
-                    tonemap_softness=3.0):
-        """Apply bloom post-processing. Lazily initializes GPU resources."""
-        if self._bloom_processor is None:
-            from utilities.bloom import BloomProcessor
-            self._bloom_processor = BloomProcessor(self.ctx)
-        return self._bloom_processor.process(
-            texture, threshold, intensity, radius,
-            tonemap_softness=tonemap_softness,
+    def _composite_overlays(self, finished_tex, overlay_params, watercolor_mode,
+                            screen_aspect, exposure, mouse_screen_coords):
+        """Composite UI markup over a finished frame for display only.
+
+        Returns the composited display texture, or ``finished_tex`` unchanged
+        when there is no markup to draw. Never mutates the recorded frame.
+        """
+        if not overlay_params:
+            return finished_tex
+        comp = self.overlay_compositor
+        if not comp.has_markup(
+                sweep_mode=overlay_params.get('sweep_mode', False),
+                sweep_reticle_visible=overlay_params.get('sweep_reticle_visible', False),
+                trail_draw_radius=overlay_params.get('trail_draw_radius', 0.0),
+                field_overlay_active=(
+                    overlay_params.get('advanced_drawing_resources_initialized', False)
+                    and overlay_params.get('draw_target_overlay_opacity', 0.0) > 0.0)):
+            return finished_tex
+        return comp.composite(
+            finished_tex,
+            sweep_mode=overlay_params.get('sweep_mode', False),
+            sweep_reticle_pos=overlay_params.get('sweep_reticle_pos', (0.5, 0.5)),
+            sweep_reticle_visible=overlay_params.get('sweep_reticle_visible', False),
+            screen_aspect=screen_aspect,
+            watercolor_mode=watercolor_mode,
+            exposure=exposure,
+            trail_draw_radius=overlay_params.get('trail_draw_radius', 0.0),
+            mouse_screen_coords=mouse_screen_coords,
+            camera_position=tuple(self.position),
+            camera_zoom=self.zoom,
+            canvas_resolution=self.sim.get_canvas_dimensions(),
+            field_texture=overlay_params.get('field_texture', None),
+            advanced_drawing_resources_initialized=overlay_params.get(
+                'advanced_drawing_resources_initialized', False),
+            draw_target_overlay_opacity=overlay_params.get(
+                'draw_target_overlay_opacity', 0.0),
         )
 
     def render(self, sim_going: bool = True,
@@ -291,50 +319,51 @@ class Camera:
                 sdf_enabled: bool = False, inv_view_proj=None,
                 sdf_sun_dir: tuple = (0.577, 0.577, 0.577),
                 sdf_sun_color: tuple = (3.0, 3.0, 3.0),
-                sdf_sky_color: tuple = (0.5, 0.7, 1.0)):
+                sdf_sky_color: tuple = (0.5, 0.7, 1.0),
+                overlay_params: dict = None):
         self.watercolor_mode = watercolor_mode
         self.ink_weight = ink_weight
 
-        # ALWAYS use assembled texture when simulation is running
-        # When paused, regenerate view to allow camera panning/zooming
+        # ALWAYS use the (markup-free) finished texture when the sim is running.
+        # When paused, regenerate the view so camera panning/zooming still works.
         if sim_going and self.assembled_texture is not None:
             TEX_TO_VIEW = self.assembled_texture
         else:
-            # When paused or no assembled texture yet, generate fresh frame and apply gamma
+            # Paused / no finished texture yet: generate a fresh finished frame.
             raw_tex = self.generate_view_texture()
-            # Apply gamma correction via frame assembler (single sample mode)
-            # Pass draw_size only when in draw trail mode
-            trail_draw_radius = draw_size if draw_trail_mode else 0.0
-            TEX_TO_VIEW = self.frame_assembler.assemble_frame(
+            TEX_TO_VIEW = self.image_pipeline.assemble_frame(
                 raw_tex,
                 total_samples=1,
                 current_sample_index=0,
-                sweep_mode=sweep_mode,
-                sweep_reticle_pos=sweep_reticle_pos,
-                sweep_reticle_visible=sweep_reticle_visible,
-                screen_aspect=screen_aspect,
                 brightness=self.BRIGHTNESS,
                 exposure=exposure,
                 ink_weight=self.ink_weight,
                 watercolor_mode=watercolor_mode,
-                camera_position=tuple(self.position),
-                camera_zoom=self.zoom,
-                trail_draw_radius=trail_draw_radius,
-                mouse_screen_coords=mouse_screen_coords,
-                canvas_resolution=self.sim.get_canvas_dimensions(),
                 tonemap_softness=tonemap_softness,
                 sdf_enabled=sdf_enabled,
                 inv_view_proj=inv_view_proj,
                 sdf_sun_dir=sdf_sun_dir,
                 sdf_sun_color=sdf_sun_color,
-                sdf_sky_color=sdf_sky_color
+                sdf_sky_color=sdf_sky_color,
+                bloom_enabled=bloom_enabled,
+                bloom_threshold=bloom_threshold,
+                bloom_intensity=bloom_intensity,
+                bloom_radius=bloom_radius,
             )
-            # assemble_frame returns the texture immediately when total_samples=1
-            if bloom_enabled and not watercolor_mode and TEX_TO_VIEW is not None:
-                TEX_TO_VIEW = self.apply_bloom(
-                    TEX_TO_VIEW, bloom_threshold, bloom_intensity, bloom_radius,
-                    tonemap_softness=tonemap_softness,
-                )
+
+        # Composite overlay markup over the finished frame for display only.
+        # Fall back to draw-trail params when overlay_params isn't supplied.
+        if overlay_params is None:
+            overlay_params = {
+                'sweep_mode': sweep_mode,
+                'sweep_reticle_pos': sweep_reticle_pos,
+                'sweep_reticle_visible': sweep_reticle_visible,
+                'trail_draw_radius': draw_size if draw_trail_mode else 0.0,
+            }
+        if TEX_TO_VIEW is not None:
+            TEX_TO_VIEW = self._composite_overlays(
+                TEX_TO_VIEW, overlay_params, watercolor_mode,
+                screen_aspect, exposure, mouse_screen_coords)
 
         # Render to screen
         self.ctx.screen.use()
