@@ -307,15 +307,15 @@ class FieldHandler:
         self.adv_draw.write_field_data(existing)
         print(f"Loaded {target} field from image: {filepath}")
 
-    def enforce_snapshot_cap(self, config_clipboard):
-        """Null out oldest field snapshots if >MAX_FIELD_SNAPSHOTS entries have data."""
-        entries_with_fields = []
-        for i, entry in enumerate(config_clipboard):
-            _config, _label, field_snapshot = entry
-            if field_snapshot is not None:
-                entries_with_fields.append(i)
+    def enforce_snapshot_cap(self, entries):
+        """Null out oldest field snapshots if >MAX_FIELD_SNAPSHOTS entries have data.
+
+        Operates on a list of ConfigClipboardState.ClipboardEntry in place.
+        """
+        entries_with_fields = [
+            i for i, entry in enumerate(entries) if entry.field_snapshot is not None
+        ]
 
         while len(entries_with_fields) > MAX_FIELD_SNAPSHOTS:
             oldest_idx = entries_with_fields.pop(0)
-            config, label, _ = config_clipboard[oldest_idx]
-            config_clipboard[oldest_idx] = (config, label, None)
+            entries[oldest_idx].field_snapshot = None

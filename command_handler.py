@@ -5,6 +5,7 @@ import numpy as np
 from utilities.gl_helpers import readback_rule
 from sim import RULE_BUFFER_SIZE
 from camera_input import sync_orbit_angles_from_camera
+from config_clipboard import ConfigClipboardHandler
 
 
 class CommandHandler:
@@ -38,9 +39,14 @@ class CommandHandler:
         # None when no file preview is active. Preview NEVER touches the RuleManager
         # undo stack; restore re-applies the cached rule to the GPU directly.
         self._preview_restore = None
-        self.clipboard_preview_active = False  # Config clipboard preview
-        self._clipboard_rule_was_pushed = False  # Whether clipboard preview actually pushed a rule
-        self._clipboard_cached_config = None  # Full config saved before clipboard preview
+
+        # Config clipboard preview/load/delete handlers (Step 9): owns its own
+        # preview state and operates on the UI's ConfigClipboardState.
+        self.clipboard_handler = ConfigClipboardHandler(
+            sim, rule_manager, config_saver, ui.clipboard_state,
+            self._apply_config_with_locks, self._push_and_apply_rule,
+            ui.update_physics_defaults,
+            field_handler=field_handler, param_lock_service=param_lock_service)
 
         # Video pending state (waiting for scheduled start frame)
         self.video_pending = False
@@ -224,7 +230,7 @@ class CommandHandler:
         self._handle_preview_commands(ui_state)
 
         # Handle config clipboard commands
-        self._handle_clipboard_commands(ui_state)
+        self.clipboard_handler.process(ui_state)
 
         return None
 
@@ -391,10 +397,10 @@ class CommandHandler:
                 ui_state.sim, current_rule, field_strengths=field_strengths)
             config_string = self.config_saver.encode_clipboard(config)
             self.ui.set_clipboard(config_string)
-            self.ui.add_to_config_clipboard(
+            self.ui.clipboard_state.add(
                 config, self.ui.currently_open_project, field_snapshot=field_snapshot)
             if fh:
-                fh.enforce_snapshot_cap(self.ui.config_clipboard)
+                fh.enforce_snapshot_cap(self.ui.clipboard_state.entries)
             print(f"Config copied to clipboard ({len(config_string)} chars)")
 
         # Config load (Ctrl+V)
@@ -539,112 +545,6 @@ class CommandHandler:
         config = self.config_saver.create_config(
             ui_state.sim, current_rule, field_strengths=field_strengths)
         self._preview_restore = (config, field_snapshot)
-
-    def _handle_clipboard_commands(self, ui_state):
-        """Handle config clipboard preview, load, and delete."""
-        fh = self.field_handler
-
-        # Clear clipboard preview (must happen before new preview)
-        if ui_state.request_clear_clipboard_preview:
-            if self.clipboard_preview_active:
-                if self._clipboard_rule_was_pushed:
-                    self.rule_manager.pop_rule()
-                # Restore the full cached config (not just the rule)
-                if self._clipboard_cached_config is not None:
-                    rule = self._apply_config_with_locks(
-                        self._clipboard_cached_config, ui_state)
-                    self.sim.apply_rule(rule)
-                    self._clipboard_cached_config = None
-
-                if fh:
-                    fh.restore_from_clipboard_preview(ui_state)
-
-                self.clipboard_preview_active = False
-                self._clipboard_rule_was_pushed = False
-
-        # New clipboard preview
-        if ui_state.request_preview_clipboard_config:
-            idx = ui_state.clipboard_config_index
-            if 0 <= idx < len(self.ui.config_clipboard):
-                # Cache current full config before applying preview
-                if not self.clipboard_preview_active:
-                    current_rule = self.rule_manager.get_current_rule()
-                    self._clipboard_cached_config = self.config_saver.create_config(
-                        ui_state.sim, current_rule)
-                    if fh:
-                        fh.cache_for_clipboard_preview(ui_state)
-
-                config, _label, field_snapshot = self.ui.config_clipboard[idx]
-                rule = self._apply_config_with_locks(config, ui_state)
-                pls = self.param_lock_service
-                if not (pls and pls.should_block_rule_push()):
-                    self.rule_manager.push_rule(rule, ui_state.sim.rule_seed)
-                    self.sim.apply_rule(rule)
-                    self._clipboard_rule_was_pushed = True
-                self.clipboard_preview_active = True
-
-                if fh:
-                    fh.apply_snapshot(field_snapshot, config, ui_state)
-
-        # Load clipboard config (click)
-        if ui_state.request_load_clipboard_config:
-            self._load_clipboard_config(ui_state)
-
-        # Delete clipboard entry
-        if ui_state.request_delete_clipboard_config:
-            self._delete_clipboard_config(ui_state)
-
-    def _load_clipboard_config(self, ui_state):
-        """Load a config from the clipboard (apply it permanently)."""
-        fh = self.field_handler
-
-        # Clear preview first (discard cached config since we're committing)
-        if self.clipboard_preview_active:
-            if self._clipboard_rule_was_pushed:
-                self.rule_manager.pop_rule()
-            self.clipboard_preview_active = False
-            self._clipboard_rule_was_pushed = False
-            self._clipboard_cached_config = None
-            if fh:
-                fh.discard_clipboard_preview_cache()
-
-        idx = ui_state.clipboard_config_index
-        if 0 <= idx < len(self.ui.config_clipboard):
-            config, label, field_snapshot = self.ui.config_clipboard[idx]
-            rule = self._apply_config_with_locks(config, ui_state)
-            self._push_and_apply_rule(rule, ui_state)
-
-            if fh:
-                fh.apply_snapshot(field_snapshot, config, ui_state)
-
-            # Extract original filename from label (everything before the *)
-            original_filename = label.rsplit("*", 1)[0]
-            self.ui.update_physics_defaults(original_filename)
-            print(f"Config loaded from clipboard: {label}")
-
-    def _delete_clipboard_config(self, ui_state):
-        """Delete an entry from the config clipboard."""
-        fh = self.field_handler
-
-        # Clear preview first, restore cached config
-        if self.clipboard_preview_active:
-            if self._clipboard_rule_was_pushed:
-                self.rule_manager.pop_rule()
-            if self._clipboard_cached_config is not None:
-                rule = self._apply_config_with_locks(
-                    self._clipboard_cached_config, ui_state)
-                self.sim.apply_rule(rule)
-                self._clipboard_cached_config = None
-
-            if fh:
-                fh.restore_from_clipboard_preview(ui_state)
-
-            self.clipboard_preview_active = False
-            self._clipboard_rule_was_pushed = False
-
-        idx = ui_state.clipboard_config_index
-        if 0 <= idx < len(self.ui.config_clipboard):
-            self.ui.config_clipboard.pop(idx)
 
     def _sync_tracer_to_preferences(self, ui_state):
         """Sync live TracerInterface values into PreferencesState.

@@ -196,6 +196,7 @@ class UIWindowsPrefs:
     show_scheduled_renders_window: bool = False
     show_tracer_window: bool = False
     show_optix_window: bool = False
+    show_config_clipboard_window: bool = False
 
     # UI interaction
     physics_tooltips_enabled: bool = True
@@ -387,6 +388,7 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "show_scheduled_renders_window": ("ui_windows", "show_scheduled_renders_window"),
     "show_tracer_window": ("ui_windows", "show_tracer_window"),
     "show_optix_window": ("ui_windows", "show_optix_window"),
+    "show_config_clipboard_window": ("ui_windows", "show_config_clipboard_window"),
     "physics_tooltips_enabled": ("ui_windows", "physics_tooltips_enabled"),
     "debug_arrows": ("ui_windows", "debug_arrows"),
     "arrow_sensitivity": ("ui_windows", "arrow_sensitivity"),

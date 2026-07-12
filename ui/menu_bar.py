@@ -255,9 +255,9 @@ class MenuBarMixin:
                                        extras_menu_min.y + extras_menu_size.y))
 
                 # Config Clipboard window
-                _, self.show_history_window = imgui.checkbox(
+                _, self.state.preferences.ui_windows.show_config_clipboard_window = imgui.checkbox(
                     "Config Clipboard",
-                    self.show_history_window
+                    self.state.preferences.ui_windows.show_config_clipboard_window
                 )
                 self._delayed_tooltip("Set restorable checkpoints with Ctrl-C")
 

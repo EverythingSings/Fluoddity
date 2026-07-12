@@ -8,10 +8,9 @@ import glfw
 from imgui_bundle import imgui
 from imgui_bundle.python_backends import glfw_backend
 import time
-import numpy as np
 import moderngl
 from dataclasses import dataclass
-from state import UIState, SimState, CameraState, RecordingState
+from state import UIState, SimState, CameraState, RecordingState, ConfigClipboardState
 from services.config_saver import ConfigSaver, PhysicsConfig
 from utilities.keybinding_management import KeybindingManager
 from utilities.paths import get_user_physics_configs_dir, get_app_physics_configs_dir
@@ -20,7 +19,8 @@ from .popup_modals import PopupModalsMixin
 from .help_windows import HelpWindowsMixin
 from .slider_widgets import SliderWidgetsMixin
 from .config_browser import ConfigBrowserMixin
-from .history_window import HistoryWindowMixin
+from .config_clipboard_window import ConfigClipboardWindowMixin
+from .physics_tooltip import PhysicsTooltipMixin
 from .preferences_window import PreferencesWindowMixin
 from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
@@ -48,7 +48,8 @@ class UI(
     HelpWindowsMixin,
     PopupModalsMixin,
     PhysicsWindowMixin,
-    HistoryWindowMixin,
+    ConfigClipboardWindowMixin,
+    PhysicsTooltipMixin,
     ConfigBrowserMixin,
     SliderWidgetsMixin,
     AdvancedDrawingWindowMixin,
@@ -105,19 +106,9 @@ class UI(
         self.show_physics_settings_window = True  # Physics settings window (always visible, but can be hidden with sidebar)
         self.show_sidebar = True  # Controls visibility of Physics Settings and Preferences windows
 
-        # Config clipboard state
-        self.show_history_window = False  # Toggled by Extras menu
-        self.config_clipboard: list[tuple] = []  # [(PhysicsConfig, display_label, field_snapshot), ...]
-        self.clipboard_counter: int = 0  # Global jersey counter (00, 01, 02...)
-        self.clipboard_previewing_index: int | None = None
-        self._clipboard_renaming_index: int | None = None  # Which entry is being renamed
-        self._clipboard_rename_buffer: str = ""  # Text input buffer for rename
-
-        # Tooltip state - track which slider was last hovered
-        self.last_hovered_slider = None
-        self.last_hovered_description = ""
-        self.physics_window_interaction = False  # Track if we're interacting with sliders
-        self.tooltip_start_time = time.time()  # Track time for animations
+        # Config clipboard state (owned by the config_clipboard module; the UI
+        # holds the reference so the window mixin + callbacks can reach it).
+        self.clipboard_state = ConfigClipboardState()
 
         # File save/load state
         self.save_popup_open = False
@@ -276,51 +267,6 @@ class UI(
         glfw.set_key_callback(self.window, self.key_callback)
         glfw.set_char_callback(self.window, self.char_callback)
         glfw.set_framebuffer_size_callback(self.window, self.framebuffer_size_callback)
-
-    def setup_tooltip_shader(self):
-        """Create shader program and texture for tooltip graphics."""
-        # Simple vertex shader for full-screen quad
-        vert_shader = """
-        #version 150
-        in vec2 in_vert;
-        out vec2 texcoord;
-        void main() {
-            texcoord = in_vert * 0.5 + 0.5;
-            gl_Position = vec4(in_vert, 0.0, 1.0);
-        }
-        """
-
-        # Load fragment shader
-        with open('shaders/tooltip_graphic.frag', 'r') as f:
-            frag_shader = f.read()
-
-        # Create shader program
-        self.tooltip_program = self.ctx.program(
-            vertex_shader=vert_shader,
-            fragment_shader=frag_shader
-        )
-
-        # Create full-screen quad
-        vertices = np.array([
-            -1.0, -1.0,
-             1.0, -1.0,
-             1.0,  1.0,
-            -1.0,  1.0,
-        ], dtype='f4')
-
-        vbo = self.ctx.buffer(vertices.tobytes())
-        self.tooltip_vao = self.ctx.vertex_array(
-            self.tooltip_program,
-            [(vbo, '2f', 'in_vert')]
-        )
-
-        # Create framebuffer and texture for rendering
-        self.tooltip_texture = self.ctx.texture(
-            size=(self.tooltip_texture_size, self.tooltip_texture_size),
-            components=4
-        )
-        self.tooltip_fbo = self.ctx.framebuffer(color_attachments=[self.tooltip_texture])
-        self.tooltip_texture_id = imgui.ImTextureRef(self.tooltip_texture.glo)
 
     def framebuffer_size_callback(self, window, width, height):
         # Debounce: just record the time, actual reload happens via request_reload flag
@@ -610,16 +556,6 @@ class UI(
         """Set clipboard content (used by orchestrator for config save)."""
         glfw.set_clipboard_string(self.window, text)
 
-    def add_to_config_clipboard(self, config, filename: str, field_snapshot=None) -> None:
-        """Add a config snapshot to the config clipboard.
-
-        Args:
-            field_snapshot: Optional numpy float32 array of field texture data.
-        """
-        label = f"{filename}*{self.clipboard_counter:02d}"
-        self.config_clipboard.append((config, label, field_snapshot))
-        self.clipboard_counter += 1
-
     def update_physics_defaults(self, filename: str) -> None:
         """Update current physics defaults from current sim state (called after file load/save)."""
         self.currently_open_project = filename
@@ -744,9 +680,9 @@ class UI(
         if self.show_sidebar and self.state.preferences.ui_windows.show_video_recording_window:
             self.render_video_recording_window()
 
-        # Render history window if visible (hidden when windows toggled off)
-        if self.show_sidebar and self.show_history_window:
-            self.render_history_window()
+        # Render config clipboard window if visible (hidden when windows toggled off)
+        if self.show_sidebar and self.state.preferences.ui_windows.show_config_clipboard_window:
+            self.render_config_clipboard_window()
 
         # Render Advanced Drawing window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.advanced_drawing.enabled:

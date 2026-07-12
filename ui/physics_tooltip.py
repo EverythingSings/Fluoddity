@@ -1,99 +1,70 @@
-"""Config clipboard window with preview, and tooltip shader rendering."""
+"""Physics-parameter tooltip: animated shader graphic + hover tracking (Step 9).
+
+Split out of the old `history_window.py` (which conflated the config clipboard
+and this tooltip). Owns the tooltip GPU resources (`setup_tooltip_shader`) and
+the shared `self.*` hover-tracking state that `slider_widgets` and
+`physics_window` write via `render_custom_tooltip`. Combined into UI via multiple
+inheritance.
+"""
 import time
+import numpy as np
 import moderngl
 from imgui_bundle import imgui
 
 
-class HistoryWindowMixin:
-    """Mixin for config clipboard window and physics tooltips. Combined into UI via multiple inheritance."""
+class PhysicsTooltipMixin:
+    """Mixin for the physics-slider tooltip graphic."""
 
-    def render_history_window(self):
-        """Render config clipboard window with hover preview."""
-        expanded, opened = imgui.begin("Config Clipboard - EXPERIMENTAL", True)
-        if not opened:
-            self.show_history_window = False
-            imgui.end()
-            return
+    def setup_tooltip_shader(self):
+        """Create shader program and texture for tooltip graphics."""
+        # Tooltip hover-tracking state (shared with slider_widgets/physics_window)
+        self.last_hovered_slider = None
+        self.last_hovered_description = ""
+        self.physics_window_interaction = False  # Track if we're interacting with sliders
+        self.tooltip_start_time = time.time()  # Track time for animations
 
-        imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), "Press Ctrl+C to add a checkpoint")
-        imgui.separator()
+        # Simple vertex shader for full-screen quad
+        vert_shader = """
+        #version 150
+        in vec2 in_vert;
+        out vec2 texcoord;
+        void main() {
+            texcoord = in_vert * 0.5 + 0.5;
+            gl_Position = vec4(in_vert, 0.0, 1.0);
+        }
+        """
 
-        if not self.config_clipboard:
-            imgui.text_colored(imgui.ImVec4(0.6, 0.6, 0.6, 1.0), "No checkpoints yet")
-            imgui.end()
-            return
+        # Load fragment shader
+        with open('shaders/tooltip_graphic.frag', 'r') as f:
+            frag_shader = f.read()
 
-        # Render entries (newest first)
-        hovered_this_frame = None
+        # Create shader program
+        self.tooltip_program = self.ctx.program(
+            vertex_shader=vert_shader,
+            fragment_shader=frag_shader
+        )
 
-        for i in range(len(self.config_clipboard) - 1, -1, -1):
-            _config, label, _field = self.config_clipboard[i]
+        # Create full-screen quad
+        vertices = np.array([
+            -1.0, -1.0,
+             1.0, -1.0,
+             1.0,  1.0,
+            -1.0,  1.0,
+        ], dtype='f4')
 
-            # Selectable label for click/hover detection
-            # Use allow_overlap so the X button can receive clicks on the same line
-            clicked, _ = imgui.selectable(
-                f"{label}##clip_{i}",
-                self.clipboard_previewing_index == i,
-                imgui.SelectableFlags_.allow_overlap,
-                imgui.ImVec2(0, 0)
-            )
+        vbo = self.ctx.buffer(vertices.tobytes())
+        self.tooltip_vao = self.ctx.vertex_array(
+            self.tooltip_program,
+            [(vbo, '2f', 'in_vert')]
+        )
 
-            if imgui.is_item_hovered():
-                hovered_this_frame = i
-
-            # Right-click opens rename popup
-            if imgui.is_item_clicked(imgui.MouseButton_.right):
-                self._clipboard_renaming_index = i
-                self._clipboard_rename_buffer = label
-                imgui.open_popup(f"rename_clip_{i}")
-
-            # X button on the same line
-            imgui.same_line()
-            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
-            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
-            if imgui.small_button(f"X##clip_{i}"):
-                self._request_delete_clipboard_config = True
-                self._clipboard_config_index = i
-            imgui.pop_style_color(2)
-
-            if imgui.is_item_hovered():
-                hovered_this_frame = i
-
-            if clicked:
-                self._request_load_clipboard_config = True
-                self._clipboard_config_index = i
-
-            # Rename popup
-            if imgui.begin_popup(f"rename_clip_{i}"):
-                imgui.text("Rename:")
-                imgui.set_next_item_width(200)
-                # Auto-focus the input on first appearance
-                if imgui.is_window_appearing():
-                    imgui.set_keyboard_focus_here()
-                changed, self._clipboard_rename_buffer = imgui.input_text(
-                    f"##rename_input_{i}", self._clipboard_rename_buffer)
-                if imgui.is_item_deactivated_after_edit():
-                    # Enter pressed or focus lost after editing — commit rename
-                    if self._clipboard_rename_buffer.strip():
-                        config, _old_label, field = self.config_clipboard[i]
-                        self.config_clipboard[i] = (config, self._clipboard_rename_buffer.strip(), field)
-                    self._clipboard_renaming_index = None
-                    imgui.close_current_popup()
-                imgui.end_popup()
-
-        # Handle preview state changes
-        if hovered_this_frame != self.clipboard_previewing_index:
-            if self.clipboard_previewing_index is not None:
-                self._request_clear_clipboard_preview = True
-
-            if hovered_this_frame is not None:
-                self._request_preview_clipboard_config = True
-                self._clipboard_config_index = hovered_this_frame
-                self.clipboard_previewing_index = hovered_this_frame
-            else:
-                self.clipboard_previewing_index = None
-
-        imgui.end()
+        # Create framebuffer and texture for rendering
+        self.tooltip_texture = self.ctx.texture(
+            size=(self.tooltip_texture_size, self.tooltip_texture_size),
+            components=4
+        )
+        self.tooltip_fbo = self.ctx.framebuffer(color_attachments=[self.tooltip_texture])
+        self.tooltip_texture_id = imgui.ImTextureRef(self.tooltip_texture.glo)
 
     def update_tooltip_texture(self):
         """Render the tooltip graphic to texture using shader."""

@@ -118,7 +118,7 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `core.py` | 795 | UI class, `__init__`, GLFW callbacks, `get_state()` flag marshalling, render dispatch, config-clipboard + file-browser state, tooltip shader |
+| `core.py` | ~730 | UI class, `__init__`, GLFW callbacks, `get_state()` flag marshalling, render dispatch, file-browser state (holds a `ConfigClipboardState` reference) |
 | `physics_window.py` | 575 | Physics settings panel: slider groups, parameter-lock alt-click hooks |
 | `menu_bar.py` | 477 | File/Reset/Locks/Help/Extras menus; Load-submenu live preview; distance-based auto-close |
 | `slider_widgets.py` | 450 | Slider with range menu, jitter, sweep/range context menus |
@@ -129,7 +129,8 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 | `advanced_drawing_window.py` | 246 | Force/strafe field brush controls, shader-driven field |
 | `config_browser.py` | 232 | Config file scan/cache + hierarchical Load submenu |
 | `optix_window.py` | ~245 | OptiX renderer controls: rt-mode, Lighting/Material/Rasterize/Path Trace/Post-Process sections, preview |
-| `history_window.py` | 219 | **Config Clipboard** window (misnamed) + physics tooltip shader rendering |
+| `config_clipboard_window.py` | ~110 | **Config Clipboard** window (renamed from `history_window.py`, Step 9): checkpoint list, hover-preview, load/rename/delete |
+| `physics_tooltip.py` | ~200 | Physics-slider tooltip: animated shader graphic + hover tracking (split out of `history_window.py`, Step 9) |
 | `physics_params.py` | 139 | Data-driven single source of truth for physics slider defs |
 | `plotting.py` | 108 | Plotting/histogram window |
 | `popup_modals.py` | 85 | Save/Overwrite/Delete confirmation dialogs |
@@ -143,6 +144,7 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 |------|-------|-------------|
 | `sim.py` | 914 | GPU particle simulation: buffers, compute dispatch, physics→uniform mapping, sweeps, rules (**user-owned**) |
 | `camera.py` | ~470 | Camera state, coordinate transforms, view-texture generation (2D/3D); owns an `ImagePipeline` and returns a *finished, markup-free* display texture (no screen draw, no overlays — the Viewer owns those) |
+| `config_clipboard/` | ~130 | `ConfigClipboardHandler` (Step 9): the config-clipboard preview/load/delete command handlers, operating on the `ConfigClipboardState`. Window lives in `ui/config_clipboard_window.py`; Ctrl+C save-checkpoint stays in `CommandHandler` |
 | `viewer/` | ~230 | `Viewer` (Step 8): the always-displayed "Viewer" imgui window (docks into the dockspace central node, immune to hide-windows). Owns the `OverlayCompositor`; composites display-only markup over the finished frame and shows it. Single display sink (parallel to the video recorder's file sink). `draw_debug_overlay()` blends arrow-debug into a Viewer-owned copy so recordings stay clean |
 
 ### Services (`services/`)
@@ -167,6 +169,7 @@ Plain dataclasses.
 | `sim_state.py` | 121 | Physics params (ALL_CAPS), sweeps/jitter dicts, radio fields, appearance, notes, slider ranges |
 | `ui_state.py` | 103 | **Aggregate frame snapshot** nesting Sim/Camera/Recording/Preferences + ~60 one-shot flags |
 | `camera_state.py` | 29 | 2D + 3D camera state + OptiX/path-tracer enable and timing readouts |
+| `config_clipboard_state.py` | ~55 | `ConfigClipboardState` + `ClipboardEntry`: in-memory config checkpoints + preview/rename window state (Step 9; moved off the `UI` object) |
 | `recording_state.py` | 7 | **Empty shell** — fields migrated to `PreferencesState`; kept for structure/back-compat |
 
 ### Utilities (`utilities/`)
