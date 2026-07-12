@@ -68,6 +68,7 @@ class UI(
         self.ctx = ctx
         self.param_lock_service = None  # Set by App after construction
         self.plotting_manager = None  # Set by App after construction
+        self.viewer = None  # Viewer window; set by App after construction
 
         # Tracer references (set by App after construction)
         self._tracer_interface = None
@@ -325,6 +326,15 @@ class UI(
         # Debounce: just record the time, actual reload happens via request_reload flag
         self.pending_resize_time = time.time()
 
+    def _viewer_hovered(self) -> bool:
+        """Whether the pointer is over the Viewer window (clicks pass through).
+
+        False before the Viewer is injected. Reflects the last built frame's
+        hover state, which is what GLFW callbacks (firing before this frame's UI
+        is built) should consult — the same latency the old capture gate had.
+        """
+        return self.viewer is not None and self.viewer.hovered
+
     def mouse_button_callback(self, window, button, action, mods):
         if self.imgui_mouse_callback:
             self.imgui_mouse_callback(window, button, action, mods)
@@ -338,8 +348,11 @@ class UI(
         elif button == glfw.MOUSE_BUTTON_RIGHT:
             self._any_right_click_pending = True
 
-        # Only track non-imgui clicks for normal interactions
-        if imgui.get_io().want_capture_mouse:
+        # Only let clicks through to the sim when they land on the Viewer window
+        # (not on a floating imgui panel). The Viewer is itself an imgui window
+        # now, so `want_capture_mouse` is true over it too — gate on Viewer hover
+        # instead. See Viewer.hovered.
+        if not self._viewer_hovered():
             return
 
         if button == glfw.MOUSE_BUTTON_LEFT:
@@ -356,8 +369,8 @@ class UI(
         if self.imgui_scroll_callback:
             self.imgui_scroll_callback(window, xoffset, yoffset)
 
-        # Capture scroll for zoom-around-pointer (if imgui doesn't want it)
-        if not imgui.get_io().want_capture_mouse:
+        # Capture scroll for zoom-around-pointer only when over the Viewer
+        if self._viewer_hovered():
             self._scroll_delta += yoffset
 
     def key_callback(self, window, key, scancode, action, mods):
@@ -455,11 +468,12 @@ class UI(
         self.state.any_left_click_this_frame = self._any_left_click_pending
         self.state.any_right_click_this_frame = self._any_right_click_pending
 
-        # Continuous mouse state (for draw trail mode) - respects imgui capture
+        # Continuous mouse state (for draw trail mode) - only over the Viewer
+        viewer_hovered = self._viewer_hovered()
         left_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
-        self.state.mouse_left_held = left_button_pressed and not imgui.get_io().want_capture_mouse
+        self.state.mouse_left_held = left_button_pressed and viewer_hovered
         right_button_pressed = glfw.get_mouse_button(self.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
-        self.state.mouse_right_held = right_button_pressed and not imgui.get_io().want_capture_mouse
+        self.state.mouse_right_held = right_button_pressed and viewer_hovered
         self.state.scroll_delta = self._scroll_delta
         self.state.request_reload = self._request_reload
         self.state.request_reset = self._request_reset
@@ -658,6 +672,12 @@ class UI(
         # Create the dockspace
         dockspace_id = imgui.get_id("MainDockSpace")
         imgui.dock_space(dockspace_id, imgui.ImVec2(0.0, 0.0), imgui.DockNodeFlags_.passthru_central_node)
+
+        # Viewer window: always drawn (immune to the show/hide-windows button),
+        # docked into the central node. Shows the renderer's finished frame with
+        # display-only overlays. Injected by App after construction.
+        if self.viewer is not None:
+            self.viewer.render_window(dockspace_id)
 
         # Apply global color tinting based on mode
         recording_active = self._display_info.get('recording_active', False)

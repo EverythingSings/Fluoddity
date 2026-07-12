@@ -17,6 +17,7 @@ from controller_input import ControllerCam, process_controller_input, find_joyst
 from utilities.advanced_drawing import AdvancedDrawingProcessor
 from plotting_manager import PlottingManager
 from rendering import RendererHost
+from viewer import Viewer
 
 
 class App:
@@ -122,6 +123,12 @@ class App:
         # the single OptiX renderer; rt_mode 0 (rasterize) is a preset on it.
         # `self._pathtracer_interface` is a property aliasing `renderer_host.optix`.
         self.renderer_host = RendererHost(self.ctx)
+
+        # Viewer: the always-displayed "Viewer" ImGui window that shows the
+        # active renderer's finished frame and composites display-only overlays.
+        # Single display sink (parallel to the video recorder's file sink).
+        self.viewer = Viewer(self.ctx, self.window)
+        self.ui.viewer = self.viewer
 
         # Tracer references (for entity buffer and camera access)
         self.ui.tracer_sim = self.sim
@@ -608,7 +615,8 @@ class App:
                                   sweep_reticle_visible, screen_aspect,
                                   rt_active=rt_active)
 
-        # 7.5. Render arrow debug overlay if enabled
+        # 7.5. Render arrow debug overlay if enabled. It composites into a
+        # Viewer-owned display copy (display-only, never into recorded frames).
         if ui_state.preferences.ui_windows.debug_arrows:
             width, height = glfw.get_framebuffer_size(self.window)
             adv_prefs = ui_state.preferences
@@ -623,7 +631,7 @@ class App:
                 arrow_texture = self.sim.can
                 arrow_resolution = self.sim.can.size
                 use_zw = False
-            self.arrow_debug_service.render(
+            self.viewer.draw_debug_overlay(lambda: self.arrow_debug_service.render(
                 canvas_texture=arrow_texture,
                 cam_pos=tuple(self.camera.position),
                 cam_zoom=self.camera.zoom,
@@ -631,7 +639,7 @@ class App:
                 window_size=(width, height),
                 arrow_sensitivity=ui_state.preferences.ui_windows.arrow_sensitivity,
                 use_zw_channels=use_zw,
-            )
+            ))
 
         # 7.9. Snapshot camera for next-frame movement detection
         self._snapshot_camera()
@@ -652,6 +660,13 @@ class App:
             'video_current_frame': self.video_service.current_frame,
             'video_max_frames': ui_state.preferences.recording.max_frames,
         })
+        # Clear the default framebuffer before ImGui draws. The renderer no
+        # longer blits to the screen (its finished frame goes into the Viewer
+        # ImGui image), so clear here to avoid stale garbage behind the UI.
+        self.ctx.screen.use()
+        width, height = glfw.get_framebuffer_size(self.window)
+        self.ctx.viewport = (0, 0, width, height)
+        self.ctx.clear(0.0, 0.0, 0.0, 1.0)
         self.ui.render()
 
     def _camera_moved(self):
@@ -676,24 +691,22 @@ class App:
     def _render_camera_view(self, ui_state, sweep_mode, sweep_reticle_pos,
                              sweep_reticle_visible, screen_aspect,
                              rt_active=False):
-        """Render the camera view to screen."""
-        # Realtime tracer mode: render path-traced image fullscreen
+        """Prepare the Viewer's display texture for this frame.
+
+        Produces the renderer's finished (markup-free) frame and hands it to the
+        Viewer, which composites display-only overlays and shows it in the
+        "Viewer" ImGui window. No longer draws to the screen directly — the
+        Viewer image fills the docking central node, so mouse coordinates stay
+        in full-window screen space (picking/drawing math unchanged).
+        """
+        # Realtime tracer mode: display the path-traced image fullscreen (no
+        # overlays — matches the previous fullscreen behavior).
         ti = self.ui._tracer_interface
         if rt_active and ti is not None and ti.display_texture is not None:
-            self.ctx.screen.use()
-            width, height = glfw.get_framebuffer_size(self.window)
-            self.ctx.viewport = (0, 0, width, height)
-            self.ctx.clear(0.0, 0.0, 0.0, 1.0)
-            self.camera.program['cam_pos'].value = (0, 0)
-            self.camera.program['cam_zoom'].value = 1.0
-            self.camera.program['tex_size'].value = (float(width), float(height))
-            self.camera.program['window_size'].value = (width, height)
-            ti.display_texture.use(location=0)
-            self.camera.program['view_tex'].value = 0
-            self.camera.vao.render()
+            self.viewer.prepare(ti.display_texture)
             return
 
-        # OptiX preview: tonemap via frame assembler and display fullscreen
+        # OptiX preview: tonemap via the image pipeline and display fullscreen.
         pt = self._pathtracer_interface
         if (pt is not None
                 and (pt.preview_active or pt.preview_has_result)
@@ -707,18 +720,7 @@ class App:
                 brightness=ui_state.preferences.rendering.brightness,
                 tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
             )
-            if tonemapped is not None:
-                self.ctx.screen.use()
-                width, height = glfw.get_framebuffer_size(self.window)
-                self.ctx.viewport = (0, 0, width, height)
-                self.ctx.clear(0.0, 0.0, 0.0, 1.0)
-                self.camera.program['cam_pos'].value = (0, 0)
-                self.camera.program['cam_zoom'].value = 1.0
-                self.camera.program['tex_size'].value = (float(width), float(height))
-                self.camera.program['window_size'].value = (width, height)
-                tonemapped.use(location=0)
-                self.camera.program['view_tex'].value = 0
-                self.camera.vao.render()
+            self.viewer.prepare(tonemapped)
             return
 
         draw_trail_mode = ui_state.preferences.ui_windows.mouse_mode == "Draw Trail"
@@ -781,12 +783,11 @@ class App:
                 adv.draw_target_overlay_opacity if adv_active else 0.0),
         }
 
-        self.camera.render(
+        finished_tex = self.camera.render(
             sim_going=ui_state.sim.going,
             screen_aspect=screen_aspect,
             watercolor_mode=ui_state.sim.watercolor_mode,
             ink_weight=ui_state.sim.ink_weight,
-            mouse_screen_coords=mouse_screen_coords,
             exposure=ui_state.preferences.rendering.exposure,
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
             bloom_enabled=ui_state.preferences.bloom.enabled,
@@ -798,7 +799,20 @@ class App:
             sdf_sun_dir=sdf_sun_dir,
             sdf_sun_color=sdf_sun_color,
             sdf_sky_color=sdf_sky_color,
+        )
+
+        # Hand the finished (markup-free) frame to the Viewer, which composites
+        # display-only overlays and shows it in the Viewer window.
+        self.viewer.prepare(
+            finished_tex,
             overlay_params=overlay_params,
+            watercolor_mode=ui_state.sim.watercolor_mode,
+            screen_aspect=screen_aspect,
+            exposure=ui_state.preferences.rendering.exposure,
+            mouse_screen_coords=mouse_screen_coords,
+            camera_position=tuple(self.camera.position),
+            camera_zoom=self.camera.zoom,
+            canvas_resolution=self.sim.get_canvas_dimensions(),
         )
 
     def _save_screenshot(self, ui_state):
@@ -974,6 +988,7 @@ class App:
             self.ui._tracer_interface = None
         self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()
+        self.viewer.cleanup()
         self.ui.cleanup()
         glfw.terminate()
 

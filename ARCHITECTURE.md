@@ -33,7 +33,7 @@ Fluoddity is a GPU-accelerated particle simulation for generative art. Thousands
 8. Applies state to Sim and Camera
 9. Delegates physics + frame assembly to `SimulationRunner` (or a renderer-specific video path)
 10. Runs the realtime tracer tick if active
-11. Renders the camera view, arrow-debug overlay, and UI
+11. Prepares the Viewer's display texture (finished frame → `viewer.prepare()`, which composites display-only overlays), renders the arrow-debug overlay into a Viewer-owned copy, clears the screen, then renders the UI (which draws the Viewer window into the dockspace central node)
 
 Core components do not talk to each other directly — coordination flows through the orchestrator. (The UI is a partial exception: App injects several service references onto it, and `CommandHandler` reaches into some UI internals. See the inventory for these coupling notes.)
 
@@ -66,7 +66,7 @@ entity_update.glsl   (compute)  — particle sense → rule eval → forces/stra
 canvas_update_3d.glsl (compute)  — trail decay + diffusion into the other canvas buffer
 ```
 
-Then, to display, `Camera.generate_view_texture()` produces the view texture (2D `cam_brush` path, or the 3D path — GL_POINTS or a routed OptiX/path-tracer interface), and the **`ImagePipeline`** (`rendering/image_pipeline.py`) composites it (temporal motion-blur accumulation, tonemap, gamma, emboss/watercolor, SDF preview) **and applies bloom internally**, returning a *finished, markup-free* frame. UI overlay markup (sweep reticle, draw-trail ring, advanced-drawing field overlay) is then composited **for display only** by the **`OverlayCompositor`** — so recorded video and screenshots capture the clean frame. (This split replaced the old monolithic `FrameAssembler` + `frame_assembly.frag` in Step 7 of the modularity refactor.)
+Then, to display, `Camera.generate_view_texture()` produces the view texture (2D `cam_brush` path, or the 3D path — GL_POINTS or a routed OptiX/path-tracer interface), and the **`ImagePipeline`** (`rendering/image_pipeline.py`) composites it (temporal motion-blur accumulation, tonemap, gamma, emboss/watercolor, SDF preview) **and applies bloom internally**, returning a *finished, markup-free* frame. That finished frame goes two places: to the **video recorder** (file sink, clean) and to the **`Viewer`** (`viewer/`, display sink). The Viewer owns the **`OverlayCompositor`**, which composites UI markup (sweep reticle, draw-trail ring, advanced-drawing field overlay) over the finished frame **for display only** — so recorded video and screenshots capture the clean frame. (The ImagePipeline/OverlayCompositor split replaced the old monolithic `FrameAssembler` + `frame_assembly.frag` in Step 7; the Viewer window + overlay ownership landed in Step 8 of the modularity refactor.)
 
 > **Note:** Older docs referenced `fourier4_4.glsl` and an `entity_update → fourier4_4 → frame_assembly` chain. That is out of date; the diffusion shader is `fourier6_6.glsl` and it is *prepended into* `entity_update.glsl`, not a separate dispatch stage.
 
@@ -142,7 +142,8 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 | File | Lines | Description |
 |------|-------|-------------|
 | `sim.py` | 914 | GPU particle simulation: buffers, compute dispatch, physics→uniform mapping, sweeps, rules (**user-owned**) |
-| `camera.py` | ~490 | Camera state, coordinate transforms, view-texture generation (2D/3D), screen rendering; owns an `ImagePipeline` + `OverlayCompositor` (renders a finished frame, then composites display-only overlays) |
+| `camera.py` | ~470 | Camera state, coordinate transforms, view-texture generation (2D/3D); owns an `ImagePipeline` and returns a *finished, markup-free* display texture (no screen draw, no overlays — the Viewer owns those) |
+| `viewer/` | ~230 | `Viewer` (Step 8): the always-displayed "Viewer" imgui window (docks into the dockspace central node, immune to hide-windows). Owns the `OverlayCompositor`; composites display-only markup over the finished frame and shows it. Single display sink (parallel to the video recorder's file sink). `draw_debug_overlay()` blends arrow-debug into a Viewer-owned copy so recordings stay clean |
 
 ### Services (`services/`)
 | File | Lines | Description |

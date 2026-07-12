@@ -109,7 +109,7 @@ void report(float val, uint plot_num) {
 #define INPUT_PROJECTION false
 #define OUTPUT_PROJECTION false
 #define GRID_2D_MODE true
-#define CRUNCH true
+//#define CRUNCH true
                             //Entities with index > ACTIVE_COUNT aren't rendered or updated
 int get_particle_cohorts() {
     return COHORTS;

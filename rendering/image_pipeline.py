@@ -3,9 +3,9 @@
 Step 7 pulls the *universal image pipeline* (temporal accumulation, tonemap,
 watercolor, EXPOSURE long-exposure blend, SDF preview, and now bloom) out of the
 overlay markup. Renderers own an `ImagePipeline` and return finished (tonemapped,
-bloomed) frames; the orchestrator runs an `OverlayCompositor` afterwards to draw
-UI markup (sweep reticle, draw ring, field overlay) over the finished frame for
-*display only* — so recorded video frames stay markup-free.
+bloomed) frames; the Viewer (Step 8) runs an `OverlayCompositor` afterwards to
+draw UI markup (sweep reticle, draw ring, field overlay) over the finished frame
+for *display only* — so recorded video frames stay markup-free.
 
 - `ImagePipeline` drives `shaders/image_pipeline.frag` and internally applies
   `BloomProcessor`. Same accumulation contract as the old FrameAssembler
