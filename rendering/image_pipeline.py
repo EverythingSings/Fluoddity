@@ -172,9 +172,9 @@ class ImagePipeline:
 class OverlayCompositor:
     """Draws UI markup over a finished frame for display only.
 
-    Runs `shaders/overlay.frag`: sweep reticle, draw-trail ring, and the
-    advanced-drawing field overlay. Input is a finished (tonemapped) texture;
-    output is a display-only texture (never sent to the video recorder).
+    Runs `shaders/overlay.frag`: the parameter-sweep reticle. Input is a
+    finished (tonemapped) texture; output is a display-only texture (never
+    sent to the video recorder).
     """
 
     def __init__(self, ctx):
@@ -200,32 +200,19 @@ class OverlayCompositor:
             self._out_fbo = self.ctx.framebuffer(color_attachments=[self._out_tex])
             self._size = (width, height)
 
-    def has_markup(self, *, sweep_mode, sweep_reticle_visible, trail_draw_radius,
-                   field_overlay_active):
+    def has_markup(self, *, sweep_mode, sweep_reticle_visible):
         """Whether any overlay would actually draw (lets callers skip the pass)."""
-        return (
-            (sweep_mode and sweep_reticle_visible)
-            or (trail_draw_radius > 0.0)
-            or field_overlay_active
-        )
+        return sweep_mode and sweep_reticle_visible
 
     def composite(self, input_texture, *,
                   sweep_mode=False, sweep_reticle_pos=(0.5, 0.5),
                   sweep_reticle_visible=False, screen_aspect=1.0,
-                  watercolor_mode=False, exposure=0.0,
-                  trail_draw_radius=0.0, mouse_screen_coords=(0.5, 0.5),
-                  camera_position=(0.0, 0.0), camera_zoom=1.0,
-                  canvas_resolution=(1024, 1024),
-                  field_texture=None,
-                  advanced_drawing_resources_initialized=False,
-                  draw_target_overlay_opacity=0.0):
+                  watercolor_mode=False, exposure=0.0):
         """Composite markup over ``input_texture``; return a display texture."""
         width, height = input_texture.size
         self._ensure(width, height)
 
         input_texture.use(location=0)
-        if field_texture is not None:
-            field_texture.use(location=3)
 
         s = self._shader
         s['input_frame'] = 0
@@ -235,15 +222,6 @@ class OverlayCompositor:
         tryset(s, 'screen_aspect', screen_aspect)
         tryset(s, 'WATERCOLOR_MODE', watercolor_mode)
         tryset(s, 'EXPOSURE', exposure)
-        tryset(s, 'TRAIL_DRAW_RADIUS', trail_draw_radius)
-        tryset(s, 'mouse_screen_coords', mouse_screen_coords)
-        tryset(s, 'camera_position', camera_position)
-        tryset(s, 'camera_zoom', camera_zoom)
-        tryset(s, 'canvas_resolution', canvas_resolution)
-        tryset(s, 'field_texture', 3)
-        tryset(s, 'advanced_drawing_resources_initialized',
-               advanced_drawing_resources_initialized)
-        tryset(s, 'draw_target_overlay_opacity', draw_target_overlay_opacity)
 
         self._out_fbo.use()
         self._vao.render()

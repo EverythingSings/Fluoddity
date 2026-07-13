@@ -21,12 +21,6 @@ class HelpWindowsMixin:
             imgui.bullet_text("You can undo particle selection and randomize actions.")
             imgui.unindent(20)
 
-            imgui.text("Draw Trail mode:")
-            imgui.indent(20)
-            imgui.bullet_text("Click and drag - Draw trails on the canvas")
-            imgui.bullet_text("Right click and drag - Erase trails on the canvas")
-            imgui.unindent(20)
-
             imgui.spacing()
             imgui.text("Keyboard Controls")
             imgui.separator()
@@ -54,7 +48,6 @@ class HelpWindowsMixin:
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_watercolor')} - Toggle watercolor mode")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('reload_shaders')} - Reload shaders (Sometimes fixes frozen/black screen)")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_help')} - Show tutorial")
-            imgui.bullet_text(f"{self.keybindings.get_key_display_name('toggle_mouse_mode')} - Toggle mouse mode: Selection/Trail Drawing")
             imgui.bullet_text(f"{self.keybindings.get_key_display_name('randomize_rules')} - Randomize particle behavior + new mutation seed")
             
             imgui.spacing()
@@ -141,12 +134,7 @@ class HelpWindowsMixin:
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('reset_keybinding')} to reset the simulation.")
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_pause')} to toggle pause.")
                 imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('randomize_mutations')} for a fresh crop of mutations.")
-                imgui.bullet_text("Click to draw trails or select particles.")
-                imgui.bullet_text(f"Press {self.keybindings.get_key_display_name('toggle_mouse_mode')} to toggle between drawing and selecting.")
-                imgui.separator_text("Trail Drawing Mode - White reticle visible")
-                imgui.bullet_text("Click and drag to draw trails")
-                imgui.bullet_text("Right Click and drag to erase trails")
-                imgui.separator_text("Particle Selection Mode - no reticle")
+                imgui.separator_text("Particle Selection Mode")
                 imgui.bullet_text("Click a particle to select it and other\nparticles will copy its behavior (with mutations)")
                 imgui.bullet_text("Right click to go back and undo particle selection")
                 imgui.bullet_text(f"Right click also undos Randomize actions ({self.keybindings.get_key_display_name('randomize_mutations')}/{self.keybindings.get_key_display_name('randomize_rules')})")
@@ -177,8 +165,7 @@ class HelpWindowsMixin:
                 imgui.text_wrapped(
                     "Particles in Fluoddity can't directly 'see' each other. "
                     "Instead, they interact by leaving pheremone trails as they move, like ants. "
-                    "These trails accumulate on the 'Canvas' where particles can see them. Trails spread out and fade over time. "
-                    "You can try writing your own pheremone trails to the canvas with 'Draw Trails' mouse mode (Preferences -> mouse mode)"
+                    "These trails accumulate on the 'Canvas' where particles can see them. Trails spread out and fade over time."
                 )
 
 

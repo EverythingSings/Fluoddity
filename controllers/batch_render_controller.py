@@ -16,8 +16,7 @@ class BatchRenderController:
     """Owns the render-queue execution state machine."""
 
     def __init__(self, render_spec_service, video_service, sim, camera,
-                 config_saver, rule_manager, entity_picker, ui, window,
-                 field_handler=None):
+                 config_saver, rule_manager, entity_picker, ui, window):
         self.render_spec_service = render_spec_service
         self.video_service = video_service
         self.sim = sim
@@ -27,7 +26,6 @@ class BatchRenderController:
         self.entity_picker = entity_picker
         self.ui = ui
         self.window = window
-        self.field_handler = field_handler
 
         self.executing = False
         self.index = 0
@@ -101,7 +99,7 @@ class BatchRenderController:
                 spec, gpu_buffers,
                 self.sim, self.camera, self.ui.tracer_controller_cam, ui_state,
                 self.config_saver, self.rule_manager,
-                self.field_handler.adv_draw if self.field_handler else None
+                None  # no live field texture (drawing removed; render_spec field is data-only)
             )
             if world_size_changed:
                 self.entity_picker.update_buffer(self.sim.get_entity_buffer())

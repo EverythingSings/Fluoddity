@@ -8,7 +8,8 @@ uniform sampler3D can_tex;
 layout(rgba16f, binding = 0) uniform image3D can_out;
 
 uniform ivec3 canvas_3d_size;  // (W, H, D) — supports non-cube shapes
-uniform bool TESTING_MODE;
+// TESTING_MODE (2D XY-only path) removed in the 3D-only cleanup; always 3D now.
+const bool TESTING_MODE = false;
 uniform int BOUNDARY_CONDITIONS_MODE; // 0=Bounce, 1=Reset, 2=Wrap
 uniform int frame_count;
 

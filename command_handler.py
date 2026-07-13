@@ -17,7 +17,7 @@ class CommandHandler:
 
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, user_configs_dir,
-                 field_handler=None, param_lock_service=None, render_spec_service=None,
+                 param_lock_service=None, render_spec_service=None,
                  recording_controller=None, controller_cam=None, plotting_manager=None):
         self.sim = sim
         self.camera = camera
@@ -27,7 +27,6 @@ class CommandHandler:
         self.video_service = video_service
         self.config_saver = config_saver
         self.user_configs_dir = user_configs_dir
-        self.field_handler = field_handler
         self.param_lock_service = param_lock_service
         self.render_spec_service = render_spec_service
         self.recording_controller = recording_controller
@@ -48,7 +47,7 @@ class CommandHandler:
             sim, rule_manager, config_saver, ui.clipboard_state,
             self._apply_config_with_locks, self._push_and_apply_rule,
             ui.update_physics_defaults,
-            field_handler=field_handler, param_lock_service=param_lock_service)
+            param_lock_service=param_lock_service)
 
         # Deferred entity selection state (waits one frame for rule buffer to be written)
         self._pending_entity_selection = None  # Tuple of (entity_id, entity_pos, entity_cohort) or None
@@ -74,21 +73,20 @@ class CommandHandler:
     def load_full_config(self, config, ui_state, *, json_filepath=None,
                          field_snapshot=None, watercolor_override=None,
                          push_rule=True):
-        """Load a whole PhysicsConfig to live state: params + rule + fields.
+        """Load a whole PhysicsConfig to live state: params + rule.
 
-        The single "load a full config" primitive. Composes the three steps that
+        The single "load a full config" primitive. Composes the two steps that
         were previously duplicated across fresh-load / clipboard-load / preview:
           1. physics params + appearance + 3D settings (lock-aware) via apply_config
           2. the rule to the GPU
-          3. the field texture + strengths (lock-aware)
 
         Args:
             config: PhysicsConfig to apply.
             ui_state: Frame state (sim + preferences), mutated in place.
-            json_filepath: When loading from a file, path used to locate the
-                companion _fields.png (via field_handler's cache).
-            field_snapshot: When loading from an in-memory snapshot (preview
-                restore), the raw field texture data (np.ndarray or None).
+            json_filepath: Unused (kept for signature stability; the live force/
+                strafe field runtime was removed with the drawing mode). Field
+                data on disk is preserved but no longer applied.
+            field_snapshot: Unused (see json_filepath).
             watercolor_override: If not None, overrides config's watercolor_mode.
             push_rule: True for real (undoable) loads -> pushes onto RuleManager.
                 False for preview -> applies the rule to the GPU directly without
@@ -105,15 +103,6 @@ class CommandHandler:
                 if not (pls and pls.is_locked('rule_seed')):
                     ui_state.sim.rule_seed = config.rule_seed
                 self.sim.apply_rule(rule)
-
-        fh = self.field_handler
-        if fh:
-            if json_filepath is not None:
-                fh.apply_for_config(config, json_filepath, ui_state)
-            else:
-                # In-memory snapshot path (preview restore). apply_snapshot handles
-                # a None snapshot by clearing/defaulting, and is lock-aware.
-                fh.apply_snapshot(field_snapshot, config, ui_state)
         return rule
 
     @property
@@ -172,8 +161,6 @@ class CommandHandler:
             if self.rule_manager.has_rules():
                 self.sim.apply_rule(self.rule_manager.get_current_rule())
             self.camera.reload()
-            if self.field_handler and self.field_handler.adv_draw:
-                self.field_handler.adv_draw.reload()
             if self.plotting_manager is not None:
                 self.plotting_manager.reload_shader()
             if self.ui._tracer_interface is not None:
@@ -208,14 +195,6 @@ class CommandHandler:
         # Handle config save/load/delete
         self._handle_config_commands(ui_state)
 
-        # Handle field image load requests
-        if ui_state.request_load_force_field_image and ui_state.field_load_image_path:
-            if self.field_handler:
-                self.field_handler.load_field_from_image(ui_state.field_load_image_path, "force")
-        if ui_state.request_load_strafe_field_image and ui_state.field_load_image_path:
-            if self.field_handler:
-                self.field_handler.load_field_from_image(ui_state.field_load_image_path, "strafe")
-
         # Save render spec
         if ui_state.request_save_render_spec:
             self._handle_save_render_spec(ui_state)
@@ -242,10 +221,6 @@ class CommandHandler:
         if self.rule_manager.has_rules():
             self.sim.apply_rule(self.rule_manager.get_current_rule())
         self.sim.reset()
-        # Reinitialize field texture at new canvas dimensions (if it exists)
-        if self.field_handler and self.field_handler._has_field_tex:
-            canvas_dim_x, canvas_dim_y = self.sim.get_canvas_dimensions()
-            self.field_handler.adv_draw.ensure_initialized(canvas_dim_x, canvas_dim_y)
         self.ui._last_applied_entity_count = ui_state.preferences.rendering.entity_count
         self.ui._last_applied_canvas_resolution = ui_state.preferences.rendering.canvas_resolution
         print(f"World size changed "
@@ -363,24 +338,22 @@ class CommandHandler:
             print(f"Warning: entity_id {entity_id} out of bounds (max: {self.sim.entity_count - 1})")
 
     def _handle_config_commands(self, ui_state):
-        """Handle config save/load/delete commands."""
-        fh = self.field_handler
+        """Handle config save/load/delete commands.
 
+        The live force/strafe field runtime was removed with the drawing mode,
+        so new saves never carry field data (``field_strengths=None``). Field
+        data in *old* saves on disk is left untouched — the config/render_spec
+        serializers still round-trip ``field_strengths`` for a future step.
+        """
         # Config save (Ctrl+C)
         if ui_state.request_save_config:
             current_rule = self.rule_manager.get_current_rule()
-
-            field_snapshot, field_strengths = (
-                fh.snapshot_with_strengths(ui_state) if fh else (None, None))
-
             config = self.config_saver.create_config(
-                ui_state.sim, current_rule, field_strengths=field_strengths)
+                ui_state.sim, current_rule, field_strengths=None)
             config_string = self.config_saver.encode_clipboard(config)
             self.ui.set_clipboard(config_string)
             self.ui.clipboard_state.add(
-                config, self.ui.currently_open_project, field_snapshot=field_snapshot)
-            if fh:
-                fh.enforce_snapshot_cap(self.ui.clipboard_state.entries)
+                config, self.ui.currently_open_project, field_snapshot=None)
             print(f"Config copied to clipboard ({len(config_string)} chars)")
 
         # Config load (Ctrl+V)
@@ -391,8 +364,6 @@ class CommandHandler:
                 if config is not None:
                     rule = self._apply_config_with_locks(config, ui_state)
                     self._push_and_apply_rule(rule, ui_state)
-                    if fh:
-                        fh.apply_last_copied(ui_state)
                     print("Config loaded from clipboard")
                 else:
                     print("Failed to load config from clipboard")
@@ -413,30 +384,19 @@ class CommandHandler:
                 filepath = self.ui._get_config_path(filename, category)
                 if filepath.exists():
                     filepath.unlink()
-                    if fh:
-                        fh.delete_field_png(filepath)
                     print(f"Config deleted: {filepath}")
 
     def _handle_file_save(self, ui_state):
-        """Handle file save from menu, including field texture PNG."""
+        """Handle file save from menu."""
         filename = ui_state.save_filename
         if not filename:
             return
 
-        fh = self.field_handler
         current_rule = self.rule_manager.get_current_rule()
-
-        field_data, field_strengths = (
-            fh.snapshot_with_strengths(ui_state) if fh else (None, None))
-
         config = self.config_saver.create_config(
-            ui_state.sim, current_rule, field_strengths=field_strengths)
+            ui_state.sim, current_rule, field_strengths=None)
         filepath = self.user_configs_dir / f"{filename}.json"
         self.config_saver.save_to_file(config, filepath)
-
-        if fh:
-            fh.save_field_png(field_data, filename, self.user_configs_dir)
-            fh.invalidate_cache(filepath)
 
         print(f"Config saved to {filepath}")
         self.ui.update_physics_defaults(filename)
@@ -515,16 +475,10 @@ class CommandHandler:
 
     def _capture_preview_restore(self, ui_state):
         """Snapshot the current live state as the preview's remembered original."""
-        fh = self.field_handler
         current_rule = self.rule_manager.get_current_rule()
-        field_snapshot = fh.snapshot_field_only(ui_state) if fh else None
-        field_strengths = (
-            ui_state.preferences.advanced_drawing.force_field_strength,
-            ui_state.preferences.advanced_drawing.strafe_field_strength,
-        )
         config = self.config_saver.create_config(
-            ui_state.sim, current_rule, field_strengths=field_strengths)
-        self._preview_restore = (config, field_snapshot)
+            ui_state.sim, current_rule, field_strengths=None)
+        self._preview_restore = (config, None)
 
     def _sync_tracer_to_preferences(self, ui_state):
         """Sync live TracerInterface values into PreferencesState.
@@ -575,7 +529,7 @@ class CommandHandler:
             spec, gpu_buffers = self.render_spec_service.capture_current_state(
                 self.sim, self.camera, self.controller_cam, ui_state,
                 self.config_saver, self.rule_manager,
-                self.field_handler.adv_draw if self.field_handler else None,
+                None,  # no live field texture (drawing removed)
                 name
             )
             saved_path = self.render_spec_service.save_to_disk(spec, gpu_buffers)
@@ -605,7 +559,7 @@ class CommandHandler:
                 spec, gpu_buffers,
                 self.sim, self.camera, self.controller_cam, ui_state,
                 self.config_saver, self.rule_manager,
-                self.field_handler.adv_draw if self.field_handler else None
+                None  # no live field texture (drawing removed)
             )
             if world_size_changed:
                 self.entity_picker.update_buffer(self.sim.get_entity_buffer())

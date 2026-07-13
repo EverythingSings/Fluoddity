@@ -18,7 +18,7 @@ class ConfigClipboardHandler:
     def __init__(self, sim, rule_manager, config_saver, clipboard_state,
                  apply_config_with_locks, push_and_apply_rule,
                  update_physics_defaults,
-                 field_handler=None, param_lock_service=None):
+                 param_lock_service=None):
         self.sim = sim
         self.rule_manager = rule_manager
         self.config_saver = config_saver
@@ -29,7 +29,6 @@ class ConfigClipboardHandler:
         # Updates the UI's project name after a permanent clipboard load
         # (bound from ui.update_physics_defaults). Keeps this module UI-free.
         self._update_physics_defaults = update_physics_defaults
-        self.field_handler = field_handler
         self.param_lock_service = param_lock_service
 
         # Preview state (was on CommandHandler)
@@ -39,8 +38,6 @@ class ConfigClipboardHandler:
 
     def process(self, ui_state):
         """Handle clipboard preview, load, and delete for this frame."""
-        fh = self.field_handler
-
         # Clear preview (must happen before a new preview)
         if ui_state.request_clear_clipboard_preview:
             if self.preview_active:
@@ -51,9 +48,6 @@ class ConfigClipboardHandler:
                     rule = self._apply_config_with_locks(self._cached_config, ui_state)
                     self.sim.apply_rule(rule)
                     self._cached_config = None
-
-                if fh:
-                    fh.restore_from_clipboard_preview(ui_state)
 
                 self.preview_active = False
                 self._rule_was_pushed = False
@@ -67,8 +61,6 @@ class ConfigClipboardHandler:
                     current_rule = self.rule_manager.get_current_rule()
                     self._cached_config = self.config_saver.create_config(
                         ui_state.sim, current_rule)
-                    if fh:
-                        fh.cache_for_clipboard_preview(ui_state)
 
                 entry = self.state.entries[idx]
                 rule = self._apply_config_with_locks(entry.config, ui_state)
@@ -78,9 +70,6 @@ class ConfigClipboardHandler:
                     self.sim.apply_rule(rule)
                     self._rule_was_pushed = True
                 self.preview_active = True
-
-                if fh:
-                    fh.apply_snapshot(entry.field_snapshot, entry.config, ui_state)
 
         # Load (click)
         if ui_state.request_load_clipboard_config:
@@ -92,8 +81,6 @@ class ConfigClipboardHandler:
 
     def _load(self, ui_state):
         """Load a config from the clipboard (apply it permanently)."""
-        fh = self.field_handler
-
         # Clear preview first (discard cached config since we're committing)
         if self.preview_active:
             if self._rule_was_pushed:
@@ -101,17 +88,12 @@ class ConfigClipboardHandler:
             self.preview_active = False
             self._rule_was_pushed = False
             self._cached_config = None
-            if fh:
-                fh.discard_clipboard_preview_cache()
 
         idx = ui_state.clipboard_config_index
         if 0 <= idx < len(self.state.entries):
             entry = self.state.entries[idx]
             rule = self._apply_config_with_locks(entry.config, ui_state)
             self._push_and_apply_rule(rule, ui_state)
-
-            if fh:
-                fh.apply_snapshot(entry.field_snapshot, entry.config, ui_state)
 
             # Extract original filename from label (everything before the *)
             original_filename = entry.label.rsplit("*", 1)[0]
@@ -120,8 +102,6 @@ class ConfigClipboardHandler:
 
     def _delete(self, ui_state):
         """Delete an entry from the config clipboard."""
-        fh = self.field_handler
-
         # Clear preview first, restore cached config
         if self.preview_active:
             if self._rule_was_pushed:
@@ -130,9 +110,6 @@ class ConfigClipboardHandler:
                 rule = self._apply_config_with_locks(self._cached_config, ui_state)
                 self.sim.apply_rule(rule)
                 self._cached_config = None
-
-            if fh:
-                fh.restore_from_clipboard_preview(ui_state)
 
             self.preview_active = False
             self._rule_was_pushed = False

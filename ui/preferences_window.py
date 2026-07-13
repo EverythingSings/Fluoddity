@@ -125,32 +125,15 @@ class PreferencesWindowMixin:
             imgui.separator()
 
             # === Mouse Interaction section ===
-            imgui.text("Mouse Interaction (Press 'T' to toggle)")
+            imgui.text("Mouse Interaction")
 
-            # Mouse mode combo box
-            mouse_modes = ["Select Particle", "Draw Trail"]
+            # Mouse mode combo box (kept for future interaction modes)
+            mouse_modes = ["Select Particle"]
             current_mode_idx = mouse_modes.index(self.state.preferences.ui_windows.mouse_mode) if self.state.preferences.ui_windows.mouse_mode in mouse_modes else 0
             clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
             if clicked:
                 self.state.preferences.ui_windows.mouse_mode = mouse_modes[new_mode_idx]
-            self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
-
-            # Draw mode sliders (only show when in Draw Trail mode)
-            if self.state.preferences.ui_windows.mouse_mode == "Draw Trail":
-                imgui.indent(20)
-                _, self.state.preferences.ui_windows.draw_size = imgui.slider_float(
-                    "Draw Size",
-                    self.state.preferences.ui_windows.draw_size,
-                    0.01, 0.5,
-                    format="%.3f"
-                )
-                _, self.state.preferences.ui_windows.draw_power = imgui.slider_float(
-                    "Draw Power",
-                    self.state.preferences.ui_windows.draw_power,
-                    0.1, 5.0,
-                    format="%.2f"
-                )
-                imgui.unindent(20)
+            self._delayed_tooltip("In Select Particle mode, clicking selects a particle rule to focus on.\nSee Help->Controls for more")
 
             imgui.separator()
 
@@ -161,15 +144,12 @@ class PreferencesWindowMixin:
             )
             self._delayed_tooltip("Enable verbose tooltip and vector diagram for physics sliders.")
 
-            # Arrow debug checkbox - label changes when advanced drawing is open
-            arrow_label = ("View Draw Target Arrows"
-                           if self.state.preferences.advanced_drawing.enabled
-                           else "View Trail Arrows")
+            # Arrow debug checkbox — visualizes the trail canvas velocity field
             _, self.state.preferences.ui_windows.debug_arrows = imgui.checkbox(
-                arrow_label,
+                "View Trail Arrows",
                 self.state.preferences.ui_windows.debug_arrows
             )
-            self._delayed_tooltip("Render a grid of arrows to help visualize the active draw target's vector field.")
+            self._delayed_tooltip("Render a grid of arrows to help visualize the trail canvas velocity field.")
 
             # Arrow sensitivity slider (only show when debug arrows enabled)
             if self.state.preferences.ui_windows.debug_arrows:

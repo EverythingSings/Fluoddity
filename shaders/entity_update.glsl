@@ -42,11 +42,13 @@ struct PhysicsSetting {
 uniform int frame_count;
 uniform Rule target_rule;
 uniform sampler3D canvas_3d; //trails canvas (RGBA16F packed: R=vx, G=vy, B=vz)
-uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
+// DISABLED — legacy 2D force/strafe field. Retained (commented out) for a future
+// field reimplementation; the live drawing runtime was removed in the 3D-only cleanup.
+//uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
 uniform ivec3 canvas_3d_size;  // (W, H, D) for non-cube support
-uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
-uniform float force_field_strength; // Multiplier for force field effects
-uniform float strafe_field_strength; // Multiplier for strafe field effects
+//uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
+//uniform float force_field_strength; // Multiplier for force field effects
+//uniform float strafe_field_strength; // Multiplier for strafe field effects
 uniform vec2 canvas_resolution;
 uniform PhysicsSetting DRAG_SETTING; 
 uniform PhysicsSetting STRAFE_POWER_SETTING;
@@ -63,8 +65,11 @@ layout(rgba16f, binding = 0) uniform image3D can_img;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
-uniform int PLANE_SAMPLES;   // Number of random plane samples per entity per frame (default 1)
-uniform bool TESTING_MODE;   // Lock z=0, XY plane only — must reproduce 2D behavior exactly
+// TESTING_MODE (lock z=0, XY plane) and PLANE_SAMPLES (multi-plane Monte Carlo)
+// were removed in the 3D-only cleanup. The shader now always runs the full 3D
+// path with a single tangent-plane sample.
+const bool TESTING_MODE = false;
+const int PLANE_SAMPLES = 1;
 uniform int ABSOLUTE_ORIENTATION; // 0=Off, 1=Y axis, 2=Radial
 uniform float ORIENTATION_MIX; // Blend factor for orientation calculations
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
@@ -276,14 +281,18 @@ vec3 get_can_3d(vec3 p){
     vec3 uvw = vec3(uv_xy, uv_z);
     return texture(canvas_3d, uvw).rgb;
 }
+// DISABLED — legacy 2D force/strafe field sampler. Retained (stubbed) for a
+// future field reimplementation; the live drawing runtime was removed in the
+// 3D-only cleanup. Returns zero so the (also-disabled) callers stay inert.
 vec4 get_field(vec2 p){
-    if(!advanced_drawing_resources_initialized)return vec4(0);
-    vec2 res=textureSize(field_texture,0);
-    float ca = res.x / res.y;
-    vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
-    vec2 uv = p / (2.0 * half_extent) + 0.5;
-    if(get_particle_boundary_conditions() == 2) uv = fract(uv);
-    return texture(field_texture, uv);
+    return vec4(0);
+    //if(!advanced_drawing_resources_initialized)return vec4(0);
+    //vec2 res=textureSize(field_texture,0);
+    //float ca = res.x / res.y;
+    //vec2 half_extent = vec2(sqrt(ca), 1.0 / sqrt(ca));
+    //vec2 uv = p / (2.0 * half_extent) + 0.5;
+    //if(get_particle_boundary_conditions() == 2) uv = fract(uv);
+    //return texture(field_texture, uv);
 }
 
 vec2 safenorm(vec2 p){
@@ -782,12 +791,14 @@ void main() {
         e.py+=n.y;
         e.pz+=n.z;
     }
-    //ADVANCED DRAWING force / strafe (still 2D, applied to XY only)
-    vec4 draw_sample =get_field(vec2(e.px, e.py));
-    e.vx += .01/CANVAS_SCALE*force_field_strength*draw_sample.x;
-    e.vy += .01/CANVAS_SCALE*force_field_strength*draw_sample.y;
-    e.px += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.z;
-    e.py += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.w;
+    // DISABLED — legacy 2D ADVANCED DRAWING force / strafe (applied to XY only).
+    // Retained (commented out) for a future field reimplementation; the live
+    // drawing runtime + its uniforms were removed in the 3D-only cleanup.
+    //vec4 draw_sample =get_field(vec2(e.px, e.py));
+    //e.vx += .01/CANVAS_SCALE*force_field_strength*draw_sample.x;
+    //e.vy += .01/CANVAS_SCALE*force_field_strength*draw_sample.y;
+    //e.px += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.z;
+    //e.py += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.w;
     vec3 sp = vec3(e.px,e.py,e.pz);
     vec3 n = scene(sp).x*-.01*sdf_normal(sp);
     //e.px+=n.x;

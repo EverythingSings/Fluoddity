@@ -55,22 +55,6 @@ class RecordingPrefs:
 
 
 @dataclass
-class AdvancedDrawingPrefs:
-    """Advanced force/strafe field drawing preferences."""
-    enabled: bool = False  # Whether Advanced Drawing window is shown
-    draw_canvas: bool = True  # "Trails / Canvas (Default)" checkbox
-    draw_force_field: bool = False  # "Force Field" checkbox
-    draw_strafe_field: bool = False  # "Strafe Field" checkbox
-    brush_mode: int = 0  # 0=Mouse Direction, 1=Inverse, 2=Fixed, 3=Attract, 4=Repel
-    fixed_direction_heading: float = 0.0  # Range -PI to PI, heading for Fixed Direction mode
-    force_field_strength: float = 1.0  # Multiplier for force field effect (log scale 0.0001-10.0)
-    strafe_field_strength: float = 1.0  # Multiplier for strafe field effect (log scale 0.0001-10.0)
-    draw_target_overlay_opacity: float = 0.0  # Opacity of draw target field overlay in frame assembly (0-1)
-    shader_driven_field: bool = False  # Use a frag shader to override the field texture
-    field_override_shader: str = "march.frag"  # Currently selected field override shader filename
-
-
-@dataclass
 class GenericsPrefs:
     """Live-coding scratch uniform values."""
     generic0: float = 0.0
@@ -202,9 +186,7 @@ class UIWindowsPrefs:
     physics_tooltips_enabled: bool = True
     debug_arrows: bool = False  # Visual debug overlay for velocity field
     arrow_sensitivity: float = 15.0  # Velocity scale for debug arrows (pow(2, x))
-    mouse_mode: str = "Select Particle"  # "Select Particle" or "Draw Trail"
-    draw_size: float = 0.031  # Gaussian kernel width for trail drawing
-    draw_power: float = 1.0  # Velocity strength when drawing trails
+    mouse_mode: str = "Select Particle"  # Mouse interaction mode (currently only "Select Particle")
     menu_close_threshold: float = 80.0  # Distance in pixels before menus auto-close
 
     # Physics slider group collapsed states (True = expanded/open, False = collapsed)
@@ -230,7 +212,6 @@ class PreferencesState:
     rendering: RenderingPrefs = field(default_factory=RenderingPrefs)
     bloom: BloomPrefs = field(default_factory=BloomPrefs)
     recording: RecordingPrefs = field(default_factory=RecordingPrefs)
-    advanced_drawing: AdvancedDrawingPrefs = field(default_factory=AdvancedDrawingPrefs)
     generics: GenericsPrefs = field(default_factory=GenericsPrefs)
     parameter_locks: ParameterLocksPrefs = field(default_factory=ParameterLocksPrefs)
     tracer: TracerPrefs = field(default_factory=TracerPrefs)
@@ -275,18 +256,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "recording_blur_quality": ("recording", "recording_blur_quality"),
     "video_end_frame": ("recording", "video_end_frame"),
     "tracer_mode": ("recording", "tracer_mode"),
-    # AdvancedDrawingPrefs
-    "advanced_drawing_enabled": ("advanced_drawing", "enabled"),
-    "advanced_draw_canvas": ("advanced_drawing", "draw_canvas"),
-    "advanced_draw_force_field": ("advanced_drawing", "draw_force_field"),
-    "advanced_draw_strafe_field": ("advanced_drawing", "draw_strafe_field"),
-    "brush_mode": ("advanced_drawing", "brush_mode"),
-    "fixed_direction_heading": ("advanced_drawing", "fixed_direction_heading"),
-    "force_field_strength": ("advanced_drawing", "force_field_strength"),
-    "strafe_field_strength": ("advanced_drawing", "strafe_field_strength"),
-    "draw_target_overlay_opacity": ("advanced_drawing", "draw_target_overlay_opacity"),
-    "shader_driven_field": ("advanced_drawing", "shader_driven_field"),
-    "field_override_shader": ("advanced_drawing", "field_override_shader"),
     # GenericsPrefs
     "generic0": ("generics", "generic0"),
     "generic1": ("generics", "generic1"),
@@ -393,8 +362,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "debug_arrows": ("ui_windows", "debug_arrows"),
     "arrow_sensitivity": ("ui_windows", "arrow_sensitivity"),
     "mouse_mode": ("ui_windows", "mouse_mode"),
-    "draw_size": ("ui_windows", "draw_size"),
-    "draw_power": ("ui_windows", "draw_power"),
     "menu_close_threshold": ("ui_windows", "menu_close_threshold"),
     "physics_group_basics": ("ui_windows", "physics_group_basics"),
     "physics_group_forces": ("ui_windows", "physics_group_forces"),

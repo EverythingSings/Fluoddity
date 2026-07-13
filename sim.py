@@ -109,7 +109,6 @@ class Sim:
         tryset(self.entity_update_program, 'canvas_resolution', (self.canvas_resolution, self.canvas_resolution))
         tryset(self.entity_update_program, 'canvas_3d', 1)
         tryset(self.entity_update_program, 'canvas_3d_size', (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
-        tryset(self.entity_update_program, 'field_texture', 5)
 
         # 2. Canvas update 3D compute shader
         try:
@@ -120,9 +119,6 @@ class Sim:
             print(e)
 
     def entity_update(self, ctx: moderngl.Context,
-                      field_texture_bound=False,
-                      force_field_strength: float = 1.0,
-                      strafe_field_strength: float = 1.0,
                       generics: tuple = None):
         '''
         Run a single physics update on all particles
@@ -131,11 +127,7 @@ class Sim:
         tryset(self.entity_update_program, 'canvas_3d', 1)
         tryset(self.entity_update_program, 'canvas_3d_size', (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
 
-        # Advanced drawing field texture
-        tryset(self.entity_update_program, 'field_texture', 5)
-        tryset(self.entity_update_program, 'advanced_drawing_resources_initialized', field_texture_bound)
-        tryset(self.entity_update_program, 'force_field_strength', force_field_strength)
-        tryset(self.entity_update_program, 'strafe_field_strength', strafe_field_strength)
+        # (Legacy force/strafe field uniforms removed with the drawing mode.)
 
         # Only write rules to buffer when explicitly requested (avoids 192MB/frame cost)
         tryset(self.entity_update_program, 'WRITE_RULES', self._pending_rule_buffer_update)
@@ -167,10 +159,6 @@ class Sim:
         tryset(self.entity_update_program, 'RADIO_TARGET_FREQ', self._state.RADIO_TARGET_FREQ)
         tryset(self.entity_update_program, 'RADIO_BANDWIDTH', self._state.RADIO_BANDWIDTH)
 
-        # 3D physics uniforms
-        tryset(self.entity_update_program, 'PLANE_SAMPLES', self._state.PLANE_SAMPLES)
-        tryset(self.entity_update_program, 'TESTING_MODE', self._state.TESTING_MODE)
-
         # Appearance settings from sim state (now part of physics config)
         tryset(self.entity_update_program, 'HUE_SENSITIVITY', self._state.hue_sensitivity)
         tryset(self.entity_update_program, 'COLOR_BY_COHORT', self._state.color_by_cohort)
@@ -191,7 +179,6 @@ class Sim:
         """
         prog = self.canvas_update_3d_program
         tryset(prog, 'canvas_3d_size', (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
-        tryset(prog, 'TESTING_MODE', self._state.TESTING_MODE)
         tryset(prog, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(prog, 'frame_count', self.frame_count)
 
@@ -243,32 +230,16 @@ class Sim:
         # Swap buffers
         self.can_read_index = write_index
 
-    def update(self, ctx, draw_mode: bool = False, mouse_pos: tuple[float, float] = None,
-               prev_mouse_pos: tuple[float, float] = None, draw_size: float = 0.1, draw_power: float = 0.0,
-               brush_mode: int = 0, fixed_direction_heading: float = 0.0,
-               erase_mode: bool = False, fill_mode: bool = False, fill_direction_type: int = 0,
-               canvas_draw_active: bool = True,
-               field_texture=None,
-               force_field_strength: float = 1.0,
-               strafe_field_strength: float = 1.0,
-               generics: tuple = None):
+    def update(self, ctx, generics: tuple = None):
         # Bind packed 3D canvas texture for entity_update sampling (sensors) and atomic splatting
         self.can_3d[self.can_read_index].use(location=1)
         self.can_3d[self.can_read_index].bind_to_image(0, read=False, write=True)
-
-        # Bind advanced drawing field texture if available
-        if field_texture is not None:
-            field_texture.use(location=5)
 
         current_time = time.time()
         self.time = current_time - self.start_time_stamp
 
         # 1. Entity physics + atomic splat (reads canvas for sensors, writes trails atomically)
-        self.entity_update(ctx,
-                           field_texture_bound=field_texture is not None,
-                           force_field_strength=force_field_strength,
-                           strafe_field_strength=strafe_field_strength,
-                           generics=generics)
+        self.entity_update(ctx, generics=generics)
 
         # 2. Memory barrier: ensure atomic writes visible to canvas fragment shader
         ctx.memory_barrier()

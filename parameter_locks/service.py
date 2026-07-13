@@ -40,14 +40,11 @@ class ParameterLockService:
         self._locks: dict[str, bool] = {
             p: False for p in sim_params + pref_params}
         self.lock_rule: bool = False
-        self.lock_force_field: bool = False
-        self.lock_strafe_field: bool = False
         self.enabled: bool = False
 
     @property
     def any_locked(self) -> bool:
-        return (any(self._locks.values())
-                or self.lock_rule or self.lock_force_field or self.lock_strafe_field)
+        return any(self._locks.values()) or self.lock_rule
 
     def is_locked(self, param_name: str) -> bool:
         if not self.enabled:
@@ -62,15 +59,11 @@ class ParameterLockService:
         for key in self._locks:
             self._locks[key] = True
         self.lock_rule = True
-        self.lock_force_field = True
-        self.lock_strafe_field = True
 
     def unlock_all(self):
         for key in self._locks:
             self._locks[key] = False
         self.lock_rule = False
-        self.lock_force_field = False
-        self.lock_strafe_field = False
 
     def reset(self):
         self.unlock_all()
@@ -120,12 +113,6 @@ class ParameterLockService:
 
     def should_block_rule_push(self) -> bool:
         return self.enabled and self.lock_rule
-
-    def should_block_force_field(self) -> bool:
-        return self.enabled and self.lock_force_field
-
-    def should_block_strafe_field(self) -> bool:
-        return self.enabled and self.lock_strafe_field
 
     # --- UI helpers ---
 

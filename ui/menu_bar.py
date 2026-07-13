@@ -181,10 +181,10 @@ class MenuBarMixin:
                     self._request_camera_reset = True
                 self._delayed_tooltip("Return camera to default position and zoom level.")
 
-                # Reset canvas and fields
-                if imgui.menu_item("Reset Canvas and Fields", "", False)[0]:
-                    self._request_clear_canvas_and_fields = True
-                self._delayed_tooltip("Clear canvas, brush, and all field textures to zero.")
+                # Reset canvas
+                if imgui.menu_item("Reset Canvas", "", False)[0]:
+                    self.state.request_clear_canvas = True
+                self._delayed_tooltip("Clear the trail canvas to zero.")
 
                 imgui.end_menu()
 
@@ -213,14 +213,6 @@ class MenuBarMixin:
                     if changed:
                         pls._locks['rule_seed'] = pls.lock_rule
                     self._delayed_tooltip("Prevent the target rule and mutation seed\nfrom being changed by config loads/pastes.\nMutation seed can also be locked independently via Alt-click.")
-
-                    _, pls.lock_force_field = imgui.checkbox(
-                        "Lock Force Field", pls.lock_force_field)
-                    self._delayed_tooltip("Prevent the force components of the field\ntexture from being changed by loads/pastes.")
-
-                    _, pls.lock_strafe_field = imgui.checkbox(
-                        "Lock Strafe Field", pls.lock_strafe_field)
-                    self._delayed_tooltip("Prevent the strafe components of the field\ntexture from being changed by loads/pastes.")
 
                     imgui.end_menu()
 
@@ -265,26 +257,6 @@ class MenuBarMixin:
                 _, self.state.preferences.ui_windows.show_video_recording_window = imgui.checkbox(
                     "Screen Recording Controls",
                     self.state.preferences.ui_windows.show_video_recording_window
-                )
-
-                # Load Field submenu
-                if imgui.begin_menu("Load Field"):
-                    if imgui.menu_item("Load Force Field...", "", False)[0]:
-                        self._open_field_loader("force")
-                    self._delayed_tooltip("Load a PNG/JPEG image as a force field.\nR=magnitude, G=angle (polar coordinates).")
-                    if imgui.menu_item("Load Strafe Field...", "", False)[0]:
-                        self._open_field_loader("strafe")
-                    self._delayed_tooltip("Load a PNG/JPEG image as a strafe field.\nR=magnitude, G=angle (polar coordinates).")
-                    imgui.end_menu()
-
-                # Advanced Drawing toggle
-                _, self.state.preferences.advanced_drawing.enabled = imgui.checkbox(
-                    "Advanced Drawing - EXPERIMENTAL",
-                    self.state.preferences.advanced_drawing.enabled
-                )
-                self._delayed_tooltip(
-                    "Open the Drawing Controls window for advanced\n"
-                    "brush modes, force fields, and strafe fields."
                 )
 
                 # Parameter Locks checkbox

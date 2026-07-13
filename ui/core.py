@@ -24,7 +24,6 @@ from .physics_tooltip import PhysicsTooltipMixin
 from .preferences_window import PreferencesWindowMixin
 from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
-from advanced_drawing import AdvancedDrawingWindowMixin, FieldLoaderWindowMixin
 from .generics_window import GenericsWindowMixin
 from .plotting import PlottingWindowMixin
 from .three_d_window import ThreeDWindowMixin
@@ -51,8 +50,6 @@ class UI(
     PhysicsTooltipMixin,
     ConfigBrowserMixin,
     SliderWidgetsMixin,
-    AdvancedDrawingWindowMixin,
-    FieldLoaderWindowMixin,
     GenericsWindowMixin,
     PlottingWindowMixin,
     ThreeDWindowMixin,
@@ -65,7 +62,7 @@ class UI(
 
     def __init__(self, window, ctx: moderngl.Context,
                  param_lock_service=None, plotting_manager=None,
-                 render_spec_service=None, advanced_drawing_processor=None,
+                 render_spec_service=None,
                  viewer=None, tracer_sim=None, tracer_controller_cam=None,
                  tracer_camera=None):
         self.window = window
@@ -74,7 +71,6 @@ class UI(
         self.param_lock_service = param_lock_service
         self.plotting_manager = plotting_manager
         self.render_spec_service = render_spec_service
-        self.advanced_drawing_processor = advanced_drawing_processor
         self.viewer = viewer  # Viewer window
 
         # Tracer references (for entity buffer and camera access)
@@ -204,9 +200,6 @@ class UI(
         self._request_clear_preview = False
         self._request_world_size_change = False
 
-        # Advanced drawing one-shot flags (owned by AdvancedDrawingWindowMixin)
-        self._init_advanced_drawing_state()
-
         # Config clipboard flags (owned by ConfigClipboardWindowMixin)
         self._init_config_clipboard_flags()
 
@@ -221,9 +214,6 @@ class UI(
         self._preview_filename = ""
         self._preview_category = ""  # Category for preview operation
         self._preview_watercolor_override: bool | None = None  # Session watercolor mode for preview load/restore
-
-        # Field loader state + one-shot flags (owned by FieldLoaderWindowMixin)
-        self._init_field_loader_state()
 
         # Scheduled renders (render_spec_service injected via constructor above)
         self._init_scheduled_renders_state()
@@ -347,12 +337,6 @@ class UI(
                 self.state.sim.going = not self.state.sim.going
             elif key == self.keybindings.get_key("randomize_mutations"):
                 self._request_randomize_mutations = True
-            elif key == self.keybindings.get_key("toggle_mouse_mode"):
-                # Toggle mouse mode between Select Particle and Draw Trail
-                if self.state.preferences.ui_windows.mouse_mode == "Select Particle":
-                    self.state.preferences.ui_windows.mouse_mode = "Draw Trail"
-                else:
-                    self.state.preferences.ui_windows.mouse_mode = "Select Particle"
             elif key == self.keybindings.get_key("toggle_parameter_sweep"):
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
@@ -424,10 +408,6 @@ class UI(
         self.state.request_preview_config = self._request_preview_config
         self.state.request_clear_preview = self._request_clear_preview
         self.state.request_world_size_change = self._request_world_size_change
-
-        # Each module marshals its own one-shot flags (copy into state + reset).
-        self._marshal_advanced_drawing_state(self.state)
-        self._marshal_field_loader_state(self.state)
 
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
@@ -619,10 +599,6 @@ class UI(
         if self.show_sidebar and self.state.preferences.ui_windows.show_config_clipboard_window:
             self.render_config_clipboard_window()
 
-        # Render Advanced Drawing window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.advanced_drawing.enabled:
-            self.render_advanced_drawing_window()
-
         # Render Generics window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.ui_windows.show_generics_window:
             self.render_generics_window()
@@ -650,9 +626,6 @@ class UI(
         # Render Scheduled Renders window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.ui_windows.show_scheduled_renders_window:
             self.render_scheduled_renders_window()
-
-        # Render field loader window (transient, not gated by sidebar)
-        self.render_field_loader_window()
 
         if self.show_demo_window:
             imgui.show_demo_window()

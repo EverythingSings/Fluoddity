@@ -27,13 +27,9 @@ class UIState:
 
     # Continuous mouse state (respects imgui capture)
     mouse_left_held: bool = False
-    mouse_right_held: bool = False  # For right-click eraser in Draw Trail mode
+    mouse_right_held: bool = False
 
-    # Advanced drawing one-shot flags
-    request_fill_operation: bool = False  # Fill entire canvas/field for one frame
-    fill_direction_type: int = 0  # 0=fixed, 1=radial_in, 2=radial_out
-    request_clear_force_field: bool = False  # Clear force field channels
-    request_clear_strafe_field: bool = False  # Clear strafe field channels
+    # Canvas clear (menu-driven, one-shot; reset by the runner after acting)
     request_clear_canvas: bool = False  # Clear trails/canvas textures
 
     # Scroll input (for zoom-around-pointer)
@@ -48,7 +44,6 @@ class UIState:
     request_screenshot: bool = False
     request_world_size_change: bool = False
     request_camera_reset: bool = False
-    request_clear_canvas_and_fields: bool = False
     request_pick_focal: bool = False  # N key: set focal plane to nearest entity
 
     # Config save/load (Ctrl+C/Ctrl+V)
@@ -74,11 +69,6 @@ class UIState:
     preview_filename: str = ""  # Filename to preview
     preview_category: str = ""  # Category for preview operation
     preview_watercolor_override: bool | None = None  # Session watercolor mode for preview load/restore
-
-    # Field loader (load image as force/strafe field)
-    request_load_force_field_image: bool = False
-    request_load_strafe_field_image: bool = False
-    field_load_image_path: str = ""
 
     # Config clipboard flags
     request_preview_clipboard_config: bool = False

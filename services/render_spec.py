@@ -63,13 +63,9 @@ class RenderSpecService:
         """
         # 1. Physics config (reuse existing serialization)
         rule = rule_manager.get_current_rule()
-        # Include field strengths if field texture exists
+        # The live force/strafe field runtime was removed with the drawing mode,
+        # so new specs never carry field strengths (adv_draw_processor is None).
         field_strengths = None
-        if adv_draw_processor and adv_draw_processor.snapshot_field_data() is not None:
-            field_strengths = (
-                ui_state.preferences.advanced_drawing.force_field_strength,
-                ui_state.preferences.advanced_drawing.strafe_field_strength,
-            )
         physics_config = config_saver.create_config(ui_state.sim, rule, field_strengths)
         physics_config_dict = physics_config.to_dict()
 
@@ -136,7 +132,10 @@ class RenderSpecService:
         buffers['can_packed'] = np.frombuffer(
             sim.can_3d[read_idx].read(), dtype=np.float16).copy()
 
-        # Force/strafe field texture (optional)
+        # Force/strafe field texture (optional). The live field runtime was
+        # removed with the drawing mode, so adv_draw_processor is always None
+        # now and new specs carry no field; field.npz in *old* specs is still
+        # loaded (data-only) on the load path for a future reimplementation.
         if adv_draw_processor is not None:
             field_data = adv_draw_processor.snapshot_field_data()
             if field_data is not None:

@@ -144,10 +144,10 @@ DEFAULT_SLIDER_RANGES: dict[str, list[float]] = {
 # of hardcoding it, so it stays in sync with the params.
 #
 # The 12 physics sliders above are all lockable. In addition, several
-# non-slider SimState settings and two force/strafe-field *preference* values
-# are lockable. Those extras are not sliders, so they are NOT part of
-# PHYSICS_PARAMS (which drives config_saver's sweep/jitter dicts and the physics
-# window's slider rendering) — they are declared separately here.
+# non-slider SimState settings are lockable. Those extras are not sliders, so
+# they are NOT part of PHYSICS_PARAMS (which drives config_saver's sweep/jitter
+# dicts and the physics window's slider rendering) — they are declared
+# separately here.
 
 # Extra lockable SimState params that are not physics sliders: (name, display label).
 LOCKABLE_EXTRA_SIM_PARAMS: list[tuple[str, str]] = [
@@ -164,10 +164,10 @@ LOCKABLE_EXTRA_SIM_PARAMS: list[tuple[str, str]] = [
     ('hue_sensitivity', 'Hue Sensitivity'),
 ]
 
-# Lockable PreferencesState params (live on preferences.advanced_drawing, not SimState).
-LOCKABLE_PREF_PARAMS: list[str] = [
-    'force_field_strength', 'strafe_field_strength',
-]
+# Lockable PreferencesState params. (The force/strafe-field strengths that
+# used to live here were removed with the drawing mode; the list is now empty
+# but kept so the parameter_locks registry contract is unchanged.)
+LOCKABLE_PREF_PARAMS: list[str] = []
 
 # All lockable SimState param names, in a stable order: the 12 sliders first,
 # then the extras. (Used to initialize the lock dict and to drive snapshot/restore.)

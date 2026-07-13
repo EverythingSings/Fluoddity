@@ -13,7 +13,6 @@ from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
 from camera_input import process_camera_input, reposition_orbit_camera
 from controller_input import ControllerCam, process_controller_input, find_joystick
-from advanced_drawing import AdvancedDrawingProcessor, FieldHandler
 from rendering import RendererHost
 from viewer import Viewer
 from controllers import RecordingController, BatchRenderController
@@ -72,7 +71,6 @@ class App:
         self.video_service = VideoRecorderService()
         self.config_saver = ConfigSaver()
         self.arrow_debug_service = ArrowDebugService(self.ctx)
-        self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
         self.plotting_manager = PlottingManager(self.ctx)
         self.render_spec_service = RenderSpecService()
         self.param_lock_service = ParameterLockService()
@@ -87,7 +85,6 @@ class App:
                      param_lock_service=self.param_lock_service,
                      plotting_manager=self.plotting_manager,
                      render_spec_service=self.render_spec_service,
-                     advanced_drawing_processor=self.advanced_drawing_processor,
                      viewer=self.viewer,
                      tracer_sim=self.sim,
                      tracer_controller_cam=self.controller_cam,
@@ -115,11 +112,6 @@ class App:
         self.user_configs_dir = get_user_physics_configs_dir()
         self.user_configs_dir.mkdir(exist_ok=True)
 
-        # Delegated handlers.
-        self.field_handler = FieldHandler(
-            self.advanced_drawing_processor, self.sim,
-            param_lock_service=self.param_lock_service)
-
         # Recording controller: owns the video-recording state machine
         # (idle -> pending -> recording -> finished), including video-strategy
         # build, speedmult/motion-blur override + restore, and its RecordingState.
@@ -130,7 +122,6 @@ class App:
             self.sim, self.camera, self.ui, self.rule_manager,
             self.entity_picker, self.video_service, self.config_saver,
             self.user_configs_dir,
-            field_handler=self.field_handler,
             param_lock_service=self.param_lock_service,
             render_spec_service=self.render_spec_service,
             recording_controller=self.recording_controller,
@@ -147,7 +138,6 @@ class App:
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
             self.command_handler, self.window,
-            advanced_drawing_processor=self.advanced_drawing_processor,
             controller_cam=self.controller_cam,
             plotting_manager=self.plotting_manager
         )
@@ -157,7 +147,7 @@ class App:
         self.batch_render_controller = BatchRenderController(
             self.render_spec_service, self.video_service, self.sim, self.camera,
             self.config_saver, self.rule_manager, self.entity_picker, self.ui,
-            self.window, field_handler=self.field_handler)
+            self.window)
 
         # Frame timing
         self.last_update_time = time.time()
@@ -537,18 +527,9 @@ class App:
         # Viewer-owned display copy (display-only, never into recorded frames).
         if ui_state.preferences.ui_windows.debug_arrows:
             width, height = glfw.get_framebuffer_size(self.window)
-            adv_prefs = ui_state.preferences
-            adv_active = adv_prefs.advanced_drawing.enabled
-            field_tex = self.advanced_drawing_processor.field_texture
-            # Use field_texture for force/strafe targets, canvas for trails
-            if adv_active and not adv_prefs.advanced_drawing.draw_canvas and field_tex is not None:
-                arrow_texture = field_tex
-                arrow_resolution = field_tex.size
-                use_zw = adv_prefs.advanced_drawing.draw_strafe_field
-            else:
-                arrow_texture = self.sim.can
-                arrow_resolution = self.sim.can.size
-                use_zw = False
+            arrow_texture = self.sim.can
+            arrow_resolution = self.sim.can.size
+            use_zw = False
             self.viewer.draw_debug_overlay(lambda: self.arrow_debug_service.render(
                 canvas_texture=arrow_texture,
                 cam_pos=tuple(self.camera.position),
@@ -638,8 +619,6 @@ class App:
             self.viewer.prepare(tonemapped)
             return
 
-        draw_trail_mode = ui_state.preferences.ui_windows.mouse_mode == "Draw Trail"
-
         width, height = glfw.get_framebuffer_size(self.window)
         mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
         mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
@@ -673,29 +652,12 @@ class App:
                 ski = p.tracer.sky_intensity
                 sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
-        # Build overlay markup params (sweep reticle + draw ring + field overlay).
-        # These composite over the finished frame for DISPLAY only; the recorded
-        # frame stays markup-free. Draw ring is suppressed while recording/
-        # screenshotting/sweeping (matches the old _get_trail_draw_radius gating).
-        adv = ui_state.preferences.advanced_drawing
-        adv_active = adv.enabled
-        trail_draw_radius = 0.0
-        if (draw_trail_mode and not self.video_service.is_active()
-                and not self.screenshot_in_progress
-                and not ui_state.sim.parameter_sweeps_enabled):
-            trail_draw_radius = ui_state.preferences.ui_windows.draw_size
+        # Build overlay markup params (sweep reticle). These composite over the
+        # finished frame for DISPLAY only; the recorded frame stays markup-free.
         overlay_params = {
             'sweep_mode': sweep_mode,
             'sweep_reticle_pos': sweep_reticle_pos,
             'sweep_reticle_visible': sweep_reticle_visible,
-            'trail_draw_radius': trail_draw_radius,
-            'field_texture': (self.advanced_drawing_processor.field_texture
-                              if self.advanced_drawing_processor is not None else None),
-            'advanced_drawing_resources_initialized': (
-                self.advanced_drawing_processor is not None
-                and self.advanced_drawing_processor.field_texture is not None),
-            'draw_target_overlay_opacity': (
-                adv.draw_target_overlay_opacity if adv_active else 0.0),
         }
 
         finished_tex = self.camera.render(
@@ -813,7 +775,6 @@ class App:
         if ti is not None:
             ti.cleanup()
             self.ui._tracer_interface = None
-        self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()
         self.viewer.cleanup()
         self.ui.cleanup()

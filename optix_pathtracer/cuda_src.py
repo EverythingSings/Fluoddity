@@ -344,7 +344,10 @@ static __forceinline__ __device__ float3 sample_brdf(
         if (next_float(rng) < R) {
             out_dir = reflect3(incident, normal);
             out_delta = 1;
-            return albedo;
+            // Glossy is dielectric-y: the specular/mirror lobe reflects the
+            // full 1.0 independent of albedo (albedo only tints the diffuse
+            // lobe below and the pure MAT_MIRROR conductor above).
+            return mk3(1.0f, 1.0f, 1.0f);
         } else {
             out_dir = sample_cosine_hemisphere(normal, rng);
             out_delta = 0;
@@ -797,8 +800,11 @@ extern "C" __global__ void __raygen__rg()
                     float3 brdf_cos = eval_brdf_cos(
                         ray_dir, params.sun_direction, N,
                         mat_id, albedo, ior);
+                    // Directional-sun NEE (cos-lobe sky OFF) is 3.5x weaker
+                    // than the raw sun_intensity to match the cos-lobe path.
                     radiance = radiance + throughput * brdf_cos
-                             * params.sun_color * params.sun_intensity;
+                             * params.sun_color * params.sun_intensity
+                             * (1.0f / 3.5f);
                 }
             }
         }

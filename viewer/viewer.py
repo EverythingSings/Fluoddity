@@ -90,14 +90,9 @@ class Viewer:
         if not overlay_params:
             return finished_tex
         comp = self.overlay_compositor
-        field_overlay_active = (
-            overlay_params.get('advanced_drawing_resources_initialized', False)
-            and overlay_params.get('draw_target_overlay_opacity', 0.0) > 0.0)
         if not comp.has_markup(
                 sweep_mode=overlay_params.get('sweep_mode', False),
-                sweep_reticle_visible=overlay_params.get('sweep_reticle_visible', False),
-                trail_draw_radius=overlay_params.get('trail_draw_radius', 0.0),
-                field_overlay_active=field_overlay_active):
+                sweep_reticle_visible=overlay_params.get('sweep_reticle_visible', False)):
             return finished_tex
         return comp.composite(
             finished_tex,
@@ -107,16 +102,6 @@ class Viewer:
             screen_aspect=screen_aspect,
             watercolor_mode=watercolor_mode,
             exposure=exposure,
-            trail_draw_radius=overlay_params.get('trail_draw_radius', 0.0),
-            mouse_screen_coords=mouse_screen_coords,
-            camera_position=camera_position,
-            camera_zoom=camera_zoom,
-            canvas_resolution=canvas_resolution,
-            field_texture=overlay_params.get('field_texture', None),
-            advanced_drawing_resources_initialized=overlay_params.get(
-                'advanced_drawing_resources_initialized', False),
-            draw_target_overlay_opacity=overlay_params.get(
-                'draw_target_overlay_opacity', 0.0),
         )
 
     def draw_debug_overlay(self, render_fn):

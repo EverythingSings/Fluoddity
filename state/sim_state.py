@@ -98,8 +98,6 @@ class SimState:
     })
     # 3D simulation settings
     canvas_3d_depth: int = 256       # Z-depth of 3D canvas (256 = full 3D resolution)
-    TESTING_MODE: bool = False       # Lock z=0, XY plane only, 4-neighbor blur
-    PLANE_SAMPLES: int = 1           # Number of random plane samples per entity per frame
 
     # Jitter settings: per-parameter temporal randomness (0.0-2.0)
     # Jitter is proportional: 0.5 means ±50% random variation per frame

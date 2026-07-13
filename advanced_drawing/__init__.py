@@ -1,23 +1,21 @@
-"""Advanced Drawing module (Step 11 of the modularity refactor).
+"""Legacy force/strafe field persistence (post-cleanup remnant).
 
-Bundles the painted/procedural force-strafe field subsystem that feeds the sim:
-the GPU field processor, the field-texture persistence handler + cache + IO, and
-the two UI windows. Field-override shaders stay in `shaders/field_override/`
-(resolved via `get_app_dir()`); this package references them by path.
+The live force/strafe field runtime (GPU processor, brush painting, the
+Drawing/Field-loader windows, the "Draw Trail" mouse mode) was removed in the
+3D-only cleanup. What remains here are the pure host-side codecs used to
+*read* field data persisted by old saves:
 
-See `docs/component_inventory.md` -> Modules -> Advanced Drawing / Force-Strafe Fields.
+- ``field_texture_io``  — encode/decode a float32 field <-> 16-bit PNG (with
+  per-channel range metadata) and the polar-image loader.
+- ``field_texture_cache`` — LRU cache over ``{config}_fields.png`` files.
+
+These are retained so a future step can load an old config/render-spec that
+carried a field, extract a simple description (e.g. the center pixel — many
+fields are constant), and reproduce it as a force/strafe effect. Nothing in
+the running app consumes a live field texture anymore.
 """
-from .processor import AdvancedDrawingProcessor
-from .field_handler import FieldHandler, MAX_FIELD_SNAPSHOTS
 from .field_texture_cache import FieldTextureCache
-from .window import AdvancedDrawingWindowMixin
-from .field_loader_window import FieldLoaderWindowMixin
 
 __all__ = [
-    'AdvancedDrawingProcessor',
-    'FieldHandler',
-    'MAX_FIELD_SNAPSHOTS',
     'FieldTextureCache',
-    'AdvancedDrawingWindowMixin',
-    'FieldLoaderWindowMixin',
 ]

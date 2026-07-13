@@ -26,7 +26,7 @@ class VideoContext:
     camera: object
     controller_cam: object
     window: object
-    run_physics_step: object  # callable(ui_state, draw_mode, mouse, power, step_index)
+    run_physics_step: object  # callable(ui_state, step_index)
 
     def compute_view_proj(self):
         cam = self.controller_cam
@@ -67,7 +67,7 @@ class TracerVideoStrategy:
             self._schedule[0] = max(self._schedule[0], 1)
 
             # Initial physics step
-            c.run_physics_step(ui_state, False, (0.0, 0.0), 0.0, 0)
+            c.run_physics_step(ui_state, 0)
 
             view_proj = c.compute_view_proj()
             width, height = glfw.get_framebuffer_size(c.window)
@@ -89,8 +89,7 @@ class TracerVideoStrategy:
         # --- Run any physics steps needed before this sample ---
         target_steps = self._schedule[self._samples_done]
         while self._physics_steps_done < target_steps:
-            c.run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                               self._physics_steps_done)
+            c.run_physics_step(ui_state, self._physics_steps_done)
             self._physics_steps_done += 1
             # Re-splat entities with updated positions (keeps accumulation)
             view_proj = c.compute_view_proj()
@@ -144,7 +143,7 @@ class OptixPtVideoStrategy:
             self._physics_per_substep = physics_per_substep
 
             for i in range(physics_per_substep):
-                c.run_physics_step(ui_state, False, (0.0, 0.0), 0.0, i)
+                c.run_physics_step(ui_state, i)
 
             width, height = glfw.get_framebuffer_size(c.window)
             scale = max(0.1, ui_state.preferences.optix.resolution_scale)
@@ -170,8 +169,7 @@ class OptixPtVideoStrategy:
         # --- Subsequent substeps: physics step(s) + offline_substep ---
         if self._substeps_done < self._total_substeps:
             for i in range(self._physics_per_substep):
-                c.run_physics_step(ui_state, False, (0.0, 0.0), 0.0,
-                                   self._physics_steps_done)
+                c.run_physics_step(ui_state, self._physics_steps_done)
                 self._physics_steps_done += 1
             cam = c.controller_cam
             pt.offline_substep(cam.pos, cam.dir, cam.up, cam.fov)

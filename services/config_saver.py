@@ -98,8 +98,6 @@ class PhysicsConfig:
     strafe_field_strength: float | None = None
 
     # 3D simulation settings
-    plane_samples: int = 1
-    testing_mode: bool = False
     canvas_3d_depth: int = 256
 
     def to_dict(self) -> dict:
@@ -146,8 +144,6 @@ class PhysicsConfig:
             'rule': self.rule.flatten().tolist(),
             'notes': self.notes,
             'sim_3d': {
-                'plane_samples': self.plane_samples,
-                'testing_mode': self.testing_mode,
                 'canvas_3d_depth': self.canvas_3d_depth,
             },
         }
@@ -237,8 +233,6 @@ class PhysicsConfig:
             notes=notes,
             force_field_strength=force_field_strength,
             strafe_field_strength=strafe_field_strength,
-            plane_samples=sim_3d.get('plane_samples', 1),
-            testing_mode=sim_3d.get('testing_mode', False),
             canvas_3d_depth=sim_3d.get('canvas_3d_depth', 256),
         )
 
@@ -300,8 +294,6 @@ class ConfigSaver:
             notes=sim_state.notes,
             force_field_strength=field_strengths[0] if field_strengths else None,
             strafe_field_strength=field_strengths[1] if field_strengths else None,
-            plane_samples=sim_state.PLANE_SAMPLES,
-            testing_mode=sim_state.TESTING_MODE,
             canvas_3d_depth=sim_state.canvas_3d_depth,
         )
 
@@ -368,8 +360,6 @@ class ConfigSaver:
         sim_state.notes = config.notes
 
         # 3D simulation settings
-        sim_state.PLANE_SAMPLES = config.plane_samples
-        sim_state.TESTING_MODE = config.testing_mode
         sim_state.canvas_3d_depth = config.canvas_3d_depth
 
         return config.rule.copy()

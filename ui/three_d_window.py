@@ -65,15 +65,4 @@ class ThreeDWindowMixin:
                 "Orbit Rate", self.state.camera.orbit_rate, -0.05, 0.05, format="%.4f"
             )
 
-            imgui.separator()
-            imgui.text("Simulation")
-
-            _, self.state.sim.TESTING_MODE = imgui.checkbox(
-                "Testing Mode (2D compat)", self.state.sim.TESTING_MODE
-            )
-
-            _, self.state.sim.PLANE_SAMPLES = imgui.slider_int(
-                "Plane Samples", self.state.sim.PLANE_SAMPLES, 1, 8
-            )
-
         imgui.end()
