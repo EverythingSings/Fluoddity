@@ -18,6 +18,11 @@ class ScheduledRendersWindowMixin:
         self._delete_all_specs_confirm = False  # "are you sure?" guard
         self._delete_spec_confirm = False  # per-spec delete confirmation
 
+        # One-shot flag for saving the current app state as a render spec
+        self._request_save_render_spec = False
+        self._save_render_spec_name = ""  # persistent widget text (not a one-shot)
+        self._render_spec_saved_time = 0  # timestamp for "Saved!" feedback
+
         # One-shot flags for preview
         self._request_preview_render_spec = False
         self._preview_render_spec_path = ""
@@ -28,6 +33,32 @@ class ScheduledRendersWindowMixin:
         self._render_queue_names = []
         self._request_cancel_render_queue = False
         self._shutdown_after_render_queue = False  # Shut down PC after batch completes
+
+    def _marshal_scheduled_renders_state(self, state):
+        """Copy render-spec + render-queue one-shot flags into state, then reset.
+
+        Note: `_save_render_spec_name` is persistent widget text, NOT a one-shot,
+        so it is marshalled but deliberately not reset.
+        """
+        state.request_save_render_spec = self._request_save_render_spec
+        state.save_render_spec_name = self._save_render_spec_name
+        state.request_preview_render_spec = self._request_preview_render_spec
+        state.preview_render_spec_path = self._preview_render_spec_path
+
+        state.request_execute_render_queue = self._request_execute_render_queue
+        state.render_queue_paths = self._render_queue_paths
+        state.render_queue_names = self._render_queue_names
+        state.request_cancel_render_queue = self._request_cancel_render_queue
+
+        self._request_save_render_spec = False
+        # _save_render_spec_name intentionally not reset (persistent widget text)
+        self._request_preview_render_spec = False
+        self._preview_render_spec_path = ""
+
+        self._request_execute_render_queue = False
+        self._render_queue_paths = []
+        self._render_queue_names = []
+        self._request_cancel_render_queue = False
 
     def _refresh_render_spec_files(self):
         """Scan disk for available .frs directories."""

@@ -12,6 +12,28 @@ from imgui_bundle import imgui
 class ConfigClipboardWindowMixin:
     """Mixin for the config clipboard window."""
 
+    def _init_config_clipboard_flags(self):
+        """Initialize config-clipboard one-shot flags. Called from UI.__init__."""
+        self._request_preview_clipboard_config = False
+        self._request_clear_clipboard_preview = False
+        self._request_load_clipboard_config = False
+        self._request_delete_clipboard_config = False
+        self._clipboard_config_index = -1
+
+    def _marshal_config_clipboard_state(self, state):
+        """Copy config-clipboard one-shot flags into state, then reset them."""
+        state.request_preview_clipboard_config = self._request_preview_clipboard_config
+        state.request_clear_clipboard_preview = self._request_clear_clipboard_preview
+        state.request_load_clipboard_config = self._request_load_clipboard_config
+        state.request_delete_clipboard_config = self._request_delete_clipboard_config
+        state.clipboard_config_index = self._clipboard_config_index
+
+        self._request_preview_clipboard_config = False
+        self._request_clear_clipboard_preview = False
+        self._request_load_clipboard_config = False
+        self._request_delete_clipboard_config = False
+        self._clipboard_config_index = -1
+
     def render_config_clipboard_window(self):
         """Render config clipboard window with hover preview."""
         cs = self.clipboard_state

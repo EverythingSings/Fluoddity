@@ -5,7 +5,7 @@ import numpy as np
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, RenderSpecService
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, RenderSpecService, PlottingManager
 from parameter_locks import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
@@ -14,7 +14,6 @@ from simulation_runner import SimulationRunner
 from camera_input import process_camera_input, reposition_orbit_camera
 from controller_input import ControllerCam, process_controller_input, find_joystick
 from advanced_drawing import AdvancedDrawingProcessor, FieldHandler
-from plotting_manager import PlottingManager
 from rendering import RendererHost
 from viewer import Viewer
 from controllers import RecordingController, BatchRenderController
@@ -53,12 +52,46 @@ class App:
         # Load preferences first to get entity_count / canvas_resolution
         loaded_prefs = load_preferences()
 
-        # Create components (no cross-references between UI and sim/camera)
+        # Xbox controller (FPS camera for 3D view + shader-driven field). Built
+        # first — it has no dependencies — so it can be constructor-injected into
+        # Camera, UI, and CommandHandler below.
+        self.controller_cam = ControllerCam()
+        self.joystick_state = {'joystick_id': find_joystick(), 'prev_buttons': []}
+
+        # Simulation + camera.
         self.sim = Sim(self.ctx,
                        entity_count=loaded_prefs.rendering.entity_count,
                        canvas_resolution=loaded_prefs.rendering.canvas_resolution)
-        self.camera = Camera(self.ctx, self.sim, self.window)
-        self.ui = UI(self.window, self.ctx)
+        self.camera = Camera(self.ctx, self.sim, self.window,
+                             controller_cam=self.controller_cam)
+
+        # Services UI depends on — built before UI so they can be injected.
+        self.rule_manager = RuleManager()
+        entity_stride = SIZE_OF_ENTITY_STRUCT // 4
+        self.entity_picker = EntityPicker(self.sim.get_entity_buffer(), entity_stride)
+        self.video_service = VideoRecorderService()
+        self.config_saver = ConfigSaver()
+        self.arrow_debug_service = ArrowDebugService(self.ctx)
+        self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
+        self.plotting_manager = PlottingManager(self.ctx)
+        self.render_spec_service = RenderSpecService()
+        self.param_lock_service = ParameterLockService()
+
+        # Viewer: the always-displayed "Viewer" ImGui window that shows the
+        # active renderer's finished frame and composites display-only overlays.
+        # Single display sink (parallel to the video recorder's file sink).
+        self.viewer = Viewer(self.ctx, self.window)
+
+        # UI — all cross-component dependencies injected via constructor.
+        self.ui = UI(self.window, self.ctx,
+                     param_lock_service=self.param_lock_service,
+                     plotting_manager=self.plotting_manager,
+                     render_spec_service=self.render_spec_service,
+                     advanced_drawing_processor=self.advanced_drawing_processor,
+                     viewer=self.viewer,
+                     tracer_sim=self.sim,
+                     tracer_controller_cam=self.controller_cam,
+                     tracer_camera=self.camera)
 
         # Apply loaded preferences to UI
         self.ui.state.preferences = loaded_prefs
@@ -77,31 +110,15 @@ class App:
         cam.orbit_rate = loaded_prefs.camera3d.orbit_rate
         cam.optix_enabled = loaded_prefs.optix.enabled
 
-        # Create services (Orchestrator owns these)
-        self.rule_manager = RuleManager()
-        entity_stride = SIZE_OF_ENTITY_STRUCT // 4
-        self.entity_picker = EntityPicker(self.sim.get_entity_buffer(), entity_stride)
-        self.video_service = VideoRecorderService()
-        self.config_saver = ConfigSaver()
-        self.arrow_debug_service = ArrowDebugService(self.ctx)
-        self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
-        self.plotting_manager = PlottingManager(self.ctx)
-        self.render_spec_service = RenderSpecService()
-        self.ui.advanced_drawing_processor = self.advanced_drawing_processor
-        self.ui.plotting_manager = self.plotting_manager
-        self.ui.render_spec_service = self.render_spec_service
-
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()
         self.user_configs_dir = get_user_physics_configs_dir()
         self.user_configs_dir.mkdir(exist_ok=True)
 
-        # Create delegated handlers
-        self.param_lock_service = ParameterLockService()
+        # Delegated handlers.
         self.field_handler = FieldHandler(
             self.advanced_drawing_processor, self.sim,
             param_lock_service=self.param_lock_service)
-        self.ui.param_lock_service = self.param_lock_service
 
         # Recording controller: owns the video-recording state machine
         # (idle -> pending -> recording -> finished), including video-strategy
@@ -116,32 +133,16 @@ class App:
             field_handler=self.field_handler,
             param_lock_service=self.param_lock_service,
             render_spec_service=self.render_spec_service,
-            recording_controller=self.recording_controller
+            recording_controller=self.recording_controller,
+            controller_cam=self.controller_cam,
+            plotting_manager=self.plotting_manager
         )
-        # Xbox controller (FPS camera for 3D view and shader-driven field)
-        self.controller_cam = ControllerCam()
-        self.camera.controller_cam = self.controller_cam
-        self.joystick_state = {'joystick_id': find_joystick(), 'prev_buttons': []}
-
-        self.command_handler.controller_cam = self.controller_cam
-        self.command_handler.plotting_manager = self.plotting_manager
 
         # Renderer host: owns the OptiX path tracer's lifecycle (lazy creation,
         # VRAM release, error recovery, prefs sync, preview). The path tracer is
         # the single OptiX renderer; rt_mode 0 (rasterize) is a preset on it.
         # `self._pathtracer_interface` is a property aliasing `renderer_host.optix`.
         self.renderer_host = RendererHost(self.ctx)
-
-        # Viewer: the always-displayed "Viewer" ImGui window that shows the
-        # active renderer's finished frame and composites display-only overlays.
-        # Single display sink (parallel to the video recorder's file sink).
-        self.viewer = Viewer(self.ctx, self.window)
-        self.ui.viewer = self.viewer
-
-        # Tracer references (for entity buffer and camera access)
-        self.ui.tracer_sim = self.sim
-        self.ui.tracer_controller_cam = self.controller_cam
-        self.ui.tracer_camera = self.camera
 
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,

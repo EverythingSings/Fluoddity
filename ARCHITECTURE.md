@@ -35,15 +35,15 @@ Fluoddity is a GPU-accelerated particle simulation for generative art. Thousands
 10. Runs the realtime tracer tick if active
 11. Prepares the Viewer's display texture (finished frame → `viewer.prepare()`, which composites display-only overlays), renders the arrow-debug overlay into a Viewer-owned copy, clears the screen, then renders the UI (which draws the Viewer window into the dockspace central node)
 
-Core components do not talk to each other directly — coordination flows through the orchestrator. (The UI is a partial exception: App injects several service references onto it, and `CommandHandler` reaches into some UI internals. See the inventory for these coupling notes.)
+Core components do not talk to each other directly — coordination flows through the orchestrator. (The UI is a partial exception: App passes several service references into it via its constructor, and `CommandHandler` reaches into some UI internals. As of Step 12 `App.__init__` uses constructor injection throughout — `ControllerCam` is built first and injected into `Camera`/`UI`/`CommandHandler`, and the UI-dependent services are `UI` constructor params — so there is no init-time post-construction attribute injection. See the inventory for the remaining coupling notes.)
 
 ## Key Design Patterns
 
 ### Passive UI
-The UI renders ImGui widgets and exposes state via `get_state()`. It does not run simulation logic. It also owns the GLFW input callbacks (keyboard/mouse/scroll) and the ImGui GLFW backend, and holds references (injected by App) to several services and the active tracer interface.
+The UI renders ImGui widgets and exposes state via `get_state()`. It does not run simulation logic. It also owns the GLFW input callbacks (keyboard/mouse/scroll) and the ImGui GLFW backend, and holds references (passed in via its constructor by App) to several services and the tracer camera/sim; the active tracer interface is created lazily inside the tracer window mixin.
 
 ### One-Shot Flags
-UI sets boolean flags (e.g. `request_reset`, `request_save_file`, `toggle_recording`) that the orchestrator reads and clears each frame. These flags all live on `UIState` and are marshalled in `UI.get_state()`.
+UI sets boolean flags (e.g. `request_reset`, `request_save_file`, `toggle_recording`) that the orchestrator reads and clears each frame. These flags all live on `UIState`. `UI.get_state()` builds the input snapshot + core command flags, then delegates to each owning mixin's `_marshal_<feature>_state(state)` hook (copy-into-state + reset), so a feature's flag marshalling lives beside its `_init_*_state()` rather than in one central block (Step 12).
 
 ### State Containers
 All mutable state lives in dataclasses in `state/`. The UI modifies these via widget bindings; the orchestrator reads them and applies to components. `PreferencesState` is now composed of per-module slices (accessed nested, e.g. `preferences.tracer.sdf_enabled`); `UIState` is still a flag monolith (see [State](#state-state) below).
@@ -104,7 +104,6 @@ Line counts are approximate and will drift; treat them as size signals.
 |------|-------|-------------|
 | `pathtracer_interface.py` | ~830 | App-facing wrapper over the OptiX path tracer (rasterize + path-trace modes, realtime, preview, offline video) |
 | `tracer_interface.py` | 497 | App-facing wrapper over the volumetric path tracer |
-| `plotting_manager.py` | 138 | GPU histogram reporting manager (lives at root; see inventory) |
 
 ### Renderer Packages
 | Package | Lines | Description |
@@ -159,6 +158,7 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 | `field_texture_cache.py` | 80 | LRU host-memory cache for field PNGs |
 | `rule_manager.py` | 60 | Undo stack of `(rule, seed)` tuples (max 200) |
 | `video_recorder.py` | 57 | Thin facade over `VidSaver` |
+| `plotting_manager.py` | 138 | GPU histogram reporting manager (moved here from repo root in Step 12) |
 
 ### State (`state/`)
 Plain dataclasses.
@@ -167,10 +167,10 @@ Plain dataclasses.
 |------|-------|-------------|
 | `preferences_state.py` | ~470 | Persistent user prefs, now split into **10 per-module slice dataclasses** (`RenderingPrefs`, `BloomPrefs`, `RecordingPrefs`, `AdvancedDrawingPrefs`, `GenericsPrefs`, `ParameterLocksPrefs`, `TracerPrefs`, `OptixPrefs`, `Camera3DPrefs`, `UIWindowsPrefs`) composed into `PreferencesState`. Accessed nested (`preferences.tracer.sdf_enabled`). `save_preferences` writes nested JSON; `load_preferences` also reads legacy flat-key JSON via `_FLAT_KEY_MAP`. `to_flat_dict`/`set_flat` back the flat snapshot used by `render_spec` |
 | `sim_state.py` | 121 | Physics params (ALL_CAPS), sweeps/jitter dicts, radio fields, appearance, notes, slider ranges |
-| `ui_state.py` | 103 | **Aggregate frame snapshot** nesting Sim/Camera/Recording/Preferences + ~60 one-shot flags |
+| `ui_state.py` | 103 | **Aggregate frame snapshot** nesting Sim/Camera/Recording/Preferences + ~60 one-shot flags. The flags are marshalled per-mixin (Step 12), but still declared on this one aggregate dataclass |
 | `camera_state.py` | 29 | 2D + 3D camera state + OptiX/path-tracer enable and timing readouts |
 | `config_clipboard_state.py` | ~55 | `ConfigClipboardState` + `ClipboardEntry`: in-memory config checkpoints + preview/rename window state (Step 9; moved off the `UI` object) |
-| `recording_state.py` | 7 | **Empty shell** — fields migrated to `PreferencesState`; kept for structure/back-compat |
+| `recording_state.py` | 18 | `RecordingState`: the `RecordingController`'s live state-machine data (`video_pending`, `video_scheduled_start_frame`, restore-settings; Step 10). Still nested as a fresh unused default in `UIState` for the frame snapshot |
 
 ### Utilities (`utilities/`)
 | File | Lines | Description |

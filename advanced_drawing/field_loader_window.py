@@ -12,6 +12,21 @@ class FieldLoaderWindowMixin:
         self._field_loader_target = ""  # "force" or "strafe"
         self._field_loader_files: list[str] = []
 
+        # One-shot flags for field-image load
+        self._request_load_force_field_image = False
+        self._request_load_strafe_field_image = False
+        self._field_load_image_path = ""
+
+    def _marshal_field_loader_state(self, state):
+        """Copy field-loader one-shot flags into state, then reset them."""
+        state.request_load_force_field_image = self._request_load_force_field_image
+        state.request_load_strafe_field_image = self._request_load_strafe_field_image
+        state.field_load_image_path = self._field_load_image_path
+
+        self._request_load_force_field_image = False
+        self._request_load_strafe_field_image = False
+        self._field_load_image_path = ""
+
     def _open_field_loader(self, target: str):
         """Open the field loader window for the given target ("force" or "strafe")."""
         self._field_loader_target = target

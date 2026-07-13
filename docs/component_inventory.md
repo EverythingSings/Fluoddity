@@ -72,10 +72,10 @@ Core components. Not candidates for removal; the refactor goal here is to *shrin
 - **Location:** `main.py` (1175 lines). `App.__init__` (`:29`), `run()` (`:207`), `orchestrate_frame()` (`:215`–`:864`, ~650 lines), `cleanup()` (`:1114`).
 - **Entry points:** `orchestrate_frame()` (the whole per-frame pipeline).
 - **Coupling / scatter flags:**
-  - `orchestrate_frame()` carries **four interleaved state machines**: screenshot (`:308`), recording lock/restore (`:324`–`:390`), render-queue batch (`:258`–`:296`, `:1026`+), and renderer lifecycle (`:409`–`:647`, ~220 lines).
-  - **Post-construction attribute injection** hides the dependency graph: `controller_cam`, `plotting_manager`, `param_lock_service`, `_tracer_interface`, `tracer_sim/camera/controller_cam` are set on already-built objects (`:104,115,118–119,130–132`).
-  - `cleanup()` hand-copies ~40 tracer fields back into `PreferencesState` (`:1130`–`:1158`) — a symptom of the prefs monolith.
-- **Target home / abstraction:** Keep as the wiring + frame-loop owner, but extract each state machine into the module that owns it (recording → a RecordingController, render-queue → RenderSpec module, renderer lifecycle → a RendererHost behind the `Renderer` protocol). Prefer constructor injection over attribute injection.
+  - `orchestrate_frame()` used to carry **four interleaved state machines**. Mostly resolved: renderer lifecycle → `RendererHost` (Step 7), recording lock/restore → `RecordingController` and render-queue batch → `BatchRenderController` (Step 10). The **screenshot** 2-frame machine still lives in the orchestrator.
+  - ✅ **Resolved (Step 12): post-construction attribute injection removed.** `ControllerCam()` is built first and constructor-injected into `Camera`/`UI`/`CommandHandler`; `plotting_manager`, `param_lock_service`, `render_spec_service`, `advanced_drawing_processor`, `viewer`, and the `tracer_*` refs are `UI` ctor params. `App.__init__` now reads top-to-bottom (deps before consumers). (The per-frame `ui._pathtracer_interface` refresh is a display-handle update, not init-injection; `_tracer_interface` is UI-lazy.)
+  - `cleanup()` hand-copies tracer/optix fields back into `PreferencesState` — a lingering symptom of the (now-sliced) prefs aggregate.
+- **Target home / abstraction:** The wiring + frame-loop owner. Remaining shrink targets: the screenshot state machine and the `cleanup()` prefs write-back.
 
 ### GL Context + Window
 - **Purpose:** GLFW window creation, GL context, vsync, buffer swap, teardown.
@@ -142,7 +142,7 @@ Self-contained features that should each become a folder owning all their logic.
 - **Purpose:** `PhysicsConfig` + `ConfigSaver` — JSON (v7) + base64 "SIM7:" clipboard string; legacy SIM1–6 decode.
 - **Location:** `services/config_saver.py` (571). Depends on `ui/physics_params.py` for param defs.
 - **Coupling / scatter flags:** Every saved field is **hand-listed in 5 methods** (`PhysicsConfig` fields, `to_dict`, `from_dict`, `create_config`, `apply_config`, `:105`–`375`). Adding a saved field means editing all five. Legacy binary decode (`_from_legacy_bytes`, `:462`–571) is self-contained and separately deletable.
-- **Target home / abstraction:** Drive serialization from a single field registry (ideally the same `physics_params.py` source) so add-a-field is one edit. Split legacy decode into its own module.
+- **Target home / abstraction:** Drive serialization from a single field registry (ideally incorporating `physics_params.py`) so add-a-field is one edit. Split legacy decode into its own module. ⛔ **Deferred out of Step 12:** config save/load is the highest-risk area (has real asymmetries — `apply_config` drops field strengths and returns `rule` instead of assigning it) and overlaps `docs/engine_rewrite_proposal.md`; `physics_params.py` can drive only the 12-slider block, so a new registry (per-field "kind" + explicit SimState-attr column) is needed. Left for a dedicated pass.
 
 ### Multi-Load System — ⛔ CUT
 - **Purpose:** Mix up to 64 configs simultaneously across cohorts; progression/assignment.
@@ -195,9 +195,9 @@ Self-contained features that should each become a folder owning all their logic.
 
 ### Plotting
 - **Purpose:** GPU histogram reporting — shader `report()` → SSBO (binding 5) → rendered histogram texture.
-- **Location:** `plotting_manager.py` (138, **at repo root**) + `ui/plotting.py` (108) + shaders `histogram_render.*`. Hooked in `simulation_runner.py` (6 call sites), enabled `main.py:221`, reloaded `command_handler.py:126`.
-- **Coupling / scatter flags:** Manager owns its GPU resources cleanly; living at repo root (not `services/`) is a minor inconsistency.
-- **Target home / abstraction:** Move to a `plotting/` module (or `services/`). Otherwise a good model.
+- **Location:** `services/plotting_manager.py` (moved here in Step 12; was at repo root) + `ui/plotting.py` (108) + shaders `histogram_render.*`. Hooked in `simulation_runner.py` (6 call sites), enabled from `main.py`, reloaded from `command_handler.py`.
+- **Coupling / scatter flags:** Manager owns its GPU resources cleanly. ✅ **Resolved (Step 12):** moved into `services/` so every manager lives in one place.
+- **Target home / abstraction:** `services/plotting_manager.py` (done). A good model.
 
 ### Radio
 - **Purpose:** Visibility filter hiding particles outside a target frequency ± bandwidth band.
@@ -215,7 +215,7 @@ Self-contained features that should each become a folder owning all their logic.
 - **Purpose:** FPS/orbit camera settings + 3D sim params (TESTING_MODE, PLANE_SAMPLES, debug slice) + OptiX-spheres toggle.
 - **Location:** `ui/three_d_window.py` (84).
 - **Coupling / scatter flags:** One of a **cluster of four interrelated 3D/renderer windows** (`three_d_window`, `optix_window` 227, `tracer_window` 253) all sharing the huge `three_d_*` / `three_d_optix_*` / `tracer_*` pref blocks and importing the renderer interfaces for availability checks.
-- **Target home / abstraction:** These windows should move next to their renderers (each Swappable renderer owns its control window + prefs slice).
+- **Target home / abstraction:** ⛔ **Descoped (Step 12): windows stay as `ui/` mixins.** Physically moving them into `optix_pathtracer/` / `volrender/` would *invert* the dependency (pull imgui + `state` into render-only packages) and decouples nothing — they couple to imgui + preference slices, not to the renderer packages. The prefs slices already moved to per-renderer slices in Step 5; the windows remain thin imgui mixins.
 
 ### UI Window Host + Passive Windows
 - **Purpose:** The imgui mixin architecture and the remaining passive windows not owned by a specific module above.
@@ -295,9 +295,9 @@ The `state/` dataclasses. Data, not behavior — but the primary coupling surfac
 | `UIState` | `state/ui_state.py` (103) | **Flag god-object:** nests Sim/Camera/Recording/Preferences/MultiLoad + ~60 one-shot `request_*`/click/input flags. Primary UI↔orchestrator coupling surface. |
 | `CameraState` | `state/camera_state.py` (29) | 2D + 3D camera; also carries UI-display-only telemetry (`optix_*_time_ms`, `pathtracer_sample_count`) — mixes input with output. |
 | `MultiLoadState` | `state/multi_load_state.py` (24) | Multi-load toggle + progression/assignment. **⛔ CUT with multi-load.** |
-| `RecordingState` | `state/recording_state.py` (7) | **Empty shell** — fields migrated to `PreferencesState`; kept for structure/back-compat. Candidate for removal or revival as the RecordingController's state. |
+| `RecordingState` | `state/recording_state.py` (18) | ✅ **Repurposed (Step 10)** as the `RecordingController`'s live state-machine data (`video_pending`, `video_scheduled_start_frame`, restore-settings, …). Still nested (as a fresh unused default) in `UIState` for the frame snapshot. |
 
-**Target:** Break `PreferencesState` into per-module slices; move one-shot flags out of the monolithic `UIState` so each Module marshals its own; move `CameraState` telemetry out to a read-only render-stats struct; either delete `RecordingState` or repurpose it for the RecordingController. Delete `MultiLoadState` (multi-load cut) and drop the `strong_determinism` pref (control cut).
+**Target:** ✅ `PreferencesState` split into per-module slices (Step 5); ✅ each Module marshals its own one-shot flags via `_marshal_*_state()` (Step 12) — though the flag *fields* still live on the aggregate `UIState`; ✅ `RecordingState` repurposed for `RecordingController` (Step 10); ✅ `MultiLoadState` deleted and `strong_determinism` dropped (cuts, Steps 1/3). Remaining: move `CameraState` telemetry out to a read-only render-stats struct.
 
 ---
 
@@ -307,8 +307,8 @@ Logic deliberately woven through many components. These resist becoming a single
 
 - **Parameter Locks** — service is clean; callers woven through menu bar, field handler, `main.py`, physics window, slider widgets, plus hardcoded param lists. (Also listed under Modules; the cross-cutting part is the alt-click hooks + lock-aware writes.)
 - **Parameter Sweeps + Jitter** — dicts on `SimState`; `calculate_setting()` triplicated across `entity_update.glsl`, `canvas.frag`, `sim.py`; reticle logic in `main.py`. (Target design belongs to the separate parameter rewrite — out of scope here.)
-- **Config Save/Load field duplication** — every saved field hand-listed in 5 methods of `config_saver.py`.
-- **`ui/core.py get_state()` flag marshalling** — a long, hand-maintained block (`:440`–595) that grows ~4 lines per feature (set + reset). Each Module should marshal its own flags.
+- **Config Save/Load field duplication** — every saved field hand-listed in 5 methods of `config_saver.py`. (⛔ De-dup deferred out of Step 12 — see Save/Load module note.)
+- **`ui/core.py get_state()` flag marshalling** — ✅ **Resolved (Step 12).** Each mixin that owns one-shot flags now provides a `_marshal_<feature>_state(state)` (copy + reset) beside its `_init_*_state()`; `get_state()` calls those hooks. Core keeps only the genuinely core-owned input snapshot + core command flags + file save/load/preview strings + the gated clipboard-text read.
 - **`ui/menu_bar.py` Load-submenu preview** — config apply + watercolor + field strengths + parameter-lock snapshot tangled into menu rendering (`:68`–179). Highest-complexity UI file.
 - **`ui/history_window.py` double duty** — renders the Config Clipboard AND the physics tooltip shader (`update_tooltip_texture`, `render_physics_tooltip`) in one file. Split.
 - **Renderer lifecycle in the orchestrator** — see Swappable; ~220 lines in `orchestrate_frame`.
@@ -406,10 +406,18 @@ Each step below lists its **goal**, the **main files touched**, and a **verify**
 - **Files:** new `advanced_drawing/` gathering `utilities/advanced_drawing.py`, `services/field_handler.py`, `services/field_texture_cache.py`, `utilities/field_texture_io.py`, `ui/advanced_drawing_window.py`, `ui/field_loader_window.py`, the field-override shader registry; new `parameter_locks/` from `services/parameter_lock_service.py` + the alt-click hooks in `physics_window.py`/`slider_widgets.py`/`menu_bar.py`.
 - **Verify:** Force/strafe field painting, image load, shader-driven override, save/load/preview field round-trip; parameter lock alt-click toggling + lock-aware config loads still work.
 
-### Step 12 — Cleanup + docs refresh
+### Step 12 — Cleanup + docs refresh ✅ DONE
 - **Goal:** De-duplicate the `config_saver.py` field list (drive from one registry); let each Module marshal its own `get_state()` flags so `ui/core.py get_state()` stops being a monolith; move `plotting_manager.py` into a module/`services/`; relocate the remaining renderer control windows next to their renderers; prefer constructor injection over post-construction attribute injection in `App.__init__`. Update `ARCHITECTURE.md` + this inventory to the new reality; delete/repurpose `RecordingState`.
-- **Files:** `services/config_saver.py`, `ui/core.py`, `plotting_manager.py`, `main.py` wiring, `ARCHITECTURE.md`, `docs/component_inventory.md`.
-- **Verify:** Full pass through `docs/testing_checklist.md`; add-a-saved-field is one edit; App wiring reads clearly; docs match the code.
+- **Outcome:**
+  - **`plotting_manager.py` → `services/plotting_manager.py`** (exported from `services/__init__.py`); every manager now lives under `services/`. Import-only move; shader paths are location-independent.
+  - **`get_state()` decomposed.** Each mixin that owns one-shot flags now provides a `_marshal_<feature>_state(state)` (copy-into-state + reset) alongside its `_init_*_state()`, and `ui/core.py get_state()` calls those hooks instead of hand-listing ~55 flags. Moved groups: advanced-drawing (`AdvancedDrawingWindowMixin`), field-loader (`FieldLoaderWindowMixin`), config-clipboard (`ConfigClipboardWindowMixin`), render-spec + render-queue (`ScheduledRendersWindowMixin`, preserving the `_save_render_spec_name`-is-persistent exception). Core keeps only the genuinely core-owned input snapshot + core command flags + file save/load/preview strings + the gated clipboard-text read.
+  - **Constructor injection in `App.__init__`.** `ControllerCam()` is now built first (it has no deps) and constructor-injected into `Camera`, `UI`, and `CommandHandler`. `advanced_drawing_processor`, `plotting_manager`, `render_spec_service`, `param_lock_service`, `viewer`, and the three `tracer_*` refs are now `UI` ctor params. No init-time `self.ui.X = …` / `self.command_handler.Y = …` / `self.camera.controller_cam = …` remain. (The per-frame `self.ui._pathtracer_interface = …` display-handle refresh is not init-injection and stays; `_tracer_interface` is still UI-lazy.)
+  - **`RecordingState` resolved:** already **repurposed** in Step 10 — it now holds the `RecordingController`'s live state-machine fields (`video_pending`, `video_scheduled_start_frame`, restore-settings, …), so it is kept, not deleted. `UIState` still nests a fresh unused default for the frame snapshot.
+- **⛔ Deliberately descoped (considered, not forgotten):**
+  - **config_saver field-registry de-dup** — deferred. Config save/load is the #1 testing-checklist item and has real asymmetries (`apply_config` drops field strengths and returns `rule` instead of assigning it); it also overlaps the separate `docs/engine_rewrite_proposal.md`. `ui/physics_params.py` can drive only the 12-slider block; the other ~20 fields would need a new registry with a per-field "kind" + explicit SimState-attr column. Left for a dedicated pass.
+  - **Relocating renderer control windows** (`ui/optix_window.py` / `ui/tracer_window.py` / `ui/three_d_window.py`) into `optix_pathtracer/` / `volrender/` — descoped. It would *invert* the dependency (pull imgui + `state` into render-only packages) and decouples nothing; the windows couple to imgui + preference slices, not to the renderer packages. They stay as `ui/` mixins.
+- **Files:** `services/plotting_manager.py` (moved) + `services/__init__.py`, `ui/core.py`, `advanced_drawing/window.py`, `advanced_drawing/field_loader_window.py`, `ui/config_clipboard_window.py`, `ui/scheduled_renders_window.py`, `camera.py`, `command_handler.py`, `main.py` wiring, `ARCHITECTURE.md`, `docs/component_inventory.md`.
+- **Verify:** Full pass through `docs/testing_checklist.md`; App wiring reads clearly top-to-bottom; docs match the code.
 
 ---
 

@@ -18,7 +18,7 @@ class CommandHandler:
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, user_configs_dir,
                  field_handler=None, param_lock_service=None, render_spec_service=None,
-                 recording_controller=None):
+                 recording_controller=None, controller_cam=None, plotting_manager=None):
         self.sim = sim
         self.camera = camera
         self.ui = ui
@@ -32,8 +32,8 @@ class CommandHandler:
         self.render_spec_service = render_spec_service
         self.recording_controller = recording_controller
 
-        self.controller_cam = None  # Set by App after construction
-        self.plotting_manager = None  # Set by App after construction
+        self.controller_cam = controller_cam
+        self.plotting_manager = plotting_manager
 
         # Preview state
         # The "remembered original" for file/Load-menu preview: a (config, field_snapshot)

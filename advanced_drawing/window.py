@@ -8,6 +8,37 @@ from parameter_locks import lock_widget
 class AdvancedDrawingWindowMixin:
     """Mixin for advanced drawing controls. Combined into UI via multiple inheritance."""
 
+    def _init_advanced_drawing_state(self):
+        """Initialize advanced-drawing one-shot flags. Called from UI.__init__."""
+        self._request_fill_operation = False
+        self._fill_direction_type = 0
+        self._request_clear_force_field = False
+        self._request_clear_strafe_field = False
+        self._request_clear_canvas = False
+        self._request_camera_reset = False
+        self._request_clear_canvas_and_fields = False
+        self._request_pick_focal = False
+
+    def _marshal_advanced_drawing_state(self, state):
+        """Copy advanced-drawing one-shot flags into state, then reset them."""
+        state.request_fill_operation = self._request_fill_operation
+        state.fill_direction_type = self._fill_direction_type
+        state.request_clear_force_field = self._request_clear_force_field
+        state.request_clear_strafe_field = self._request_clear_strafe_field
+        state.request_clear_canvas = self._request_clear_canvas
+        state.request_camera_reset = self._request_camera_reset
+        state.request_clear_canvas_and_fields = self._request_clear_canvas_and_fields
+        state.request_pick_focal = self._request_pick_focal
+
+        self._request_fill_operation = False
+        self._fill_direction_type = 0
+        self._request_clear_force_field = False
+        self._request_clear_strafe_field = False
+        self._request_clear_canvas = False
+        self._request_camera_reset = False
+        self._request_clear_canvas_and_fields = False
+        self._request_pick_focal = False
+
     def render_advanced_drawing_window(self):
         """Render the Advanced Drawing Controls window."""
         expanded, opened = imgui.begin("Drawing Controls", True)

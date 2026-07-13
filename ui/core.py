@@ -63,18 +63,25 @@ class UI(
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
-    def __init__(self, window, ctx: moderngl.Context):
+    def __init__(self, window, ctx: moderngl.Context,
+                 param_lock_service=None, plotting_manager=None,
+                 render_spec_service=None, advanced_drawing_processor=None,
+                 viewer=None, tracer_sim=None, tracer_controller_cam=None,
+                 tracer_camera=None):
         self.window = window
         self.ctx = ctx
-        self.param_lock_service = None  # Set by App after construction
-        self.plotting_manager = None  # Set by App after construction
-        self.viewer = None  # Viewer window; set by App after construction
+        # Dependencies injected by App via constructor.
+        self.param_lock_service = param_lock_service
+        self.plotting_manager = plotting_manager
+        self.render_spec_service = render_spec_service
+        self.advanced_drawing_processor = advanced_drawing_processor
+        self.viewer = viewer  # Viewer window
 
-        # Tracer references (set by App after construction)
-        self._tracer_interface = None
-        self.tracer_sim = None
-        self.tracer_controller_cam = None
-        self.tracer_camera = None
+        # Tracer references (for entity buffer and camera access)
+        self._tracer_interface = None  # Lazily created inside TracerWindowMixin
+        self.tracer_sim = tracer_sim
+        self.tracer_controller_cam = tracer_controller_cam
+        self.tracer_camera = tracer_camera
 
         # Initialize keybinding manager
         self.keybindings = KeybindingManager()
@@ -197,27 +204,14 @@ class UI(
         self._request_clear_preview = False
         self._request_world_size_change = False
 
-        # Advanced drawing one-shot flags
-        self._request_fill_operation = False
-        self._fill_direction_type = 0
-        self._request_clear_force_field = False
-        self._request_clear_strafe_field = False
-        self._request_clear_canvas = False
-        self._request_camera_reset = False
-        self._request_clear_canvas_and_fields = False
-        self._request_pick_focal = False
+        # Advanced drawing one-shot flags (owned by AdvancedDrawingWindowMixin)
+        self._init_advanced_drawing_state()
 
-        # Config clipboard flags
-        self._request_preview_clipboard_config = False
-        self._request_clear_clipboard_preview = False
-        self._request_load_clipboard_config = False
-        self._request_delete_clipboard_config = False
-        self._clipboard_config_index = -1
+        # Config clipboard flags (owned by ConfigClipboardWindowMixin)
+        self._init_config_clipboard_flags()
 
-        # Render spec flags
-        self._request_save_render_spec = False
-        self._save_render_spec_name = ""
-        self._render_spec_saved_time = 0  # timestamp for "Saved!" feedback
+        # Render-spec + render-queue flags are owned by ScheduledRendersWindowMixin
+        # (initialized below in self._init_scheduled_renders_state()).
 
         self._save_filename = ""
         self._load_filename = ""
@@ -228,14 +222,10 @@ class UI(
         self._preview_category = ""  # Category for preview operation
         self._preview_watercolor_override: bool | None = None  # Session watercolor mode for preview load/restore
 
-        # Field loader one-shot flags
-        self._request_load_force_field_image = False
-        self._request_load_strafe_field_image = False
-        self._field_load_image_path = ""
+        # Field loader state + one-shot flags (owned by FieldLoaderWindowMixin)
         self._init_field_loader_state()
 
-        # Scheduled renders
-        self.render_spec_service = None  # Set by App after construction
+        # Scheduled renders (render_spec_service injected via constructor above)
         self._init_scheduled_renders_state()
 
         # Display info (received from Orchestrator)
@@ -435,20 +425,9 @@ class UI(
         self.state.request_clear_preview = self._request_clear_preview
         self.state.request_world_size_change = self._request_world_size_change
 
-        # Transfer advanced drawing flags
-        self.state.request_fill_operation = self._request_fill_operation
-        self.state.fill_direction_type = self._fill_direction_type
-        self.state.request_clear_force_field = self._request_clear_force_field
-        self.state.request_clear_strafe_field = self._request_clear_strafe_field
-        self.state.request_clear_canvas = self._request_clear_canvas
-        self.state.request_camera_reset = self._request_camera_reset
-        self.state.request_clear_canvas_and_fields = self._request_clear_canvas_and_fields
-        self.state.request_pick_focal = self._request_pick_focal
-
-        # Transfer field loader flags
-        self.state.request_load_force_field_image = self._request_load_force_field_image
-        self.state.request_load_strafe_field_image = self._request_load_strafe_field_image
-        self.state.field_load_image_path = self._field_load_image_path
+        # Each module marshals its own one-shot flags (copy into state + reset).
+        self._marshal_advanced_drawing_state(self.state)
+        self._marshal_field_loader_state(self.state)
 
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
@@ -460,24 +439,8 @@ class UI(
         self.state.preview_watercolor_override = self._preview_watercolor_override
         self.state.load_watercolor_override = self._load_watercolor_override
 
-        # Transfer config clipboard flags
-        self.state.request_preview_clipboard_config = self._request_preview_clipboard_config
-        self.state.request_clear_clipboard_preview = self._request_clear_clipboard_preview
-        self.state.request_load_clipboard_config = self._request_load_clipboard_config
-        self.state.request_delete_clipboard_config = self._request_delete_clipboard_config
-        self.state.clipboard_config_index = self._clipboard_config_index
-
-        # Transfer render spec flags
-        self.state.request_save_render_spec = self._request_save_render_spec
-        self.state.save_render_spec_name = self._save_render_spec_name
-        self.state.request_preview_render_spec = self._request_preview_render_spec
-        self.state.preview_render_spec_path = self._preview_render_spec_path
-
-        # Transfer render queue execution flags
-        self.state.request_execute_render_queue = self._request_execute_render_queue
-        self.state.render_queue_paths = self._render_queue_paths
-        self.state.render_queue_names = self._render_queue_names
-        self.state.request_cancel_render_queue = self._request_cancel_render_queue
+        self._marshal_config_clipboard_state(self.state)
+        self._marshal_scheduled_renders_state(self.state)
 
         # Read clipboard content if load is requested
         if self._request_load_config:
@@ -506,17 +469,6 @@ class UI(
         self._request_preview_config = False
         self._request_clear_preview = False
         self._request_world_size_change = False
-        self._request_fill_operation = False
-        self._fill_direction_type = 0
-        self._request_clear_force_field = False
-        self._request_clear_strafe_field = False
-        self._request_clear_canvas = False
-        self._request_camera_reset = False
-        self._request_clear_canvas_and_fields = False
-        self._request_pick_focal = False
-        self._request_load_force_field_image = False
-        self._request_load_strafe_field_image = False
-        self._field_load_image_path = ""
         self._save_filename = ""
         self._load_filename = ""
         self._load_category = ""
@@ -526,24 +478,8 @@ class UI(
         self._preview_category = ""
         self._preview_watercolor_override = None
         self._load_watercolor_override = None
-
-        # Reset config clipboard flags
-        self._request_preview_clipboard_config = False
-        self._request_clear_clipboard_preview = False
-        self._request_load_clipboard_config = False
-        self._request_delete_clipboard_config = False
-        self._clipboard_config_index = -1
-
-        # Reset render spec flags (keep _save_render_spec_name — it's widget state)
-        self._request_save_render_spec = False
-        self._request_preview_render_spec = False
-        self._preview_render_spec_path = ""
-
-        # Reset render queue execution flags
-        self._request_execute_render_queue = False
-        self._render_queue_paths = []
-        self._render_queue_names = []
-        self._request_cancel_render_queue = False
+        # Advanced-drawing, field-loader, config-clipboard, and render-spec/queue
+        # one-shot flags are reset by their owning mixin's _marshal_*_state above.
 
         return self.state
 
