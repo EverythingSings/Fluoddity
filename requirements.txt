@@ -6,6 +6,10 @@ Pillow>=10.0.0
 pyopengl>=3.1.0
 
 # Optional: OptiX raytraced sphere rendering (requires NVIDIA RTX GPU)
-# cupy-cuda12x
+# cupy-cuda13x
 # cuda-python
 # pyoptix
+
+#Opitx renderer also requires you install these SDKS:
+#-Optix SDK 9.1
+#-Cuda toolkit 13.3

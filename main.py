@@ -18,6 +18,7 @@ from utilities.advanced_drawing import AdvancedDrawingProcessor
 from plotting_manager import PlottingManager
 from rendering import RendererHost
 from viewer import Viewer
+from controllers import RecordingController, BatchRenderController
 
 
 class App:
@@ -102,13 +103,21 @@ class App:
             self.advanced_drawing_processor, self.sim,
             param_lock_service=self.param_lock_service)
         self.ui.param_lock_service = self.param_lock_service
+
+        # Recording controller: owns the video-recording state machine
+        # (idle -> pending -> recording -> finished), including video-strategy
+        # build, speedmult/motion-blur override + restore, and its RecordingState.
+        self.recording_controller = RecordingController(
+            self.video_service, self.camera, self.ui, self.sim)
+
         self.command_handler = CommandHandler(
             self.sim, self.camera, self.ui, self.rule_manager,
             self.entity_picker, self.video_service, self.config_saver,
             self.user_configs_dir,
             field_handler=self.field_handler,
             param_lock_service=self.param_lock_service,
-            render_spec_service=self.render_spec_service
+            render_spec_service=self.render_spec_service,
+            recording_controller=self.recording_controller
         )
         # Xbox controller (FPS camera for 3D view and shader-driven field)
         self.controller_cam = ControllerCam()
@@ -143,18 +152,16 @@ class App:
             plotting_manager=self.plotting_manager
         )
 
+        # Batch-render controller: owns the render-queue state machine
+        # (loading -> start_recording -> recording -> done).
+        self.batch_render_controller = BatchRenderController(
+            self.render_spec_service, self.video_service, self.sim, self.camera,
+            self.config_saver, self.rule_manager, self.entity_picker, self.ui,
+            self.window, field_handler=self.field_handler)
+
         # Frame timing
         self.last_update_time = time.time()
         self.last_orbit_frame_count = 0  # For frame-synced orbit stepping
-
-        # Active renderer video strategy (built at recording start, cleared at stop)
-        self.active_video_strategy = None
-
-        # Track user's desired settings (for restoration after recording)
-        self.user_speedmult = 1
-        self.was_recording = False
-        self.user_motion_blur = True
-        self.user_blur_quality = 1
 
         # Screenshot state machine
         self.screenshot_pending = False
@@ -170,13 +177,6 @@ class App:
 
         # Physics step tracking for GAS rebuild scheduling
         self._prev_sim_frame_count = 0
-
-        # Render queue execution state machine
-        self.render_queue_executing = False
-        self.render_queue_index = 0
-        self.render_queue_phase = 'idle'  # idle / loading / start_recording / recording / done
-        self.render_queue = []            # list of path strings
-        self.render_queue_names = []      # display names (parallel list)
 
         # Ensure _Default.json exists and load it
         self._ensure_default_config()
@@ -265,55 +265,23 @@ class App:
             or self.command_handler.config_applied_this_frame
         )
 
-        # 2.5. Check for render queue execution request
-        if ui_state.request_execute_render_queue and not self.render_queue_executing:
-            if ui_state.render_queue_paths:
-                # Validate all spec paths exist on disk
-                from pathlib import Path
-                valid_paths = []
-                valid_names = []
-                for p, n in zip(ui_state.render_queue_paths, ui_state.render_queue_names):
-                    if Path(p).exists():
-                        valid_paths.append(p)
-                        valid_names.append(n)
-                    else:
-                        print(f"[RenderQueue] Spec not found, skipping: {p}")
-                if valid_paths:
-                    # Save preferences before execution (in case app auto-closes)
-                    self.command_handler._sync_tracer_to_preferences(ui_state)
-                    save_preferences(ui_state.preferences)
-                    self.render_queue_executing = True
-                    self.render_queue_index = 0
-                    self.render_queue_phase = 'loading'
-                    self.render_queue = valid_paths
-                    self.render_queue_names = valid_names
-                    print(f"[RenderQueue] Starting batch render of {len(self.render_queue)} specs")
-                else:
-                    print("[RenderQueue] No valid specs to render")
-
-        # 2.5.1. Check for render queue cancel request
-        if ui_state.request_cancel_render_queue and self.render_queue_executing:
-            if self.video_service.is_active():
-                self.video_service.stop()
-            self.render_queue_executing = False
-            self.render_queue_phase = 'idle'
-            ui_state.sim.going = False
-            print("[RenderQueue] Batch render cancelled")
+        # 2.5. Handle render-queue execute / cancel requests
+        def _save_prefs_before_batch(us):
+            self.command_handler._sync_tracer_to_preferences(us)
+            save_preferences(us.preferences)
+        self.batch_render_controller.handle_requests(
+            ui_state, on_before_execute=_save_prefs_before_batch)
 
         # 2.6. Advance render pipeline state machine
-        if self.render_queue_executing:
-            self._advance_render_pipeline(ui_state)
+        if self.batch_render_controller.executing:
+            self.batch_render_controller.advance(ui_state)
 
         # 3. Process continuous input (camera movement)
         process_camera_input(ui_state, self.window, self.ui.keybindings,
                              self.sim.view_tex, dt, controller_cam=self.controller_cam)
 
         # 3.2. Check if pending video should start
-        cmd = self.command_handler
-        if cmd.video_pending and self.sim.frame_count >= cmd.video_scheduled_start_frame:
-            cmd.video_pending = False
-            cmd.video_scheduled_start_frame = 0
-            self.video_service.start()
+        self.recording_controller.check_pending_start(ui_state)
 
         # 3.5. Screenshot state machine
         if self.screenshot_pending and not self.screenshot_in_progress:
@@ -331,78 +299,26 @@ class App:
             if not ui_state.sim.going:
                 ui_state.sim.going = True
 
-        # 4. Lock physics frequency to video recorder frequency if recording
-        is_recording = self.video_service.is_active()
-        tracer_video_active = is_recording and ui_state.preferences.recording.tracer_mode
-        optix_pt_video_active = (is_recording
-                                 and not tracer_video_active
-                                 and ui_state.camera.optix_enabled
-                                 and ui_state.preferences.optix.rt_mode > 0
-                                 and self._pathtracer_interface is not None)
-
-        if is_recording and not self.was_recording:
-            self.user_speedmult = ui_state.preferences.rendering.speedmult
-            self.user_motion_blur = ui_state.preferences.rendering.motion_blur
-            self.user_blur_quality = ui_state.preferences.rendering.blur_quality
-            # Build the renderer's video strategy when starting a recording
-            if tracer_video_active:
-                # Ensure TracerInterface is created
-                if self.ui._tracer_interface is None:
-                    from tracer_interface import TracerInterface
-                    self.ui._tracer_interface = TracerInterface(self.ctx)
-                    self.ui._apply_tracer_preferences(self.ui._tracer_interface)
-                # Sync DOF from camera state
-                self.ui._tracer_interface.aperture = ui_state.camera.aperture
-                self.ui._tracer_interface.focal_plane_depth = ui_state.camera.focal_plane_depth
-                self.active_video_strategy = self.sim_runner.make_tracer_video_strategy(
-                    self.ui._tracer_interface)
-            elif optix_pt_video_active:
-                # Build OptiX path tracer offline video strategy
-                self.active_video_strategy = self.sim_runner.make_optix_pt_video_strategy(
-                    self._pathtracer_interface)
-            elif (ui_state.camera.optix_enabled
-                  and ui_state.preferences.optix.rt_mode == 0
-                  and self._pathtracer_interface is not None):
-                # Rasterize mode: override AO rays with Capture SPP for a
-                # high-quality AO term during video capture.
-                self._saved_ao_num_rays = ui_state.preferences.optix.ao_num_rays
-                ui_state.preferences.optix.ao_num_rays = ui_state.preferences.optix.rt_preview_spp
-        elif not is_recording and self.was_recording:
-            ui_state.preferences.rendering.speedmult = self.user_speedmult
-            ui_state.preferences.rendering.motion_blur = self.user_motion_blur
-            ui_state.preferences.rendering.blur_quality = self.user_blur_quality
-            # Recording ended — drop the active video strategy
-            self.active_video_strategy = None
-            # Invalidate cached texture — the image pipeline recreates resources
-            # when total_samples changes, releasing the old texture
-            self.camera.assembled_texture = None
-            # Restore AO rays if we overrode them
-            if hasattr(self, '_saved_ao_num_rays'):
-                ui_state.preferences.optix.ao_num_rays = self._saved_ao_num_rays
-                del self._saved_ao_num_rays
-            # Pause simulation when recording ended by reaching max_frames
-            if self.video_service.finished_naturally():
-                if self.render_queue_executing:
-                    # Batch render mode: advance to next spec instead of pausing
-                    self._on_render_spec_complete()
-                else:
-                    ui_state.sim.going = False
-
-        if is_recording:
-            if tracer_video_active:
-                # Tracer mode: physics steps are managed by the video strategy
-                ui_state.preferences.rendering.speedmult = 1
-                ui_state.preferences.rendering.motion_blur = False
-            elif optix_pt_video_active:
-                # OptiX PT mode: physics steps managed by the video strategy
-                ui_state.preferences.rendering.speedmult = 1
-                ui_state.preferences.rendering.motion_blur = False
+        # 4. Advance the recording state machine: lock physics frequency to the
+        # video recorder while recording, build/drop the renderer video strategy,
+        # and restore user settings afterward. On a natural (max-frames) finish,
+        # advance the batch render if one is running, else pause the sim.
+        def _on_recording_finished(us):
+            if self.batch_render_controller.executing:
+                self.batch_render_controller.on_recording_complete()
             else:
-                ui_state.preferences.rendering.speedmult = ui_state.preferences.recording.motion_blur_samples
-                ui_state.preferences.rendering.motion_blur = ui_state.preferences.recording.recording_motion_blur
-                ui_state.preferences.rendering.blur_quality = ui_state.preferences.recording.recording_blur_quality
+                us.sim.going = False
 
-        self.was_recording = is_recording
+        rec = self.recording_controller.update(
+            ui_state,
+            pathtracer_interface=self._pathtracer_interface,
+            sim_runner=self.sim_runner,
+            on_finished_naturally=_on_recording_finished,
+        )
+        is_recording = rec.is_recording
+        tracer_video_active = rec.tracer_video_active
+        optix_pt_video_active = rec.optix_pt_video_active
+        active_video_strategy = rec.active_video_strategy
 
         # 5. Apply state to components
         if ui_state.request_camera_reset:
@@ -516,10 +432,11 @@ class App:
 
         if tracer_video_active and ui_state.sim.going:
             # Tracer video mode: progressive path tracing with interleaved physics
-            if self.active_video_strategy is None:
-                self.active_video_strategy = self.sim_runner.make_tracer_video_strategy(
+            if active_video_strategy is None:
+                active_video_strategy = self.sim_runner.make_tracer_video_strategy(
                     self.ui._tracer_interface)
-            tracer_frame = self.active_video_strategy.run_frame(ui_state)
+                self.recording_controller.active_video_strategy = active_video_strategy
+            tracer_frame = active_video_strategy.run_frame(ui_state)
             if tracer_frame is not None:
                 # A complete output frame is ready — send to video recorder
                 self.video_service.process_frame(
@@ -531,10 +448,11 @@ class App:
                 )
         elif optix_pt_video_active and ui_state.sim.going:
             # OptiX path tracer video mode: offline rendering with motion blur
-            if self.active_video_strategy is None:
-                self.active_video_strategy = self.sim_runner.make_optix_pt_video_strategy(
+            if active_video_strategy is None:
+                active_video_strategy = self.sim_runner.make_optix_pt_video_strategy(
                     self._pathtracer_interface)
-            pt_frame_hdr = self.active_video_strategy.run_frame(ui_state)
+                self.recording_controller.active_video_strategy = active_video_strategy
+            pt_frame_hdr = active_video_strategy.run_frame(ui_state)
             if pt_frame_hdr is not None:
                 # Tonemap HDR frame through the image pipeline
                 pt_frame = self.camera.image_pipeline.assemble_frame(
@@ -645,21 +563,18 @@ class App:
         self._snapshot_camera()
 
         # 8. Update UI display info and render
-        self.ui.update_display_info({
+        display_info = {
             'time': self.sim.time,
             'frame_count': self.sim.frame_count,
             'tex_size': self.sim.view_tex.size,
             'recording_active': self.video_service.is_active(),
-            'video_pending': cmd.video_pending,
-            'video_scheduled_start_frame': cmd.video_scheduled_start_frame,
-            'render_queue_executing': self.render_queue_executing,
-            'render_queue_index': self.render_queue_index,
-            'render_queue_total': len(self.render_queue),
-            'render_queue_phase': self.render_queue_phase,
-            'render_queue_current_name': self.render_queue_names[self.render_queue_index] if self.render_queue_executing and self.render_queue_index < len(self.render_queue_names) else '',
+            'video_pending': self.recording_controller.video_pending,
+            'video_scheduled_start_frame': self.recording_controller.video_scheduled_start_frame,
             'video_current_frame': self.video_service.current_frame,
             'video_max_frames': ui_state.preferences.recording.max_frames,
-        })
+        }
+        display_info.update(self.batch_render_controller.display_status())
+        self.ui.update_display_info(display_info)
         # Clear the default framebuffer before ImGui draws. The renderer no
         # longer blits to the screen (its finished frame goes into the Viewer
         # ImGui image), so clear here to avoid stale garbage behind the UI.
@@ -845,94 +760,6 @@ class App:
         ui_state.sim.going = self.screenshot_saved_settings['going']
         self.screenshot_in_progress = False
         self.screenshot_saved_settings = {}
-
-    def _advance_render_pipeline(self, ui_state):
-        """State machine for sequential batch rendering.
-
-        Called every frame from orchestrate_frame() when render_queue_executing is True.
-        Phases: loading -> start_recording -> recording -> (next spec or done)
-        """
-        phase = self.render_queue_phase
-
-        if phase == 'loading':
-            from pathlib import Path
-            idx = self.render_queue_index
-            dir_path = Path(self.render_queue[idx])
-            display_name = self.render_queue_names[idx]
-
-            print(f"[RenderQueue] Loading spec {idx + 1}/{len(self.render_queue)}: {display_name}")
-
-            spec = self.render_spec_service.load_metadata(dir_path)
-            if spec is None:
-                print(f"[RenderQueue] Failed to load metadata for {display_name}, skipping")
-                self._render_queue_advance_or_finish()
-                return
-
-            gpu_buffers = self.render_spec_service.load_gpu_buffers(dir_path)
-            if gpu_buffers is None:
-                print(f"[RenderQueue] Failed to load GPU buffers for {display_name}, skipping")
-                self._render_queue_advance_or_finish()
-                return
-
-            world_size_changed = self.render_spec_service.apply_state(
-                spec, gpu_buffers,
-                self.sim, self.camera, self.controller_cam, ui_state,
-                self.config_saver, self.rule_manager,
-                self.field_handler.adv_draw if self.field_handler else None
-            )
-            if world_size_changed:
-                self.entity_picker.update_buffer(self.sim.get_entity_buffer())
-                self.ui._last_applied_entity_count = ui_state.preferences.rendering.entity_count
-                self.ui._last_applied_canvas_resolution = ui_state.preferences.rendering.canvas_resolution
-
-            # Re-sync tracer interface if it exists
-            if self.ui._tracer_interface is not None:
-                self.ui._apply_tracer_preferences(self.ui._tracer_interface)
-
-            # Set filename_prefix so VidSaver uses the display name
-            ui_state.preferences.recording.filename_prefix = display_name
-
-            # Unpause simulation (recording requires going = True)
-            ui_state.sim.going = True
-
-            self.render_queue_phase = 'start_recording'
-
-        elif phase == 'start_recording':
-            # GPU state has settled for one frame. Start recording.
-            ui_state.sim.going = True
-            self.video_service.start()
-            self.render_queue_phase = 'recording'
-            display_name = self.render_queue_names[self.render_queue_index]
-            print(f"[RenderQueue] Recording started for: {display_name}")
-
-        elif phase == 'recording':
-            # Normal frame execution handles physics + recording.
-            # Completion detected by the modified recording lifecycle block.
-            pass
-
-        elif phase == 'done':
-            print(f"[RenderQueue] All {len(self.render_queue)} renders complete. Closing app.")
-            if self.ui._shutdown_after_render_queue:
-                import os
-                print("[RenderQueue] PC shutdown scheduled in 60 seconds (cancel with 'shutdown /a')")
-                os.system('shutdown /s /t 60')
-            self.render_queue_executing = False
-            glfw.set_window_should_close(self.window, True)
-
-    def _on_render_spec_complete(self):
-        """Called when a recording finishes naturally during batch execution."""
-        idx = self.render_queue_index
-        display_name = self.render_queue_names[idx]
-        print(f"[RenderQueue] Recording complete for: {display_name} ({idx + 1}/{len(self.render_queue)})")
-        self._render_queue_advance_or_finish()
-
-    def _render_queue_advance_or_finish(self):
-        """Move to the next spec in the queue, or finish if all done."""
-        self.render_queue_index += 1
-        if self.render_queue_index < len(self.render_queue):
-            self.render_queue_phase = 'loading'
-        else:
-            self.render_queue_phase = 'done'
 
     def cleanup(self):
         # Save preferences before cleanup

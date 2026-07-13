@@ -17,7 +17,8 @@ class CommandHandler:
 
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, user_configs_dir,
-                 field_handler=None, param_lock_service=None, render_spec_service=None):
+                 field_handler=None, param_lock_service=None, render_spec_service=None,
+                 recording_controller=None):
         self.sim = sim
         self.camera = camera
         self.ui = ui
@@ -29,6 +30,7 @@ class CommandHandler:
         self.field_handler = field_handler
         self.param_lock_service = param_lock_service
         self.render_spec_service = render_spec_service
+        self.recording_controller = recording_controller
 
         self.controller_cam = None  # Set by App after construction
         self.plotting_manager = None  # Set by App after construction
@@ -47,10 +49,6 @@ class CommandHandler:
             self._apply_config_with_locks, self._push_and_apply_rule,
             ui.update_physics_defaults,
             field_handler=field_handler, param_lock_service=param_lock_service)
-
-        # Video pending state (waiting for scheduled start frame)
-        self.video_pending = False
-        self.video_scheduled_start_frame = 0
 
         # Deferred entity selection state (waits one frame for rule buffer to be written)
         self._pending_entity_selection = None  # Tuple of (entity_id, entity_pos, entity_cohort) or None
@@ -162,7 +160,7 @@ class CommandHandler:
 
         # Toggle recording (with delayed start support)
         if ui_state.toggle_recording:
-            self._handle_toggle_recording(ui_state)
+            self.recording_controller.toggle(ui_state)
 
         # Screenshot request (Shift+P) - set pending flag
         if ui_state.request_screenshot:
@@ -253,24 +251,6 @@ class CommandHandler:
         print(f"World size changed "
               f"(entity_count: {self.sim.entity_count}, "
               f"canvas: {self.sim.get_canvas_dimensions()[0]}x{self.sim.get_canvas_dimensions()[1]})")
-
-    def _handle_toggle_recording(self, ui_state):
-        """Handle video recording toggle with delayed start support."""
-        if self.video_pending:
-            self.video_pending = False
-            self.video_scheduled_start_frame = 0
-        elif self.video_service.is_active():
-            self.video_service.stop()
-        else:
-            video_end_frame = ui_state.preferences.recording.video_end_frame
-            video_simulation_frames = ui_state.preferences.recording.max_frames * ui_state.preferences.recording.motion_blur_samples
-            scheduled_start_frame = video_end_frame - video_simulation_frames
-
-            if video_end_frame == 0 or scheduled_start_frame <= self.sim.frame_count:
-                self.video_service.start()
-            else:
-                self.video_pending = True
-                self.video_scheduled_start_frame = scheduled_start_frame
 
     def _handle_full_reset(self, ui_state):
         """Handle full reset (Z key): reset entities, apply zero rule, randomize, push new state."""
