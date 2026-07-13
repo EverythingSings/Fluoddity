@@ -1,7 +1,8 @@
 """Advanced Drawing window: brush modes, force/strafe field controls."""
 import math
 from imgui_bundle import imgui
-from utilities.advanced_drawing import AdvancedDrawingProcessor
+from .processor import AdvancedDrawingProcessor
+from parameter_locks import lock_widget
 
 
 class AdvancedDrawingWindowMixin:
@@ -128,54 +129,37 @@ class AdvancedDrawingWindowMixin:
             FIELD_EXP_RANGE = FIELD_MAX_EXP - FIELD_MIN_EXP  # 5.0
 
             pls = self.param_lock_service
-            ffs_lock_colors = pls.push_locked_style('force_field_strength') if pls else 0
-            ffs_label = pls.get_display_label('force_field_strength', "Force Field Strength") if pls else "Force Field Strength"
 
             if prefs.advanced_drawing.force_field_strength > 0:
                 fslider = (math.log10(prefs.advanced_drawing.force_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
             else:
                 fslider = 0.0
             fslider = max(0.0, min(1.0, fslider))
-            _, new_fpos = imgui.slider_float(
-                ffs_label,
-                fslider,
-                0.0,
-                1.0,
-                f"{prefs.advanced_drawing.force_field_strength:.4f}",
-            )
-            if pls and pls.handle_alt_click('force_field_strength'):
-                pass  # alt-click intercepted; discard value change
-            else:
+            with lock_widget(pls, 'force_field_strength', "Force Field Strength") as w:
+                _, new_fpos = imgui.slider_float(
+                    w.label, fslider, 0.0, 1.0,
+                    f"{prefs.advanced_drawing.force_field_strength:.4f}",
+                )
+            if not w.alt_clicked:
                 prefs.advanced_drawing.force_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_fpos)
-            if pls:
-                pls.pop_locked_style(ffs_lock_colors)
             self._delayed_tooltip(
                 "Multiplier for force field effects.\n"
                 "Logarithmic scale: 0.0001 to 10.0, default 1.0."
             )
 
             # === 8. Strafe Field Strength (logarithmic: 0.0001 to 10.0) ===
-            sfs_lock_colors = pls.push_locked_style('strafe_field_strength') if pls else 0
-            sfs_label = pls.get_display_label('strafe_field_strength', "Strafe Field Strength") if pls else "Strafe Field Strength"
-
             if prefs.advanced_drawing.strafe_field_strength > 0:
                 sslider = (math.log10(prefs.advanced_drawing.strafe_field_strength) - FIELD_MIN_EXP) / FIELD_EXP_RANGE
             else:
                 sslider = 0.0
             sslider = max(0.0, min(1.0, sslider))
-            _, new_spos = imgui.slider_float(
-                sfs_label,
-                sslider,
-                0.0,
-                1.0,
-                f"{prefs.advanced_drawing.strafe_field_strength:.4f}",
-            )
-            if pls and pls.handle_alt_click('strafe_field_strength'):
-                pass  # alt-click intercepted; discard value change
-            else:
+            with lock_widget(pls, 'strafe_field_strength', "Strafe Field Strength") as w:
+                _, new_spos = imgui.slider_float(
+                    w.label, sslider, 0.0, 1.0,
+                    f"{prefs.advanced_drawing.strafe_field_strength:.4f}",
+                )
+            if not w.alt_clicked:
                 prefs.advanced_drawing.strafe_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_spos)
-            if pls:
-                pls.pop_locked_style(sfs_lock_colors)
             self._delayed_tooltip(
                 "Multiplier for strafe field effects.\n"
                 "Logarithmic scale: 0.0001 to 10.0, default 1.0."

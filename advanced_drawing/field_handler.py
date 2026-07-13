@@ -4,8 +4,8 @@ Owns all GPU field texture state transitions (snapshot, restore, write, clear)
 and the LRU cache for field PNGs. CommandHandler delegates field operations here.
 """
 import numpy as np
-from services.field_texture_cache import FieldTextureCache
-from utilities.field_texture_io import is_field_nonzero, save_field_png as _save_field_png
+from .field_texture_cache import FieldTextureCache
+from .field_texture_io import is_field_nonzero, save_field_png as _save_field_png
 
 MAX_FIELD_SNAPSHOTS = 20  # Max clipboard entries with non-None field snapshots
 
@@ -278,7 +278,7 @@ class FieldHandler:
             target: "force" to write .xy channels, "strafe" to write .zw channels.
         """
         from pathlib import Path
-        from utilities.field_texture_io import load_image_as_polar_field
+        from .field_texture_io import load_image_as_polar_field
 
         canvas_dim_x,canvas_dim_y = self.sim.get_canvas_dimensions()
         cartesian = load_image_as_polar_field(Path(filepath), canvas_dim_y, canvas_dim_x)

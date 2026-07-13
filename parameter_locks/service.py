@@ -6,37 +6,39 @@ toggling on UI widgets, snapshot/restore around apply_config calls, and
 visual styling helpers for locked elements.
 """
 from imgui_bundle import imgui
-from ui.physics_params import PARAM_BY_NAME
 
 
-# All lockable SimState parameter names
-LOCKABLE_SIM_PARAMS = [
-    # 12 physics sliders
-    'SENSOR_GAIN', 'SENSOR_ANGLE', 'SENSOR_DISTANCE', 'MUTATION_SCALE',
-    'GLOBAL_FORCE_MULT', 'DRAG', 'AXIAL_FORCE', 'LATERAL_FORCE',
-    'STRAFE_POWER', 'TRAIL_PERSISTENCE', 'TRAIL_DIFFUSION', 'HAZARD_RATE',
-    # Additional settings
-    'rule_seed', 'boundary_conditions', 'initial_conditions', 'num_cohorts',
-    'DISABLE_SYMMETRY', 'ABSOLUTE_ORIENTATION', 'ORIENTATION_MIX',
-    # Appearance
-    'color_by_cohort', 'hue_sensitivity',
-]
+# The lockable-param lists are derived from the shared param registry in
+# ui/physics_params.py. That module is imported LAZILY (inside _registry())
+# rather than at top level: importing `ui.physics_params` eagerly runs
+# ui/__init__ -> ui.core, which imports back into this package and
+# advanced_drawing, so a top-level import here creates a circular-import cycle.
+# The registry is a leaf module with no such deps; fetching it on first use
+# (well after all packages have finished importing) breaks the cycle.
+_REGISTRY_CACHE = None
 
-# Lockable PreferencesState parameter names
-LOCKABLE_PREF_PARAMS = [
-    'force_field_strength', 'strafe_field_strength',
-]
 
-# Map SimState param name -> slider_ranges label (only for physics sliders)
-_PARAM_TO_SLIDER_LABEL = {p.name: p.label for p in PARAM_BY_NAME.values()}
+def _registry():
+    """Lazily import and cache the lockable-param lists from the registry."""
+    global _REGISTRY_CACHE
+    if _REGISTRY_CACHE is None:
+        from ui.physics_params import (
+            LOCKABLE_SIM_PARAMS,
+            LOCKABLE_PREF_PARAMS,
+            LOCKABLE_PARAM_LABELS,
+        )
+        _REGISTRY_CACHE = (
+            LOCKABLE_SIM_PARAMS, LOCKABLE_PREF_PARAMS, LOCKABLE_PARAM_LABELS)
+    return _REGISTRY_CACHE
 
 
 class ParameterLockService:
     """Tracks locked parameters and provides snapshot/restore for config loads."""
 
     def __init__(self):
+        sim_params, pref_params, _labels = _registry()
         self._locks: dict[str, bool] = {
-            p: False for p in LOCKABLE_SIM_PARAMS + LOCKABLE_PREF_PARAMS}
+            p: False for p in sim_params + pref_params}
         self.lock_rule: bool = False
         self.lock_force_field: bool = False
         self.lock_strafe_field: bool = False
@@ -84,14 +86,15 @@ class ParameterLockService:
         """
         if not self.enabled:
             return {}
+        sim_params, pref_params, labels = _registry()
         snapshot = {}
-        for param_name in LOCKABLE_SIM_PARAMS:
+        for param_name in sim_params:
             if self.is_locked(param_name):
                 snapshot[param_name] = getattr(sim_state, param_name)
-                label = _PARAM_TO_SLIDER_LABEL.get(param_name)
+                label = labels.get(param_name)
                 if label and label in sim_state.slider_ranges:
                     snapshot[f'_range_{param_name}'] = sim_state.slider_ranges[label].copy()
-        for param_name in LOCKABLE_PREF_PARAMS:
+        for param_name in pref_params:
             if self.is_locked(param_name):
                 snapshot[param_name] = getattr(prefs_state, param_name)
         return snapshot
@@ -100,15 +103,16 @@ class ParameterLockService:
         """Re-apply locked parameter values after apply_config."""
         if not snapshot:
             return
-        for param_name in LOCKABLE_SIM_PARAMS:
+        sim_params, pref_params, labels = _registry()
+        for param_name in sim_params:
             if param_name in snapshot:
                 setattr(sim_state, param_name, snapshot[param_name])
                 range_key = f'_range_{param_name}'
                 if range_key in snapshot:
-                    label = _PARAM_TO_SLIDER_LABEL.get(param_name)
+                    label = labels.get(param_name)
                     if label:
                         sim_state.slider_ranges[label] = snapshot[range_key]
-        for param_name in LOCKABLE_PREF_PARAMS:
+        for param_name in pref_params:
             if param_name in snapshot:
                 setattr(prefs_state, param_name, snapshot[param_name])
 

@@ -137,3 +137,48 @@ for _p in PHYSICS_PARAMS:
 DEFAULT_SLIDER_RANGES: dict[str, list[float]] = {
     p.label: [p.default_min, p.default_max] for p in PHYSICS_PARAMS
 }
+
+
+# === Lockable-parameter registry (Parameter Locks feature) ===
+# The parameter_locks module derives its lockable-param list from here instead
+# of hardcoding it, so it stays in sync with the params.
+#
+# The 12 physics sliders above are all lockable. In addition, several
+# non-slider SimState settings and two force/strafe-field *preference* values
+# are lockable. Those extras are not sliders, so they are NOT part of
+# PHYSICS_PARAMS (which drives config_saver's sweep/jitter dicts and the physics
+# window's slider rendering) — they are declared separately here.
+
+# Extra lockable SimState params that are not physics sliders: (name, display label).
+LOCKABLE_EXTRA_SIM_PARAMS: list[tuple[str, str]] = [
+    # Additional settings
+    ('rule_seed', 'Rule Seed'),
+    ('boundary_conditions', 'Boundary Conditions'),
+    ('initial_conditions', 'Initial Conditions'),
+    ('num_cohorts', 'Number of Cohorts'),
+    ('DISABLE_SYMMETRY', 'Disable Symmetry'),
+    ('ABSOLUTE_ORIENTATION', 'Absolute Orientation'),
+    ('ORIENTATION_MIX', 'Orientation Mix'),
+    # Appearance
+    ('color_by_cohort', 'Color by Cohort'),
+    ('hue_sensitivity', 'Hue Sensitivity'),
+]
+
+# Lockable PreferencesState params (live on preferences.advanced_drawing, not SimState).
+LOCKABLE_PREF_PARAMS: list[str] = [
+    'force_field_strength', 'strafe_field_strength',
+]
+
+# All lockable SimState param names, in a stable order: the 12 sliders first,
+# then the extras. (Used to initialize the lock dict and to drive snapshot/restore.)
+LOCKABLE_SIM_PARAMS: list[str] = (
+    PHYSICS_PARAM_NAMES + [name for name, _label in LOCKABLE_EXTRA_SIM_PARAMS]
+)
+
+# name -> display label for every lockable SimState param (sliders + extras).
+# Only slider params have entries in SimState.slider_ranges, but a label for
+# every lockable param keeps the lock UI's [L] prefix consistent.
+LOCKABLE_PARAM_LABELS: dict[str, str] = {
+    **{p.name: p.label for p in PHYSICS_PARAMS},
+    **{name: label for name, label in LOCKABLE_EXTRA_SIM_PARAMS},
+}

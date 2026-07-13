@@ -253,7 +253,7 @@ class AdvancedDrawingProcessor:
         """
         if self._resources is None:
             return
-        from utilities.field_texture_io import write_field_to_gpu
+        from .field_texture_io import write_field_to_gpu
         write_field_to_gpu(self._resources["field_tex"], data)
 
     def ensure_initialized(self, canvas_dim_x: int,canvas_dim_y:int) -> None:

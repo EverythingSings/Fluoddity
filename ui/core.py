@@ -24,8 +24,7 @@ from .physics_tooltip import PhysicsTooltipMixin
 from .preferences_window import PreferencesWindowMixin
 from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
-from .advanced_drawing_window import AdvancedDrawingWindowMixin
-from .field_loader_window import FieldLoaderWindowMixin
+from advanced_drawing import AdvancedDrawingWindowMixin, FieldLoaderWindowMixin
 from .generics_window import GenericsWindowMixin
 from .plotting import PlottingWindowMixin
 from .three_d_window import ThreeDWindowMixin

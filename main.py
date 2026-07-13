@@ -6,15 +6,14 @@ from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, RenderSpecService
-from services.field_handler import FieldHandler
-from services.parameter_lock_service import ParameterLockService
+from parameter_locks import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
 from camera_input import process_camera_input, reposition_orbit_camera
 from controller_input import ControllerCam, process_controller_input, find_joystick
-from utilities.advanced_drawing import AdvancedDrawingProcessor
+from advanced_drawing import AdvancedDrawingProcessor, FieldHandler
 from plotting_manager import PlottingManager
 from rendering import RendererHost
 from viewer import Viewer

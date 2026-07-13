@@ -12,7 +12,7 @@ from collections import OrderedDict
 from pathlib import Path
 import numpy as np
 
-from utilities.field_texture_io import load_field_png, _bilinear_resize
+from .field_texture_io import load_field_png, _bilinear_resize
 
 
 class FieldTextureCache:

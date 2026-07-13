@@ -1,6 +1,7 @@
 """Reusable slider widgets with context menus, sweep buttons, and range adjustment."""
 from imgui_bundle import imgui
 from .physics_params import PARAM_BY_LABEL
+from parameter_locks import lock_widget
 
 
 class SliderWidgetsMixin:
@@ -400,51 +401,47 @@ class SliderWidgetsMixin:
         pls = self.param_lock_service
         value = getattr(self.state.sim, pdef.name)
 
-        # Push red lock style if locked
-        lock_colors = pls.push_locked_style(pdef.name) if pls else 0
+        # lock_widget handles the red lock style + "[L]…" display label. Alt-click
+        # is deferred: this slider renders a context menu after the widget, so the
+        # alt-click must be checked immediately after imgui.slider_float (before the
+        # menu) rather than at the wrapper's exit — the power-scaled branch does it
+        # inline, and slider_float_with_range_menu does it internally.
+        with lock_widget(pls, pdef.name, pdef.label, defer_alt_click=True) as w:
+            # Sweep buttons + range adjust (only when sweeps enabled)
+            if self.state.sim.parameter_sweeps_enabled:
+                self.render_sweep_buttons(pdef.name)
+                imgui.same_line(spacing=2)
+                self.render_range_adjust_buttons(
+                    pdef.name, pdef.label, value,
+                    pdef.default_min, pdef.default_max,
+                    hard_min=pdef.hard_min, hard_max=pdef.hard_max,
+                )
+                imgui.same_line(spacing=8)
+                imgui.set_next_item_width(80)
 
-        # Build display label: "[L]Sensor Gain##Sensor Gain" when locked
-        display_label = pls.get_display_label(pdef.name, pdef.label) if pls else pdef.label
-
-        # Sweep buttons + range adjust (only when sweeps enabled)
-        if self.state.sim.parameter_sweeps_enabled:
-            self.render_sweep_buttons(pdef.name)
-            imgui.same_line(spacing=2)
-            self.render_range_adjust_buttons(
-                pdef.name, pdef.label, value,
-                pdef.default_min, pdef.default_max,
-                hard_min=pdef.hard_min, hard_max=pdef.hard_max,
-            )
-            imgui.same_line(spacing=8)
-            imgui.set_next_item_width(80)
-
-        if pdef.is_power_scaled:
-            # Power-scaled slider (e.g. Hazard Rate): fine control at low values
-            slider_pos = (value / pdef.default_max) ** (1.0 / pdef.power_exponent)
-            _, new_pos = imgui.slider_float(
-                display_label, slider_pos, 0.0, 1.0,
-                f"{value:.5f}"
-            )
-            # Check alt-click for lock toggle (intercept suppresses the value change)
-            if not (pls and pls.handle_alt_click(pdef.name)):
-                new_value = pdef.default_max * (new_pos ** pdef.power_exponent)
+            if pdef.is_power_scaled:
+                # Power-scaled slider (e.g. Hazard Rate): fine control at low values
+                slider_pos = (value / pdef.default_max) ** (1.0 / pdef.power_exponent)
+                _, new_pos = imgui.slider_float(
+                    w.label, slider_pos, 0.0, 1.0,
+                    f"{value:.5f}"
+                )
+                # Check alt-click for lock toggle (intercept suppresses the value change)
+                if not (pls and pls.handle_alt_click(pdef.name)):
+                    new_value = pdef.default_max * (new_pos ** pdef.power_exponent)
+                    setattr(self.state.sim, pdef.name, new_value)
+                # Context menu without jitter (power-scaled params hide jitter)
+                self.add_slider_context_menu(pdef.label, pdef.default_min, pdef.default_max)
+            else:
+                # Standard slider with range menu (alt-click handled internally)
+                _, new_value = self.slider_float_with_range_menu(
+                    label=pdef.label,
+                    param_name=pdef.name,
+                    value=value,
+                    default_min=pdef.default_min,
+                    default_max=pdef.default_max,
+                    display_label=w.label,
+                )
                 setattr(self.state.sim, pdef.name, new_value)
-            # Context menu without jitter (power-scaled params hide jitter)
-            self.add_slider_context_menu(pdef.label, pdef.default_min, pdef.default_max)
-        else:
-            # Standard slider with range menu
-            _, new_value = self.slider_float_with_range_menu(
-                label=pdef.label,
-                param_name=pdef.name,
-                value=value,
-                default_min=pdef.default_min,
-                default_max=pdef.default_max,
-                display_label=display_label,
-            )
-            setattr(self.state.sim, pdef.name, new_value)
-
-        # Pop lock style
-        if pls:
-            pls.pop_locked_style(lock_colors)
 
         self.render_custom_tooltip(pdef.label, pdef.description)
