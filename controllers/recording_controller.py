@@ -92,9 +92,14 @@ class RecordingController:
         #   OpenGL + RT Off / Optix rasterize -> normal per-frame assembly
         is_recording = self.video_service.is_active()
         optix_active = ui_state.camera.optix_enabled
+        # Use the LIVE tracer realtime mode: the RT button mutates the
+        # TracerInterface directly, and the pref only syncs back on save, so the
+        # pref is stale during normal use. Fall back to the pref if no interface.
+        ti = self.ui._tracer_interface
+        tracer_rt_mode = ti.realtime_mode if ti is not None else p.tracer.realtime_mode
         tracer_video_active = (is_recording
                                and not optix_active
-                               and p.tracer.realtime_mode > 0)
+                               and tracer_rt_mode > 0)
         optix_pt_video_active = (is_recording
                                  and optix_active
                                  and p.optix.rt_mode > 0
