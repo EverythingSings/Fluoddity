@@ -358,8 +358,12 @@ class HelpWindowsMixin:
                 name = self._save_render_spec_name.strip()
                 if not name:
                     name = self.state.preferences.recording.filename_prefix or "render"
-                self._request_save_render_spec = True
                 self._save_render_spec_name = name
+                # Confirm overwrite if a spec with this name already exists.
+                if self.render_spec_service and self.render_spec_service.spec_exists(name):
+                    self._render_spec_overwrite_name = name
+                else:
+                    self._request_save_render_spec = True
 
             # Brief "Saved!" feedback
             if self._render_spec_saved_time > 0:
@@ -380,7 +384,7 @@ class HelpWindowsMixin:
                 self.state.preferences.recording.filename_prefix,
                 256
             )
-            self._delayed_tooltip("Defaults to 'animation' if left empty. Saves to documents/Fluoddity/ All filenames get timestamps appended")
+            self._delayed_tooltip("Defaults to 'animation' if left empty. Saves to documents/Fluoddity/ Video filenames get timestamps appended")
 
         imgui.end()
 

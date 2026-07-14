@@ -161,11 +161,23 @@ class MenuBarMixin:
                     if not self._editor_save_files:
                         imgui.text_disabled("(no saves)")
                     else:
-                        for path in self._editor_save_files:
-                            label = path.name[:-len('.editor.json')]
-                            if imgui.menu_item(label, "", False)[0]:
+                        labels = [p.name[:-len('.editor.json')] for p in self._editor_save_files]
+                        max_w = max((imgui.calc_text_size(l).x for l in labels), default=0.0)
+                        for path, label in zip(self._editor_save_files, labels):
+                            clicked, _ = imgui.selectable(
+                                f"{label}##editor_load", False,
+                                imgui.SelectableFlags_.no_auto_close_popups,
+                                imgui.ImVec2(max_w + 10, 0))
+                            if clicked:
                                 self._request_load_editor = True
                                 self._load_editor_path = str(path)
+                                imgui.close_current_popup()
+                            imgui.same_line()
+                            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+                            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+                            if imgui.small_button(f"X##editor_del_{label}"):
+                                self._editor_delete_path = path
+                            imgui.pop_style_color(2)
                     imgui.end_menu()
                     self._editor_load_submenu_was_open = True
                 else:
@@ -375,11 +387,23 @@ class MenuBarMixin:
                     if not self._simulation_save_dirs:
                         imgui.text_disabled("(no saves)")
                     else:
-                        for path in self._simulation_save_dirs:
-                            label = path.name[:-len('.fsim')]
-                            if imgui.menu_item(label, "", False)[0]:
+                        labels = [p.name[:-len('.fsim')] for p in self._simulation_save_dirs]
+                        max_w = max((imgui.calc_text_size(l).x for l in labels), default=0.0)
+                        for path, label in zip(self._simulation_save_dirs, labels):
+                            clicked, _ = imgui.selectable(
+                                f"{label}##sim_load", False,
+                                imgui.SelectableFlags_.no_auto_close_popups,
+                                imgui.ImVec2(max_w + 10, 0))
+                            if clicked:
                                 self._request_load_simulation = True
                                 self._load_simulation_path = str(path)
+                                imgui.close_current_popup()
+                            imgui.same_line()
+                            imgui.push_style_color(imgui.Col_.button, imgui.ImVec4(0.8, 0.2, 0.2, 1.0))
+                            imgui.push_style_color(imgui.Col_.button_hovered, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
+                            if imgui.small_button(f"X##sim_del_{label}"):
+                                self._simulation_delete_path = path
+                            imgui.pop_style_color(2)
                     imgui.end_menu()
                     self._simulation_load_submenu_was_open = True
                 else:

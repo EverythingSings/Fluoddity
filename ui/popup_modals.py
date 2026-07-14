@@ -73,13 +73,36 @@ class PopupModalsMixin:
             if imgui.button("Save", imgui.ImVec2(120, 0)):
                 name = self._save_editor_name_buffer.strip()
                 if name:
-                    self._save_editor_name = name
-                    self._request_save_editor = True
                     self.editor_save_popup_open = False
                     imgui.close_current_popup()
+                    # If a save with this name exists, confirm overwrite first.
+                    if self.editor_saver and self.editor_saver.exists(name):
+                        self._editor_overwrite_name = name
+                    else:
+                        self._save_editor_name = name
+                        self._request_save_editor = True
             imgui.same_line()
             if imgui.button("Cancel", imgui.ImVec2(120, 0)):
                 self.editor_save_popup_open = False
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Editor settings overwrite confirmation
+        if self._editor_overwrite_name:
+            imgui.open_popup("Overwrite Editor Settings?")
+
+        if imgui.begin_popup_modal("Overwrite Editor Settings?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text(f"'{self._editor_overwrite_name}' already exists.")
+            imgui.text("Do you want to overwrite it?")
+            imgui.separator()
+            if imgui.button("Overwrite", imgui.ImVec2(120, 0)):
+                self._save_editor_name = self._editor_overwrite_name
+                self._request_save_editor = True
+                self._editor_overwrite_name = None
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self._editor_overwrite_name = None
                 imgui.close_current_popup()
             imgui.end_popup()
 
@@ -95,13 +118,95 @@ class PopupModalsMixin:
             if imgui.button("Save", imgui.ImVec2(120, 0)):
                 name = self._save_simulation_name_buffer.strip()
                 if name:
-                    self._save_simulation_name = name
-                    self._request_save_simulation = True
                     self.simulation_save_popup_open = False
                     imgui.close_current_popup()
+                    if self.simulation_saver and self.simulation_saver.exists(name):
+                        self._simulation_overwrite_name = name
+                    else:
+                        self._save_simulation_name = name
+                        self._request_save_simulation = True
             imgui.same_line()
             if imgui.button("Cancel", imgui.ImVec2(120, 0)):
                 self.simulation_save_popup_open = False
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Simulation state overwrite confirmation
+        if self._simulation_overwrite_name:
+            imgui.open_popup("Overwrite Simulation State?")
+
+        if imgui.begin_popup_modal("Overwrite Simulation State?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text(f"'{self._simulation_overwrite_name}' already exists.")
+            imgui.text("Do you want to overwrite it?")
+            imgui.separator()
+            if imgui.button("Overwrite", imgui.ImVec2(120, 0)):
+                self._save_simulation_name = self._simulation_overwrite_name
+                self._request_save_simulation = True
+                self._simulation_overwrite_name = None
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self._simulation_overwrite_name = None
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Render spec overwrite confirmation (save button lives in the Screen
+        # Recording window; it routes here when the name already exists on disk).
+        if self._render_spec_overwrite_name:
+            imgui.open_popup("Overwrite Render Spec?")
+
+        if imgui.begin_popup_modal("Overwrite Render Spec?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text(f"'{self._render_spec_overwrite_name}' already exists.")
+            imgui.text("Do you want to overwrite it?")
+            imgui.separator()
+            if imgui.button("Overwrite", imgui.ImVec2(120, 0)):
+                self._save_render_spec_name = self._render_spec_overwrite_name
+                self._request_save_render_spec = True
+                self._render_spec_overwrite_name = None
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self._render_spec_overwrite_name = None
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Editor settings delete confirmation
+        if self._editor_delete_path:
+            imgui.open_popup("Delete Editor Settings?")
+
+        if imgui.begin_popup_modal("Delete Editor Settings?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            name = self._editor_delete_path.name[:-len('.editor.json')]
+            imgui.text(f"Are you sure you want to delete '{name}'?")
+            imgui.separator()
+            if imgui.button("Delete", imgui.ImVec2(120, 0)):
+                if self.editor_saver:
+                    self.editor_saver.delete(self._editor_delete_path)
+                self._editor_delete_path = None
+                self._refresh_editor_save_files()
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self._editor_delete_path = None
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Simulation state delete confirmation
+        if self._simulation_delete_path:
+            imgui.open_popup("Delete Simulation State?")
+
+        if imgui.begin_popup_modal("Delete Simulation State?", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            name = self._simulation_delete_path.name[:-len('.fsim')]
+            imgui.text(f"Are you sure you want to delete '{name}'?")
+            imgui.separator()
+            if imgui.button("Delete", imgui.ImVec2(120, 0)):
+                if self.simulation_saver:
+                    self.simulation_saver.delete(self._simulation_delete_path)
+                self._simulation_delete_path = None
+                self._refresh_simulation_save_dirs()
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self._simulation_delete_path = None
                 imgui.close_current_popup()
             imgui.end_popup()
 

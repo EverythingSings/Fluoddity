@@ -83,11 +83,19 @@ class EditorSaver:
         if apply_layout and save.imgui_layout:
             imgui.load_ini_settings_from_memory(save.imgui_layout)
 
+    def path_for(self, name: str) -> Path:
+        """Resolve the .editor.json path a save with this name would use."""
+        return get_editor_saves_dir() / f"{name}.editor.json"
+
+    def exists(self, name: str) -> bool:
+        """True if an editor save with this name already exists on disk."""
+        return self.path_for(name).exists()
+
     def save_to_file(self, save: EditorSave, path: Path | None = None,
                      name: str = "editor") -> Path:
         """Write an EditorSave to a .editor.json file. Returns the path."""
         if path is None:
-            path = get_editor_saves_dir() / f"{name}.editor.json"
+            path = self.path_for(name)
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(self.to_dict(save), indent=2))
@@ -115,3 +123,13 @@ class EditorSaver:
                  if f.is_file() and f.name.endswith('.editor.json')]
         files.sort(key=lambda p: p.name.lower())
         return files
+
+    def delete(self, path: Path) -> bool:
+        """Delete a .editor.json file. Returns True on success."""
+        try:
+            Path(path).unlink()
+            print(f"[EditorSaver] Deleted: {Path(path).name}")
+            return True
+        except OSError as e:
+            print(f"[EditorSaver] Failed to delete {path}: {e}")
+            return False

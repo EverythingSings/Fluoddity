@@ -121,6 +121,13 @@ class UI(
         self.simulation_save_popup_open = False
         self._save_simulation_name_buffer = ""
         self._simulation_load_submenu_was_open = False
+        # Overwrite-confirm (name of the pending save when a file already exists)
+        self._editor_overwrite_name = None
+        self._simulation_overwrite_name = None
+        self._render_spec_overwrite_name = None
+        # Delete-confirm (Path of the editor/sim save pending deletion)
+        self._editor_delete_path = None
+        self._simulation_delete_path = None
         # Physics configs: app dir for bundled (Core/Advanced), user dir for user-created
         self.app_configs_dir = get_app_physics_configs_dir()
         self.user_configs_dir = get_user_physics_configs_dir()

@@ -13,7 +13,6 @@ File format:
             canvas.npz              # Compressed packed RGBA16F 3D canvas texture
 """
 import json
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -118,12 +117,19 @@ class SimulationSaver:
 
     # --- disk I/O ---------------------------------------------------------
 
+    def path_for(self, name: str) -> Path:
+        """Resolve the .fsim directory path a save with this name would use."""
+        return get_simulation_saves_dir() / f"{name}.fsim"
+
+    def exists(self, name: str) -> bool:
+        """True if a simulation save with this name already exists on disk."""
+        return self.path_for(name).exists()
+
     def save_to_disk(self, buffers: dict, sim_metadata: dict,
                      dir_path: Path | None = None, name: str = "simulation") -> Path:
         """Save buffers + metadata to a .fsim directory. Returns the directory path."""
         if dir_path is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            dir_path = get_simulation_saves_dir() / f"{name}_{timestamp}.fsim"
+            dir_path = get_simulation_saves_dir() / f"{name}.fsim"
 
         dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -210,3 +216,14 @@ class SimulationSaver:
                 if d.is_dir() and d.suffix == '.fsim']
         dirs.sort(key=lambda p: p.name.lower())
         return dirs
+
+    def delete(self, dir_path: Path) -> bool:
+        """Delete a .fsim directory. Returns True on success."""
+        import shutil
+        try:
+            shutil.rmtree(dir_path)
+            print(f"[SimulationSaver] Deleted: {dir_path.name}")
+            return True
+        except OSError as e:
+            print(f"[SimulationSaver] Failed to delete {dir_path}: {e}")
+            return False

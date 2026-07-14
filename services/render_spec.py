@@ -24,7 +24,6 @@ Versioning:
     v2 (current): editor block { preferences (nested), imgui_layout }.
 """
 import json
-from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -115,12 +114,19 @@ class RenderSpecService:
 
         return spec, gpu_buffers
 
+    def path_for(self, name: str) -> Path:
+        """Resolve the .frs directory path a spec with this name would use."""
+        return get_render_specs_dir() / f"{name}.frs"
+
+    def spec_exists(self, name: str) -> bool:
+        """True if a render spec with this name already exists on disk."""
+        return self.path_for(name).exists()
+
     def save_to_disk(self, spec: RenderSpec, gpu_buffers: dict,
                      dir_path: Path | None = None) -> Path:
         """Save a RenderSpec to a .frs directory on disk. Returns the directory path."""
         if dir_path is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            dir_path = get_render_specs_dir() / f"{spec.display_name}_{timestamp}.frs"
+            dir_path = get_render_specs_dir() / f"{spec.display_name}.frs"
 
         dir_path.mkdir(parents=True, exist_ok=True)
 
