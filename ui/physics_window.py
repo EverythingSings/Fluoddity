@@ -127,14 +127,14 @@ class PhysicsWindowMixin:
                 changed_gf, new_gf = imgui.slider_float(w.label, self.state.sim.GRAVITY_FORCE, -1.0, 1.0, "%.2f")
             if changed_gf and not w.alt_clicked:
                 self.state.sim.GRAVITY_FORCE = new_gf
-            self._delayed_tooltip("Gravity-like axial force applied to particles.")
+            self._delayed_tooltip("Gravity-like force applied to particles.\nLogarithmic: force grows ~10x per quarter of slider travel,\nwith a dead-zone at center.")
 
             imgui.set_next_item_width(100)
             with lock_widget(pls, 'GRAVITY_STRAFE', "Gravity Strafe") as w:
                 changed_gs, new_gs = imgui.slider_float(w.label, self.state.sim.GRAVITY_STRAFE, -1.0, 1.0, "%.2f")
             if changed_gs and not w.alt_clicked:
                 self.state.sim.GRAVITY_STRAFE = new_gs
-            self._delayed_tooltip("Gravity-like strafe (direct position offset) applied to particles.")
+            self._delayed_tooltip("Gravity-like strafe (direct position offset) applied to particles.\nLogarithmic: strafe grows ~10x per quarter of slider travel,\nwith a dead-zone at center.")
 
             imgui.separator()
 

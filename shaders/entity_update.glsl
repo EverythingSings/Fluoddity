@@ -72,7 +72,7 @@ const bool TESTING_MODE = false;
 const int PLANE_SAMPLES = 1;
 uniform int ABSOLUTE_ORIENTATION; // 0=Off, 1=Y axis, 2=Radial
 uniform float ORIENTATION_MIX; // Blend factor for orientation calculations
-uniform float GRAVITY_FORCE;  // Gravity-like axial force [-1,1]
+uniform float GRAVITY_FORCE;  // Gravity-like force [-1,1]
 uniform float GRAVITY_STRAFE; // Gravity-like strafe [-1,1]
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
@@ -295,6 +295,25 @@ vec4 get_field(vec2 p){
     //vec2 uv = p / (2.0 * half_extent) + 0.5;
     //if(get_particle_boundary_conditions() == 2) uv = fract(uv);
     //return texture(field_texture, uv);
+}
+
+// Gravity-like force expansion: maps a linear -1..1 slider (GRAVITY_FORCE /
+// GRAVITY_STRAFE) to a logarithmic physical force so a small knob covers a wide
+// range. Odd-symmetric, with a linear dead-zone near center so it reaches 0.
+// SYNCHRONIZED: constants + curve must match scripts/migrate_legacy_gravity.py
+//   physical = sign(c) * MAXV * 10^(DECADES*(|c|-1))         for |c| > KNEE
+//   physical = sign(c) * V_KNEE * (|c|/KNEE)                 for |c| <= KNEE
+#define GRAVITY_MAXV    0.5   // physical value at |control| = 1
+#define GRAVITY_DECADES 4.0   // log span: MAXV .. MAXV/10^DECADES
+#define GRAVITY_KNEE    0.05  // |control| below this ramps linearly to 0
+float gravity_expand(float c){
+    float a = abs(c);
+    float s = sign(c);
+    float v_knee = GRAVITY_MAXV * pow(10.0, GRAVITY_DECADES*(GRAVITY_KNEE - 1.0));
+    if (a <= GRAVITY_KNEE) {
+        return s * v_knee * (a / GRAVITY_KNEE);
+    }
+    return s * GRAVITY_MAXV * pow(10.0, GRAVITY_DECADES*(a - 1.0));
 }
 
 vec2 safenorm(vec2 p){
@@ -797,12 +816,16 @@ void main() {
     // Retained (commented out) for a future field reimplementation; the live
     // drawing runtime + its uniforms were removed in the 3D-only cleanup.
     //vec4 draw_sample =get_field(vec2(e.px, e.py));
-    //e.vx += .01/CANVAS_SCALE*force_field_strength*draw_sample.x;
-    float force_field_strength = -GRAVITY_FORCE;
-    float strafe_field_strength = -GRAVITY_STRAFE;
+    //e.vy += .01/CANVAS_SCALE*force_field_strength*draw_sample.y;
+    //e.py += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.w;
+    //vec3 sp = vec3(e.px,e.py,e.pz);
+    // GRAVITY_FORCE / GRAVITY_STRAFE are linear -1..1 sliders; expand to a
+    // logarithmic physical force before applying (see gravity_expand()).
+    float force_field_strength = -gravity_expand(GRAVITY_FORCE);
+    float strafe_field_strength = -gravity_expand(GRAVITY_STRAFE);
     e.vy += .01/CANVAS_SCALE*force_field_strength;
-    //e.px += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.z;
     e.py += .01/CANVAS_SCALE*strafe_field_strength;
+
     vec3 sp = vec3(e.px,e.py,e.pz);
     vec3 n = scene(sp).x*-.01*sdf_normal(sp);
     //e.px+=n.x;
