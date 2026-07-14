@@ -291,26 +291,12 @@ class MenuBarMixin:
                 )
                 self._delayed_tooltip("GPU histogram visualization from report()\ncalls in entity_update.glsl.")
 
-                # 3D Controls window toggle
-                _, self.state.preferences.ui_windows.show_three_d_window = imgui.checkbox(
-                    "3D Controls",
-                    self.state.preferences.ui_windows.show_three_d_window
+                # Render settings window toggle (unified per-renderer controls)
+                _, self.state.preferences.ui_windows.show_render_settings_window = imgui.checkbox(
+                    "Render settings",
+                    self.state.preferences.ui_windows.show_render_settings_window
                 )
-                self._delayed_tooltip("FPS camera settings, orbit rate, and\n3D simulation parameters.")
-
-                # OptiX Controls window toggle
-                _, self.state.preferences.ui_windows.show_optix_window = imgui.checkbox(
-                    "OptiX Controls",
-                    self.state.preferences.ui_windows.show_optix_window
-                )
-                self._delayed_tooltip("OptiX sphere raytracing settings:\nRT mode, lighting, materials, and rendering.")
-
-                # Tracer window toggle
-                _, self.state.preferences.ui_windows.show_tracer_window = imgui.checkbox(
-                    "Tracer",
-                    self.state.preferences.ui_windows.show_tracer_window
-                )
-                self._delayed_tooltip("Volumetric path tracer.\nSplats entities into a voxel grid and\npath-traces with adjustable medium/lighting.")
+                self._delayed_tooltip("Per-renderer controls: RT mode, capture, camera,\nmedium/geometry, lighting, sky, and post-process.\nShows the active renderer's settings (Preferences -> Renderer).")
 
                 # Radio window toggle
                 _, self.state.preferences.ui_windows.show_radio_window = imgui.checkbox(

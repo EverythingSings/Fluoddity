@@ -26,11 +26,9 @@ from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
 from .generics_window import GenericsWindowMixin
 from .plotting import PlottingWindowMixin
-from .three_d_window import ThreeDWindowMixin
-from .tracer_window import TracerWindowMixin
+from .render_settings_window import RenderSettingsWindowMixin
 from .radio_window import RadioWindowMixin
 from .scheduled_renders_window import ScheduledRendersWindowMixin
-from .optix_window import OptiXWindowMixin
 
 
 @dataclass
@@ -52,11 +50,9 @@ class UI(
     SliderWidgetsMixin,
     GenericsWindowMixin,
     PlottingWindowMixin,
-    ThreeDWindowMixin,
-    TracerWindowMixin,
+    RenderSettingsWindowMixin,
     RadioWindowMixin,
     ScheduledRendersWindowMixin,
-    OptiXWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -74,7 +70,7 @@ class UI(
         self.viewer = viewer  # Viewer window
 
         # Tracer references (for entity buffer and camera access)
-        self._tracer_interface = None  # Lazily created inside TracerWindowMixin
+        self._tracer_interface = None  # Lazily created inside RenderSettingsWindowMixin
         self.tracer_sim = tracer_sim
         self.tracer_controller_cam = tracer_controller_cam
         self.tracer_camera = tracer_camera
@@ -607,17 +603,9 @@ class UI(
         if self.state.preferences.ui_windows.show_plotting_window:
             self.render_plotting_window()
 
-        # Render 3D Controls window if enabled
-        if self.show_sidebar and self.state.preferences.ui_windows.show_three_d_window:
-            self.render_three_d_window()
-
-        # Render OptiX Controls window if enabled
-        if self.show_sidebar and self.state.preferences.ui_windows.show_optix_window:
-            self.render_optix_window()
-
-        # Render Tracer window if enabled (hidden when windows toggled off)
-        if self.show_sidebar and self.state.preferences.ui_windows.show_tracer_window:
-            self.render_tracer_window()
+        # Render the unified Render settings window (active renderer's controls)
+        if self.show_sidebar and self.state.preferences.ui_windows.show_render_settings_window:
+            self.render_render_settings_window()
 
         # Render Radio window if enabled (hidden when windows toggled off)
         if self.show_sidebar and self.state.preferences.ui_windows.show_radio_window:

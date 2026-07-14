@@ -1,7 +1,8 @@
 """Tracer interface: bridges Fluoddity's entity buffer and camera to the volrender path tracer.
 
-All logic for the Tracer window lives here. The UI mixin (ui/tracer_window.py)
-renders ImGui controls and calls into this class for rendering.
+All volumetric-tracer logic lives here. The UI mixin
+(ui/render_settings_window.py, OpenGL renderer sections) renders ImGui controls
+and calls into this class for rendering.
 
 Supports two modes:
   1. Interactive preview: "Re-render" button starts a progressive render,
@@ -474,10 +475,12 @@ class TracerInterface:
     def tonemap_for_video(self) -> moderngl.Texture:
         """Tonemap the resolved HDR target into the display texture and return it.
 
-        Used by the video recording path to get a tonemapped frame for the
-        video service. The display_tex is rgba8 which the vid_saver expects.
+        Used by the video recording path to get a tonemapped frame. Uses natural
+        OpenGL orientation (flip_y=False) so the same texture displays upright in
+        the Viewer (matching the realtime + OptiX-video paths); the recorder is
+        told flip_y=False to keep the written video upright too.
         """
-        self._tonemap_to_display()
+        self._tonemap_to_display(flip_y=False)
         return self._display_tex
 
     # ------------------------------------------------------------ lifecycle

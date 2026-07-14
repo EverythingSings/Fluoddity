@@ -456,7 +456,8 @@ class App:
                     tracer_frame,
                     ui_state.preferences.recording.max_frames,
                     ui_state.preferences.recording.supersample_k,
-                    ui_state.preferences.recording.filename_prefix
+                    ui_state.preferences.recording.filename_prefix,
+                    flip_y=False  # natural orientation (matches OptiX video)
                 )
         elif optix_pt_video_active and ui_state.sim.going:
             # OptiX path tracer video mode: offline rendering with motion blur

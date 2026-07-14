@@ -181,10 +181,8 @@ class UIWindowsPrefs:
     show_radio_window: bool = False
     show_plotting_window: bool = False
     show_video_recording_window: bool = False
-    show_three_d_window: bool = False
     show_scheduled_renders_window: bool = False
-    show_tracer_window: bool = False
-    show_optix_window: bool = False
+    show_render_settings_window: bool = False  # unified per-renderer controls
     show_config_clipboard_window: bool = False
 
     # UI interaction
@@ -354,10 +352,8 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "show_radio_window": ("ui_windows", "show_radio_window"),
     "show_plotting_window": ("ui_windows", "show_plotting_window"),
     "show_video_recording_window": ("ui_windows", "show_video_recording_window"),
-    "show_three_d_window": ("ui_windows", "show_three_d_window"),
     "show_scheduled_renders_window": ("ui_windows", "show_scheduled_renders_window"),
-    "show_tracer_window": ("ui_windows", "show_tracer_window"),
-    "show_optix_window": ("ui_windows", "show_optix_window"),
+    "show_render_settings_window": ("ui_windows", "show_render_settings_window"),
     "show_config_clipboard_window": ("ui_windows", "show_config_clipboard_window"),
     "physics_tooltips_enabled": ("ui_windows", "physics_tooltips_enabled"),
     "debug_arrows": ("ui_windows", "debug_arrows"),
