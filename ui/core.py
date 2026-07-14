@@ -404,6 +404,7 @@ class UI(
         self.state.request_preview_config = self._request_preview_config
         self.state.request_clear_preview = self._request_clear_preview
         self.state.request_world_size_change = self._request_world_size_change
+        self.state.request_pick_focal = getattr(self, '_request_pick_focal', False)
 
         self.state.save_filename = self._save_filename
         self.state.load_filename = self._load_filename
@@ -445,6 +446,7 @@ class UI(
         self._request_preview_config = False
         self._request_clear_preview = False
         self._request_world_size_change = False
+        self._request_pick_focal = False
         self._save_filename = ""
         self._load_filename = ""
         self._load_category = ""

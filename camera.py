@@ -225,11 +225,7 @@ class Camera:
                 watercolor_mode: bool = False, ink_weight: float = 1.0,
                 tonemap_softness: float = 1.0,
                 bloom_enabled: bool = False, bloom_threshold: float = 0.8,
-                bloom_intensity: float = 0.5, bloom_radius: float = 1.0,
-                sdf_enabled: bool = False, inv_view_proj=None,
-                sdf_sun_dir: tuple = (0.577, 0.577, 0.577),
-                sdf_sun_color: tuple = (3.0, 3.0, 3.0),
-                sdf_sky_color: tuple = (0.5, 0.7, 1.0)):
+                bloom_intensity: float = 0.5, bloom_radius: float = 1.0):
         """Produce the finished, markup-free display texture and return it.
 
         No longer draws to the screen or composites overlays — that is the
@@ -254,11 +250,6 @@ class Camera:
             ink_weight=self.ink_weight,
             watercolor_mode=watercolor_mode,
             tonemap_softness=tonemap_softness,
-            sdf_enabled=sdf_enabled,
-            inv_view_proj=inv_view_proj,
-            sdf_sun_dir=sdf_sun_dir,
-            sdf_sun_color=sdf_sun_color,
-            sdf_sky_color=sdf_sky_color,
             bloom_enabled=bloom_enabled,
             bloom_threshold=bloom_threshold,
             bloom_intensity=bloom_intensity,

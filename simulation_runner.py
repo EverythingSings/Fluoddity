@@ -3,8 +3,6 @@
 Renderer-specific offline video paths now live behind the VideoStrategy
 protocol (see rendering/video_strategies.py); this runner only builds them.
 """
-import glfw
-import numpy as np
 
 
 class SimulationRunner:
@@ -87,46 +85,11 @@ class SimulationRunner:
         markup (sweep reticle, draw ring, field overlay) is NOT included here —
         it is composited for display only, so recorded frames stay markup-free.
         """
-        # SDF preview params (for 3D GL-points mode)
-        sdf_enabled = False
-        inv_view_proj = None
-        sdf_sun_dir = (0.577, 0.577, 0.577)
-        sdf_sun_color = (3.0, 3.0, 3.0)
-        sdf_sky_color = (0.5, 0.7, 1.0)
-
-        sdf_enabled = ui_state.preferences.tracer.sdf_enabled
-        if sdf_enabled:
-            cam = self.controller_cam
-            width, height = glfw.get_framebuffer_size(self.window)
-            aspect = width / max(height, 1)
-            view_proj = self.camera.compute_fps_view_proj(
-                cam.pos, cam.dir, cam.up, cam.fov, aspect
-            )
-            inv_view_proj = np.linalg.inv(
-                view_proj.astype(np.float64)
-            ).astype(np.float32)
-
-            p = ui_state.preferences
-            sun_d = np.array(p.lighting.light_direction, dtype=np.float64)
-            sun_len = max(np.linalg.norm(sun_d), 1e-8)
-            sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-            sc = p.lighting.light_color
-            si = p.lighting.light_intensity
-            sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-            skc = p.lighting.sky_color_top
-            ski = p.lighting.sky_intensity
-            sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
-
         return dict(
             brightness=self.camera.BRIGHTNESS,
             ink_weight=ui_state.sim.ink_weight,
             watercolor_mode=ui_state.sim.watercolor_mode,
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
-            sdf_enabled=sdf_enabled,
-            inv_view_proj=inv_view_proj,
-            sdf_sun_dir=sdf_sun_dir,
-            sdf_sun_color=sdf_sun_color,
-            sdf_sky_color=sdf_sky_color,
             bloom_enabled=ui_state.preferences.bloom.enabled,
             bloom_threshold=ui_state.preferences.bloom.threshold,
             bloom_intensity=ui_state.preferences.bloom.intensity,

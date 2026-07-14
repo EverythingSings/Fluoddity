@@ -25,6 +25,21 @@ class EntityPicker:
         """
         self.entity_buffer = entity_buffer
 
+    def get_entity_by_index(self, idx: int, num_cohorts: int = 1,
+                            active_count: int = 1) -> tuple[tuple[float, float], float]:
+        """Return ((pos_x, pos_y), cohort_value) for a known entity index.
+
+        Used when an external picker (e.g. the OptiX ray) already has the hit
+        entity index and only needs the position + cohort, derived the same way
+        find_nearest_entity_3d does.
+        """
+        ent_cache = np.frombuffer(self.entity_buffer.read(), dtype=np.float32)
+        base = idx * self.entity_stride
+        pos_x = float(ent_cache[base + 0])
+        pos_y = float(ent_cache[base + 1])
+        cohort_value = float(num_cohorts) * float(idx) / float(max(active_count, 1))
+        return ((pos_x, pos_y), cohort_value)
+
     def find_nearest_entity(self, tex_coords: tuple[float, float], canvas_aspect_ratio: float,
                             num_cohorts: int = 1, active_count: int = 1) -> tuple[int, tuple[float, float], float]:
         """Find the entity closest to given texture coordinates.

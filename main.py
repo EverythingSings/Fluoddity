@@ -117,6 +117,13 @@ class App:
         self.recording_controller = RecordingController(
             self.video_service, self.camera, self.ui, self.sim)
 
+        # Renderer host: owns the OptiX path tracer's lifecycle (lazy creation,
+        # VRAM release, error recovery, prefs sync, preview). The path tracer is
+        # the single OptiX renderer; rt_mode 0 (rasterize) is a preset on it.
+        # `self._pathtracer_interface` is a property aliasing `renderer_host.optix`.
+        # Created before the CommandHandler so picking can route through the GAS.
+        self.renderer_host = RendererHost(self.ctx)
+
         self.command_handler = CommandHandler(
             self.sim, self.camera, self.ui, self.rule_manager,
             self.entity_picker, self.video_service, self.config_saver,
@@ -125,14 +132,9 @@ class App:
             render_spec_service=self.render_spec_service,
             recording_controller=self.recording_controller,
             controller_cam=self.controller_cam,
-            plotting_manager=self.plotting_manager
+            plotting_manager=self.plotting_manager,
+            renderer_host=self.renderer_host
         )
-
-        # Renderer host: owns the OptiX path tracer's lifecycle (lazy creation,
-        # VRAM release, error recovery, prefs sync, preview). The path tracer is
-        # the single OptiX renderer; rt_mode 0 (rasterize) is a preset on it.
-        # `self._pathtracer_interface` is a property aliasing `renderer_host.optix`.
-        self.renderer_host = RendererHost(self.ctx)
 
         self.sim_runner = SimulationRunner(
             self.sim, self.camera, self.video_service,
@@ -638,33 +640,6 @@ class App:
         mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
         mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
 
-        # SDF preview params
-        sdf_enabled = False
-        inv_view_proj = None
-        sdf_sun_dir = (0.577, 0.577, 0.577)
-        sdf_sun_color = (3.0, 3.0, 3.0)
-        sdf_sky_color = (0.5, 0.7, 1.0)
-        sdf_enabled = ui_state.preferences.tracer.sdf_enabled
-        if sdf_enabled:
-            cam = self.controller_cam
-            aspect = width / max(height, 1)
-            view_proj = self.camera.compute_fps_view_proj(
-                cam.pos, cam.dir, cam.up, cam.fov, aspect
-            )
-            inv_view_proj = np.linalg.inv(
-                view_proj.astype(np.float64)
-            ).astype(np.float32)
-            p = ui_state.preferences
-            sun_d = np.array(p.lighting.light_direction, dtype=np.float64)
-            sun_len = max(np.linalg.norm(sun_d), 1e-8)
-            sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-            sc = p.lighting.light_color
-            si = p.lighting.light_intensity
-            sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-            skc = p.lighting.sky_color_top
-            ski = p.lighting.sky_intensity
-            sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
-
         # Build overlay markup params (sweep reticle). These composite over the
         # finished frame for DISPLAY only; the recorded frame stays markup-free.
         overlay_params = {
@@ -683,11 +658,6 @@ class App:
             bloom_threshold=ui_state.preferences.bloom.threshold,
             bloom_intensity=ui_state.preferences.bloom.intensity,
             bloom_radius=ui_state.preferences.bloom.radius,
-            sdf_enabled=sdf_enabled,
-            inv_view_proj=inv_view_proj,
-            sdf_sun_dir=sdf_sun_dir,
-            sdf_sun_color=sdf_sun_color,
-            sdf_sky_color=sdf_sky_color,
         )
 
         # Hand the finished (markup-free) frame to the Viewer, which composites

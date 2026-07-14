@@ -18,12 +18,16 @@ class CommandHandler:
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, user_configs_dir,
                  param_lock_service=None, render_spec_service=None,
-                 recording_controller=None, controller_cam=None, plotting_manager=None):
+                 recording_controller=None, controller_cam=None, plotting_manager=None,
+                 renderer_host=None):
         self.sim = sim
         self.camera = camera
         self.ui = ui
         self.rule_manager = rule_manager
         self.entity_picker = entity_picker
+        # Renderer host — used to route entity picking through the OptiX GAS
+        # (single-ray pick) when OptiX is the active renderer.
+        self.renderer_host = renderer_host
         self.video_service = video_service
         self.config_saver = config_saver
         self.user_configs_dir = user_configs_dir
@@ -243,12 +247,37 @@ class CommandHandler:
             self.rule_manager.push_rule(current_rule.copy(), ui_state.sim.rule_seed)
             self.sim.apply_rule(current_rule)
 
+    def _pick_entity_3d(self, ui_state, ray_origin, ray_dir):
+        """Pick an entity along a 3D ray.
+
+        When OptiX is the active renderer, cast a real ray into the OptiX GAS
+        and select the first entity hit (respects sphere radii + occlusion). On
+        an OptiX miss / SDF hit / out-of-range index, fall back to the CPU
+        nearest-particle-to-ray picker.
+
+        Returns (entity_id, (pos_x, pos_y), cohort_value, depth).
+        """
+        if ui_state.camera.optix_enabled and self.renderer_host is not None \
+                and self.renderer_host.optix is not None:
+            hit = self.renderer_host.optix.pick(ray_origin, ray_dir)
+            if hit is not None:
+                prim, depth = hit
+                if 0 <= prim < self.sim.entity_count:
+                    pos, cohort = self.entity_picker.get_entity_by_index(
+                        prim, num_cohorts=ui_state.sim.num_cohorts,
+                        active_count=self.sim.entity_count)
+                    return (prim, pos, cohort, depth)
+
+        # Fallback: CPU nearest-particle-to-ray.
+        return self.entity_picker.find_nearest_entity_3d(
+            ray_origin, ray_dir,
+            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+
     def _handle_pick_focal(self, ui_state):
         """Handle N key: pick nearest entity to mouse, set focal plane and orbit center."""
         ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
-        _entity_id, _entity_pos, _cohort, depth = self.entity_picker.find_nearest_entity_3d(
-            ray_origin, ray_dir,
-            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+        _entity_id, _entity_pos, _cohort, depth = self._pick_entity_3d(
+            ui_state, ray_origin, ray_dir)
         if depth > 0:
             ui_state.camera.focal_plane_depth = depth
             ui_state.camera.orbit_center[:] = ray_origin + ray_dir * depth
@@ -294,17 +323,15 @@ class CommandHandler:
             return
 
         ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
-        entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
-            ray_origin, ray_dir,
-            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+        entity_id, entity_pos, entity_cohort, _depth = self._pick_entity_3d(
+            ui_state, ray_origin, ray_dir)
         self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
 
     def _handle_entity_pick(self, ui_state, canvas_aspect_ratio):
         """Handle entity selection via left click in Select Particle mode (3D ray pick)."""
         ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
-        entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
-            ray_origin, ray_dir,
-            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+        entity_id, entity_pos, entity_cohort, _depth = self._pick_entity_3d(
+            ui_state, ray_origin, ray_dir)
 
         if entity_id >= 0 and entity_id < self.sim.entity_count:
             print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort} - requesting rule buffer update")

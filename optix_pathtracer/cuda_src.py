@@ -128,7 +128,18 @@ struct Params
     float          ao_radius;          // offset 360: AO ray max length
     unsigned int   ao_frame_index;     // offset 364: AO jitter decorrelation counter
     float3         ambient_color;      // offset 368: rasterize ambient tint (scaled by `ambient`)
-    // _pad_end                        // offset 380: pad to 384
+
+    // Single-ray entity picking. When pick_mode != 0, __raygen__rg traces one
+    // ray (eye + pick_dir) and writes [prim_index(int), hit_t(float)] to
+    // pick_out instead of shading. prim_index = -1 on miss / SDF hit.
+    // pick_mode packs into the old trailing pad at 380; pick_out (pointer) is
+    // 8-byte aligned at 384.
+    int                pick_mode;      // offset 380
+    unsigned long long pick_out;       // offset 384: device ptr to int2 output
+    float              pick_dir_x;     // offset 392
+    float              pick_dir_y;     // offset 396
+    float              pick_dir_z;     // offset 400
+    // sizeof(Params) = 408 (trailing pad to 8-byte alignment)
 };
 __constant__ Params params;
 }
@@ -625,6 +636,35 @@ extern "C" __global__ void __raygen__rg()
 
     float3 ray_origin = params.eye;
     float3 ray_dir = normalize3(d.x * params.U + d.y * params.V + params.W);
+
+    // 2b. Pick mode: trace a single ray (eye + pick_dir) and write the hit
+    //     primitive index + depth to pick_out, then return before shading.
+    if (params.pick_mode != 0) {
+        float3 pick_dir = normalize3(mk3(params.pick_dir_x,
+                                         params.pick_dir_y,
+                                         params.pick_dir_z));
+        unsigned int q0 = 0, q1 = 0, q2 = 0, q3 = 0;
+        unsigned int q4 = 0, q5 = 0, q6 = 0, q7 = 0;
+        optixTrace(
+            (OptixTraversableHandle)params.handle,
+            params.eye, pick_dir,
+            0.0f, 1e16f, 0.0f,
+            OptixVisibilityMask(255),
+            OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+            0, 0,       // SBT offset, stride
+            0,          // miss index: radiance
+            q0, q1, q2, q3, q4, q5, q6, q7);
+
+        float pick_t = __uint_as_float(q0);
+        int   pick_prim = -1;               // miss / SDF hit sentinel
+        if (pick_t > 0.0f && q1 != 0xFFFFFFFFu) {
+            pick_prim = (int)q1;            // sphere/curve primitive index
+        }
+        int* out = (int*)params.pick_out;
+        out[0] = pick_prim;
+        out[1] = __float_as_int(pick_t > 0.0f ? pick_t : -1.0f);
+        return;
+    }
 
     // 3. Depth of field: thin lens model
     if (params.aperture > 0.0f) {

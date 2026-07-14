@@ -19,6 +19,20 @@ class RenderSettingsWindowMixin:
     # Preview request flag (set by UI, cleared by orchestrator) — OptiX preview.
     _request_optix_preview: bool = False
 
+    def _persisted_header(self, label, pref_field):
+        """Collapsing header whose open/closed state persists in preferences.
+
+        Drives the header from ``ui_windows.<pref_field>`` each frame (making the
+        preference authoritative over imgui's .ini) and writes the state back on
+        user toggle. Mirrors the physics-window group pattern. Returns the open bool.
+        """
+        uw = self.state.preferences.ui_windows
+        imgui.set_next_item_open(getattr(uw, pref_field))
+        is_open = imgui.collapsing_header(label)
+        if imgui.is_item_toggled_open():
+            setattr(uw, pref_field, is_open)
+        return is_open
+
     def render_render_settings_window(self):
         """Render the unified Render settings window for the active renderer."""
         visible, opened = imgui.begin("Render settings", True)
@@ -150,8 +164,7 @@ class RenderSettingsWindowMixin:
 
     def _render_camera_section(self):
         """Camera section — identical for both renderers (shared camera state)."""
-        default_open = imgui.TreeNodeFlags_.default_open.value
-        if imgui.collapsing_header("Camera", default_open):
+        if self._persisted_header("Camera", "render_group_camera"):
             cam = self.state.camera
             _, cam.fov = imgui.slider_float(
                 "FOV", cam.fov, 10.0, 120.0, format="%.0f deg")
@@ -178,8 +191,7 @@ class RenderSettingsWindowMixin:
         (Photosphere + Enable NEE live here; the OptiX-only Cos-lobe Sky toggle
         is added by the OptiX path.)
         """
-        default_open = imgui.TreeNodeFlags_.default_open.value
-        if imgui.collapsing_header("Lighting", default_open):
+        if self._persisted_header("Lighting", "render_group_lighting"):
             lit = self.state.preferences.lighting
             changed, vals = imgui.drag_float3(
                 "Light Dir", list(lit.light_direction), 0.01, -1.0, 1.0)
@@ -224,8 +236,7 @@ class RenderSettingsWindowMixin:
 
     def _render_sky_section(self):
         """Sky section — two-tone gradient from the shared LightingPrefs."""
-        default_open = imgui.TreeNodeFlags_.default_open.value
-        if imgui.collapsing_header("Sky", default_open):
+        if self._persisted_header("Sky", "render_group_sky"):
             lit = self.state.preferences.lighting
             _, lit.sky_color_top = imgui.color_edit3("Sky Top", lit.sky_color_top)
             _, lit.sky_color_bottom = imgui.color_edit3("Sky Bottom", lit.sky_color_bottom)
@@ -237,7 +248,6 @@ class RenderSettingsWindowMixin:
     # ------------------------------------------------------------------- OptiX
     def _render_optix_settings(self):
         p = self.state.preferences
-        default_open = imgui.TreeNodeFlags_.default_open.value
 
         # ---- Pathtrace mode button + unlabeled samples slider (shared) ----
         # Samples slider (spp) shows only in "X spp" mode and only for OptiX.
@@ -283,7 +293,7 @@ class RenderSettingsWindowMixin:
         self._render_camera_section()
 
         # ---- Geometry ----
-        if imgui.collapsing_header("Geometry", default_open):
+        if self._persisted_header("Geometry", "render_group_geometry"):
             _, p.optix.sphere_radius_scale = imgui.slider_float(
                 "Sphere Scale", p.optix.sphere_radius_scale,
                 0.1, 10.0, format="%.1fx")
@@ -307,7 +317,7 @@ class RenderSettingsWindowMixin:
             _, p.optix.sdf_enabled = imgui.checkbox("Enable SDF", p.optix.sdf_enabled)
 
         # ---- Material (moved to between Geometry and Lighting) ----
-        if imgui.collapsing_header("Material", default_open):
+        if self._persisted_header("Material", "render_group_material"):
             mat_labels = ["Lambert", "Glossy", "Mirror"]
             _, p.optix.pt_global_material = imgui.combo(
                 "BRDF", p.optix.pt_global_material, mat_labels)
@@ -324,7 +334,7 @@ class RenderSettingsWindowMixin:
         self._render_sky_section()
 
         # ---- Rasterize-specific (greyed out in path-trace modes) ----
-        if imgui.collapsing_header("Rasterize", default_open):
+        if self._persisted_header("Rasterize", "render_group_rasterize"):
             if not rasterize:
                 imgui.begin_disabled()
             # (The "Shadows (rasterize)" checkbox was removed — always on.)
@@ -353,7 +363,7 @@ class RenderSettingsWindowMixin:
                 imgui.end_disabled()
 
         # ---- Path trace-specific (greyed out in rasterize mode) ----
-        if imgui.collapsing_header("Path Trace", default_open):
+        if self._persisted_header("Path Trace", "render_group_pathtrace"):
             if rasterize:
                 imgui.begin_disabled()
             _, p.optix.pt_max_bounces = imgui.drag_int(
@@ -371,7 +381,7 @@ class RenderSettingsWindowMixin:
                 imgui.end_disabled()
 
         # ---- Post-Process ----
-        if imgui.collapsing_header("Post-Process", default_open):
+        if self._persisted_header("Post-Process", "render_group_postprocess"):
             self._render_firefly_clamp()
 
             _, p.optix.pt_denoise_enabled = imgui.checkbox(
@@ -390,8 +400,6 @@ class RenderSettingsWindowMixin:
 
     # ------------------------------------------------------------------ OpenGL
     def _render_opengl_settings(self):
-        default_open = imgui.TreeNodeFlags_.default_open.value
-
         # Lazy-create the TracerInterface (owns the volumetric renderer).
         if self._tracer_interface is None:
             from tracer_interface import TracerInterface
@@ -446,7 +454,7 @@ class RenderSettingsWindowMixin:
         self._render_camera_section()
 
         # ---- Medium (Enable SDF moved to the bottom of this section) ----
-        if imgui.collapsing_header("Medium", default_open):
+        if self._persisted_header("Medium", "render_group_medium"):
             _, ti.colored_extinction = imgui.checkbox(
                 "Colored Extinction", ti.colored_extinction)
             if ti.colored_extinction:
@@ -482,7 +490,7 @@ class RenderSettingsWindowMixin:
         self._render_sky_section()
 
         # ---- Grid Resolutions (between Sky and Post Process; collapsed) ----
-        if imgui.collapsing_header("Grid Resolutions"):
+        if self._persisted_header("Grid Resolutions", "render_group_grid_resolutions"):
             _, ti.density_resolution_log2 = imgui.slider_int(
                 "Density (2^n)", ti.density_resolution_log2, 5, 10)
             if imgui.is_item_hovered():
@@ -505,7 +513,7 @@ class RenderSettingsWindowMixin:
             imgui.text(f"VRAM: ~{vram_mb:.0f} MB")
 
         # ---- Post Process (Firefly clamp, shared; + shared Bloom) ----
-        if imgui.collapsing_header("Post Process", default_open):
+        if self._persisted_header("Post Process", "render_group_opengl_postprocess"):
             self._render_firefly_clamp()
             self._render_bloom_controls()
 

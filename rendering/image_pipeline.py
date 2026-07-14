@@ -1,7 +1,7 @@
 """ImagePipeline + OverlayCompositor — the split of the old FrameAssembler.
 
 Step 7 pulls the *universal image pipeline* (temporal accumulation, tonemap,
-watercolor, EXPOSURE long-exposure blend, SDF preview, and now bloom) out of the
+watercolor, EXPOSURE long-exposure blend, and now bloom) out of the
 overlay markup. Renderers own an `ImagePipeline` and return finished (tonemapped,
 bloomed) frames; the Viewer (Step 8) runs an `OverlayCompositor` afterwards to
 draw UI markup (sweep reticle, draw ring, field overlay) over the finished frame
@@ -18,22 +18,14 @@ from __future__ import annotations
 import moderngl
 import numpy as np
 
-from utilities.gl_helpers import tryset, tryset_mat4, read_shader
+from utilities.gl_helpers import tryset, read_shader
 
 
 def _create_image_pipeline_shader(ctx, total_samples):
-    """Compile image_pipeline.frag with SDF scene includes + sample count."""
+    """Compile image_pipeline.frag with the sample count baked in."""
     vertex_shader = read_shader('shaders/frame_assembly.vert')
     fragment_shader = read_shader('shaders/image_pipeline.frag')
     fragment_shader = fragment_shader.replace('{total_samples}', str(total_samples))
-
-    # Prepend SDF scene definition (common.glsl + volume_scene.glsl) after #version
-    common_src = read_shader('volrender/shaders/common.glsl')
-    scene_src = read_shader('volrender/shaders/volume_scene.glsl')
-    insert_pos = fragment_shader.find("\n")
-    fragment_shader = (fragment_shader[:insert_pos + 1]
-                       + common_src + scene_src
-                       + fragment_shader[insert_pos + 1:])
     return ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
 
 
@@ -46,7 +38,7 @@ def _fullscreen_quad_vao(ctx, shader):
 
 
 class ImagePipeline:
-    """Temporal accumulation + tonemap + watercolor + SDF preview + bloom.
+    """Temporal accumulation + tonemap + watercolor + bloom.
 
     Owns the accumulation buffer and (lazily) a BloomProcessor. Returns a
     finished, tonemapped (and optionally bloomed) texture on the final sample.
@@ -77,10 +69,6 @@ class ImagePipeline:
     def assemble_frame(self, input_texture, total_samples, current_sample_index,
                        brightness=1.0, ink_weight=1.0,
                        watercolor_mode=False, tonemap_softness=1.0,
-                       sdf_enabled=False, inv_view_proj=None,
-                       sdf_sun_dir=(0.577, 0.577, 0.577),
-                       sdf_sun_color=(3.0, 3.0, 3.0),
-                       sdf_sky_color=(0.5, 0.7, 1.0),
                        bloom_enabled=False, bloom_threshold=0.8,
                        bloom_intensity=0.5, bloom_radius=1.0):
         """Accumulate one sample; on the final sample return the finished texture.
@@ -115,13 +103,6 @@ class ImagePipeline:
         tryset(shader, 'INK_WEIGHT', ink_weight)
         tryset(shader, 'WATERCOLOR_MODE', watercolor_mode)
         tryset(shader, 'TONEMAP_SOFTNESS', tonemap_softness)
-        # SDF preview uniforms
-        tryset(shader, 'u_sdf_enabled', sdf_enabled)
-        if sdf_enabled and inv_view_proj is not None:
-            tryset_mat4(shader, 'u_inv_view_proj', inv_view_proj)
-            tryset(shader, 'u_sdf_sun_dir', sdf_sun_dir)
-            tryset(shader, 'u_sdf_sun_color', sdf_sun_color)
-            tryset(shader, 'u_sdf_sky_color', sdf_sky_color)
 
         self.resources['accumulation_fbo'].use()
         self.resources['vao'].render()

@@ -133,7 +133,10 @@ PARAMS_DTYPE = np.dtype({
         "rasterize",
         "ao_enabled", "ao_num_rays", "ao_radius", "ao_frame_index",
         "ambient_color_r", "ambient_color_g", "ambient_color_b",
-        "_pad_end",
+        # Single-ray entity picking. pick_mode packs into the old trailing pad
+        # at 380; pick_out (pointer) is 8-byte aligned at 384.
+        "pick_mode", "pick_out",
+        "pick_dir_x", "pick_dir_y", "pick_dir_z",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -192,7 +195,9 @@ PARAMS_DTYPE = np.dtype({
         "i4",
         "i4", "i4", "f4", "u4",
         "f4", "f4", "f4",
-        "u4",
+        # Single-ray entity picking
+        "i4", "u8",
+        "f4", "f4", "f4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -251,9 +256,11 @@ PARAMS_DTYPE = np.dtype({
         348,
         352, 356, 360, 364,
         368, 372, 376,
-        380,
+        # Single-ray entity picking
+        380, 384,
+        392, 396, 400,
     ],
-    "itemsize": 384,
+    "itemsize": 408,
 })
 
 
@@ -331,6 +338,13 @@ class PathTracerRenderer:
         self._total_prims = 0
         self._temp_size = 0
         self._gas_size = 0
+
+        # Entity picking (single-ray). Cached geometry params from the last
+        # build_accel so pick() matches the sphere sizes / SDF prim in the GAS.
+        self._d_pick_out = None
+        self._last_radius_scale = 1.0
+        self._last_sphere_size_jitter = 0.0
+        self._sdf_enabled = False
 
         # Curve resources (built in _compute_curve_data())
         self._d_curve_vertices = None
@@ -1103,6 +1117,12 @@ class PathTracerRenderer:
             curve_r0: Curve start radius multiplier.
             curve_r1: Curve end radius multiplier.
         """
+        # Cache geometry params so pick() can match the sphere sizes / SDF prim
+        # that this GAS was built with.
+        self._last_radius_scale = radius_scale
+        self._last_sphere_size_jitter = sphere_size_jitter
+        self._sdf_enabled = sdf_enabled
+
         self._ensure_pipeline(use_curves)
         self._ctx.finish()
         entities_ptr, _ = map_resource(self._entity_res)
@@ -1346,7 +1366,7 @@ class PathTracerRenderer:
         h_params["ambient_color_r"] = amb[0]
         h_params["ambient_color_g"] = amb[1]
         h_params["ambient_color_b"] = amb[2]
-        h_params["_pad_end"] = 0
+        # pick_* fields stay zero here (pick_mode=0 => normal render path).
 
         self._d_params.set(
             np.frombuffer(h_params.tobytes(), dtype=np.uint8)
@@ -1569,6 +1589,69 @@ class PathTracerRenderer:
         # Blit PBO to texture (fast GPU-to-GPU copy)
         self._tex.write(self._pbo)
         return self._tex
+
+    def pick(self, ray_origin, ray_dir):
+        """Trace a single ray into the current GAS and return the first hit.
+
+        Uses the most recently built traversable (the same GAS/IAS the last
+        render used). Launches __raygen__rg in pick mode at 1x1: the ray is
+        (ray_origin, ray_dir); the raygen writes [prim_index, hit_t] to a small
+        device buffer.
+
+        Returns (prim_index, depth) for a particle hit, or None on miss / SDF
+        hit / when no GAS is built. prim_index is the entity index.
+        """
+        if self._traversable_handle is None:
+            return None
+
+        ray_origin = np.asarray(ray_origin, dtype=np.float32)
+        ray_dir = np.asarray(ray_dir, dtype=np.float32)
+
+        # Lazily allocate the 2-int output buffer (prim_index, hit_t-as-int).
+        if getattr(self, "_d_pick_out", None) is None:
+            self._d_pick_out = cp.empty(2, dtype=cp.int32)
+
+        # Map entity buffer for the launch (intersection reads it).
+        self._ctx.finish()
+        entities_ptr, _ = map_resource(self._entity_res)
+        try:
+            h_params = np.zeros(1, dtype=PARAMS_DTYPE)
+            h_params["entities"] = entities_ptr
+            h_params["entity_stride"] = self._entity_stride
+            h_params["handle"] = self._traversable_handle
+            h_params["width"] = 1
+            h_params["height"] = 1
+            h_params["eye_x"] = ray_origin[0]
+            h_params["eye_y"] = ray_origin[1]
+            h_params["eye_z"] = ray_origin[2]
+            # SDF prim index so the sphere IS can detect the SDF primitive.
+            h_params["sdf_enabled"] = 1 if self._sdf_enabled else 0
+            h_params["sdf_prim_index"] = self._entity_count
+            h_params["radius_scale"] = self._last_radius_scale
+            h_params["sphere_size_jitter"] = self._last_sphere_size_jitter
+            h_params["pick_mode"] = 1
+            h_params["pick_out"] = int(self._d_pick_out.data.ptr)
+            h_params["pick_dir_x"] = ray_dir[0]
+            h_params["pick_dir_y"] = ray_dir[1]
+            h_params["pick_dir_z"] = ray_dir[2]
+
+            self._d_params.set(np.frombuffer(h_params.tobytes(), dtype=np.uint8))
+
+            optix.launch(
+                self._pipeline, self._stream, self._d_params.data.ptr,
+                PARAMS_DTYPE.itemsize, self._sbt, 1, 1, 1,
+            )
+            check_cuda(cudart.cudaStreamSynchronize(self._stream_obj))
+
+            out = cp.asnumpy(self._d_pick_out)
+        finally:
+            unmap_resource(self._entity_res)
+
+        prim = int(out[0])
+        if prim < 0:
+            return None
+        depth = float(np.frombuffer(out[1:2].tobytes(), dtype=np.float32)[0])
+        return (prim, depth)
 
     def render_from_camera(self, width, height, cam_pos, cam_dir, cam_up,
                            fov_deg, sun_direction=(0.577, 0.577, 0.577),

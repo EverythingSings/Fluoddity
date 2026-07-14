@@ -202,6 +202,19 @@ class UIWindowsPrefs:
     load_menu_custom_open: bool = True  # Default: open
     load_menu_advanced_open: bool = False  # Default: collapsed
 
+    # Render-settings window collapsing-header open states (True = expanded/open)
+    render_group_camera: bool = True
+    render_group_lighting: bool = True
+    render_group_sky: bool = True
+    render_group_geometry: bool = True
+    render_group_material: bool = True
+    render_group_rasterize: bool = True
+    render_group_pathtrace: bool = True
+    render_group_postprocess: bool = True
+    render_group_medium: bool = True
+    render_group_grid_resolutions: bool = False
+    render_group_opengl_postprocess: bool = True
+
 
 @dataclass
 class PreferencesState:

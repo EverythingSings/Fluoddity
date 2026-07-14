@@ -598,6 +598,24 @@ class PathTracerInterface:
         """SPP of the last completed preview."""
         return self._preview_last_spp
 
+    # ------------------------------------------------------------- entity pick
+
+    def pick(self, ray_origin, ray_dir):
+        """Trace one ray into the last-built GAS; return (entity_id, depth) or None.
+
+        Returns None on miss, SDF hit, no renderer/GAS yet, or any OptiX error
+        (so the caller can fall back to the CPU nearest-particle picker). Uses
+        the most recently rendered frame's GAS, which is current while OptiX is
+        the live renderer.
+        """
+        if self._renderer is None or self._failed:
+            return None
+        try:
+            return self._renderer.pick(ray_origin, ray_dir)
+        except Exception as e:
+            print(f"OptiX pick failed: {e}")
+            return None
+
     # --------------------------------------------------------- accumulation API
 
     def reset_accumulation(self) -> None:
