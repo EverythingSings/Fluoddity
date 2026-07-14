@@ -97,7 +97,6 @@ class App:
 
         # Restore 3D camera settings from preferences
         cam = self.ui.state.camera
-        cam.render_3d = loaded_prefs.camera3d.render_3d
         cam.fov = loaded_prefs.camera3d.fov
         cam.aperture = loaded_prefs.camera3d.aperture
         cam.focal_plane_depth = loaded_prefs.camera3d.focal_plane_depth
@@ -105,7 +104,8 @@ class App:
         cam.rotate_speed = loaded_prefs.camera3d.rotate_speed
         cam.orbit_center[:] = loaded_prefs.camera3d.orbit_center
         cam.orbit_rate = loaded_prefs.camera3d.orbit_rate
-        cam.optix_enabled = loaded_prefs.optix.enabled
+        # OptiX active is derived each frame from the renderer dropdown.
+        cam.optix_enabled = (loaded_prefs.rendering.renderer == 1)
 
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()
@@ -225,6 +225,11 @@ class App:
         ui_state = self.ui.get_state()
         self.plotting_manager.enabled = ui_state.preferences.ui_windows.show_plotting_window
 
+        # Derive the transient "OptiX active" flag from the renderer dropdown.
+        # (The RendererHost may clear it back to False if OptiX fails to init,
+        # falling back to the OpenGL path for this frame.)
+        ui_state.camera.optix_enabled = (ui_state.preferences.rendering.renderer == 1)
+
         # 1.5. Poll gamepad and inject one-shot flags before command processing
         current_time = time.time()
         dt = current_time - self.last_update_time
@@ -314,12 +319,11 @@ class App:
         if ui_state.request_camera_reset:
             ui_state.camera.position[:] = [0.0, 0.0]
             ui_state.camera.zoom = 1.0
-            if ui_state.camera.render_3d:
-                self.controller_cam.reset()
-                ui_state.camera.orbit_angle = 0.0
-                ui_state.camera.orbit_pitch = 0.0
-                ui_state.camera.orbit_center[:] = [0.0, 0.0, 0.0]
-                reposition_orbit_camera(self.controller_cam, ui_state.camera)
+            self.controller_cam.reset()
+            ui_state.camera.orbit_angle = 0.0
+            ui_state.camera.orbit_pitch = 0.0
+            ui_state.camera.orbit_center[:] = [0.0, 0.0, 0.0]
+            reposition_orbit_camera(self.controller_cam, ui_state.camera)
         self.controller_cam.fov = ui_state.camera.fov
         self.sim.apply_state(ui_state.sim)
         self.sim.apply_camera_state(ui_state.camera)
@@ -404,9 +408,12 @@ class App:
         sweep_mode = ui_state.sim.parameter_sweeps_enabled
         sweep_reticle_pos = (sweep_reticle_x, sweep_reticle_y)
 
-        # 6. Run simulation if going
+        # 6. Run simulation if going. The realtime volumetric tracer only drives
+        # the display for the OpenGL renderer (Optix uses the path tracer).
         ti = self.ui._tracer_interface
-        rt_active = ti is not None and ti.realtime_mode > 0 and not is_recording
+        opengl_renderer = ui_state.preferences.rendering.renderer == 0
+        rt_active = (ti is not None and ti.realtime_mode > 0
+                     and opengl_renderer and not is_recording)
 
         # OptiX preview owns the path tracer while accumulating/displaying, so
         # the normal per-frame OptiX render must be skipped (it would reset the
@@ -630,27 +637,26 @@ class App:
         sdf_sun_dir = (0.577, 0.577, 0.577)
         sdf_sun_color = (3.0, 3.0, 3.0)
         sdf_sky_color = (0.5, 0.7, 1.0)
-        if ui_state.camera.render_3d:
-            sdf_enabled = ui_state.preferences.tracer.sdf_enabled
-            if sdf_enabled:
-                cam = self.controller_cam
-                aspect = width / max(height, 1)
-                view_proj = self.camera.compute_fps_view_proj(
-                    cam.pos, cam.dir, cam.up, cam.fov, aspect
-                )
-                inv_view_proj = np.linalg.inv(
-                    view_proj.astype(np.float64)
-                ).astype(np.float32)
-                p = ui_state.preferences
-                sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
-                sun_len = max(np.linalg.norm(sun_d), 1e-8)
-                sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-                sc = p.tracer.sun_color
-                si = p.tracer.sun_intensity
-                sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-                skc = p.tracer.sky_color
-                ski = p.tracer.sky_intensity
-                sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
+        sdf_enabled = ui_state.preferences.tracer.sdf_enabled
+        if sdf_enabled:
+            cam = self.controller_cam
+            aspect = width / max(height, 1)
+            view_proj = self.camera.compute_fps_view_proj(
+                cam.pos, cam.dir, cam.up, cam.fov, aspect
+            )
+            inv_view_proj = np.linalg.inv(
+                view_proj.astype(np.float64)
+            ).astype(np.float32)
+            p = ui_state.preferences
+            sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
+            sun_len = max(np.linalg.norm(sun_d), 1e-8)
+            sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
+            sc = p.tracer.sun_color
+            si = p.tracer.sun_intensity
+            sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
+            skc = p.tracer.sky_color
+            ski = p.tracer.sky_intensity
+            sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         # Build overlay markup params (sweep reticle). These composite over the
         # finished frame for DISPLAY only; the recorded frame stays markup-free.
@@ -700,7 +706,7 @@ class App:
             import os
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             prefix = ui_state.preferences.recording.filename_prefix or "screenshot"
-            flip_y = not ui_state.camera.render_3d
+            flip_y = False  # always-3D orientation
             filename = save_frame_gpu(
                 self.camera.assembled_texture,
                 self.ctx,
@@ -729,7 +735,6 @@ class App:
 
         # Sync 3D camera settings into preferences
         cam = ui_state.camera
-        ui_state.preferences.camera3d.render_3d = cam.render_3d
         ui_state.preferences.camera3d.fov = cam.fov
         ui_state.preferences.camera3d.aperture = cam.aperture
         ui_state.preferences.camera3d.focal_plane_depth = cam.focal_plane_depth
@@ -737,7 +742,9 @@ class App:
         ui_state.preferences.camera3d.rotate_speed = cam.rotate_speed
         ui_state.preferences.camera3d.orbit_center = list(cam.orbit_center)
         ui_state.preferences.camera3d.orbit_rate = cam.orbit_rate
-        ui_state.preferences.optix.enabled = cam.optix_enabled
+        # Keep the legacy optix.enabled mirror in sync (renderer enum is the
+        # source of truth and persists directly via rendering.renderer).
+        ui_state.preferences.optix.enabled = (ui_state.preferences.rendering.renderer == 1)
 
         # Sync tracer settings into preferences
         ti = self.ui._tracer_interface

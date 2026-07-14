@@ -86,11 +86,17 @@ class RecordingController:
         st = self.state
         p = ui_state.preferences
 
+        # Renderer selection (ui_state.camera.optix_enabled == renderer is Optix):
+        #   OpenGL + RT spp/accumulate  -> volumetric tracer (offline video)
+        #   Optix  + rt_mode spp/accum  -> OptiX path tracer (offline video)
+        #   OpenGL + RT Off / Optix rasterize -> normal per-frame assembly
         is_recording = self.video_service.is_active()
-        tracer_video_active = is_recording and p.recording.tracer_mode
+        optix_active = ui_state.camera.optix_enabled
+        tracer_video_active = (is_recording
+                               and not optix_active
+                               and p.tracer.realtime_mode > 0)
         optix_pt_video_active = (is_recording
-                                 and not tracer_video_active
-                                 and ui_state.camera.optix_enabled
+                                 and optix_active
                                  and p.optix.rt_mode > 0
                                  and pathtracer_interface is not None)
 
@@ -114,7 +120,7 @@ class RecordingController:
                 # Build OptiX path tracer offline video strategy
                 self.active_video_strategy = sim_runner.make_optix_pt_video_strategy(
                     pathtracer_interface)
-            elif (ui_state.camera.optix_enabled
+            elif (optix_active
                   and p.optix.rt_mode == 0
                   and pathtracer_interface is not None):
                 # Rasterize mode: override AO rays with Capture SPP for a

@@ -25,9 +25,11 @@ class TracerWindowMixin:
         ti = self._tracer_interface
 
         # Tick progressive render if active (1 SPP per app frame)
-        # Skip during tracer video recording — the orchestrator drives accumulation
+        # Skip during tracer video recording — the orchestrator drives accumulation.
+        # Tracer video is active when recording with the OpenGL renderer + RT on.
         recording_tracer = (self._display_info.get('recording_active', False)
-                            and self.state.preferences.recording.tracer_mode)
+                            and self.state.preferences.rendering.renderer == 0
+                            and self.state.preferences.tracer.realtime_mode > 0)
         if ti.is_rendering and not recording_tracer and ti.realtime_mode == 0:
             ti.tick()
 

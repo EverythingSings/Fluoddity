@@ -19,6 +19,7 @@ from utilities.paths import get_user_preferences_path
 @dataclass
 class RenderingPrefs:
     """Core frame rendering / motion-blur / tonemap preferences."""
+    renderer: int = 0  # Active 3D renderer: 0=OpenGL (GL points / volumetric tracer), 1=Optix
     speedmult: int = 5
     motion_blur: bool = True
     blur_quality: int = 2  # Motion blur render cadence (1 = every frame, 2 = every 2 frames, etc.)
@@ -51,7 +52,6 @@ class RecordingPrefs:
     recording_motion_blur: bool = True  # Motion blur setting used during video recording
     recording_blur_quality: int = 1  # Blur quality setting used during video recording
     video_end_frame: int = 0  # Target frame for video to end on (0 = disabled, start immediately)
-    tracer_mode: bool = False  # Use volumetric path tracer for video recording instead of normal frame assembly
 
 
 @dataclass
@@ -153,7 +153,6 @@ class OptixPrefs:
 @dataclass
 class Camera3DPrefs:
     """3D camera preferences."""
-    render_3d: bool = True
     fov: float = 50.0
     aperture: float = 0.0  # DOF lens radius
     focal_plane_depth: float = 5.0  # DOF focal plane distance
@@ -231,6 +230,7 @@ _SLICE_ATTRS = tuple(PreferencesState.__dataclass_fields__.keys())
 # ---------------------------------------------------------------------------
 _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     # RenderingPrefs
+    "renderer": ("rendering", "renderer"),
     "speedmult": ("rendering", "speedmult"),
     "motion_blur": ("rendering", "motion_blur"),
     "blur_quality": ("rendering", "blur_quality"),
@@ -255,7 +255,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "recording_motion_blur": ("recording", "recording_motion_blur"),
     "recording_blur_quality": ("recording", "recording_blur_quality"),
     "video_end_frame": ("recording", "video_end_frame"),
-    "tracer_mode": ("recording", "tracer_mode"),
     # GenericsPrefs
     "generic0": ("generics", "generic0"),
     "generic1": ("generics", "generic1"),
@@ -335,7 +334,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_pt_env_sky_nee": ("optix", "pt_env_sky_nee"),
     "three_d_pt_photosphere": ("optix", "pt_photosphere"),
     # Camera3DPrefs
-    "three_d_render_3d": ("camera3d", "render_3d"),
     "three_d_fov": ("camera3d", "fov"),
     "three_d_aperture": ("camera3d", "aperture"),
     "three_d_focal_plane_depth": ("camera3d", "focal_plane_depth"),
@@ -450,9 +448,29 @@ def load_preferences(filepath: Path | str = None) -> PreferencesState:
         data = json.loads(filepath.read_text())
         # Nested format has the slice attrs as top-level keys; legacy format is flat.
         if isinstance(data, dict) and any(k in data for k in _SLICE_ATTRS):
-            return _from_nested_dict(data)
-        return from_flat_dict(data)
+            prefs = _from_nested_dict(data)
+        else:
+            prefs = from_flat_dict(data)
+        _migrate_renderer_selection(prefs, data)
+        return prefs
     except (json.JSONDecodeError, TypeError) as e:
         print(f"Warning: Failed to load preferences from {filepath}: {e}")
         print("Using default preferences")
         return PreferencesState()
+
+
+def _migrate_renderer_selection(prefs: PreferencesState, data: dict) -> None:
+    """Migrate the pre-cleanup OptiX toggle to the new renderer enum.
+
+    Before the unified ``rendering.renderer`` dropdown, OptiX was selected by
+    ``optix.enabled`` (nested) / ``three_d_optix_enabled`` (flat). If a loaded
+    prefs file predates ``renderer`` (so it stayed at the default 0=OpenGL) but
+    had OptiX enabled, switch the renderer to Optix so the choice isn't lost.
+    """
+    has_renderer_key = (
+        isinstance(data.get('rendering'), dict) and 'renderer' in data['rendering']
+    ) or ('renderer' in data)
+    if has_renderer_key:
+        return  # File already uses the new enum; respect it verbatim.
+    if prefs.optix.enabled:
+        prefs.rendering.renderer = 1

@@ -94,29 +94,28 @@ class SimulationRunner:
         sdf_sun_color = (3.0, 3.0, 3.0)
         sdf_sky_color = (0.5, 0.7, 1.0)
 
-        if self.camera.render_3d:
-            sdf_enabled = ui_state.preferences.tracer.sdf_enabled
-            if sdf_enabled:
-                cam = self.controller_cam
-                width, height = glfw.get_framebuffer_size(self.window)
-                aspect = width / max(height, 1)
-                view_proj = self.camera.compute_fps_view_proj(
-                    cam.pos, cam.dir, cam.up, cam.fov, aspect
-                )
-                inv_view_proj = np.linalg.inv(
-                    view_proj.astype(np.float64)
-                ).astype(np.float32)
+        sdf_enabled = ui_state.preferences.tracer.sdf_enabled
+        if sdf_enabled:
+            cam = self.controller_cam
+            width, height = glfw.get_framebuffer_size(self.window)
+            aspect = width / max(height, 1)
+            view_proj = self.camera.compute_fps_view_proj(
+                cam.pos, cam.dir, cam.up, cam.fov, aspect
+            )
+            inv_view_proj = np.linalg.inv(
+                view_proj.astype(np.float64)
+            ).astype(np.float32)
 
-                p = ui_state.preferences
-                sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
-                sun_len = max(np.linalg.norm(sun_d), 1e-8)
-                sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-                sc = p.tracer.sun_color
-                si = p.tracer.sun_intensity
-                sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-                skc = p.tracer.sky_color
-                ski = p.tracer.sky_intensity
-                sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
+            p = ui_state.preferences
+            sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
+            sun_len = max(np.linalg.norm(sun_d), 1e-8)
+            sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
+            sc = p.tracer.sun_color
+            si = p.tracer.sun_intensity
+            sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
+            skc = p.tracer.sky_color
+            ski = p.tracer.sky_intensity
+            sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         return dict(
             brightness=self.camera.BRIGHTNESS,
@@ -167,9 +166,8 @@ class SimulationRunner:
             return
         self.camera.assembled_texture = assembled_tex
         if self.video_service.is_active():
-            # 3D view has opposite Y orientation in the FBO compared to 2D;
-            # skip the vertical flip so the video comes out right-side-up.
-            flip_y = not self.camera.render_3d
+            # Always-3D orientation: no vertical flip (video comes out upright).
+            flip_y = False
             self.video_service.process_frame(
                 self.camera.ctx,
                 assembled_tex,

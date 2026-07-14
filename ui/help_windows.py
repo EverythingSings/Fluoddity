@@ -340,18 +340,9 @@ class HelpWindowsMixin:
                 self._delayed_tooltip("Motion Blur can be expensive at high frequencies,\nskip some frames to improve performance.\nThis setting overrides the Blur Quality slider in Preferences while recording.")
                 imgui.unindent(20)
 
-            # Tracer Mode checkbox
-            imgui.spacing()
-            _, self.state.preferences.recording.tracer_mode = imgui.checkbox(
-                "Tracer Mode",
-                self.state.preferences.recording.tracer_mode
-            )
-            self._delayed_tooltip(
-                "Use the volumetric path tracer for video recording.\n"
-                "Renders the scene using Tracer window settings instead\n"
-                "of normal frame assembly. Physics steps are interleaved\n"
-                "with path-traced samples for motion blur."
-            )
+            # Recording uses whichever renderer is active (Preferences -> Renderer):
+            # OpenGL with RT spp/accumulate records via the volumetric tracer;
+            # Optix records via the path tracer. No separate toggle needed.
 
             # Save Render Spec
             imgui.spacing()

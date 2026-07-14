@@ -245,8 +245,6 @@ class CommandHandler:
 
     def _handle_pick_focal(self, ui_state):
         """Handle N key: pick nearest entity to mouse, set focal plane and orbit center."""
-        if not self.camera.render_3d:
-            return
         ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
         _entity_id, _entity_pos, _cohort, depth = self.entity_picker.find_nearest_entity_3d(
             ray_origin, ray_dir,
@@ -288,47 +286,25 @@ class CommandHandler:
                     self.sim.apply_rule(prev_rule)
 
     def _handle_sweep_click(self, ui_state, canvas_aspect_ratio):
-        """Handle left click when parameter sweeps are enabled."""
-        if not (self.sim.has_active_xy_sweep() or self.sim.has_active_cohort_sweep()):
+        """Handle left click when parameter sweeps are enabled (3D ray pick).
+
+        Only cohort sweeps make sense in 3D (XY sweeps have no 3D analogue).
+        """
+        if not self.sim.has_active_cohort_sweep():
             return
 
-        if self.camera.render_3d:
-            # In 3D mode, only cohort sweeps make sense (XY sweeps have no 3D analogue)
-            if self.sim.has_active_cohort_sweep():
-                ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
-                entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
-                    ray_origin, ray_dir,
-                    num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
-                self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
-            return
-
-        tex_coords = self.camera.screen_to_tex(
-            ui_state.mouse_pos, self.sim.view_tex.size
-        )
-        world_pos = (tex_coords[0] * 2 - 1, tex_coords[1] * 2 - 1)
-
-        if self.sim.has_active_cohort_sweep():
-            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(
-                tex_coords, canvas_aspect_ratio,
-                num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
-            self.sim.update_sliders_from_particle(world_pos, entity_cohort)
-        else:
-            self.sim.update_sliders_from_position(world_pos)
+        ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
+        entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
+            ray_origin, ray_dir,
+            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+        self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
 
     def _handle_entity_pick(self, ui_state, canvas_aspect_ratio):
-        """Handle entity selection via left click in Select Particle mode."""
-        if self.camera.render_3d:
-            ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
-            entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
-                ray_origin, ray_dir,
-                num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
-        else:
-            tex_coords = self.camera.screen_to_tex(
-                ui_state.mouse_pos, self.sim.view_tex.size
-            )
-            entity_id, entity_pos, entity_cohort = self.entity_picker.find_nearest_entity(
-                tex_coords, canvas_aspect_ratio,
-                num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
+        """Handle entity selection via left click in Select Particle mode (3D ray pick)."""
+        ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
+        entity_id, entity_pos, entity_cohort, _depth = self.entity_picker.find_nearest_entity_3d(
+            ray_origin, ray_dir,
+            num_cohorts=ui_state.sim.num_cohorts, active_count=self.sim.entity_count)
 
         if entity_id >= 0 and entity_id < self.sim.entity_count:
             print(f"Entity {entity_id} at pos {entity_pos}, cohort {entity_cohort} - requesting rule buffer update")

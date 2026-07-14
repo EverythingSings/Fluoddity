@@ -13,19 +13,17 @@ class Camera:
         self.window = window
         self.BRIGHTNESS = 1
         self.ink_weight = 1
-        self.cam_brush_mode = True
         self.watercolor_mode = False
 
-        # Camera state
-        self.position = np.array([0.0, 0.0])  # 2D position
+        # Camera state (2D pan/zoom retained only for sweep-reticle screen mapping)
+        self.position = np.array([0.0, 0.0])
         self.zoom = 1.0
 
-        # 3D camera state
-        self.render_3d = False
+        # 3D camera state (the app is 3D-only)
         self.fov_3d = 50.0
         self.controller_cam = controller_cam  # 3D FPS camera (injected by App)
         self.optix_interface = None  # Set by orchestrator: the OptiX path tracer (or None)
-        self.optix_enabled = False   # Toggle between GL_POINTS and OptiX
+        self.optix_enabled = False   # Transient per-frame flag: OptiX active (renderer==Optix)
         self.optix_resolution_scale = 1.0  # Render resolution multiplier for OptiX
 
         self.setup_rendering()
@@ -57,19 +55,6 @@ class Camera:
             print('Camera shader failed')
             print(e)
 
-        # Create cam brush program
-        self.cam_brush_vertex_shader = read_shader('shaders/cam_brush.vert')
-        self.cam_brush_fragment_shader = read_shader('shaders/cam_brush.frag')
-
-        try:
-            self.cam_brush_program = self.ctx.program(
-                vertex_shader=self.cam_brush_vertex_shader,
-                fragment_shader=self.cam_brush_fragment_shader
-            )
-        except Exception as e:
-            print('Cambrush shader failed')
-            print(e)
-
         # Create vertex array
         vbo = self.ctx.buffer(quad_vertices.tobytes())
         ibo = self.ctx.buffer(quad_indices.tobytes())
@@ -78,11 +63,9 @@ class Camera:
             [(vbo, '2f 2f', 'in_position', 'in_texcoord')],
             ibo
         )
-        self.cam_brush_vao = self.ctx.vertex_array(
-            self.cam_brush_program,
-            []
-        )
 
+        # Shared render-output FBO: both the OptiX path tracer and the GL_POINTS
+        # path blit their result into this texture, which the ImagePipeline reads.
         self.cam_brush_target = self.ctx.texture(glfw.get_framebuffer_size(self.window), 4, dtype='f4')
         self.cam_brush_fbo = self.ctx.framebuffer([self.cam_brush_target])
 
@@ -163,37 +146,8 @@ class Camera:
         return right, true_up
 
     def generate_view_texture(self):
-        """Generate raw view texture (PRE-gamma correction) based on current mode."""
-
-        if self.render_3d and self.points_3d_program is not None:
-            return self._generate_3d_view_texture()
-
-        if self.cam_brush_mode:
-            # Render particles to cam_brush_target
-            self.cam_brush_fbo.use()
-            width, height = glfw.get_framebuffer_size(self.window)
-            self.ctx.viewport = (0, 0, width, height)
-            self.ctx.clear(0, 0, 0, 1)
-
-            self.cam_brush_program['cam_pos'].value = tuple(self.position)
-            self.cam_brush_program['cam_zoom'].value = self.zoom
-            self.cam_brush_program['canvas_resolution'].value = self.sim.view_tex.size
-            self.cam_brush_program['window_size'].value = (width, height)
-            tryset(self.cam_brush_program, 'WATERCOLOR_MODE', self.watercolor_mode)
-
-            # Particles need additive blending
-            self.ctx.enable(moderngl.BLEND)
-            self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
-            self.ctx.blend_equation = moderngl.FUNC_ADD
-
-            self.cam_brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=self.sim.entity_count, vertices=4)
-
-            self.ctx.disable(moderngl.BLEND)
-
-            # Return raw texture (NO gamma correction - that happens in ImagePipeline)
-            return self.cam_brush_target
-        else:
-            return self.sim.view_tex
+        """Generate raw view texture (PRE-gamma correction). Always 3D."""
+        return self._generate_3d_view_texture()
 
     def _generate_3d_view_texture(self):
         """Render particles in 3D using OptiX (if enabled) or GL_POINTS."""
@@ -261,10 +215,8 @@ class Camera:
         self.position = state.position.copy()
         self.zoom = state.zoom
         self.BRIGHTNESS = state.BRIGHTNESS
-        self.cam_brush_mode = state.cam_brush_mode
 
         # 3D camera state
-        self.render_3d = state.render_3d
         self.fov_3d = state.fov
         self.optix_enabled = state.optix_enabled
 

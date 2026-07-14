@@ -25,7 +25,7 @@ class OptiXWindowMixin:
         if not self.state.camera.optix_enabled:
             imgui.text_colored(
                 imgui.ImVec4(0.6, 0.6, 0.6, 1.0),
-                "Enable OptiX Spheres in 3D Controls")
+                "Set Renderer to Optix in Preferences")
             imgui.end()
             return
 

@@ -74,8 +74,6 @@ class RenderSpecService:
         camera_state = {
             'position': cam.position.tolist(),
             'zoom': cam.zoom,
-            'cam_brush_mode': cam.cam_brush_mode,
-            'render_3d': cam.render_3d,
             'orbit_center': cam.orbit_center.tolist(),
             'orbit_rate': cam.orbit_rate,
             'orbit_angle': cam.orbit_angle,
@@ -329,8 +327,6 @@ class RenderSpecService:
         if cam_data:
             ui_state.camera.position[:] = cam_data.get('position', [0.0, 0.0])
             ui_state.camera.zoom = cam_data.get('zoom', 1.0)
-            ui_state.camera.cam_brush_mode = cam_data.get('cam_brush_mode', True)
-            ui_state.camera.render_3d = cam_data.get('render_3d', True)
             ui_state.camera.orbit_center[:] = cam_data.get('orbit_center', [0.0, 0.0, 0.0])
             ui_state.camera.orbit_rate = cam_data.get('orbit_rate', 0.0)
             ui_state.camera.orbit_angle = cam_data.get('orbit_angle', 0.0)

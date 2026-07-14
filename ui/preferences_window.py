@@ -122,6 +122,26 @@ class PreferencesWindowMixin:
                 self._delayed_tooltip("Motion Blur can be expensive at high frequencies,\nskip some frames to improve performance")
                 imgui.unindent(20)
 
+            # Renderer selection (OpenGL vs Optix). Drives the whole app: display,
+            # recording, and screenshots all use whichever renderer is active.
+            from pathtracer_interface import PathTracerInterface
+            renderer_labels = ["OpenGL", "Optix"]
+            optix_available = PathTracerInterface.is_available()
+            cur = self.state.preferences.rendering.renderer
+            if cur < 0 or cur >= len(renderer_labels):
+                cur = 0
+            clicked, new_renderer = imgui.combo("Renderer", cur, renderer_labels)
+            if clicked:
+                if new_renderer == 1 and not optix_available:
+                    pass  # OptiX unavailable — ignore the selection
+                else:
+                    self.state.preferences.rendering.renderer = new_renderer
+            self._delayed_tooltip(
+                "OpenGL: GL points (RT Off) or the volumetric path tracer (RT on).\n"
+                "Optix: the RTX path tracer (rasterize / path-trace modes).\n"
+                "Requires an NVIDIA RTX GPU with OptiX/CUDA installed for Optix."
+            )
+
             imgui.separator()
 
             # === Mouse Interaction section ===
