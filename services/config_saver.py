@@ -76,6 +76,8 @@ class PhysicsConfig:
     disable_symmetry: bool = False
     absolute_orientation: int = 0  # 0=Off, 1=Y axis, 2=Radial
     orientation_mix: float = 1.0
+    gravity_force: float = 0.0
+    gravity_strafe: float = 0.0
     boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap
     initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring
     num_cohorts: int = 64
@@ -130,6 +132,8 @@ class PhysicsConfig:
                 'disable_symmetry': self.disable_symmetry,
                 'absolute_orientation': self.absolute_orientation,
                 'orientation_mix': self.orientation_mix,
+                'gravity_force': self.gravity_force,
+                'gravity_strafe': self.gravity_strafe,
                 'boundary_conditions': self.boundary_conditions,
                 'initial_conditions': self.initial_conditions,
                 'num_cohorts': self.num_cohorts,
@@ -221,6 +225,8 @@ class PhysicsConfig:
             disable_symmetry=settings.get('disable_symmetry', False),
             absolute_orientation=int(settings.get('absolute_orientation', 0)),
             orientation_mix=settings.get('orientation_mix', 1.0),
+            gravity_force=settings.get('gravity_force', 0.0),
+            gravity_strafe=settings.get('gravity_strafe', 0.0),
             boundary_conditions=settings.get('boundary_conditions', 0),
             initial_conditions=settings.get('initial_conditions', 0),
             num_cohorts=settings.get('num_cohorts', 64),
@@ -282,6 +288,8 @@ class ConfigSaver:
             disable_symmetry=sim_state.DISABLE_SYMMETRY,
             absolute_orientation=sim_state.ABSOLUTE_ORIENTATION,
             orientation_mix=sim_state.ORIENTATION_MIX,
+            gravity_force=sim_state.GRAVITY_FORCE,
+            gravity_strafe=sim_state.GRAVITY_STRAFE,
             boundary_conditions=sim_state.boundary_conditions,
             initial_conditions=sim_state.initial_conditions,
             num_cohorts=sim_state.num_cohorts,
@@ -345,6 +353,8 @@ class ConfigSaver:
         sim_state.DISABLE_SYMMETRY = config.disable_symmetry
         sim_state.ABSOLUTE_ORIENTATION = config.absolute_orientation
         sim_state.ORIENTATION_MIX = config.orientation_mix
+        sim_state.GRAVITY_FORCE = config.gravity_force
+        sim_state.GRAVITY_STRAFE = config.gravity_strafe
         sim_state.boundary_conditions = config.boundary_conditions
         sim_state.initial_conditions = config.initial_conditions
         sim_state.num_cohorts = config.num_cohorts

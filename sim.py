@@ -144,6 +144,8 @@ class Sim:
         tryset(self.entity_update_program, 'DISABLE_SYMMETRY', self._state.DISABLE_SYMMETRY)
         tryset(self.entity_update_program, 'ABSOLUTE_ORIENTATION', self._state.ABSOLUTE_ORIENTATION)
         tryset(self.entity_update_program, 'ORIENTATION_MIX', self._state.ORIENTATION_MIX)
+        tryset(self.entity_update_program, 'GRAVITY_FORCE', self._state.GRAVITY_FORCE)
+        tryset(self.entity_update_program, 'GRAVITY_STRAFE', self._state.GRAVITY_STRAFE)
         # Rule seed from sim state (saved with physics configs)
         tryset(self.entity_update_program, 'RULE_SEED', self._state.rule_seed)
 

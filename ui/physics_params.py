@@ -156,6 +156,8 @@ LOCKABLE_EXTRA_SIM_PARAMS: list[tuple[str, str]] = [
     ('boundary_conditions', 'Boundary Conditions'),
     ('initial_conditions', 'Initial Conditions'),
     ('num_cohorts', 'Number of Cohorts'),
+    ('GRAVITY_FORCE', 'Gravity Force'),
+    ('GRAVITY_STRAFE', 'Gravity Strafe'),
     ('DISABLE_SYMMETRY', 'Disable Symmetry'),
     ('ABSOLUTE_ORIENTATION', 'Absolute Orientation'),
     ('ORIENTATION_MIX', 'Orientation Mix'),

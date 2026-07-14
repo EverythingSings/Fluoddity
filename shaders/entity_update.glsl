@@ -72,6 +72,8 @@ const bool TESTING_MODE = false;
 const int PLANE_SAMPLES = 1;
 uniform int ABSOLUTE_ORIENTATION; // 0=Off, 1=Y axis, 2=Radial
 uniform float ORIENTATION_MIX; // Blend factor for orientation calculations
+uniform float GRAVITY_FORCE;  // Gravity-like axial force [-1,1]
+uniform float GRAVITY_STRAFE; // Gravity-like strafe [-1,1]
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
 uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
 uniform int COHORTS; //each cohort gets its own rule and starting location
@@ -796,9 +798,11 @@ void main() {
     // drawing runtime + its uniforms were removed in the 3D-only cleanup.
     //vec4 draw_sample =get_field(vec2(e.px, e.py));
     //e.vx += .01/CANVAS_SCALE*force_field_strength*draw_sample.x;
-    //e.vy += .01/CANVAS_SCALE*force_field_strength*draw_sample.y;
+    float force_field_strength = -GRAVITY_FORCE;
+    float strafe_field_strength = -GRAVITY_STRAFE;
+    e.vy += .01/CANVAS_SCALE*force_field_strength;
     //e.px += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.z;
-    //e.py += .01/CANVAS_SCALE*strafe_field_strength*draw_sample.w;
+    e.py += .01/CANVAS_SCALE*strafe_field_strength;
     vec3 sp = vec3(e.px,e.py,e.pz);
     vec3 n = scene(sp).x*-.01*sdf_normal(sp);
     //e.px+=n.x;

@@ -21,6 +21,9 @@ class SimState:
     HAZARD_RATE: float = 0.0
 
     # Extra options
+    # Gravity-like forces (saved with physics config)
+    GRAVITY_FORCE: float = 0.0
+    GRAVITY_STRAFE: float = 0.0
     DISABLE_SYMMETRY: bool = False
     ABSOLUTE_ORIENTATION: int = 0  # 0=Off, 1=Y axis, 2=Radial
     ORIENTATION_MIX: float = 1.0
