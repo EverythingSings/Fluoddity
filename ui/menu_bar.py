@@ -123,11 +123,53 @@ class MenuBarMixin:
 
                     imgui.end_menu()
 
-                imgui.separator()
+                imgui.end_menu()
 
-                # Preferences toggle
+            # Editor menu — non-physics editor state (preferences + render
+            # settings + imgui layout) save/load, plus the Preferences toggle.
+            if imgui.begin_menu("Editor", not self.force_close_main_menus):
+                any_menu_open_this_frame = True
+                editor_menu_min = imgui.get_window_pos()
+                editor_menu_size = imgui.get_window_size()
+                menu_rectangles.append((editor_menu_min.x, editor_menu_min.y,
+                                       editor_menu_min.x + editor_menu_size.x,
+                                       editor_menu_min.y + editor_menu_size.y))
+
+                # Preferences toggle (moved here from File).
                 if imgui.menu_item("Preferences", "", self.state.preferences.ui_windows.show_preferences_window)[0]:
                     self.state.preferences.ui_windows.show_preferences_window = not self.state.preferences.ui_windows.show_preferences_window
+
+                imgui.separator()
+
+                # Save Editor Settings... (opens the editor-save popup)
+                if imgui.menu_item("Save Editor Settings...", "", False)[0]:
+                    self.editor_save_popup_open = True
+                    self._save_editor_name_buffer = self._save_editor_name or "editor"
+                self._delayed_tooltip(
+                    "Save all non-physics settings (preferences, render settings,\n"
+                    "window visibility, and window/docking layout).")
+
+                # Load Editor Settings submenu (no hover preview)
+                if imgui.begin_menu("Load Editor Settings", not self.force_close_main_menus):
+                    any_menu_open_this_frame = True
+                    le_min = imgui.get_window_pos()
+                    le_size = imgui.get_window_size()
+                    menu_rectangles.append((le_min.x, le_min.y,
+                                           le_min.x + le_size.x, le_min.y + le_size.y))
+                    if not self._editor_load_submenu_was_open:
+                        self._refresh_editor_save_files()
+                    if not self._editor_save_files:
+                        imgui.text_disabled("(no saves)")
+                    else:
+                        for path in self._editor_save_files:
+                            label = path.name[:-len('.editor.json')]
+                            if imgui.menu_item(label, "", False)[0]:
+                                self._request_load_editor = True
+                                self._load_editor_path = str(path)
+                    imgui.end_menu()
+                    self._editor_load_submenu_was_open = True
+                else:
+                    self._editor_load_submenu_was_open = False
 
                 imgui.end_menu()
 
@@ -311,6 +353,37 @@ class MenuBarMixin:
                     self.state.preferences.ui_windows.show_scheduled_renders_window
                 )
                 self._delayed_tooltip("Queue multiple render specs for\nunattended batch video rendering.")
+
+                imgui.separator()
+
+                # Simulation state save/load (entity + canvas GPU buffers)
+                if imgui.menu_item("Save Simulation State...", "", False)[0]:
+                    self.simulation_save_popup_open = True
+                    self._save_simulation_name_buffer = self._save_simulation_name or "simulation"
+                self._delayed_tooltip(
+                    "Dump the current entity buffer and 3D canvas\n"
+                    "to disk (particle positions + trail densities).")
+
+                if imgui.begin_menu("Load Simulation State", not self.force_close_main_menus):
+                    any_menu_open_this_frame = True
+                    ls_min = imgui.get_window_pos()
+                    ls_size = imgui.get_window_size()
+                    menu_rectangles.append((ls_min.x, ls_min.y,
+                                           ls_min.x + ls_size.x, ls_min.y + ls_size.y))
+                    if not self._simulation_load_submenu_was_open:
+                        self._refresh_simulation_save_dirs()
+                    if not self._simulation_save_dirs:
+                        imgui.text_disabled("(no saves)")
+                    else:
+                        for path in self._simulation_save_dirs:
+                            label = path.name[:-len('.fsim')]
+                            if imgui.menu_item(label, "", False)[0]:
+                                self._request_load_simulation = True
+                                self._load_simulation_path = str(path)
+                    imgui.end_menu()
+                    self._simulation_load_submenu_was_open = True
+                else:
+                    self._simulation_load_submenu_was_open = False
 
                 imgui.end_menu()
 

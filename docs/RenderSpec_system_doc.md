@@ -1,5 +1,15 @@
 # Scheduled Renders Feature — Implementation Plan
 
+> **Update (RenderSpec split):** `RenderSpecService` is now a *thin container* that
+> bundles three independent save systems — physics (`services/config_saver.py`),
+> editor state (`services/editor_saver.py`: preferences + imgui window/docking layout),
+> and simulation buffers (`services/simulation_saver.py`: entities + canvas). The `.frs`
+> `metadata.json` now stores an `editor` block `{ preferences (nested), imgui_layout }`
+> at version 2; version-1 specs (flat `preferences`, no layout, optional `field.npz`)
+> still load. The three savers are also usable standalone from the **Editor** menu
+> (editor state) and **Extras** menu (simulation state). Sections below describe the
+> original monolithic v1 design and are kept for historical context.
+
 ## Context
 
 Rendering in Fluoddity can take a long time. This feature lets users save complete simulation snapshots ("render specs") to disk, then queue multiple specs for back-to-back unattended rendering. After all renders complete, the app closes itself. This enables overnight/weekend batch rendering with no human intervention.

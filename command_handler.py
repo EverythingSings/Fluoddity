@@ -18,6 +18,7 @@ class CommandHandler:
     def __init__(self, sim, camera, ui, rule_manager, entity_picker,
                  video_service, config_saver, user_configs_dir,
                  param_lock_service=None, render_spec_service=None,
+                 editor_saver=None, simulation_saver=None,
                  recording_controller=None, controller_cam=None, plotting_manager=None,
                  renderer_host=None):
         self.sim = sim
@@ -33,6 +34,8 @@ class CommandHandler:
         self.user_configs_dir = user_configs_dir
         self.param_lock_service = param_lock_service
         self.render_spec_service = render_spec_service
+        self.editor_saver = editor_saver
+        self.simulation_saver = simulation_saver
         self.recording_controller = recording_controller
 
         self.controller_cam = controller_cam
@@ -206,6 +209,18 @@ class CommandHandler:
         # Preview render spec (destructive apply)
         if ui_state.request_preview_render_spec:
             self._handle_preview_render_spec(ui_state)
+
+        # Editor settings save/load
+        if ui_state.request_save_editor:
+            self._handle_save_editor(ui_state)
+        if ui_state.request_load_editor:
+            self._handle_load_editor(ui_state)
+
+        # Simulation state save/load
+        if ui_state.request_save_simulation:
+            self._handle_save_simulation(ui_state)
+        if ui_state.request_load_simulation:
+            self._handle_load_simulation(ui_state)
 
         # Handle preview commands (file browser)
         self._handle_preview_commands(ui_state)
@@ -568,3 +583,85 @@ class CommandHandler:
             print(f"Previewing render spec: {spec.display_name}")
         except Exception as e:
             print(f"Failed to preview render spec: {e}")
+
+    # --- Editor settings save/load ---------------------------------------
+
+    def _handle_save_editor(self, ui_state):
+        """Save non-physics editor state (preferences + imgui layout) to disk."""
+        if not self.editor_saver:
+            print("EditorSaver not available")
+            return
+        name = ui_state.save_editor_name or "editor"
+        # Sync tracer settings into preferences before capturing.
+        self._sync_tracer_to_preferences(ui_state)
+        try:
+            save = self.editor_saver.create_save(ui_state.preferences)
+            path = self.editor_saver.save_to_file(save, name=name)
+            print(f"Editor settings saved: {path}")
+        except Exception as e:
+            print(f"Failed to save editor settings: {e}")
+
+    def _handle_load_editor(self, ui_state):
+        """Load non-physics editor state from disk and apply it (in place)."""
+        if not self.editor_saver:
+            print("EditorSaver not available")
+            return
+        from pathlib import Path
+        path = Path(ui_state.load_editor_path)
+        try:
+            save = self.editor_saver.load_from_file(path)
+            if save is None:
+                return
+            self.editor_saver.apply_save(save, ui_state.preferences)
+            # Re-sync the live TracerInterface with the newly-loaded preferences.
+            if self.ui._tracer_interface is not None:
+                self.ui._apply_tracer_preferences(self.ui._tracer_interface)
+            print(f"Editor settings loaded: {path.name}")
+        except Exception as e:
+            print(f"Failed to load editor settings: {e}")
+
+    # --- Simulation state save/load --------------------------------------
+
+    def _handle_save_simulation(self, ui_state):
+        """Save the entity + canvas GPU buffers to disk."""
+        if not self.simulation_saver:
+            print("SimulationSaver not available")
+            return
+        name = ui_state.save_simulation_name or "simulation"
+        try:
+            buffers = self.simulation_saver.read_buffers(self.sim)
+            sim_metadata = self.simulation_saver.sim_metadata(self.sim)
+            path = self.simulation_saver.save_to_disk(buffers, sim_metadata, name=name)
+            print(f"Simulation state saved: {path}")
+        except Exception as e:
+            print(f"Failed to save simulation state: {e}")
+
+    def _handle_load_simulation(self, ui_state):
+        """Load entity + canvas GPU buffers from disk and write them into the sim."""
+        if not self.simulation_saver:
+            print("SimulationSaver not available")
+            return
+        from pathlib import Path
+        dir_path = Path(ui_state.load_simulation_path)
+        if not dir_path.exists():
+            print(f"Simulation state not found: {dir_path}")
+            return
+        try:
+            loaded = self.simulation_saver.load_from_disk(dir_path)
+            if loaded is None:
+                return
+            buffers, sim_metadata = loaded
+            # canvas_resolution isn't in sim_metadata; hand the live value through
+            # so write_buffers only reallocates when entity_count actually differs.
+            sim_metadata = dict(sim_metadata)
+            sim_metadata['canvas_resolution'] = self.sim.canvas_resolution
+            rule = self.rule_manager.get_current_rule()
+            world_size_changed = self.simulation_saver.write_buffers(
+                self.sim, buffers, sim_metadata, rule=rule)
+            if world_size_changed:
+                self.entity_picker.update_buffer(self.sim.get_entity_buffer())
+                self.ui._last_applied_entity_count = ui_state.preferences.rendering.entity_count
+                self.ui._last_applied_canvas_resolution = ui_state.preferences.rendering.canvas_resolution
+            print(f"Simulation state loaded: {dir_path.name}")
+        except Exception as e:
+            print(f"Failed to load simulation state: {e}")

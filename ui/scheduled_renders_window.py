@@ -34,6 +34,22 @@ class ScheduledRendersWindowMixin:
         self._request_cancel_render_queue = False
         self._shutdown_after_render_queue = False  # Shut down PC after batch completes
 
+        # Editor settings save/load one-shot flags (set from the Editor menu)
+        self._request_save_editor = False
+        self._save_editor_name = ""  # persistent widget text (not a one-shot)
+        self._request_load_editor = False
+        self._load_editor_path = ""
+        self._editor_saved_time = 0  # timestamp for "Saved!" feedback
+        self._editor_save_files = []  # scanned .editor.json paths
+
+        # Simulation state save/load one-shot flags (set from the Extras menu)
+        self._request_save_simulation = False
+        self._save_simulation_name = ""  # persistent widget text (not a one-shot)
+        self._request_load_simulation = False
+        self._load_simulation_path = ""
+        self._simulation_saved_time = 0  # timestamp for "Saved!" feedback
+        self._simulation_save_dirs = []  # scanned .fsim paths
+
     def _marshal_scheduled_renders_state(self, state):
         """Copy render-spec + render-queue one-shot flags into state, then reset.
 
@@ -59,6 +75,40 @@ class ScheduledRendersWindowMixin:
         self._render_queue_paths = []
         self._render_queue_names = []
         self._request_cancel_render_queue = False
+
+        # Editor settings save/load
+        state.request_save_editor = self._request_save_editor
+        state.save_editor_name = self._save_editor_name
+        state.request_load_editor = self._request_load_editor
+        state.load_editor_path = self._load_editor_path
+        self._request_save_editor = False
+        # _save_editor_name intentionally not reset (persistent widget text)
+        self._request_load_editor = False
+        self._load_editor_path = ""
+
+        # Simulation state save/load
+        state.request_save_simulation = self._request_save_simulation
+        state.save_simulation_name = self._save_simulation_name
+        state.request_load_simulation = self._request_load_simulation
+        state.load_simulation_path = self._load_simulation_path
+        self._request_save_simulation = False
+        # _save_simulation_name intentionally not reset (persistent widget text)
+        self._request_load_simulation = False
+        self._load_simulation_path = ""
+
+    def _refresh_editor_save_files(self):
+        """Scan disk for available .editor.json files."""
+        if self.editor_saver is not None:
+            self._editor_save_files = self.editor_saver.list_available()
+        else:
+            self._editor_save_files = []
+
+    def _refresh_simulation_save_dirs(self):
+        """Scan disk for available .fsim directories."""
+        if self.simulation_saver is not None:
+            self._simulation_save_dirs = self.simulation_saver.list_available()
+        else:
+            self._simulation_save_dirs = []
 
     def _refresh_render_spec_files(self):
         """Scan disk for available .frs directories."""

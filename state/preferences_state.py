@@ -438,6 +438,38 @@ def save_preferences(prefs: PreferencesState, filepath: Path | str = None) -> No
     filepath.write_text(json.dumps(data, indent=2))
 
 
+def preferences_from_dict(data: dict) -> PreferencesState:
+    """Build a PreferencesState from a loaded JSON dict, running all migrations.
+
+    Accepts both the current nested per-slice format and the legacy flat-key
+    format. Shared by load_preferences() and EditorSaver so editor saves migrate
+    exactly like the on-disk preferences.config.
+    """
+    # Nested format has the slice attrs as top-level keys; legacy format is flat.
+    if isinstance(data, dict) and any(k in data for k in _SLICE_ATTRS):
+        prefs = _from_nested_dict(data)
+        _migrate_lighting_nested(prefs, data)
+        _migrate_render_controls_nested(prefs, data)
+    else:
+        prefs = from_flat_dict(data)
+    _migrate_renderer_selection(prefs, data)
+    return prefs
+
+
+def copy_preferences_into(target: PreferencesState, source: PreferencesState) -> None:
+    """Copy every slice field from source onto target in place.
+
+    Preserves target's object identity (and its slice objects' identities) so
+    references held elsewhere (ui.state.preferences, etc.) see the update. Used
+    when loading an EditorSave over the live preferences.
+    """
+    for slice_attr in _SLICE_ATTRS:
+        src_slice = getattr(source, slice_attr)
+        dst_slice = getattr(target, slice_attr)
+        for fld in type(dst_slice).__dataclass_fields__:
+            setattr(dst_slice, fld, getattr(src_slice, fld))
+
+
 def load_preferences(filepath: Path | str = None) -> PreferencesState:
     """Load preferences from a JSON file. Returns default preferences if file doesn't exist.
 
@@ -452,15 +484,7 @@ def load_preferences(filepath: Path | str = None) -> PreferencesState:
 
     try:
         data = json.loads(filepath.read_text())
-        # Nested format has the slice attrs as top-level keys; legacy format is flat.
-        if isinstance(data, dict) and any(k in data for k in _SLICE_ATTRS):
-            prefs = _from_nested_dict(data)
-            _migrate_lighting_nested(prefs, data)
-            _migrate_render_controls_nested(prefs, data)
-        else:
-            prefs = from_flat_dict(data)
-        _migrate_renderer_selection(prefs, data)
-        return prefs
+        return preferences_from_dict(data)
     except (json.JSONDecodeError, TypeError) as e:
         print(f"Warning: Failed to load preferences from {filepath}: {e}")
         print("Using default preferences")

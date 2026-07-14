@@ -5,7 +5,7 @@ import numpy as np
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, RenderSpecService, PlottingManager
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, RenderSpecService, EditorSaver, SimulationSaver, PlottingManager
 from parameter_locks import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
@@ -71,7 +71,13 @@ class App:
         self.video_service = VideoRecorderService()
         self.config_saver = ConfigSaver()
         self.plotting_manager = PlottingManager(self.ctx)
-        self.render_spec_service = RenderSpecService()
+        # Editor + simulation savers: standalone save/load systems that RenderSpec
+        # bundles together (physics is handled by config_saver above).
+        self.editor_saver = EditorSaver()
+        self.simulation_saver = SimulationSaver()
+        self.render_spec_service = RenderSpecService(
+            editor_saver=self.editor_saver,
+            simulation_saver=self.simulation_saver)
         self.param_lock_service = ParameterLockService()
 
         # Viewer: the always-displayed "Viewer" ImGui window that shows the
@@ -84,6 +90,8 @@ class App:
                      param_lock_service=self.param_lock_service,
                      plotting_manager=self.plotting_manager,
                      render_spec_service=self.render_spec_service,
+                     editor_saver=self.editor_saver,
+                     simulation_saver=self.simulation_saver,
                      viewer=self.viewer,
                      tracer_sim=self.sim,
                      tracer_controller_cam=self.controller_cam,
@@ -130,6 +138,8 @@ class App:
             self.user_configs_dir,
             param_lock_service=self.param_lock_service,
             render_spec_service=self.render_spec_service,
+            editor_saver=self.editor_saver,
+            simulation_saver=self.simulation_saver,
             recording_controller=self.recording_controller,
             controller_cam=self.controller_cam,
             plotting_manager=self.plotting_manager,

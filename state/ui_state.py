@@ -90,3 +90,15 @@ class UIState:
     render_queue_paths: list = field(default_factory=list)
     render_queue_names: list = field(default_factory=list)
     request_cancel_render_queue: bool = False
+
+    # Editor settings save/load (non-physics editor state + imgui layout)
+    request_save_editor: bool = False
+    save_editor_name: str = ""
+    request_load_editor: bool = False
+    load_editor_path: str = ""  # Path to .editor.json file to load
+
+    # Simulation state save/load (entity + canvas GPU buffers)
+    request_save_simulation: bool = False
+    save_simulation_name: str = ""
+    request_load_simulation: bool = False
+    load_simulation_path: str = ""  # Path to .fsim directory to load

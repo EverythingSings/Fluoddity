@@ -58,7 +58,7 @@ class UI(
 
     def __init__(self, window, ctx: moderngl.Context,
                  param_lock_service=None, plotting_manager=None,
-                 render_spec_service=None,
+                 render_spec_service=None, editor_saver=None, simulation_saver=None,
                  viewer=None, tracer_sim=None, tracer_controller_cam=None,
                  tracer_camera=None):
         self.window = window
@@ -67,6 +67,8 @@ class UI(
         self.param_lock_service = param_lock_service
         self.plotting_manager = plotting_manager
         self.render_spec_service = render_spec_service
+        self.editor_saver = editor_saver
+        self.simulation_saver = simulation_saver
         self.viewer = viewer  # Viewer window
 
         # Tracer references (for entity buffer and camera access)
@@ -111,6 +113,14 @@ class UI(
         # File save/load state
         self.save_popup_open = False
         self.save_filename_buffer = ""
+
+        # Editor / Simulation save popups + submenu open-tracking
+        self.editor_save_popup_open = False
+        self._save_editor_name_buffer = ""
+        self._editor_load_submenu_was_open = False
+        self.simulation_save_popup_open = False
+        self._save_simulation_name_buffer = ""
+        self._simulation_load_submenu_was_open = False
         # Physics configs: app dir for bundled (Core/Advanced), user dir for user-created
         self.app_configs_dir = get_app_physics_configs_dir()
         self.user_configs_dir = get_user_physics_configs_dir()

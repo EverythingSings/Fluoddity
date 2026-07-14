@@ -61,6 +61,50 @@ class PopupModalsMixin:
                 imgui.close_current_popup()
             imgui.end_popup()
 
+        # Editor settings save popup
+        if self.editor_save_popup_open:
+            imgui.open_popup("Save Editor Settings")
+
+        if imgui.begin_popup_modal("Save Editor Settings", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text("Enter a name (without extension):")
+            _, self._save_editor_name_buffer = imgui.input_text(
+                "##editor_name", self._save_editor_name_buffer)
+            imgui.separator()
+            if imgui.button("Save", imgui.ImVec2(120, 0)):
+                name = self._save_editor_name_buffer.strip()
+                if name:
+                    self._save_editor_name = name
+                    self._request_save_editor = True
+                    self.editor_save_popup_open = False
+                    imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self.editor_save_popup_open = False
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+        # Simulation state save popup
+        if self.simulation_save_popup_open:
+            imgui.open_popup("Save Simulation State")
+
+        if imgui.begin_popup_modal("Save Simulation State", flags=imgui.WindowFlags_.always_auto_resize)[0]:
+            imgui.text("Enter a name (without extension):")
+            _, self._save_simulation_name_buffer = imgui.input_text(
+                "##simulation_name", self._save_simulation_name_buffer)
+            imgui.separator()
+            if imgui.button("Save", imgui.ImVec2(120, 0)):
+                name = self._save_simulation_name_buffer.strip()
+                if name:
+                    self._save_simulation_name = name
+                    self._request_save_simulation = True
+                    self.simulation_save_popup_open = False
+                    imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button("Cancel", imgui.ImVec2(120, 0)):
+                self.simulation_save_popup_open = False
+                imgui.close_current_popup()
+            imgui.end_popup()
+
         # Delete confirmation popup
         if self.delete_confirm_filename:
             imgui.open_popup("Delete Config?")

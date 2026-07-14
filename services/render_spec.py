@@ -2,29 +2,38 @@
 RenderSpec: complete snapshot of app state for scheduled video rendering.
 
 A RenderSpec captures everything needed to reproduce an exact simulation state:
-physics config, camera, preferences, and GPU buffer snapshots (entities, canvas,
-field texture). Saved as a directory containing JSON metadata + compressed numpy
-binary data.
+physics config, camera, editor state (preferences + imgui layout), and GPU buffer
+snapshots (entities, canvas). It is a thin container that bundles the three
+independent save systems:
+
+    - Physics  -> services/config_saver.py  (PhysicsConfig)
+    - Editor   -> services/editor_saver.py  (EditorSave: prefs + imgui layout)
+    - Sim state-> services/simulation_saver.py (entity + canvas GPU buffers)
+
+plus the small .frs-specific camera / controller-cam / sim-metadata dicts.
 
 File format:
     RenderSpecs/
         MyRender.frs/               # .frs = Fluoddity Render Spec (directory)
-            metadata.json           # All scalar/dict state
+            metadata.json           # All scalar/dict state (incl. editor block)
             entities.npz            # Compressed entity buffer
-            canvas.npz              # Compressed 3D canvas textures
-            field.npz               # Compressed field texture (optional)
+            canvas.npz              # Compressed 3D canvas texture
+
+Versioning:
+    v1 (legacy): preferences stored as a FLAT dict, no imgui layout.
+    v2 (current): editor block { preferences (nested), imgui_layout }.
 """
 import json
 from datetime import datetime
-import numpy as np
 from dataclasses import dataclass, field
-from dataclasses import asdict
 from pathlib import Path
 
 from services.config_saver import ConfigSaver, PhysicsConfig
+from services.editor_saver import EditorSaver, EditorSave
+from services.simulation_saver import SimulationSaver
 from utilities.paths import get_render_specs_dir
 
-RENDER_SPEC_VERSION = 1
+RENDER_SPEC_VERSION = 2
 
 
 @dataclass
@@ -34,8 +43,9 @@ class RenderSpec:
     physics_config_dict: dict = field(default_factory=dict)
     camera_state: dict = field(default_factory=dict)
     controller_cam_state: dict = field(default_factory=dict)
-    preferences: dict = field(default_factory=dict)
+    editor_save: EditorSave | None = None
     sim_metadata: dict = field(default_factory=dict)
+    version: int = RENDER_SPEC_VERSION
     # Path to the .frs directory on disk (set after save/load)
     dir_path: Path | None = None
 
@@ -43,33 +53,26 @@ class RenderSpec:
 class RenderSpecService:
     """Service for capturing, saving, loading, and applying RenderSpec snapshots."""
 
+    def __init__(self, editor_saver: EditorSaver | None = None,
+                 simulation_saver: SimulationSaver | None = None):
+        self.editor_saver = editor_saver or EditorSaver()
+        self.simulation_saver = simulation_saver or SimulationSaver()
+
     def capture_current_state(self, sim, camera, controller_cam, ui_state,
                               config_saver: ConfigSaver, rule_manager,
                               adv_draw_processor, name: str) -> tuple[RenderSpec, dict]:
         """Snapshot all app state + GPU buffers into a RenderSpec.
 
-        Args:
-            sim: Sim instance (GPU buffers, frame_count)
-            camera: Camera instance (not used directly; state comes from ui_state.camera)
-            controller_cam: ControllerCam instance (FPS camera pos/yaw/pitch/fov)
-            ui_state: UIState with sim, camera, and preferences
-            config_saver: ConfigSaver for creating PhysicsConfig
-            rule_manager: RuleManager to get current rule
-            adv_draw_processor: AdvancedDrawingProcessor for field texture snapshot
-            name: Display name for this render spec
-
-        Returns:
-            (spec, gpu_buffers) tuple where gpu_buffers is a dict of numpy arrays
+        Returns (spec, gpu_buffers) where gpu_buffers is a dict of numpy arrays.
+        `adv_draw_processor` is accepted for signature compatibility but unused
+        (the live force/strafe field runtime was removed with the drawing mode).
         """
         # 1. Physics config (reuse existing serialization)
         rule = rule_manager.get_current_rule()
-        # The live force/strafe field runtime was removed with the drawing mode,
-        # so new specs never carry field strengths (adv_draw_processor is None).
-        field_strengths = None
-        physics_config = config_saver.create_config(ui_state.sim, rule, field_strengths)
+        physics_config = config_saver.create_config(ui_state.sim, rule, None)
         physics_config_dict = physics_config.to_dict()
 
-        # 2. Camera state
+        # 2. Camera state (.frs-specific — small, kept inline)
         cam = ui_state.camera
         camera_state = {
             'position': cam.position.tolist(),
@@ -93,131 +96,65 @@ class RenderSpecService:
             'fov': controller_cam.fov,
         }
 
-        # 4. Preferences (full snapshot, flat-key dict for stable .frs format)
-        from state.preferences_state import to_flat_dict
-        preferences = to_flat_dict(ui_state.preferences)
+        # 4. Editor state (preferences + imgui layout)
+        editor_save = self.editor_saver.create_save(ui_state.preferences)
 
         # 5. Sim metadata
-        sim_metadata = {
-            'frame_count': sim.frame_count,
-            'can_read_index': sim.can_read_index,
-            'entity_count': sim.entity_count,
-        }
+        sim_metadata = self.simulation_saver.sim_metadata(sim)
 
         spec = RenderSpec(
             display_name=name,
             physics_config_dict=physics_config_dict,
             camera_state=camera_state,
             controller_cam_state=controller_cam_state,
-            preferences=preferences,
+            editor_save=editor_save,
             sim_metadata=sim_metadata,
+            version=RENDER_SPEC_VERSION,
         )
 
-        # 6. GPU buffer snapshots
-        gpu_buffers = self._read_gpu_buffers(sim, adv_draw_processor)
+        # 6. GPU buffer snapshots (entities + canvas)
+        gpu_buffers = self.simulation_saver.read_buffers(sim)
 
         return spec, gpu_buffers
 
-    def _read_gpu_buffers(self, sim, adv_draw_processor) -> dict:
-        """Read all GPU buffers back to CPU as numpy arrays."""
-        buffers = {}
-
-        # Entity buffer (raw bytes → uint8 array for maximal compression)
-        buffers['entities'] = np.frombuffer(sim.entities.read(), dtype=np.uint8).copy()
-
-        # 3D canvas texture (packed RGBA16F, only the active read-side)
-        read_idx = sim.can_read_index
-        buffers['can_packed'] = np.frombuffer(
-            sim.can_3d[read_idx].read(), dtype=np.float16).copy()
-
-        # Force/strafe field texture (optional). The live field runtime was
-        # removed with the drawing mode, so adv_draw_processor is always None
-        # now and new specs carry no field; field.npz in *old* specs is still
-        # loaded (data-only) on the load path for a future reimplementation.
-        if adv_draw_processor is not None:
-            field_data = adv_draw_processor.snapshot_field_data()
-            if field_data is not None:
-                buffers['field'] = field_data
-
-        return buffers
-
     def save_to_disk(self, spec: RenderSpec, gpu_buffers: dict,
                      dir_path: Path | None = None) -> Path:
-        """Save a RenderSpec to a .frs directory on disk.
-
-        Args:
-            spec: The RenderSpec metadata
-            gpu_buffers: Dict of numpy arrays from capture_current_state()
-            dir_path: Override save location. If None, uses RenderSpecs/{name}.frs
-
-        Returns:
-            Path to the saved .frs directory
-        """
+        """Save a RenderSpec to a .frs directory on disk. Returns the directory path."""
         if dir_path is None:
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             dir_path = get_render_specs_dir() / f"{spec.display_name}_{timestamp}.frs"
 
         dir_path.mkdir(parents=True, exist_ok=True)
 
-        # Save metadata as JSON
+        editor_block = (self.editor_saver.to_dict(spec.editor_save)
+                        if spec.editor_save is not None else {})
         metadata = {
             'version': RENDER_SPEC_VERSION,
             'display_name': spec.display_name,
             'physics_config': spec.physics_config_dict,
             'camera_state': spec.camera_state,
             'controller_cam_state': spec.controller_cam_state,
-            'preferences': spec.preferences,
+            'editor': editor_block,
             'sim_metadata': spec.sim_metadata,
         }
-        metadata_path = dir_path / 'metadata.json'
-        metadata_path.write_text(json.dumps(metadata, indent=2))
+        (dir_path / 'metadata.json').write_text(json.dumps(metadata, indent=2))
 
-        # Save GPU buffers as compressed numpy archives
-        entities_path = dir_path / 'entities.npz'
-        np.savez_compressed(str(entities_path), data=gpu_buffers['entities'])
+        # GPU buffers -> entities.npz + canvas.npz (delegated to SimulationSaver)
+        self.simulation_saver.save_buffers(gpu_buffers, dir_path)
 
-        canvas_path = dir_path / 'canvas.npz'
-        np.savez_compressed(str(canvas_path),
-                            can_packed=gpu_buffers['can_packed'])
-
-        if 'field' in gpu_buffers:
-            field_path = dir_path / 'field.npz'
-            np.savez_compressed(str(field_path), data=gpu_buffers['field'])
-
-        # Print compression stats
         raw_entities = gpu_buffers['entities'].nbytes
         raw_canvas = gpu_buffers['can_packed'].nbytes
-        comp_entities = entities_path.stat().st_size
-        comp_canvas = canvas_path.stat().st_size
-        total_raw = raw_entities + raw_canvas
-        total_comp = comp_entities + comp_canvas
-
+        comp_entities = (dir_path / 'entities.npz').stat().st_size
+        comp_canvas = (dir_path / 'canvas.npz').stat().st_size
         print(f"[RenderSpec] Saved: {spec.display_name}")
-        print(f"  Entities: {raw_entities / 1e6:.1f} MB -> {comp_entities / 1e6:.1f} MB "
-              f"({raw_entities / max(comp_entities, 1):.0f}:1)")
-        print(f"  Canvas:   {raw_canvas / 1e6:.1f} MB -> {comp_canvas / 1e6:.1f} MB "
-              f"({raw_canvas / max(comp_canvas, 1):.0f}:1)")
-        if 'field' in gpu_buffers:
-            raw_field = gpu_buffers['field'].nbytes
-            comp_field = (dir_path / 'field.npz').stat().st_size
-            total_raw += raw_field
-            total_comp += comp_field
-            print(f"  Field:    {raw_field / 1e6:.1f} MB -> {comp_field / 1e6:.1f} MB "
-                  f"({raw_field / max(comp_field, 1):.0f}:1)")
-        print(f"  Total:    {total_raw / 1e6:.1f} MB -> {total_comp / 1e6:.1f} MB")
+        print(f"  Entities: {raw_entities / 1e6:.1f} MB -> {comp_entities / 1e6:.1f} MB")
+        print(f"  Canvas:   {raw_canvas / 1e6:.1f} MB -> {comp_canvas / 1e6:.1f} MB")
 
         spec.dir_path = dir_path
         return dir_path
 
     def load_metadata(self, dir_path: Path) -> RenderSpec | None:
-        """Load only metadata from a .frs directory (fast, no GPU buffers).
-
-        Args:
-            dir_path: Path to the .frs directory
-
-        Returns:
-            RenderSpec with metadata populated, or None if load failed
-        """
+        """Load only metadata from a .frs directory (fast, no GPU buffers)."""
         metadata_path = dir_path / 'metadata.json'
         if not metadata_path.exists():
             print(f"[RenderSpec] No metadata.json found in {dir_path}")
@@ -229,92 +166,57 @@ class RenderSpecService:
             print(f"[RenderSpec] Failed to load metadata from {dir_path}: {e}")
             return None
 
+        version = data.get('version', 1)
+        editor_save = self._editor_save_from_metadata(data, version)
+
         return RenderSpec(
             display_name=data.get('display_name', dir_path.stem),
             physics_config_dict=data.get('physics_config', {}),
             camera_state=data.get('camera_state', {}),
             controller_cam_state=data.get('controller_cam_state', {}),
-            preferences=data.get('preferences', {}),
+            editor_save=editor_save,
             sim_metadata=data.get('sim_metadata', {}),
+            version=version,
             dir_path=dir_path,
         )
 
-    def load_gpu_buffers(self, dir_path: Path) -> dict | None:
-        """Load compressed GPU buffer data from a .frs directory.
+    def _editor_save_from_metadata(self, data: dict, version: int) -> EditorSave:
+        """Build an EditorSave from .frs metadata, handling v1 vs v2 layout.
 
-        Args:
-            dir_path: Path to the .frs directory
-
-        Returns:
-            Dict of numpy arrays, or None if load failed
+        v2 stores an `editor` block { preferences (nested), imgui_layout }.
+        v1 stored a top-level `preferences` as a FLAT dict and no imgui layout;
+        preferences_from_dict() detects flat vs nested, so passing the flat dict
+        straight through migrates it correctly.
         """
-        buffers = {}
+        if 'editor' in data:
+            return self.editor_saver.from_dict(data['editor'])
+        # Legacy v1: top-level flat preferences, no layout.
+        return EditorSave(
+            version=1,
+            preferences=data.get('preferences', {}),
+            imgui_layout="",
+        )
 
-        # Entity buffer
-        entities_path = dir_path / 'entities.npz'
-        if not entities_path.exists():
-            print(f"[RenderSpec] No entities.npz found in {dir_path}")
-            return None
-        try:
-            with np.load(str(entities_path)) as data:
-                buffers['entities'] = data['data']
-        except Exception as e:
-            print(f"[RenderSpec] Failed to load entities: {e}")
-            return None
-
-        # Canvas textures
-        canvas_path = dir_path / 'canvas.npz'
-        if not canvas_path.exists():
-            print(f"[RenderSpec] No canvas.npz found in {dir_path}")
-            return None
-        try:
-            with np.load(str(canvas_path)) as data:
-                if 'can_packed' in data:
-                    buffers['can_packed'] = data['can_packed']
-                else:
-                    # Legacy: load old separate-channel format
-                    buffers['can_x'] = data['can_x']
-                    buffers['can_y'] = data['can_y']
-                    buffers['can_z'] = data['can_z']
-        except Exception as e:
-            print(f"[RenderSpec] Failed to load canvas: {e}")
-            return None
-
-        # Field texture (optional)
-        field_path = dir_path / 'field.npz'
-        if field_path.exists():
-            try:
-                with np.load(str(field_path)) as data:
-                    buffers['field'] = data['data']
-            except Exception as e:
-                print(f"[RenderSpec] Warning: Failed to load field texture: {e}")
-                # Non-fatal — field is optional
-
-        return buffers
+    def load_gpu_buffers(self, dir_path: Path) -> dict | None:
+        """Load compressed GPU buffer data from a .frs directory. None on failure."""
+        return self.simulation_saver.load_buffers(dir_path)
 
     def apply_state(self, spec: RenderSpec, gpu_buffers: dict,
                     sim, camera, controller_cam, ui_state,
                     config_saver: ConfigSaver, rule_manager,
-                    adv_draw_processor) -> bool:
+                    adv_draw_processor, apply_editor_visibility: bool = True) -> bool:
         """Apply a RenderSpec's state + GPU buffers to the running app.
 
-        This restores the complete simulation state including physics, camera,
-        preferences, and all GPU buffers (entities, canvas, field).
+        Restores physics, camera, editor state (preferences + imgui layout), and
+        the GPU buffers. `adv_draw_processor` is unused (drawing mode removed).
 
         Args:
-            spec: RenderSpec with metadata
-            gpu_buffers: Dict of numpy arrays from load_gpu_buffers()
-            sim: Sim instance
-            camera: Camera instance (for any direct camera state)
-            controller_cam: ControllerCam instance
-            ui_state: UIState to update
-            config_saver: ConfigSaver for applying physics config
-            rule_manager: RuleManager for pushing rule
-            adv_draw_processor: AdvancedDrawingProcessor for field texture
+            apply_editor_visibility: if False, keep current window visibility
+                (used by batch/headless render paths). imgui layout is likewise
+                skipped in that case to avoid disturbing a headless layout.
 
         Returns:
-            True if entity_count or canvas_resolution changed (GPU buffers
-            were reallocated), False otherwise.
+            True if entity_count/canvas_resolution changed (buffers reallocated).
         """
         # 1. Apply physics config (includes rule)
         physics_config = PhysicsConfig.from_dict(spec.physics_config_dict)
@@ -346,74 +248,25 @@ class RenderSpecService:
             controller_cam.fov = ccam_data.get('fov', 50.0)
             controller_cam._update_vectors()
 
-        # 4. Apply preferences (skip window visibility flags — don't close/open windows)
-        prefs_data = spec.preferences
-        if prefs_data:
-            from state.preferences_state import _FLAT_KEY_MAP, set_flat
-            for key, value in prefs_data.items():
-                if key.startswith('show_') and key.endswith('_window'):
-                    continue  # Don't override which windows are open
-                if key in _FLAT_KEY_MAP:
-                    set_flat(ui_state.preferences, key, value)
+        # 4. Apply editor state (preferences + imgui layout)
+        if spec.editor_save is not None:
+            self.editor_saver.apply_save(
+                spec.editor_save, ui_state.preferences,
+                apply_visibility=apply_editor_visibility,
+                apply_layout=apply_editor_visibility,
+            )
 
-        # 4b. Detect and handle world size changes (must happen before GPU buffer writes)
-        sim_metadata = spec.sim_metadata
-        spec_entity_count = sim_metadata.get('entity_count', sim.entity_count) if sim_metadata else sim.entity_count
-        spec_canvas_res = prefs_data.get('canvas_resolution', sim.canvas_resolution) if prefs_data else sim.canvas_resolution
-        world_size_changed = False
-
-        if spec_entity_count != sim.entity_count or spec_canvas_res != sim.canvas_resolution:
-            print(f"[RenderSpec] World size change: entities {sim.entity_count}->{spec_entity_count}, "
-                  f"canvas {sim.canvas_resolution}->{spec_canvas_res}")
-            sim._entity_count = spec_entity_count
-            sim.canvas_resolution = spec_canvas_res
-            sim.setup_simulation_state()  # Reallocate entity buffer + canvas textures
-            sim.setup_shaders()           # Recompile with new ENTITY_COUNT #define
-            sim.apply_rule(rule)          # Re-push rule to new shader program
-            world_size_changed = True
-
-        # 5. Apply sim metadata
-        if sim_metadata:
-            sim.frame_count = sim_metadata.get('frame_count', 0)
-            sim.can_read_index = sim_metadata.get('can_read_index', 0)
-
-        # 6. Restore GPU buffers
-        # Entity buffer
-        if 'entities' in gpu_buffers:
-            sim.entities.write(gpu_buffers['entities'].tobytes())
-
-        # Canvas 3D texture (packed RGBA16F) — write to BOTH double-buffer textures
-        # to prevent stale data in the non-active buffer from corrupting the next swap
-        if 'can_packed' in gpu_buffers:
-            can_bytes = gpu_buffers['can_packed'].tobytes()
-            for i in range(2):
-                sim.can_3d[i].write(can_bytes)
-        elif 'can_x' in gpu_buffers:
-            # Legacy support: convert old separate R32F channels to packed RGBA16F
-            can_x = gpu_buffers['can_x'].astype(np.float16)
-            can_y = gpu_buffers['can_y'].astype(np.float16)
-            can_z = gpu_buffers['can_z'].astype(np.float16)
-            alpha = np.zeros_like(can_x)
-            packed = np.stack([can_x, can_y, can_z, alpha], axis=-1).flatten()
-            can_bytes = packed.tobytes()
-            for i in range(2):
-                sim.can_3d[i].write(can_bytes)
-
-        # Force/strafe field texture (optional)
-        if 'field' in gpu_buffers and adv_draw_processor is not None:
-            adv_draw_processor.write_field_data(gpu_buffers['field'])
-        elif adv_draw_processor is not None and adv_draw_processor.field_texture is not None:
-            # No field in render spec — clear existing field to match saved state
-            adv_draw_processor.clear_fields()
+        # 5. Restore GPU buffers (+ world-size realloc + sim metadata)
+        # canvas_resolution lives in prefs; hand it to the sim saver via metadata.
+        sim_metadata = dict(spec.sim_metadata) if spec.sim_metadata else {}
+        sim_metadata['canvas_resolution'] = ui_state.preferences.rendering.canvas_resolution
+        world_size_changed = self.simulation_saver.write_buffers(
+            sim, gpu_buffers, sim_metadata, rule=rule)
 
         return world_size_changed
 
     def list_available_specs(self) -> list[Path]:
-        """List all .frs directories in the RenderSpecs folder.
-
-        Returns:
-            Sorted list of Path objects to .frs directories
-        """
+        """List all .frs directories in the RenderSpecs folder."""
         specs_dir = get_render_specs_dir()
         if not specs_dir.exists():
             return []

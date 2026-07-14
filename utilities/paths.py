@@ -78,6 +78,16 @@ def get_render_specs_dir() -> Path:
     return get_user_data_dir() / "RenderSpecs"
 
 
+def get_editor_saves_dir() -> Path:
+    """Get path to EditorSaves directory (non-physics editor/UI state saves)."""
+    return get_user_data_dir() / "EditorSaves"
+
+
+def get_simulation_saves_dir() -> Path:
+    """Get path to SimulationSaves directory (entity + canvas buffer dumps)."""
+    return get_user_data_dir() / "SimulationSaves"
+
+
 def get_default_keyboard_controls_path() -> Path:
     """Get path to bundled default_keyboard_controls.json."""
     return get_app_dir() / "default_keyboard_controls.json"
@@ -102,6 +112,8 @@ def initialize_user_data():
     get_screenshots_dir().mkdir(exist_ok=True)
     get_videos_dir().mkdir(exist_ok=True)
     get_render_specs_dir().mkdir(exist_ok=True)
+    get_editor_saves_dir().mkdir(exist_ok=True)
+    get_simulation_saves_dir().mkdir(exist_ok=True)
 
     # Copy default keyboard controls if user's doesn't exist
     user_keyboard = get_user_keyboard_controls_path()
