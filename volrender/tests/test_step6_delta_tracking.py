@@ -148,7 +148,7 @@ def test_constant_density_collision_fraction(ctx: moderngl.Context) -> bool:
     vp = cpu_view_proj(eye, target, up, 6.0, width / height)
 
     medium = MediumParams(extinction_rgb=extinction, density_scale=density_scale)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sky_rgb = np.array([0.5, 0.7, 1.0], dtype=np.float32)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -209,7 +209,7 @@ def test_higher_extinction_more_collisions(ctx: moderngl.Context) -> bool:
     up = [0, 1, 0]
     width, height = 128, 128
     vp = cpu_view_proj(eye, target_pt, up, 6.0, width / height)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
 
     fractions = []
     for ext_val in [0.5, 2.0]:
@@ -252,7 +252,7 @@ def test_empty_grid_pure_sky(ctx: moderngl.Context) -> bool:
     vp = cpu_view_proj(eye, target_pt, up, 60.0, width / height)
 
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0), density_scale=5.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sky_rgb = np.array([0.5, 0.7, 1.0], dtype=np.float32)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -292,7 +292,7 @@ def test_camera_away_pure_sky(ctx: moderngl.Context) -> bool:
     vp = cpu_view_proj(eye, target_pt, up, 60.0, width / height)
 
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0), density_scale=5.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sky_rgb = np.array([0.5, 0.7, 1.0], dtype=np.float32)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -334,7 +334,7 @@ def test_silhouette_shape(ctx: moderngl.Context) -> bool:
 
     # High density_scale so center is almost certainly a collision
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0), density_scale=50.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sky_rgb = np.array([0.5, 0.7, 1.0], dtype=np.float32)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -384,7 +384,7 @@ def test_no_nans(ctx: moderngl.Context) -> bool:
 
     # Colored extinction + high density_scale to stress the tracker
     medium = MediumParams(extinction_rgb=(3.0, 0.5, 1.5), density_scale=10.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
     renderer.render_delta_test(vp, target_tex, medium, sky)
@@ -424,7 +424,7 @@ def test_density_scale_monotonic(ctx: moderngl.Context) -> bool:
     up = [0, 1, 0]
     width, height = 128, 128
     vp = cpu_view_proj(eye, target_pt, up, 6.0, width / height)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
 
     scales = [0.5, 1.0, 2.0, 5.0]
     fractions = []

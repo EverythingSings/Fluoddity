@@ -187,7 +187,7 @@ class VolumeRenderer:
                        main camera's ``compute_fps_view_proj``.
             target:    moderngl Texture (2D, rgba16f/rgba32f) to write into.
             medium:    MediumParams (extinction_rgb, density_scale used).
-            sky:       SkyParams (color_rgb, intensity used).
+            sky:       SkyParams (color_top, color_bottom, intensity used).
             debug_steps: Number of fixed march steps along each ray.
         """
         self.camera.set_view_proj(view_proj)
@@ -217,7 +217,8 @@ class VolumeRenderer:
         _tryset(prog, 'u_emission_strength', 0.0)
 
         # Sky
-        _tryset(prog, 'u_sky_color', sky.color_rgb)
+        _tryset(prog, 'u_sky_top', sky.color_top)
+        _tryset(prog, 'u_sky_bottom', sky.color_bottom)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
         _tryset(prog, 'u_use_photosphere', False)
         _tryset(prog, 'u_sun_sampling', False)
@@ -266,7 +267,7 @@ class VolumeRenderer:
             view_proj: 4x4 numpy array (proj @ view).
             target:    moderngl Texture (2D, rgba16f/rgba32f) to write into.
             medium:    MediumParams (extinction_rgb, density_scale used).
-            sky:       SkyParams (color_rgb, intensity used).
+            sky:       SkyParams (color_top, color_bottom, intensity used).
         """
         self.camera.set_view_proj(view_proj)
 
@@ -296,7 +297,8 @@ class VolumeRenderer:
         _tryset(prog, 'u_emission_strength', 0.0)
 
         # Sky
-        _tryset(prog, 'u_sky_color', sky.color_rgb)
+        _tryset(prog, 'u_sky_top', sky.color_top)
+        _tryset(prog, 'u_sky_bottom', sky.color_bottom)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
         _tryset(prog, 'u_use_photosphere', False)
         _tryset(prog, 'u_sun_sampling', False)
@@ -354,7 +356,7 @@ class VolumeRenderer:
             view_proj:    4x4 numpy array (proj @ view).
             target:       moderngl Texture (2D, rgba16f/rgba32f) to write into.
             medium:       MediumParams (extinction_rgb, density_scale, albedo_saturation/brightness).
-            sky:          SkyParams (color_rgb, intensity).
+            sky:          SkyParams (color_top, color_bottom, intensity).
             render:       RenderParams (max_bounces, rr_start_depth).
             sample_index: Per-sample seed offset for RNG decorrelation.
             sun:          SunParams or None.  None = no direct sun (Step 7 compat).
@@ -387,7 +389,8 @@ class VolumeRenderer:
         _tryset(prog, 'u_emission_strength', medium.emission_strength)
 
         # Sky
-        _tryset(prog, 'u_sky_color', sky.color_rgb)
+        _tryset(prog, 'u_sky_top', sky.color_top)
+        _tryset(prog, 'u_sky_bottom', sky.color_bottom)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
 
         # Sun (Step 8)
@@ -520,7 +523,8 @@ class VolumeRenderer:
         _tryset(prog, 'u_emission_strength', medium.emission_strength)
 
         # Sky
-        _tryset(prog, 'u_sky_color', sky.color_rgb)
+        _tryset(prog, 'u_sky_top', sky.color_top)
+        _tryset(prog, 'u_sky_bottom', sky.color_bottom)
         _tryset(prog, 'u_sky_intensity', sky.intensity)
 
         # Sun

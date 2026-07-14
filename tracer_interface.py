@@ -69,11 +69,13 @@ class TracerInterface:
         self.density_scale = 0.0001
         self.hg_g = 0.0  # HG asymmetry: >0 forward, <0 back, 0 isotropic
         self.emission_strength = 0.0  # emission intensity (0 = off)
+        # Sun + sky mirror the shared LightingPrefs (OptiX terminology).
         self.sun_direction = [0.577, 0.577, 0.577]
-        self.sun_color = [1.0, 0.95, 0.9]
-        self.sun_intensity = 3.0
+        self.sun_color = [1.0, 1.0, 1.0]
+        self.sun_intensity = 1.0
         self.sun_sampling = True  # NEE sun shadow rays
-        self.sky_color = [0.5, 0.7, 1.0]
+        self.sky_color_top = [0.45, 0.62, 0.85]
+        self.sky_color_bottom = [0.08, 0.08, 0.10]
         self.sky_intensity = 1.0
         self.photosphere = False  # use skybox texture for sky
         self._skybox_tex = None  # moderngl.Texture loaded from skybox.jpg
@@ -411,7 +413,8 @@ class TracerInterface:
             sampling=self.sun_sampling,
         )
         sky = SkyParams(
-            color_rgb=tuple(self.sky_color),
+            color_top=tuple(self.sky_color_top),
+            color_bottom=tuple(self.sky_color_bottom),
             intensity=self.sky_intensity,
         )
         render = RenderParams(

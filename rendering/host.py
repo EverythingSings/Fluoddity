@@ -134,11 +134,12 @@ class RendererHost:
         p = ui_state.preferences
         # Shared geometry + lighting
         pt.radius_scale = p.optix.sphere_radius_scale
-        pt.sun_direction = tuple(p.optix.light_direction)
-        pt.sun_color = tuple(p.optix.light_color)
-        pt.sun_intensity = p.optix.light_intensity
-        pt.sky_color_top = tuple(p.optix.sky_color_top)
-        pt.sky_color_bottom = tuple(p.optix.sky_color_bottom)
+        # Sun + sky from the shared LightingPrefs slice (unified across renderers)
+        pt.sun_direction = tuple(p.lighting.light_direction)
+        pt.sun_color = tuple(p.lighting.light_color)
+        pt.sun_intensity = p.lighting.light_intensity
+        pt.sky_color_top = tuple(p.lighting.sky_color_top)
+        pt.sky_color_bottom = tuple(p.lighting.sky_color_bottom)
         pt.albedo_saturation = p.optix.albedo_saturation
         pt.albedo_brightness = p.optix.albedo_brightness
         pt.sphere_size_jitter = p.optix.sphere_size_jitter
@@ -147,9 +148,9 @@ class RendererHost:
         pt.curve_r0 = p.optix.curve_r0
         pt.curve_r1 = p.optix.curve_r1
         pt.sdf_enabled = p.optix.sdf_enabled
-        pt.sun_sampling = p.optix.pt_sun_sampling
+        pt.sun_sampling = p.lighting.nee
         pt.env_sky_nee = p.optix.pt_env_sky_nee
-        pt.photosphere = p.optix.pt_photosphere
+        pt.photosphere = p.lighting.photosphere
         # Path-trace-only
         pt.max_bounces = p.optix.pt_max_bounces
         pt.rr_start_depth = p.optix.pt_rr_start_depth

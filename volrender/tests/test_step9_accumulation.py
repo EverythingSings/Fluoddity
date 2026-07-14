@@ -118,7 +118,7 @@ def test_convergence(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sun = SunParams(direction=(0.0, 1.0, 0.0),
                     color_rgb=(1.0, 1.0, 1.0), intensity=3.0)
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -182,7 +182,7 @@ def test_reset_clears(ctx: moderngl.Context) -> bool:
     _fill_constant_density(renderer, 0.5)
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.9, 0.9, 0.9), density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     sun = SunParams(direction=(0.0, 1.0, 0.0),
                     color_rgb=(1.0, 1.0, 1.0), intensity=5.0)
     render = RenderParams(num_samples=16)
@@ -193,7 +193,7 @@ def test_reset_clears(ctx: moderngl.Context) -> bool:
     # Render B: dark scene (empty grid, black sky, no sun)
     renderer.grid.clear()
     renderer.majorant_builder.build(renderer.grid)
-    sky_dark = SkyParams(color_rgb=(0.0, 0.0, 0.0), intensity=0.0)
+    sky_dark = SkyParams(color_top=(0.0, 0.0, 0.0), color_bottom=(0.0, 0.0, 0.0), intensity=0.0)
     sun_off = SunParams(direction=(0.0, 1.0, 0.0),
                         color_rgb=(0.0, 0.0, 0.0), intensity=0.0)
     renderer.render_to_completion(vp, target_tex, medium, sun_off, sky_dark, render)
@@ -320,7 +320,7 @@ def test_edit_without_resplat(ctx: moderngl.Context) -> bool:
     vp = cpu_view_proj(eye, target_pt, up, 6.0, width / height)
     target_tex = ctx.texture((width, height), 4, dtype='f2')
 
-    sky = SkyParams(color_rgb=(0.0, 0.0, 0.0), intensity=0.0)
+    sky = SkyParams(color_top=(0.0, 0.0, 0.0), color_bottom=(0.0, 0.0, 0.0), intensity=0.0)
     render = RenderParams(num_samples=64)
     margin = width // 4
 
@@ -391,7 +391,7 @@ def test_furnace_accumulated(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(1.0, 1.0, 1.0),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     sun = SunParams(direction=(0.0, 1.0, 0.0),
                     color_rgb=(1.0, 1.0, 1.0), intensity=0.0)  # sun OFF
     render = RenderParams(num_samples=128, max_bounces=0, rr_start_depth=2)
@@ -436,7 +436,7 @@ def test_accumulated_matches_cpu_average(ctx: moderngl.Context) -> bool:
 
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8), density_scale=1.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sun = SunParams(direction=(0.0, 1.0, 0.0),
                     color_rgb=(1.0, 1.0, 1.0), intensity=3.0)
     render = RenderParams(max_bounces=8, rr_start_depth=4, seed=0)

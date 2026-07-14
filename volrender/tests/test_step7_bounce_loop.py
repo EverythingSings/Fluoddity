@@ -135,7 +135,7 @@ def test_furnace_white_albedo(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(1.0, 1.0, 1.0),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     render = RenderParams(max_bounces=0, rr_start_depth=2)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -194,7 +194,7 @@ def test_absorbing_albedo(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.5, 0.5, 0.5),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     render = RenderParams(max_bounces=0, rr_start_depth=2)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -248,7 +248,7 @@ def test_colored_albedo(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.9, 0.5, 0.2),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     render = RenderParams(max_bounces=0, rr_start_depth=2)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -295,7 +295,7 @@ def test_empty_grid_pure_sky(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=5.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sky_rgb = np.array([0.5, 0.7, 1.0], dtype=np.float32)
     render = RenderParams(max_bounces=0, rr_start_depth=4)
 
@@ -344,7 +344,7 @@ def test_no_nans(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(3.0, 0.5, 1.5),
                           albedo_rgb=(0.7, 0.9, 0.3),
                           density_scale=10.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     render = RenderParams(max_bounces=0, rr_start_depth=3)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -392,7 +392,7 @@ def test_max_bounces_darkens(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     num_samples = 64
     target_tex = ctx.texture((width, height), 4, dtype='f2')
     margin = width // 4
@@ -440,7 +440,7 @@ def test_rr_unbiased(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.7, 0.7, 0.7),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     num_samples = 128
     target_tex = ctx.texture((width, height), 4, dtype='f2')
     margin = width // 4
@@ -490,7 +490,7 @@ def test_sample_index_decorrelation(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     render = RenderParams(max_bounces=0, rr_start_depth=4)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')

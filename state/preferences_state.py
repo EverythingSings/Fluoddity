@@ -84,11 +84,7 @@ class TracerPrefs:
     density_scale: float = 0.0001
     hg_g: float = 0.0  # HG phase asymmetry [-1,1]
     emission_strength: float = 0.0  # emission intensity (0 = off)
-    sun_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
-    sun_color: list = field(default_factory=lambda: [1.0, 0.95, 0.9])
-    sun_intensity: float = 3.0
-    sky_color: list = field(default_factory=lambda: [0.5, 0.7, 1.0])
-    sky_intensity: float = 1.0
+    # Sun/sky lighting moved to the shared LightingPrefs slice.
     num_samples: int = 64
     exposure: float = 1.5
     realtime_mode: int = 0  # 0=Off, 1=1spp, 2=Accumulate
@@ -99,23 +95,35 @@ class TracerPrefs:
     density_resolution_log2: int = 9   # 2^9 = 512
     color_resolution_log2: int = 9     # 2^9 = 512
     majorant_resolution_log2: int = 7  # 2^7 = 128
-    sun_sampling: bool = True  # NEE sun shadow rays
-    photosphere: bool = False  # skybox texture mode
+
+
+@dataclass
+class LightingPrefs:
+    """Shared sun + sky lighting, consumed by BOTH renderers (OpenGL volumetric
+    tracer and OptiX path tracer) so their lighting stays unified. Uses the
+    OptiX terminology/formatting. (OptiX-only extras like the cos-lobe env sky
+    stay on OptixPrefs.)"""
+    light_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])  # unit, scene -> sun
+    light_color: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
+    light_intensity: float = 1.0
+    nee: bool = True  # Next Event Estimation (sun shadow rays)
+    photosphere: bool = False  # equirectangular skybox for the sky
+    sky_color_top: list = field(default_factory=lambda: [0.45, 0.62, 0.85])  # zenith
+    sky_color_bottom: list = field(default_factory=lambda: [0.08, 0.08, 0.10])  # nadir
+    sky_intensity: float = 1.0  # (volumetric tracer only; OptiX gradient sky is unscaled)
 
 
 @dataclass
 class OptixPrefs:
-    """OptiX raytracer + path tracer preferences (spheres and PT are one subsystem)."""
+    """OptiX raytracer + path tracer preferences (spheres and PT are one subsystem).
+
+    Sun/sky lighting moved to the shared LightingPrefs slice; only OptiX-specific
+    controls remain here."""
     # OptiX raytracer settings
     enabled: bool = False
     sphere_radius_scale: float = 1.0
-    light_direction: list = field(default_factory=lambda: [0.577, 0.577, 0.577])
-    light_color: list = field(default_factory=lambda: [1.0, 1.0, 1.0])
-    light_intensity: float = 1.0
     shadows_enabled: bool = True
     ambient: float = 0.12
-    sky_color_top: list = field(default_factory=lambda: [0.45, 0.62, 0.85])
-    sky_color_bottom: list = field(default_factory=lambda: [0.08, 0.08, 0.10])
     ao_enabled: bool = False
     ao_num_rays: int = 2
     ao_radius: float = 0.5
@@ -136,7 +144,6 @@ class OptixPrefs:
     rt_realtime_samples: int = 1  # Samples/frame for RT: X spp mode (1-8)
     rz_samples: int = 1  # Samples/frame for RT: Rasterize mode (1-8)
     rt_preview_spp: int = 64  # Target SPP for Re-render Preview
-    pt_sun_sampling: bool = True
     pt_max_bounces: int = 8
     pt_rr_start_depth: int = 3
     pt_firefly_clamp: bool = True
@@ -147,7 +154,6 @@ class OptixPrefs:
     pt_denoise_enabled: bool = False
     rz_denoise_enabled: bool = False  # Denoise in rasterize mode (separate beauty pass)
     pt_env_sky_nee: bool = False  # Use cosine-lobe environment sky for NEE instead of directional sun
-    pt_photosphere: bool = False  # Use equirectangular environment map for sky
 
 
 @dataclass
@@ -213,6 +219,7 @@ class PreferencesState:
     recording: RecordingPrefs = field(default_factory=RecordingPrefs)
     generics: GenericsPrefs = field(default_factory=GenericsPrefs)
     parameter_locks: ParameterLocksPrefs = field(default_factory=ParameterLocksPrefs)
+    lighting: LightingPrefs = field(default_factory=LightingPrefs)
     tracer: TracerPrefs = field(default_factory=TracerPrefs)
     optix: OptixPrefs = field(default_factory=OptixPrefs)
     camera3d: Camera3DPrefs = field(default_factory=Camera3DPrefs)
@@ -275,11 +282,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "tracer_density_scale": ("tracer", "density_scale"),
     "tracer_hg_g": ("tracer", "hg_g"),
     "tracer_emission_strength": ("tracer", "emission_strength"),
-    "tracer_sun_direction": ("tracer", "sun_direction"),
-    "tracer_sun_color": ("tracer", "sun_color"),
-    "tracer_sun_intensity": ("tracer", "sun_intensity"),
-    "tracer_sky_color": ("tracer", "sky_color"),
-    "tracer_sky_intensity": ("tracer", "sky_intensity"),
     "tracer_num_samples": ("tracer", "num_samples"),
     "tracer_exposure": ("tracer", "exposure"),
     "tracer_realtime_mode": ("tracer", "realtime_mode"),
@@ -290,18 +292,21 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "tracer_density_resolution_log2": ("tracer", "density_resolution_log2"),
     "tracer_color_resolution_log2": ("tracer", "color_resolution_log2"),
     "tracer_majorant_resolution_log2": ("tracer", "majorant_resolution_log2"),
-    "tracer_sun_sampling": ("tracer", "sun_sampling"),
-    "tracer_photosphere": ("tracer", "photosphere"),
+    # LightingPrefs (shared sun + sky, used by both renderers).
+    # Canonical flat keys use the OptiX names for backward-compat migration.
+    "three_d_optix_light_direction": ("lighting", "light_direction"),
+    "three_d_optix_light_color": ("lighting", "light_color"),
+    "three_d_optix_light_intensity": ("lighting", "light_intensity"),
+    "three_d_pt_sun_sampling": ("lighting", "nee"),
+    "three_d_pt_photosphere": ("lighting", "photosphere"),
+    "three_d_optix_sky_color_top": ("lighting", "sky_color_top"),
+    "three_d_optix_sky_color_bottom": ("lighting", "sky_color_bottom"),
+    "lighting_sky_intensity": ("lighting", "sky_intensity"),
     # OptixPrefs (spheres)
     "three_d_optix_enabled": ("optix", "enabled"),
     "three_d_optix_sphere_radius_scale": ("optix", "sphere_radius_scale"),
-    "three_d_optix_light_direction": ("optix", "light_direction"),
-    "three_d_optix_light_color": ("optix", "light_color"),
-    "three_d_optix_light_intensity": ("optix", "light_intensity"),
     "three_d_optix_shadows_enabled": ("optix", "shadows_enabled"),
     "three_d_optix_ambient": ("optix", "ambient"),
-    "three_d_optix_sky_color_top": ("optix", "sky_color_top"),
-    "three_d_optix_sky_color_bottom": ("optix", "sky_color_bottom"),
     "three_d_optix_ao_enabled": ("optix", "ao_enabled"),
     "three_d_optix_ao_num_rays": ("optix", "ao_num_rays"),
     "three_d_optix_ao_radius": ("optix", "ao_radius"),
@@ -321,7 +326,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_rt_realtime_samples": ("optix", "rt_realtime_samples"),
     "three_d_rz_samples": ("optix", "rz_samples"),
     "three_d_rt_preview_spp": ("optix", "rt_preview_spp"),
-    "three_d_pt_sun_sampling": ("optix", "pt_sun_sampling"),
     "three_d_pt_max_bounces": ("optix", "pt_max_bounces"),
     "three_d_pt_rr_start_depth": ("optix", "pt_rr_start_depth"),
     "three_d_pt_firefly_clamp": ("optix", "pt_firefly_clamp"),
@@ -332,7 +336,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_pt_denoise_enabled": ("optix", "pt_denoise_enabled"),
     "three_d_rz_denoise_enabled": ("optix", "rz_denoise_enabled"),
     "three_d_pt_env_sky_nee": ("optix", "pt_env_sky_nee"),
-    "three_d_pt_photosphere": ("optix", "pt_photosphere"),
     # Camera3DPrefs
     "three_d_fov": ("camera3d", "fov"),
     "three_d_aperture": ("camera3d", "aperture"),
@@ -449,6 +452,7 @@ def load_preferences(filepath: Path | str = None) -> PreferencesState:
         # Nested format has the slice attrs as top-level keys; legacy format is flat.
         if isinstance(data, dict) and any(k in data for k in _SLICE_ATTRS):
             prefs = _from_nested_dict(data)
+            _migrate_lighting_nested(prefs, data)
         else:
             prefs = from_flat_dict(data)
         _migrate_renderer_selection(prefs, data)
@@ -474,3 +478,34 @@ def _migrate_renderer_selection(prefs: PreferencesState, data: dict) -> None:
         return  # File already uses the new enum; respect it verbatim.
     if prefs.optix.enabled:
         prefs.rendering.renderer = 1
+
+
+def _migrate_lighting_nested(prefs: PreferencesState, data: dict) -> None:
+    """Pull legacy per-renderer sun/sky into the shared LightingPrefs slice.
+
+    Only for nested-format files predating LightingPrefs. If the file already
+    has a ``lighting`` block, respect it. Otherwise adopt the OptiX values as
+    canonical (per the cleanup decision), falling back to the legacy tracer
+    fields for ``sky_intensity`` (OptiX had no such control).
+    """
+    if isinstance(data.get('lighting'), dict):
+        return  # File already uses the shared slice.
+    optix = data.get('optix', {}) if isinstance(data.get('optix'), dict) else {}
+    tracer = data.get('tracer', {}) if isinstance(data.get('tracer'), dict) else {}
+    lit = prefs.lighting
+    if 'light_direction' in optix:
+        lit.light_direction = list(optix['light_direction'])
+    if 'light_color' in optix:
+        lit.light_color = list(optix['light_color'])
+    if 'light_intensity' in optix:
+        lit.light_intensity = optix['light_intensity']
+    if 'pt_sun_sampling' in optix:
+        lit.nee = optix['pt_sun_sampling']
+    if 'pt_photosphere' in optix:
+        lit.photosphere = optix['pt_photosphere']
+    if 'sky_color_top' in optix:
+        lit.sky_color_top = list(optix['sky_color_top'])
+    if 'sky_color_bottom' in optix:
+        lit.sky_color_bottom = list(optix['sky_color_bottom'])
+    if 'sky_intensity' in tracer:
+        lit.sky_intensity = tracer['sky_intensity']

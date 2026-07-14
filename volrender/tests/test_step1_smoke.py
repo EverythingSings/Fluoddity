@@ -71,10 +71,12 @@ def test_dataclass_defaults() -> bool:
     if s.intensity != 3.0:
         ok = _fail(f"SunParams.intensity default {s.intensity}")
 
-    # SkyParams — all defaults
+    # SkyParams — all defaults (two-tone gradient)
     sk = SkyParams()
-    if sk.color_rgb != (0.5, 0.7, 1.0):
-        ok = _fail(f"SkyParams.color_rgb default {sk.color_rgb}")
+    if sk.color_top != (0.45, 0.62, 0.85):
+        ok = _fail(f"SkyParams.color_top default {sk.color_top}")
+    if sk.color_bottom != (0.08, 0.08, 0.10):
+        ok = _fail(f"SkyParams.color_bottom default {sk.color_bottom}")
     if sk.intensity != 1.0:
         ok = _fail(f"SkyParams.intensity default {sk.intensity}")
 
@@ -113,7 +115,7 @@ def test_dataclass_explicit() -> bool:
         )
         MediumParams(extinction_rgb=(0.5, 0.6, 0.7), albedo_rgb=(0.9, 0.9, 0.9), density_scale=2.0)
         SunParams(direction=(0.577, 0.577, 0.577), color_rgb=(1, 1, 1), intensity=5.0)
-        SkyParams(color_rgb=(0.3, 0.4, 0.5), intensity=0.5)
+        SkyParams(color_top=(0.3, 0.4, 0.5), color_bottom=(0.3, 0.4, 0.5), intensity=0.5)
         RenderParams(num_samples=128, batch_spp=4, max_bounces=8, rr_start_depth=2, seed=42)
         return _ok("all dataclasses accept explicit values")
     except Exception as e:

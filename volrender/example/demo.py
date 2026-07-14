@@ -318,7 +318,8 @@ class VolrenderDemo:
             intensity=self.sun_intensity,
         )
         sky = SkyParams(
-            color_rgb=tuple(self.sky_color),
+            color_top=tuple(self.sky_color),
+            color_bottom=tuple(self.sky_color),
             intensity=self.sky_intensity,
         )
         render = RenderParams(

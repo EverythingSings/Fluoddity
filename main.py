@@ -384,6 +384,17 @@ class App:
         ti = self.ui._tracer_interface
         if ti is not None:
             ui_state.preferences.tracer.sdf_enabled = ti.sdf_enabled
+            # Push the SHARED lighting each frame so the volumetric tracer stays
+            # in sync with edits made from either renderer's controls.
+            lit = ui_state.preferences.lighting
+            ti.sun_direction = list(lit.light_direction)
+            ti.sun_color = list(lit.light_color)
+            ti.sun_intensity = lit.light_intensity
+            ti.sky_color_top = list(lit.sky_color_top)
+            ti.sky_color_bottom = list(lit.sky_color_bottom)
+            ti.sky_intensity = lit.sky_intensity
+            ti.sun_sampling = lit.nee
+            ti.photosphere = lit.photosphere
 
         # 5.2. Sync parameter lock master toggle
         self.param_lock_service.enabled = ui_state.preferences.parameter_locks.enabled
@@ -435,7 +446,11 @@ class App:
                 self.recording_controller.active_video_strategy = active_video_strategy
             tracer_frame = active_video_strategy.run_frame(ui_state)
             if tracer_frame is not None:
-                # A complete output frame is ready — send to video recorder
+                # A complete output frame is ready. Display it (the most recent
+                # completed frame, matching OptiX-video behavior) AND send it to
+                # the recorder. camera.render() returns assembled_texture while
+                # sim_going, so this also avoids a wasted GL-points render.
+                self.camera.assembled_texture = tracer_frame
                 self.video_service.process_frame(
                     self.ctx,
                     tracer_frame,
@@ -648,14 +663,14 @@ class App:
                 view_proj.astype(np.float64)
             ).astype(np.float32)
             p = ui_state.preferences
-            sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
+            sun_d = np.array(p.lighting.light_direction, dtype=np.float64)
             sun_len = max(np.linalg.norm(sun_d), 1e-8)
             sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-            sc = p.tracer.sun_color
-            si = p.tracer.sun_intensity
+            sc = p.lighting.light_color
+            si = p.lighting.light_intensity
             sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-            skc = p.tracer.sky_color
-            ski = p.tracer.sky_intensity
+            skc = p.lighting.sky_color_top
+            ski = p.lighting.sky_intensity
             sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         # Build overlay markup params (sweep reticle). These composite over the
@@ -757,11 +772,8 @@ class App:
             ui_state.preferences.tracer.density_scale = ti.density_scale
             ui_state.preferences.tracer.hg_g = ti.hg_g
             ui_state.preferences.tracer.emission_strength = ti.emission_strength
-            ui_state.preferences.tracer.sun_direction = list(ti.sun_direction)
-            ui_state.preferences.tracer.sun_color = list(ti.sun_color)
-            ui_state.preferences.tracer.sun_intensity = ti.sun_intensity
-            ui_state.preferences.tracer.sky_color = list(ti.sky_color)
-            ui_state.preferences.tracer.sky_intensity = ti.sky_intensity
+            # Sun + sky live on the shared LightingPrefs slice (edited directly);
+            # nothing to sync back from ti.
             ui_state.preferences.tracer.num_samples = ti.num_samples
             ui_state.preferences.tracer.exposure = ti.exposure
             ui_state.preferences.tracer.realtime_mode = ti.realtime_mode
@@ -772,8 +784,6 @@ class App:
             ui_state.preferences.tracer.density_resolution_log2 = ti.density_resolution_log2
             ui_state.preferences.tracer.color_resolution_log2 = ti.color_resolution_log2
             ui_state.preferences.tracer.majorant_resolution_log2 = ti.majorant_resolution_log2
-            ui_state.preferences.tracer.sun_sampling = ti.sun_sampling
-            ui_state.preferences.tracer.photosphere = ti.photosphere
 
         save_preferences(ui_state.preferences)
 

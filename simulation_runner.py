@@ -107,14 +107,14 @@ class SimulationRunner:
             ).astype(np.float32)
 
             p = ui_state.preferences
-            sun_d = np.array(p.tracer.sun_direction, dtype=np.float64)
+            sun_d = np.array(p.lighting.light_direction, dtype=np.float64)
             sun_len = max(np.linalg.norm(sun_d), 1e-8)
             sdf_sun_dir = tuple((sun_d / sun_len).astype(np.float32))
-            sc = p.tracer.sun_color
-            si = p.tracer.sun_intensity
+            sc = p.lighting.light_color
+            si = p.lighting.light_intensity
             sdf_sun_color = (sc[0] * si, sc[1] * si, sc[2] * si)
-            skc = p.tracer.sky_color
-            ski = p.tracer.sky_intensity
+            skc = p.lighting.sky_color_top
+            ski = p.lighting.sky_intensity
             sdf_sky_color = (skc[0] * ski, skc[1] * ski, skc[2] * ski)
 
         return dict(

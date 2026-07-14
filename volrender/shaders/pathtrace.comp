@@ -41,8 +41,9 @@ uniform vec3  u_extinction_rgb;
 uniform float u_density_scale;
 uniform float u_emission_strength;   // emission intensity multiplier (0 = off)
 
-// ---- sky params ----
-uniform vec3  u_sky_color;
+// ---- sky params (two-tone vertical gradient) ----
+uniform vec3  u_sky_top;        // sky color at zenith (dir.y = +1)
+uniform vec3  u_sky_bottom;     // sky color at nadir  (dir.y = -1)
 uniform float u_sky_intensity;
 
 // ---- albedo (Step 7, per-voxel hue from entity color) ----
@@ -143,8 +144,9 @@ vec3 get_sky_col(vec3 dir) {
         float phi = dir.y / 2.0 + 0.5;
         return SRGBToLinear(texture(u_skybox, vec2(theta, phi)).xyz);
     }
-    // Procedural: base sky + soft brightening toward sun direction
-    vec3 base = u_sky_color * u_sky_intensity;
+    // Procedural: two-tone vertical gradient + soft brightening toward the sun.
+    vec3 base = mix(u_sky_bottom, u_sky_top, clamp(dir.y * 0.5 + 0.5, 0.0, 1.0))
+              * u_sky_intensity;
     float sun_dot = dot(dir, u_sun_direction);
     float sun_glow = pow(clamp(sun_dot * 0.5 + 0.5, 0.0, 1.0), 900.0);
     return base * (1.0 + sun_glow * 200.0);

@@ -55,12 +55,13 @@ class SunParams:
 
 @dataclass
 class SkyParams:
-    """Uniform isotropic sky environment.
+    """Two-tone sky environment (vertical gradient top->bottom).
 
     Not NEE-sampled; contributes only through escaped / random-walk rays.
     A primary ray that escapes the grid returns sky as the visible background.
     """
-    color_rgb: tuple[float, float, float] = (0.5, 0.7, 1.0)
+    color_top:    tuple[float, float, float] = (0.45, 0.62, 0.85)  # zenith
+    color_bottom: tuple[float, float, float] = (0.08, 0.08, 0.10)  # nadir
     intensity: float = 1.0
 
 

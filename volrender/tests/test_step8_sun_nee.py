@@ -132,7 +132,7 @@ def test_sun_adds_light(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(0.0, 0.0, 0.0), intensity=0.0)  # no sky
+    sky = SkyParams(color_top=(0.0, 0.0, 0.0), color_bottom=(0.0, 0.0, 0.0), intensity=0.0)  # no sky
     render = RenderParams(max_bounces=8, rr_start_depth=4)
     sun = SunParams(direction=(0.0, 1.0, 0.0),
                     color_rgb=(1.0, 1.0, 1.0), intensity=3.0)
@@ -185,7 +185,7 @@ def test_sun_occlusion(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.9, 0.9, 0.9),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(0.0, 0.0, 0.0), intensity=0.0)
+    sky = SkyParams(color_top=(0.0, 0.0, 0.0), color_bottom=(0.0, 0.0, 0.0), intensity=0.0)
     render = RenderParams(max_bounces=1, rr_start_depth=100)
     sun = SunParams(direction=(0.0, 1.0, 0.0),
                     color_rgb=(1.0, 1.0, 1.0), intensity=3.0)
@@ -241,7 +241,7 @@ def test_colored_shadow(ctx: moderngl.Context) -> bool:
     # We compare against a white-extinction baseline (same scalar strength).
     # The colored case should produce a measurably different channel ratio
     # than the white case (where R == G == B by symmetry).
-    sky = SkyParams(color_rgb=(0.0, 0.0, 0.0), intensity=0.0)
+    sky = SkyParams(color_top=(0.0, 0.0, 0.0), color_bottom=(0.0, 0.0, 0.0), intensity=0.0)
     render = RenderParams(max_bounces=1, rr_start_depth=100)
     sun = SunParams(direction=(0.0, 1.0, 0.0),
                     color_rgb=(1.0, 1.0, 1.0), intensity=5.0)
@@ -319,7 +319,7 @@ def test_furnace_with_sun_off(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(1.0, 1.0, 1.0),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
     render = RenderParams(max_bounces=0, rr_start_depth=2)
     # Sun present but zero intensity
     sun = SunParams(direction=(0.0, 1.0, 0.0),
@@ -368,7 +368,7 @@ def test_empty_grid_sun_no_disk(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=5.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     sky_rgb = np.array([0.5, 0.7, 1.0], dtype=np.float32)
     render = RenderParams(max_bounces=0, rr_start_depth=4)
     # Strong sun -- should NOT appear in output (NEE-only, no visible disk)
@@ -420,7 +420,7 @@ def test_no_nans_with_sun(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(3.0, 0.5, 1.5),
                           albedo_rgb=(0.7, 0.9, 0.3),
                           density_scale=10.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
     render = RenderParams(max_bounces=0, rr_start_depth=3)
     sun = SunParams(direction=(0.577, 0.577, 0.577),
                     color_rgb=(1.0, 0.95, 0.9), intensity=5.0)
@@ -469,7 +469,7 @@ def test_sun_intensity_scaling(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(0.0, 0.0, 0.0), intensity=0.0)  # no sky
+    sky = SkyParams(color_top=(0.0, 0.0, 0.0), color_bottom=(0.0, 0.0, 0.0), intensity=0.0)  # no sky
     render = RenderParams(max_bounces=4, rr_start_depth=4)
     num_samples = 128
     target_tex = ctx.texture((width, height), 4, dtype='f2')
@@ -528,7 +528,7 @@ def test_sun_direction_matters(ctx: moderngl.Context) -> bool:
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0),
                           albedo_rgb=(0.8, 0.8, 0.8),
                           density_scale=1.0)
-    sky = SkyParams(color_rgb=(0.0, 0.0, 0.0), intensity=0.0)
+    sky = SkyParams(color_top=(0.0, 0.0, 0.0), color_bottom=(0.0, 0.0, 0.0), intensity=0.0)
     render = RenderParams(max_bounces=4, rr_start_depth=4)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')

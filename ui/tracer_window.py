@@ -90,31 +90,38 @@ class TracerWindowMixin:
             if imgui.is_item_hovered():
                 imgui.set_tooltip("Self-emission intensity (0 = off)")
 
+        # ---- Sun + Sky (bind to the SHARED LightingPrefs, OptiX terminology) ----
+        lit = self.state.preferences.lighting
+
         # ---- Sun ----
         if imgui.collapsing_header("Sun", imgui.TreeNodeFlags_.default_open.value):
-            _, ti.sun_direction = imgui.drag_float3(
-                "Direction", ti.sun_direction, 0.01, -1.0, 1.0)
-            _, ti.sun_color = imgui.color_edit3(
-                "Sun Color", ti.sun_color)
-            _, ti.sun_intensity = imgui.slider_float(
-                "Sun Intensity", ti.sun_intensity, 0.0, 20.0)
+            changed, vals = imgui.drag_float3(
+                "Direction", list(lit.light_direction), 0.01, -1.0, 1.0)
+            if changed:
+                lit.light_direction = list(vals)
+            _, lit.light_color = imgui.color_edit3(
+                "Sun Color", lit.light_color)
+            _, lit.light_intensity = imgui.slider_float(
+                "Sun Intensity", lit.light_intensity, 0.0, 20.0)
 
         # ---- Sky ----
         if imgui.collapsing_header("Sky", imgui.TreeNodeFlags_.default_open.value):
-            _, ti.sky_color = imgui.color_edit3(
-                "Sky Color", ti.sky_color)
-            _, ti.sky_intensity = imgui.slider_float(
-                "Sky Intensity", ti.sky_intensity, 0.0, 5.0)
+            _, lit.sky_color_top = imgui.color_edit3(
+                "Sky Top", lit.sky_color_top)
+            _, lit.sky_color_bottom = imgui.color_edit3(
+                "Sky Bottom", lit.sky_color_bottom)
+            _, lit.sky_intensity = imgui.slider_float(
+                "Sky Intensity", lit.sky_intensity, 0.0, 5.0)
 
-            changed_photo, ti.photosphere = imgui.checkbox(
-                "Photosphere", ti.photosphere)
-            if changed_photo and ti.photosphere:
+            changed_photo, lit.photosphere = imgui.checkbox(
+                "Photosphere", lit.photosphere)
+            if changed_photo and lit.photosphere:
                 if ti._skybox_tex is None:
                     ti._skybox_tex = ti._load_skybox()
                 if ti._skybox_tex is None:
-                    ti.photosphere = False
+                    lit.photosphere = False
             imgui.same_line()
-            _, ti.sun_sampling = imgui.checkbox("Sun Sampling", ti.sun_sampling)
+            _, lit.nee = imgui.checkbox("Sun Sampling", lit.nee)
 
         # ---- SDF Scene ----
         if imgui.collapsing_header("SDF Scene", imgui.TreeNodeFlags_.default_open.value):
@@ -201,13 +208,15 @@ class TracerWindowMixin:
         ti.density_scale = p.tracer.density_scale
         ti.hg_g = p.tracer.hg_g
         ti.emission_strength = p.tracer.emission_strength
-        ti.sun_direction = list(p.tracer.sun_direction)
-        ti.sun_color = list(p.tracer.sun_color)
-        ti.sun_intensity = p.tracer.sun_intensity
-        ti.sky_color = list(p.tracer.sky_color)
-        ti.sky_intensity = p.tracer.sky_intensity
-        ti.sun_sampling = p.tracer.sun_sampling
-        ti.photosphere = p.tracer.photosphere
+        # Sun + sky from the shared LightingPrefs slice (unified across renderers)
+        ti.sun_direction = list(p.lighting.light_direction)
+        ti.sun_color = list(p.lighting.light_color)
+        ti.sun_intensity = p.lighting.light_intensity
+        ti.sky_color_top = list(p.lighting.sky_color_top)
+        ti.sky_color_bottom = list(p.lighting.sky_color_bottom)
+        ti.sky_intensity = p.lighting.sky_intensity
+        ti.sun_sampling = p.lighting.nee
+        ti.photosphere = p.lighting.photosphere
         if ti.photosphere:
             ti._skybox_tex = ti._load_skybox()
             if ti._skybox_tex is None:

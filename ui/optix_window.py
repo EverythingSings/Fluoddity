@@ -148,20 +148,21 @@ class OptiXWindowMixin:
             _, p.optix.sdf_enabled = imgui.checkbox(
                 "Enable SDF", p.optix.sdf_enabled)
 
-        # ---- Lighting (shared: applies in both modes) ----
+        # ---- Lighting (shared LightingPrefs: applies in both modes/renderers) ----
         if imgui.collapsing_header("Lighting", default_open):
+            lit = p.lighting
             changed, vals = imgui.drag_float3(
-                "Light Dir", list(p.optix.light_direction),
+                "Light Dir", list(lit.light_direction),
                 0.01, -1.0, 1.0)
             if changed:
-                p.optix.light_direction = list(vals)
-            _, p.optix.light_color = imgui.color_edit3(
-                "Light Color", p.optix.light_color)
-            _, p.optix.light_intensity = imgui.slider_float(
-                "Intensity", p.optix.light_intensity, 0.0, 20.0)
+                lit.light_direction = list(vals)
+            _, lit.light_color = imgui.color_edit3(
+                "Light Color", lit.light_color)
+            _, lit.light_intensity = imgui.slider_float(
+                "Intensity", lit.light_intensity, 0.0, 20.0)
 
-            _, p.optix.pt_sun_sampling = imgui.checkbox(
-                "Enable NEE", p.optix.pt_sun_sampling)
+            _, lit.nee = imgui.checkbox(
+                "Enable NEE", lit.nee)
             if imgui.is_item_hovered():
                 imgui.set_tooltip(
                     "Next Event Estimation: trace a shadow ray toward the\n"
@@ -175,19 +176,19 @@ class OptiXWindowMixin:
                     "with a cosine-lobe environment model.\n"
                     "Sky color controls hemisphere glow,\n"
                     "sun direction/color/intensity control sun disk.")
-            _, p.optix.pt_photosphere = imgui.checkbox(
-                "Photosphere", p.optix.pt_photosphere)
+            _, lit.photosphere = imgui.checkbox(
+                "Photosphere", lit.photosphere)
             if imgui.is_item_hovered():
                 imgui.set_tooltip(
                     "Use equirectangular environment map for the sky\n"
                     "(queried on primary-ray miss, i.e. the background).")
 
-        # ---- Sky (shared) ----
+        # ---- Sky (shared LightingPrefs) ----
         if imgui.collapsing_header("Sky", default_open):
-            _, p.optix.sky_color_top = imgui.color_edit3(
-                "Sky Top", p.optix.sky_color_top)
-            _, p.optix.sky_color_bottom = imgui.color_edit3(
-                "Sky Bottom", p.optix.sky_color_bottom)
+            _, p.lighting.sky_color_top = imgui.color_edit3(
+                "Sky Top", p.lighting.sky_color_top)
+            _, p.lighting.sky_color_bottom = imgui.color_edit3(
+                "Sky Bottom", p.lighting.sky_color_bottom)
 
         # ---- Material (shared) ----
         if imgui.collapsing_header("Material", default_open):

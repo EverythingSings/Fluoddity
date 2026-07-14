@@ -475,11 +475,8 @@ class CommandHandler:
         p.tracer.density_scale = ti.density_scale
         p.tracer.hg_g = ti.hg_g
         p.tracer.emission_strength = ti.emission_strength
-        p.tracer.sun_direction = list(ti.sun_direction)
-        p.tracer.sun_color = list(ti.sun_color)
-        p.tracer.sun_intensity = ti.sun_intensity
-        p.tracer.sky_color = list(ti.sky_color)
-        p.tracer.sky_intensity = ti.sky_intensity
+        # Sun + sky live on the shared LightingPrefs slice and are edited there
+        # directly by both renderers' controls — nothing to sync back from ti.
         p.tracer.num_samples = ti.num_samples
         p.tracer.exposure = ti.exposure
         p.tracer.realtime_mode = ti.realtime_mode
@@ -490,8 +487,6 @@ class CommandHandler:
         p.tracer.density_resolution_log2 = ti.density_resolution_log2
         p.tracer.color_resolution_log2 = ti.color_resolution_log2
         p.tracer.majorant_resolution_log2 = ti.majorant_resolution_log2
-        p.tracer.sun_sampling = ti.sun_sampling
-        p.tracer.photosphere = ti.photosphere
 
     def _handle_save_render_spec(self, ui_state):
         """Capture current state and save as a render spec to disk."""

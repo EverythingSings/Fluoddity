@@ -208,7 +208,7 @@ def test_debug_raymarch_silhouette(ctx: moderngl.Context) -> bool:
     vp = cpu_view_proj(eye, target, up, 60.0, width / height)
 
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0), density_scale=5.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
     renderer.render_debug(vp, target_tex, medium, sky, debug_steps=128)
@@ -262,7 +262,7 @@ def test_camera_away_pure_sky(ctx: moderngl.Context) -> bool:
     vp = cpu_view_proj(eye, target, up, 60.0, width / height)
 
     medium = MediumParams(extinction_rgb=(1.0, 1.0, 1.0), density_scale=5.0)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
 
     target_tex = ctx.texture((width, height), 4, dtype='f2')
     renderer.render_debug(vp, target_tex, medium, sky, debug_steps=64)
@@ -301,7 +301,7 @@ def test_density_scale_monotonic(ctx: moderngl.Context) -> bool:
     up = [0, 1, 0]
     width, height = 32, 32
     vp = cpu_view_proj(eye, target, up, 60.0, width / height)
-    sky = SkyParams(color_rgb=(0.5, 0.7, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(0.5, 0.7, 1.0), color_bottom=(0.5, 0.7, 1.0), intensity=1.0)
 
     means = []
     for scale in [1.0, 2.0, 5.0, 10.0]:
@@ -344,7 +344,7 @@ def test_colored_extinction_tint(ctx: moderngl.Context) -> bool:
     up = [0, 1, 0]
     width, height = 32, 32
     vp = cpu_view_proj(eye, target, up, 60.0, width / height)
-    sky = SkyParams(color_rgb=(1.0, 1.0, 1.0), intensity=1.0)
+    sky = SkyParams(color_top=(1.0, 1.0, 1.0), color_bottom=(1.0, 1.0, 1.0), intensity=1.0)
 
     # High red extinction → red absorbed more → red channel darker
     medium = MediumParams(extinction_rgb=(3.0, 0.5, 0.5), density_scale=5.0)
