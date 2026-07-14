@@ -31,6 +31,14 @@ class RenderingPrefs:
     brightness: float = 3.0  # Global brightness multiplier
     tonemap_softness: float = 2.5  # Asinh tonemap stretch (higher = more highlight compression)
 
+    # Shared Pathtrace controls — synced between both renderers (like Camera).
+    rt_mode: int = 0  # Pathtrace mode: 0=Off (OptiX rasterize), 1=X spp, 2=Accumulate
+    rt_samples: int = 1  # Samples/frame in "X spp" mode (OptiX only; hidden for OpenGL)
+    capture_spp: int = 64  # Target SPP for a Re-render Preview / offline capture
+    render_resolution_scale: float = 1.0  # Multiplier on render resolution
+    firefly_clamp: bool = True  # Clamp per-sample radiance to kill fireflies
+    firefly_clamp_max: float = 50.0  # Max luminance per sample when clamping
+
 
 @dataclass
 class BloomPrefs:
@@ -84,13 +92,10 @@ class TracerPrefs:
     hg_g: float = 0.0  # HG phase asymmetry [-1,1]
     emission_strength: float = 0.0  # emission intensity (0 = off)
     # Sun/sky lighting moved to the shared LightingPrefs slice.
-    num_samples: int = 64
+    # rt mode / capture spp / resolution scale / firefly clamp moved to the
+    # shared RenderingPrefs slice (synced with OptiX).
     exposure: float = 1.5
-    realtime_mode: int = 0  # 0=Off, 1=1spp, 2=Accumulate
     max_bounces: int = 0  # 0=unbounded (RR only)
-    firefly_clamp: bool = False
-    firefly_clamp_max: float = 10.0
-    resolution_scale: float = 1.0  # multiplier on render resolution
     density_resolution_log2: int = 9   # 2^9 = 512
     color_resolution_log2: int = 9     # 2^9 = 512
     majorant_resolution_log2: int = 7  # 2^7 = 128
@@ -136,17 +141,13 @@ class OptixPrefs:
     curve_r0: float = 1.0  # Radius at first control point (multiplier on entity_size * radius_scale)
     curve_r1: float = 0.5  # Radius at second control point (multiplier on entity_size * radius_scale)
     sdf_enabled: bool = False  # Enable SDF scene geometry in OptiX renderers
-    resolution_scale: float = 1.0  # multiplier on render resolution
+    # (resolution_scale, rt_mode, rt_realtime_samples, rt_preview_spp,
+    #  pt_firefly_clamp[_max] moved to shared RenderingPrefs — synced across renderers.)
 
     # OptiX RT mode and path tracer settings
-    rt_mode: int = 0  # 0=Rasterize, 1=X spp, 2=Accumulate
-    rt_realtime_samples: int = 1  # Samples/frame for RT: X spp mode (1-8)
-    rz_samples: int = 1  # Samples/frame for RT: Rasterize mode (1-8)
-    rt_preview_spp: int = 64  # Target SPP for Re-render Preview
+    rz_samples: int = 1  # Samples/frame for Rasterize (Off) mode (1-8) — OptiX only
     pt_max_bounces: int = 8
     pt_rr_start_depth: int = 3
-    pt_firefly_clamp: bool = True
-    pt_firefly_clamp_max: float = 50.0
     pt_global_material: int = 0  # 0=Lambert, 1=Glossy, 2=Mirror
     pt_glossy_ior: float = 1.5
     pt_emission_intensity: float = 10.0  # Emissive radiance multiplier for negative-hue entities
@@ -243,6 +244,14 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "rule_seed": ("rendering", "rule_seed"),
     "brightness": ("rendering", "brightness"),
     "tonemap_softness": ("rendering", "tonemap_softness"),
+    # Shared Pathtrace controls (canonical flat keys = old OptiX names, so old
+    # prefs migrate their OptiX values into the shared fields).
+    "three_d_rt_mode": ("rendering", "rt_mode"),
+    "three_d_rt_realtime_samples": ("rendering", "rt_samples"),
+    "three_d_rt_preview_spp": ("rendering", "capture_spp"),
+    "three_d_optix_resolution_scale": ("rendering", "render_resolution_scale"),
+    "three_d_pt_firefly_clamp": ("rendering", "firefly_clamp"),
+    "three_d_pt_firefly_clamp_max": ("rendering", "firefly_clamp_max"),
     # BloomPrefs
     "bloom_enabled": ("bloom", "enabled"),
     "bloom_threshold": ("bloom", "threshold"),
@@ -276,13 +285,8 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "tracer_density_scale": ("tracer", "density_scale"),
     "tracer_hg_g": ("tracer", "hg_g"),
     "tracer_emission_strength": ("tracer", "emission_strength"),
-    "tracer_num_samples": ("tracer", "num_samples"),
     "tracer_exposure": ("tracer", "exposure"),
-    "tracer_realtime_mode": ("tracer", "realtime_mode"),
     "tracer_max_bounces": ("tracer", "max_bounces"),
-    "tracer_firefly_clamp": ("tracer", "firefly_clamp"),
-    "tracer_firefly_clamp_max": ("tracer", "firefly_clamp_max"),
-    "tracer_resolution_scale": ("tracer", "resolution_scale"),
     "tracer_density_resolution_log2": ("tracer", "density_resolution_log2"),
     "tracer_color_resolution_log2": ("tracer", "color_resolution_log2"),
     "tracer_majorant_resolution_log2": ("tracer", "majorant_resolution_log2"),
@@ -314,16 +318,12 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_optix_curve_r0": ("optix", "curve_r0"),
     "three_d_optix_curve_r1": ("optix", "curve_r1"),
     "three_d_optix_sdf_enabled": ("optix", "sdf_enabled"),
-    "three_d_optix_resolution_scale": ("optix", "resolution_scale"),
+    # (resolution_scale, rt_mode, rt_realtime_samples, rt_preview_spp,
+    #  pt_firefly_clamp[_max] moved to the shared RenderingPrefs above.)
     # OptixPrefs (RT/PT)
-    "three_d_rt_mode": ("optix", "rt_mode"),
-    "three_d_rt_realtime_samples": ("optix", "rt_realtime_samples"),
     "three_d_rz_samples": ("optix", "rz_samples"),
-    "three_d_rt_preview_spp": ("optix", "rt_preview_spp"),
     "three_d_pt_max_bounces": ("optix", "pt_max_bounces"),
     "three_d_pt_rr_start_depth": ("optix", "pt_rr_start_depth"),
-    "three_d_pt_firefly_clamp": ("optix", "pt_firefly_clamp"),
-    "three_d_pt_firefly_clamp_max": ("optix", "pt_firefly_clamp_max"),
     "three_d_pt_global_material": ("optix", "pt_global_material"),
     "three_d_pt_glossy_ior": ("optix", "pt_glossy_ior"),
     "three_d_pt_emission_intensity": ("optix", "pt_emission_intensity"),
@@ -443,6 +443,7 @@ def load_preferences(filepath: Path | str = None) -> PreferencesState:
         if isinstance(data, dict) and any(k in data for k in _SLICE_ATTRS):
             prefs = _from_nested_dict(data)
             _migrate_lighting_nested(prefs, data)
+            _migrate_render_controls_nested(prefs, data)
         else:
             prefs = from_flat_dict(data)
         _migrate_renderer_selection(prefs, data)
@@ -499,3 +500,29 @@ def _migrate_lighting_nested(prefs: PreferencesState, data: dict) -> None:
         lit.sky_color_bottom = list(optix['sky_color_bottom'])
     if 'sky_intensity' in tracer:
         lit.sky_intensity = tracer['sky_intensity']
+
+
+def _migrate_render_controls_nested(prefs: PreferencesState, data: dict) -> None:
+    """Pull legacy per-renderer rt-mode / capture-spp / resolution / firefly
+    into the shared RenderingPrefs slice (nested-format files predating them).
+
+    The OptiX values are canonical (per the cleanup decision). If the file's
+    ``rendering`` block already carries the new shared keys, respect it.
+    """
+    rendering = data.get('rendering', {}) if isinstance(data.get('rendering'), dict) else {}
+    if 'rt_mode' in rendering:
+        return  # File already uses the shared slice.
+    optix = data.get('optix', {}) if isinstance(data.get('optix'), dict) else {}
+    r = prefs.rendering
+    if 'rt_mode' in optix:
+        r.rt_mode = optix['rt_mode']
+    if 'rt_realtime_samples' in optix:
+        r.rt_samples = optix['rt_realtime_samples']
+    if 'rt_preview_spp' in optix:
+        r.capture_spp = optix['rt_preview_spp']
+    if 'resolution_scale' in optix:
+        r.render_resolution_scale = optix['resolution_scale']
+    if 'pt_firefly_clamp' in optix:
+        r.firefly_clamp = optix['pt_firefly_clamp']
+    if 'pt_firefly_clamp_max' in optix:
+        r.firefly_clamp_max = optix['pt_firefly_clamp_max']

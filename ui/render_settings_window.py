@@ -30,7 +30,8 @@ class RenderSettingsWindowMixin:
             imgui.end()
             return
 
-        # Shared appearance controls at the very top (both renderers).
+        # Renderer selection at the very top, then shared appearance controls.
+        self._render_renderer_dropdown()
         self._render_appearance_top()
         imgui.separator()
 
@@ -42,6 +43,22 @@ class RenderSettingsWindowMixin:
         imgui.end()
 
     # ------------------------------------------------------------------ shared
+    def _render_renderer_dropdown(self):
+        """Renderer selection (OpenGL vs Optix) — drives the whole app."""
+        from pathtracer_interface import PathTracerInterface
+        r = self.state.preferences.rendering
+        renderer_labels = ["OpenGL", "Optix"]
+        optix_available = PathTracerInterface.is_available()
+        cur = r.renderer if 0 <= r.renderer < len(renderer_labels) else 0
+        clicked, new_renderer = imgui.combo("Renderer", cur, renderer_labels)
+        if clicked and not (new_renderer == 1 and not optix_available):
+            r.renderer = new_renderer
+        if imgui.is_item_hovered():
+            imgui.set_tooltip(
+                "OpenGL: GL points (Pathtrace Off) or the volumetric path tracer.\n"
+                "Optix: the RTX path tracer (rasterize / path-trace modes).\n"
+                "Requires an NVIDIA RTX GPU with OptiX/CUDA installed for Optix.")
+
     def _render_appearance_top(self):
         """Brightness + Tonemap Softness — shown at the top for both renderers."""
         r = self.state.preferences.rendering
@@ -85,6 +102,51 @@ class RenderSettingsWindowMixin:
             imgui.unindent(20)
         if watercolor_active:
             imgui.end_disabled()
+
+    def _render_pathtrace_mode_row(self, *, show_spp_slider):
+        """Pathtrace mode cycling button + shared samples slider.
+
+        The button cycles the shared ``rendering.rt_mode`` (0=Off, 1=X spp,
+        2=Accumulate) with unified "Pathtrace:" labels for both renderers.
+        The X-spp samples slider (``rendering.rt_samples``) is only shown when
+        ``show_spp_slider`` (OptiX) — the volumetric tracer is always 1 spp in
+        realtime mode. In OptiX Off (rasterize) mode the OptiX-only rasterize
+        samples slider is shown instead.
+        """
+        r = self.state.preferences.rendering
+        labels = ["Pathtrace: Off", f"Pathtrace: {r.rt_samples} spp", "Pathtrace: Accumulate"]
+        if imgui.button(labels[r.rt_mode]):
+            r.rt_mode = (r.rt_mode + 1) % 3
+        if show_spp_slider and r.rt_mode == 1:
+            imgui.same_line()
+            imgui.set_next_item_width(100)
+            _, r.rt_samples = imgui.slider_int("##rt_samples", r.rt_samples, 1, 8)
+        elif show_spp_slider and r.rt_mode == 0:
+            # OptiX rasterize (Off) mode has its own samples-per-frame count.
+            imgui.same_line()
+            imgui.set_next_item_width(100)
+            _, self.state.preferences.optix.rz_samples = imgui.slider_int(
+                "##rz_samples", self.state.preferences.optix.rz_samples, 1, 8)
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Rasterize samples per frame (averaged before denoise)")
+
+    def _render_resolution_scale_row(self):
+        """Resolution Scale (shared ``rendering.render_resolution_scale``)."""
+        r = self.state.preferences.rendering
+        imgui.set_next_item_width(100)
+        changed, new_scale = imgui.input_float(
+            "Resolution Scale", r.render_resolution_scale, 0.0, 0.0, "%.2f")
+        if imgui.is_item_deactivated_after_edit():
+            r.render_resolution_scale = max(0.1, min(4.0, new_scale))
+
+    def _render_firefly_clamp(self):
+        """Firefly Clamp checkbox + max (shared ``rendering.firefly_clamp``)."""
+        r = self.state.preferences.rendering
+        _, r.firefly_clamp = imgui.checkbox("Firefly Clamp", r.firefly_clamp)
+        if r.firefly_clamp:
+            imgui.set_next_item_width(imgui.get_content_region_avail().x)
+            _, r.firefly_clamp_max = imgui.drag_float(
+                "##firefly_max", r.firefly_clamp_max, 0.1, 0.1, 1000.0, "Max: %.1f")
 
     def _render_camera_section(self):
         """Camera section — identical for both renderers (shared camera state)."""
@@ -177,29 +239,14 @@ class RenderSettingsWindowMixin:
         p = self.state.preferences
         default_open = imgui.TreeNodeFlags_.default_open.value
 
-        # ---- RT Mode cycling button + unlabeled samples slider ----
-        rt_mode = p.optix.rt_mode
-        spp_label = str(p.optix.rt_realtime_samples)
-        mode_labels = ["RT: Rasterize", f"RT: {spp_label} spp", "RT: Accumulate"]
-        if imgui.button(mode_labels[rt_mode]):
-            p.optix.rt_mode = (rt_mode + 1) % 3
-        if p.optix.rt_mode == 0:
-            imgui.same_line()
-            imgui.set_next_item_width(100)
-            _, p.optix.rz_samples = imgui.slider_int(
-                "##rz_samples", p.optix.rz_samples, 1, 8)
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("Rasterize samples per frame (averaged before denoise)")
-        elif p.optix.rt_mode == 1:
-            imgui.same_line()
-            imgui.set_next_item_width(100)
-            _, p.optix.rt_realtime_samples = imgui.slider_int(
-                "##rt_samples", p.optix.rt_realtime_samples, 1, 8)
+        # ---- Pathtrace mode button + unlabeled samples slider (shared) ----
+        # Samples slider (spp) shows only in "X spp" mode and only for OptiX.
+        self._render_pathtrace_mode_row(show_spp_slider=True)
 
-        # ---- Capture SPP + Re-render Preview ----
-        _, p.optix.rt_preview_spp = imgui.slider_int(
-            "Capture SPP", p.optix.rt_preview_spp, 1, 512)
-        rt_active = p.optix.rt_mode > 0
+        # ---- Capture SPP + Re-render Preview (shared) ----
+        r = p.rendering
+        _, r.capture_spp = imgui.slider_int("Capture SPP", r.capture_spp, 1, 512)
+        rt_active = r.rt_mode > 0
         if rt_active:
             imgui.begin_disabled()
         if imgui.button("Re-render Preview"):
@@ -209,10 +256,10 @@ class RenderSettingsWindowMixin:
 
         # Progress / status indicator
         pt_interface = getattr(self, '_pathtracer_interface', None)
-        if p.optix.rt_mode == 1:
+        if r.rt_mode == 1:
             imgui.same_line()
-            imgui.text(f"  [RT {p.optix.rt_realtime_samples} spp]")
-        elif p.optix.rt_mode == 2:
+            imgui.text(f"  [{r.rt_samples} spp]")
+        elif r.rt_mode == 2:
             imgui.same_line()
             count = self.state.camera.pathtracer_sample_count
             imgui.text(f"  [accum: {count} spp]")
@@ -225,16 +272,12 @@ class RenderSettingsWindowMixin:
             imgui.same_line()
             imgui.text(f"  [done: {pt_interface.preview_last_spp} spp]")
 
-        # ---- Resolution Scale (applied on Enter key) ----
-        imgui.set_next_item_width(100)
-        changed, new_scale = imgui.input_float(
-            "Resolution Scale##optix", p.optix.resolution_scale, 0.0, 0.0, "%.2f")
-        if imgui.is_item_deactivated_after_edit():
-            p.optix.resolution_scale = max(0.1, min(4.0, new_scale))
+        # ---- Resolution Scale (applied on Enter key, shared) ----
+        self._render_resolution_scale_row()
 
         imgui.separator()
 
-        rasterize = (p.optix.rt_mode == 0)
+        rasterize = (r.rt_mode == 0)
 
         # ---- Camera (shared) ----
         self._render_camera_section()
@@ -329,13 +372,7 @@ class RenderSettingsWindowMixin:
 
         # ---- Post-Process ----
         if imgui.collapsing_header("Post-Process", default_open):
-            _, p.optix.pt_firefly_clamp = imgui.checkbox(
-                "Firefly Clamp", p.optix.pt_firefly_clamp)
-            if p.optix.pt_firefly_clamp:
-                imgui.set_next_item_width(imgui.get_content_region_avail().x)
-                _, p.optix.pt_firefly_clamp_max = imgui.drag_float(
-                    "##pt_clamp_max", p.optix.pt_firefly_clamp_max,
-                    0.1, 0.1, 1000.0, "Max: %.1f")
+            self._render_firefly_clamp()
 
             _, p.optix.pt_denoise_enabled = imgui.checkbox(
                 "Denoise (path trace)", p.optix.pt_denoise_enabled)
@@ -362,24 +399,23 @@ class RenderSettingsWindowMixin:
             self._apply_tracer_preferences(self._tracer_interface)
         ti = self._tracer_interface
 
+        r = self.state.preferences.rendering
+
         # Tick progressive render if active (1 SPP per app frame). Skip during
         # tracer video recording — the orchestrator drives accumulation.
         recording_tracer = (self._display_info.get('recording_active', False)
-                            and self.state.preferences.tracer.realtime_mode > 0)
-        if ti.is_rendering and not recording_tracer and ti.realtime_mode == 0:
+                            and r.rt_mode > 0)
+        if ti.is_rendering and not recording_tracer and r.rt_mode == 0:
             ti.tick()
 
-        # ---- RT Mode cycling button ----
-        # OpenGL RT modes: Off / 1spp / Accumulate. (The volumetric tracer has no
-        # per-frame sample count, so the RT-adjacent samples slot OptiX shows is
-        # omitted here — Capture SPP below is the only sample control.)
-        rt_labels = ["RT: Off", "RT: 1spp", "RT: Accumulate"]
-        if imgui.button(rt_labels[ti.realtime_mode]):
-            ti.realtime_mode = (ti.realtime_mode + 1) % 3
+        # ---- Pathtrace mode button (shared; no per-frame spp slider here) ----
+        # The volumetric tracer has no per-frame sample count, so the OptiX
+        # X-spp samples slider is hidden for OpenGL (show_spp_slider=False).
+        self._render_pathtrace_mode_row(show_spp_slider=False)
 
-        # ---- Capture SPP + Re-render ----
-        _, ti.num_samples = imgui.slider_int("Capture SPP", ti.num_samples, 1, 512)
-        rt_active = ti.realtime_mode > 0
+        # ---- Capture SPP + Re-render (shared) ----
+        _, r.capture_spp = imgui.slider_int("Capture SPP", r.capture_spp, 1, 512)
+        rt_active = r.rt_mode > 0
         if rt_active:
             imgui.begin_disabled()
         if imgui.button("Re-render Preview"):
@@ -388,25 +424,21 @@ class RenderSettingsWindowMixin:
             imgui.end_disabled()
 
         # Progress / status indicator
-        if ti.realtime_mode == 1:
+        if r.rt_mode == 1:
             imgui.same_line()
-            imgui.text("  [RT 1spp]")
-        elif ti.realtime_mode == 2:
+            imgui.text("  [1spp]")
+        elif r.rt_mode == 2:
             imgui.same_line()
-            imgui.text(f"  [RT accum: {ti.samples_done} spp]")
+            imgui.text(f"  [accum: {ti.samples_done} spp]")
         elif ti.is_rendering:
             imgui.same_line()
-            imgui.text(f"  [{ti.samples_done}/{ti.num_samples} spp]")
+            imgui.text(f"  [{ti.samples_done}/{r.capture_spp} spp]")
         elif ti.has_result:
             imgui.same_line()
             imgui.text(f"  [done: {ti.last_spp} spp]")
 
-        # ---- Resolution Scale (applied on Enter key) ----
-        imgui.set_next_item_width(100)
-        changed, new_scale = imgui.input_float(
-            "Resolution Scale", ti.resolution_scale, 0.0, 0.0, "%.2f")
-        if imgui.is_item_deactivated_after_edit():
-            ti.resolution_scale = max(0.1, min(4.0, new_scale))
+        # ---- Resolution Scale (applied on Enter key, shared) ----
+        self._render_resolution_scale_row()
 
         imgui.separator()
 
@@ -449,17 +481,7 @@ class RenderSettingsWindowMixin:
         self._render_lighting_section()
         self._render_sky_section()
 
-        # ---- Post Process (Firefly clamp, OptiX formatting; + shared Bloom) ----
-        if imgui.collapsing_header("Post Process", default_open):
-            _, ti.firefly_clamp = imgui.checkbox("Firefly Clamp", ti.firefly_clamp)
-            if ti.firefly_clamp:
-                imgui.set_next_item_width(imgui.get_content_region_avail().x)
-                _, ti.firefly_clamp_max = imgui.drag_float(
-                    "##clamp_max", ti.firefly_clamp_max, 0.1, 0.1, 1000.0, "Max: %.1f")
-
-            self._render_bloom_controls()
-
-        # Advanced grid resolutions (kept, collapsed by default).
+        # ---- Grid Resolutions (between Sky and Post Process; collapsed) ----
         if imgui.collapsing_header("Grid Resolutions"):
             _, ti.density_resolution_log2 = imgui.slider_int(
                 "Density (2^n)", ti.density_resolution_log2, 5, 10)
@@ -482,8 +504,13 @@ class RenderSettingsWindowMixin:
             vram_mb = (d**3 * 4 + c**3 * 4 * 2 + m**3 * 4) / 1024**2
             imgui.text(f"VRAM: ~{vram_mb:.0f} MB")
 
+        # ---- Post Process (Firefly clamp, shared; + shared Bloom) ----
+        if imgui.collapsing_header("Post Process", default_open):
+            self._render_firefly_clamp()
+            self._render_bloom_controls()
+
         # ---- Image display (only in Off mode; realtime renders fullscreen) ----
-        if ti.realtime_mode == 0 and ti.display_texture is not None:
+        if r.rt_mode == 0 and ti.display_texture is not None:
             imgui.separator()
             tex_id = imgui.ImTextureRef(ti.display_texture.glo)
             avail_width = imgui.get_content_region_avail().x
@@ -522,13 +549,16 @@ class RenderSettingsWindowMixin:
             ti._skybox_tex = ti._load_skybox()
             if ti._skybox_tex is None:
                 ti.photosphere = False
-        ti.num_samples = p.tracer.num_samples
         ti.exposure = p.tracer.exposure
-        ti.realtime_mode = p.tracer.realtime_mode
         ti.max_bounces = p.tracer.max_bounces
-        ti.firefly_clamp = p.tracer.firefly_clamp
-        ti.firefly_clamp_max = p.tracer.firefly_clamp_max
-        ti.resolution_scale = p.tracer.resolution_scale
+        # rt-mode / capture-spp / resolution / firefly are shared RenderingPrefs
+        # (pushed into ti each frame by the orchestrator); seed them here too so a
+        # freshly-created interface starts consistent.
+        ti.realtime_mode = p.rendering.rt_mode
+        ti.num_samples = p.rendering.capture_spp
+        ti.resolution_scale = p.rendering.render_resolution_scale
+        ti.firefly_clamp = p.rendering.firefly_clamp
+        ti.firefly_clamp_max = p.rendering.firefly_clamp_max
         ti.density_resolution_log2 = p.tracer.density_resolution_log2
         ti.color_resolution_log2 = p.tracer.color_resolution_log2
         ti.majorant_resolution_log2 = p.tracer.majorant_resolution_log2

@@ -475,15 +475,11 @@ class CommandHandler:
         p.tracer.density_scale = ti.density_scale
         p.tracer.hg_g = ti.hg_g
         p.tracer.emission_strength = ti.emission_strength
-        # Sun + sky live on the shared LightingPrefs slice and are edited there
-        # directly by both renderers' controls — nothing to sync back from ti.
-        p.tracer.num_samples = ti.num_samples
+        # Sun/sky (LightingPrefs) and rt-mode/capture-spp/resolution/firefly
+        # (shared RenderingPrefs) are edited directly on their slices — nothing
+        # to sync back from ti.
         p.tracer.exposure = ti.exposure
-        p.tracer.realtime_mode = ti.realtime_mode
         p.tracer.max_bounces = ti.max_bounces
-        p.tracer.firefly_clamp = ti.firefly_clamp
-        p.tracer.firefly_clamp_max = ti.firefly_clamp_max
-        p.tracer.resolution_scale = ti.resolution_scale
         p.tracer.density_resolution_log2 = ti.density_resolution_log2
         p.tracer.color_resolution_log2 = ti.color_resolution_log2
         p.tracer.majorant_resolution_log2 = ti.majorant_resolution_log2

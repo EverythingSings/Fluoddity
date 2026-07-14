@@ -350,8 +350,8 @@ class UI(
             elif key == self.keybindings.get_key("pick_focal_entity"):
                 self._request_pick_focal = True
             elif key == self.keybindings.get_key("cycle_rt_mode"):
-                p = self.state.preferences
-                p.optix.rt_mode = (p.optix.rt_mode + 1) % 3
+                r = self.state.preferences.rendering
+                r.rt_mode = (r.rt_mode + 1) % 3
             #elif key == self.keybindings.get_key("toggle_tooltips"):
             #    self.show_demo_window = not self.show_demo_window
 

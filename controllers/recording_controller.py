@@ -92,17 +92,15 @@ class RecordingController:
         #   OpenGL + RT Off / Optix rasterize -> normal per-frame assembly
         is_recording = self.video_service.is_active()
         optix_active = ui_state.camera.optix_enabled
-        # Use the LIVE tracer realtime mode: the RT button mutates the
-        # TracerInterface directly, and the pref only syncs back on save, so the
-        # pref is stale during normal use. Fall back to the pref if no interface.
-        ti = self.ui._tracer_interface
-        tracer_rt_mode = ti.realtime_mode if ti is not None else p.tracer.realtime_mode
+        # Pathtrace mode is now a shared RenderingPrefs field (synced across
+        # renderers), so it's authoritative for both.
+        rt_mode = p.rendering.rt_mode
         tracer_video_active = (is_recording
                                and not optix_active
-                               and tracer_rt_mode > 0)
+                               and rt_mode > 0)
         optix_pt_video_active = (is_recording
                                  and optix_active
-                                 and p.optix.rt_mode > 0
+                                 and rt_mode > 0
                                  and pathtracer_interface is not None)
 
         if is_recording and not st.was_recording:
@@ -126,12 +124,12 @@ class RecordingController:
                 self.active_video_strategy = sim_runner.make_optix_pt_video_strategy(
                     pathtracer_interface)
             elif (optix_active
-                  and p.optix.rt_mode == 0
+                  and rt_mode == 0
                   and pathtracer_interface is not None):
                 # Rasterize mode: override AO rays with Capture SPP for a
                 # high-quality AO term during video capture.
                 st.saved_ao_num_rays = p.optix.ao_num_rays
-                p.optix.ao_num_rays = p.optix.rt_preview_spp
+                p.optix.ao_num_rays = p.rendering.capture_spp
         elif not is_recording and st.was_recording:
             p.rendering.speedmult = st.user_speedmult
             p.rendering.motion_blur = st.user_motion_blur

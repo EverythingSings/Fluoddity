@@ -238,7 +238,8 @@ class App:
                                  rotate_speed=ui_state.camera.rotate_speed)
         # Gamepad face buttons
         if self.joystick_state.get('cycle_rt_mode_pressed', False):
-            ui_state.preferences.optix.rt_mode = (ui_state.preferences.optix.rt_mode + 1) % 3
+            r = ui_state.preferences.rendering
+            r.rt_mode = (r.rt_mode + 1) % 3
         if self.joystick_state.get('toggle_pause_pressed', False):
             ui_state.sim.going = not ui_state.sim.going
         if self.joystick_state.get('reset_pressed', False):
@@ -331,7 +332,7 @@ class App:
 
         # OptiX renderer lifecycle — owned by the RendererHost. The path tracer
         # is the single OptiX renderer; rt_mode 0 (rasterize) is a preset on it.
-        rt_mode = ui_state.preferences.optix.rt_mode
+        rt_mode = ui_state.preferences.rendering.rt_mode
         pt_active = self.renderer_host.update(
             ui_state,
             is_recording=is_recording,
@@ -353,13 +354,13 @@ class App:
 
                 cam = self.controller_cam
                 width_px, height_px = glfw.get_framebuffer_size(self.window)
-                scale = max(0.1, ui_state.preferences.optix.resolution_scale)
+                scale = max(0.1, ui_state.preferences.rendering.render_resolution_scale)
                 width_px = max(1, int(width_px * scale))
                 height_px = max(1, int(height_px * scale))
                 entity_buffer = self.sim.get_entity_buffer()
                 entity_count = self.sim.entity_count
                 pt.start_preview(
-                    target_spp=ui_state.preferences.optix.rt_preview_spp,
+                    target_spp=ui_state.preferences.rendering.capture_spp,
                     entity_buffer=entity_buffer,
                     entity_count=entity_count,
                     cam_pos=cam.pos,
@@ -377,7 +378,7 @@ class App:
 
         # Route the single OptiX renderer to the camera
         self.camera.optix_interface = self._pathtracer_interface if pt_active else None
-        self.camera.optix_resolution_scale = ui_state.preferences.optix.resolution_scale
+        self.camera.optix_resolution_scale = ui_state.preferences.rendering.render_resolution_scale
 
         # Sync tracer SDF toggle to preferences for 3D preview
         ti = self.ui._tracer_interface
@@ -394,6 +395,14 @@ class App:
             ti.sky_intensity = lit.sky_intensity
             ti.sun_sampling = lit.nee
             ti.photosphere = lit.photosphere
+            # Push the SHARED Pathtrace controls (synced with OptiX) into the
+            # tracer interface so both renderers stay in lock-step.
+            r = ui_state.preferences.rendering
+            ti.realtime_mode = r.rt_mode
+            ti.num_samples = r.capture_spp
+            ti.resolution_scale = r.render_resolution_scale
+            ti.firefly_clamp = r.firefly_clamp
+            ti.firefly_clamp_max = r.firefly_clamp_max
 
         # 5.2. Sync parameter lock master toggle
         self.param_lock_service.enabled = ui_state.preferences.parameter_locks.enabled
@@ -422,7 +431,7 @@ class App:
         # the display for the OpenGL renderer (Optix uses the path tracer).
         ti = self.ui._tracer_interface
         opengl_renderer = ui_state.preferences.rendering.renderer == 0
-        rt_active = (ti is not None and ti.realtime_mode > 0
+        rt_active = (ti is not None and ui_state.preferences.rendering.rt_mode > 0
                      and opengl_renderer and not is_recording)
 
         # OptiX preview owns the path tracer while accumulating/displaying, so
@@ -433,7 +442,7 @@ class App:
         optix_preview_display = (
             pt_preview is not None
             and (pt_preview.preview_active or pt_preview.preview_has_result)
-            and ui_state.preferences.optix.rt_mode == 0
+            and ui_state.preferences.rendering.rt_mode == 0
             and not is_recording
         )
 
@@ -612,7 +621,7 @@ class App:
         if (pt is not None
                 and (pt.preview_active or pt.preview_has_result)
                 and pt.display_texture is not None
-                and ui_state.preferences.optix.rt_mode == 0):
+                and ui_state.preferences.rendering.rt_mode == 0):
             # Run HDR preview texture through the image pipeline for tonemapping
             tonemapped = self.camera.image_pipeline.assemble_frame(
                 pt.display_texture,
@@ -753,15 +762,11 @@ class App:
             ui_state.preferences.tracer.density_scale = ti.density_scale
             ui_state.preferences.tracer.hg_g = ti.hg_g
             ui_state.preferences.tracer.emission_strength = ti.emission_strength
-            # Sun + sky live on the shared LightingPrefs slice (edited directly);
+            # Sun/sky (LightingPrefs) and rt-mode/capture-spp/resolution/firefly
+            # (shared RenderingPrefs) are edited directly on their slices;
             # nothing to sync back from ti.
-            ui_state.preferences.tracer.num_samples = ti.num_samples
             ui_state.preferences.tracer.exposure = ti.exposure
-            ui_state.preferences.tracer.realtime_mode = ti.realtime_mode
             ui_state.preferences.tracer.max_bounces = ti.max_bounces
-            ui_state.preferences.tracer.firefly_clamp = ti.firefly_clamp
-            ui_state.preferences.tracer.firefly_clamp_max = ti.firefly_clamp_max
-            ui_state.preferences.tracer.resolution_scale = ti.resolution_scale
             ui_state.preferences.tracer.density_resolution_log2 = ti.density_resolution_log2
             ui_state.preferences.tracer.color_resolution_log2 = ti.color_resolution_log2
             ui_state.preferences.tracer.majorant_resolution_log2 = ti.majorant_resolution_log2

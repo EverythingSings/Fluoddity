@@ -71,7 +71,7 @@ class RendererHost:
         Returns ``pt_active`` — whether the path tracer is the active 3D
         renderer this frame (OptiX enabled and interface live).
         """
-        rt_mode = ui_state.preferences.optix.rt_mode
+        rt_mode = ui_state.preferences.rendering.rt_mode
         pt_active = ui_state.camera.optix_enabled
 
         # Force full GAS rebuild after sim reset / config change
@@ -154,8 +154,8 @@ class RendererHost:
         # Path-trace-only
         pt.max_bounces = p.optix.pt_max_bounces
         pt.rr_start_depth = p.optix.pt_rr_start_depth
-        pt.firefly_clamp = p.optix.pt_firefly_clamp
-        pt.firefly_clamp_max = p.optix.pt_firefly_clamp_max
+        pt.firefly_clamp = p.rendering.firefly_clamp
+        pt.firefly_clamp_max = p.rendering.firefly_clamp_max
         pt.global_material = p.optix.pt_global_material
         pt.glossy_ior = p.optix.pt_glossy_ior
         pt.emission_intensity = p.optix.pt_emission_intensity
@@ -163,7 +163,7 @@ class RendererHost:
         pt.aperture = ui_state.camera.aperture
         pt.focal_plane_depth = ui_state.camera.focal_plane_depth
         # Rasterize preset (rt_mode 0)
-        pt.rasterize = (p.optix.rt_mode == 0)
+        pt.rasterize = (p.rendering.rt_mode == 0)
         pt.ao_enabled = p.optix.ao_enabled
         pt.ao_num_rays = p.optix.ao_num_rays
         pt.ao_radius = p.optix.ao_radius
@@ -172,9 +172,9 @@ class RendererHost:
         pt.rz_denoise_enabled = p.optix.rz_denoise_enabled
         pt.rz_depth_of_field = p.optix.rz_depth_of_field
         pt.rasterize_samples = p.optix.rz_samples
-        # RT mode controls (0 = rasterize, 1 = X spp, 2 = accumulate).
-        pt.render_mode = 1 if p.optix.rt_mode == 0 else p.optix.rt_mode
-        pt.realtime_samples = p.optix.rt_realtime_samples
+        # Pathtrace mode (0 = Off/rasterize, 1 = X spp, 2 = accumulate).
+        pt.render_mode = 1 if p.rendering.rt_mode == 0 else p.rendering.rt_mode
+        pt.realtime_samples = p.rendering.rt_samples
 
     def ensure_optix_for_preview(self, ui_state):
         """Lazy-create the path tracer specifically for a preview request.

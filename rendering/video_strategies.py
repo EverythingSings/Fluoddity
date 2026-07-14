@@ -124,7 +124,7 @@ class OptixPtVideoStrategy:
     def run_frame(self, ui_state):
         c = self.ctx
         pt = self.pt
-        capture_spp = ui_state.preferences.optix.rt_preview_spp
+        capture_spp = ui_state.preferences.rendering.capture_spp
         physics_rate = ui_state.preferences.recording.motion_blur_samples
 
         if ui_state.preferences.recording.recording_motion_blur:
@@ -146,7 +146,7 @@ class OptixPtVideoStrategy:
                 c.run_physics_step(ui_state, i)
 
             width, height = glfw.get_framebuffer_size(c.window)
-            scale = max(0.1, ui_state.preferences.optix.resolution_scale)
+            scale = max(0.1, ui_state.preferences.rendering.render_resolution_scale)
             width = max(1, int(width * scale))
             height = max(1, int(height * scale))
             pt.start_offline_render(
