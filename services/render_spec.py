@@ -99,6 +99,15 @@ class RenderSpecService:
         # 5. Sim metadata
         sim_metadata = self.simulation_saver.sim_metadata(sim)
 
+        # 6. GPU buffer snapshots (entities + canvas). Reading + compressing these
+        # is expensive, so skip them entirely when the sim hasn't advanced
+        # (frame_count == 0). A frame-0 spec re-seeds particles on its first step
+        # anyway, so the dump would be redundant. `has_sim_state` tells the load
+        # path whether buffers are present.
+        has_sim_state = sim.frame_count != 0
+        sim_metadata['has_sim_state'] = has_sim_state
+        gpu_buffers = self.simulation_saver.read_buffers(sim) if has_sim_state else {}
+
         spec = RenderSpec(
             display_name=name,
             physics_config_dict=physics_config_dict,
@@ -108,9 +117,6 @@ class RenderSpecService:
             sim_metadata=sim_metadata,
             version=RENDER_SPEC_VERSION,
         )
-
-        # 6. GPU buffer snapshots (entities + canvas)
-        gpu_buffers = self.simulation_saver.read_buffers(sim)
 
         return spec, gpu_buffers
 
@@ -143,16 +149,19 @@ class RenderSpecService:
         }
         (dir_path / 'metadata.json').write_text(json.dumps(metadata, indent=2))
 
-        # GPU buffers -> entities.npz + canvas.npz (delegated to SimulationSaver)
-        self.simulation_saver.save_buffers(gpu_buffers, dir_path)
-
-        raw_entities = gpu_buffers['entities'].nbytes
-        raw_canvas = gpu_buffers['can_packed'].nbytes
-        comp_entities = (dir_path / 'entities.npz').stat().st_size
-        comp_canvas = (dir_path / 'canvas.npz').stat().st_size
-        print(f"[RenderSpec] Saved: {spec.display_name}")
-        print(f"  Entities: {raw_entities / 1e6:.1f} MB -> {comp_entities / 1e6:.1f} MB")
-        print(f"  Canvas:   {raw_canvas / 1e6:.1f} MB -> {comp_canvas / 1e6:.1f} MB")
+        # GPU buffers -> entities.npz + canvas.npz (delegated to SimulationSaver).
+        # Omitted for frame-0 specs (no sim state captured — see capture_current_state).
+        if gpu_buffers:
+            self.simulation_saver.save_buffers(gpu_buffers, dir_path)
+            raw_entities = gpu_buffers['entities'].nbytes
+            raw_canvas = gpu_buffers['can_packed'].nbytes
+            comp_entities = (dir_path / 'entities.npz').stat().st_size
+            comp_canvas = (dir_path / 'canvas.npz').stat().st_size
+            print(f"[RenderSpec] Saved: {spec.display_name}")
+            print(f"  Entities: {raw_entities / 1e6:.1f} MB -> {comp_entities / 1e6:.1f} MB")
+            print(f"  Canvas:   {raw_canvas / 1e6:.1f} MB -> {comp_canvas / 1e6:.1f} MB")
+        else:
+            print(f"[RenderSpec] Saved: {spec.display_name} (no sim state — frame 0)")
 
         spec.dir_path = dir_path
         return dir_path
@@ -202,7 +211,21 @@ class RenderSpecService:
         )
 
     def load_gpu_buffers(self, dir_path: Path) -> dict | None:
-        """Load compressed GPU buffer data from a .frs directory. None on failure."""
+        """Load compressed GPU buffer data from a .frs directory.
+
+        Returns an empty dict for specs saved with no sim state (frame-0 specs,
+        where the .npz buffers were intentionally omitted); None only on genuine
+        load failure so callers can distinguish "nothing to restore" from "error".
+        """
+        # A frame-0 spec has no entities.npz/canvas.npz. Detect that up front via
+        # the metadata flag (fall back to file presence for older specs) so a
+        # missing buffer isn't treated as a failure.
+        spec = self.load_metadata(dir_path)
+        has_sim_state = True
+        if spec is not None and spec.sim_metadata:
+            has_sim_state = spec.sim_metadata.get('has_sim_state', True)
+        if not has_sim_state or not (dir_path / 'entities.npz').exists():
+            return {}
         return self.simulation_saver.load_buffers(dir_path)
 
     def apply_state(self, spec: RenderSpec, gpu_buffers: dict,
@@ -264,8 +287,27 @@ class RenderSpecService:
         # canvas_resolution lives in prefs; hand it to the sim saver via metadata.
         sim_metadata = dict(spec.sim_metadata) if spec.sim_metadata else {}
         sim_metadata['canvas_resolution'] = ui_state.preferences.rendering.canvas_resolution
-        world_size_changed = self.simulation_saver.write_buffers(
-            sim, gpu_buffers, sim_metadata, rule=rule)
+        if gpu_buffers:
+            world_size_changed = self.simulation_saver.write_buffers(
+                sim, gpu_buffers, sim_metadata, rule=rule)
+        else:
+            # Frame-0 spec: no sim buffers were saved. Skip the buffer restore
+            # entirely; force frame_count to 0 so the sim re-seeds particles on
+            # its first step. Editor prefs (applied above) already carry any
+            # entity_count/canvas_resolution change, but with no buffers to write
+            # we still need the world size to match — reallocate if it differs.
+            world_size_changed = False
+            spec_entity_count = sim_metadata.get('entity_count', sim.entity_count)
+            spec_canvas_res = sim_metadata.get('canvas_resolution', sim.canvas_resolution)
+            if (spec_entity_count != sim.entity_count
+                    or spec_canvas_res != sim.canvas_resolution):
+                sim._entity_count = spec_entity_count
+                sim.canvas_resolution = spec_canvas_res
+                sim.setup_simulation_state()
+                sim.setup_shaders()
+                sim.apply_rule(rule)
+                world_size_changed = True
+            sim.frame_count = 0
 
         return world_size_changed
 

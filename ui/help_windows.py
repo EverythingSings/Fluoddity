@@ -1,5 +1,4 @@
 """Help and informational windows: Controls, Tutorial, Parameter Sweeps, Performance, Video Recording."""
-import time
 from imgui_bundle import imgui
 
 
@@ -343,36 +342,6 @@ class HelpWindowsMixin:
             # Recording uses whichever renderer is active (Preferences -> Renderer):
             # OpenGL with RT spp/accumulate records via the volumetric tracer;
             # Optix records via the path tracer. No separate toggle needed.
-
-            # Save Render Spec
-            imgui.spacing()
-            imgui.separator()
-            imgui.spacing()
-            imgui.text("Render Specs")
-            _, self._save_render_spec_name = imgui.input_text(
-                'Spec Name',
-                self._save_render_spec_name,
-                256
-            )
-            if imgui.button("Save Render Spec"):
-                name = self._save_render_spec_name.strip()
-                if not name:
-                    name = self.state.preferences.recording.filename_prefix or "render"
-                self._save_render_spec_name = name
-                # Confirm overwrite if a spec with this name already exists.
-                if self.render_spec_service and self.render_spec_service.spec_exists(name):
-                    self._render_spec_overwrite_name = name
-                else:
-                    self._request_save_render_spec = True
-
-            # Brief "Saved!" feedback
-            if self._render_spec_saved_time > 0:
-                elapsed = time.time() - self._render_spec_saved_time
-                if elapsed < 2.0:
-                    imgui.same_line()
-                    imgui.text("Saved!")
-                else:
-                    self._render_spec_saved_time = 0
 
             # Downsample Resolution Factor (was Supersample Kernel Width)
             _, self.state.preferences.recording.supersample_k = imgui.input_int('Downsample Resolution Factor', self.state.preferences.recording.supersample_k)
