@@ -145,17 +145,16 @@ class PreferencesWindowMixin:
             imgui.separator()
 
             # === Mouse Interaction section ===
-            imgui.text("Mouse Interaction")
-
-            # Mouse mode combo box (kept for future interaction modes)
-            mouse_modes = ["Select Particle"]
-            current_mode_idx = mouse_modes.index(self.state.preferences.ui_windows.mouse_mode) if self.state.preferences.ui_windows.mouse_mode in mouse_modes else 0
-            clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
-            if clicked:
-                self.state.preferences.ui_windows.mouse_mode = mouse_modes[new_mode_idx]
-            self._delayed_tooltip("In Select Particle mode, clicking selects a particle rule to focus on.\nSee Help->Controls for more")
-
-            imgui.separator()
+            # Hidden until there's more than one mouse mode. Kept (commented out)
+            # so it's easy to restore when a new interaction mode is added.
+            # imgui.text("Mouse Interaction")
+            # mouse_modes = ["Select Particle"]
+            # current_mode_idx = mouse_modes.index(self.state.preferences.ui_windows.mouse_mode) if self.state.preferences.ui_windows.mouse_mode in mouse_modes else 0
+            # clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
+            # if clicked:
+            #     self.state.preferences.ui_windows.mouse_mode = mouse_modes[new_mode_idx]
+            # self._delayed_tooltip("In Select Particle mode, clicking selects a particle rule to focus on.\nSee Help->Controls for more")
+            # imgui.separator()
 
             # Physics tooltips checkbox
             _, self.state.preferences.ui_windows.physics_tooltips_enabled = imgui.checkbox(
@@ -164,97 +163,8 @@ class PreferencesWindowMixin:
             )
             self._delayed_tooltip("Enable verbose tooltip and vector diagram for physics sliders.")
 
-            # Arrow debug checkbox — visualizes the trail canvas velocity field
-            _, self.state.preferences.ui_windows.debug_arrows = imgui.checkbox(
-                "View Trail Arrows",
-                self.state.preferences.ui_windows.debug_arrows
-            )
-            self._delayed_tooltip("Render a grid of arrows to help visualize the trail canvas velocity field.")
-
-            # Arrow sensitivity slider (only show when debug arrows enabled)
-            if self.state.preferences.ui_windows.debug_arrows:
-                imgui.indent(20)
-                _, self.state.preferences.ui_windows.arrow_sensitivity = imgui.slider_float(
-                    "Arrow Sensitivity",
-                    self.state.preferences.ui_windows.arrow_sensitivity,
-                    1.0, 20.0,
-                    format="%.1f"
-                )
-                imgui.unindent(20)
-
-            imgui.separator()
-
-            # === Appearance section ===
-            imgui.text("Appearance")
-
-            # Brightness slider
-            _, self.state.preferences.rendering.brightness = imgui.slider_float(
-                "Brightness",
-                self.state.preferences.rendering.brightness,
-                0.01, 10.0,
-                format="%.2f"
-            )
-            self._delayed_tooltip("Global brightness multiplier for the output.")
-
-            # Tonemap Softness slider
-            _, self.state.preferences.rendering.tonemap_softness = imgui.slider_float(
-                "Tonemap Softness",
-                self.state.preferences.rendering.tonemap_softness,
-                0.1, 5.0,
-                format="%.2f"
-            )
-            self._delayed_tooltip("Controls highlight compression (asinh stretch).\nLow values = more linear (brighter highlights).\nHigh values = more logarithmic (reveals faint detail).")
-
-            # Exposure / Cheap Blur slider
-            _, self.state.preferences.rendering.exposure = imgui.slider_float(
-                "Exposure / Cheap Blur",
-                self.state.preferences.rendering.exposure,
-                0.0, 1.0,
-                format="%.2f"
-            )
-            self._delayed_tooltip("Blend frames together for a cheap motion blur or set near 1 for a long exposure effect.")
-
-            # Bloom checkbox + sliders (disabled in watercolor mode)
-            watercolor_active = self.state.sim.watercolor_mode
-            if watercolor_active:
-                imgui.begin_disabled()
-            _, self.state.preferences.bloom.enabled = imgui.checkbox(
-                "Bloom",
-                self.state.preferences.bloom.enabled
-            )
-            if watercolor_active:
-                self._delayed_tooltip("Bloom is disabled in Watercolor mode.")
-            else:
-                self._delayed_tooltip("Add a glow effect around bright areas.")
-
-            if self.state.preferences.bloom.enabled and not watercolor_active:
-                imgui.indent(20)
-                _, self.state.preferences.bloom.threshold = imgui.slider_float(
-                    "Threshold",
-                    self.state.preferences.bloom.threshold,
-                    0.0, 2.0,
-                    format="%.2f"
-                )
-                self._delayed_tooltip("Brightness cutoff for bloom extraction.\nLower = more glow everywhere.")
-
-                _, self.state.preferences.bloom.intensity = imgui.slider_float(
-                    "Intensity",
-                    self.state.preferences.bloom.intensity,
-                    0.0, 3.0,
-                    format="%.2f"
-                )
-                self._delayed_tooltip("Strength of the bloom glow.")
-
-                _, self.state.preferences.bloom.radius = imgui.slider_float(
-                    "Radius",
-                    self.state.preferences.bloom.radius,
-                    0.1, 3.0,
-                    format="%.2f"
-                )
-                self._delayed_tooltip("Spread of the bloom blur kernel.")
-                imgui.unindent(20)
-            if watercolor_active:
-                imgui.end_disabled()
+            # (Appearance — Brightness / Tonemap Softness / Bloom — moved to the
+            #  Render settings window. Exposure and View Trail Arrows removed.)
 
         imgui.end()
 

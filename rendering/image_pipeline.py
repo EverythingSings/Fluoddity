@@ -75,7 +75,7 @@ class ImagePipeline:
         }
 
     def assemble_frame(self, input_texture, total_samples, current_sample_index,
-                       brightness=1.0, exposure=0.0, ink_weight=1.0,
+                       brightness=1.0, ink_weight=1.0,
                        watercolor_mode=False, tonemap_softness=1.0,
                        sdf_enabled=False, inv_view_proj=None,
                        sdf_sun_dir=(0.577, 0.577, 0.577),
@@ -112,7 +112,6 @@ class ImagePipeline:
         shader['is_first_frame'] = is_first_frame
         shader['final_sample'] = final_sample
         tryset(shader, 'BRIGHTNESS', brightness)
-        tryset(shader, 'EXPOSURE', exposure)
         tryset(shader, 'INK_WEIGHT', ink_weight)
         tryset(shader, 'WATERCOLOR_MODE', watercolor_mode)
         tryset(shader, 'TONEMAP_SOFTNESS', tonemap_softness)
@@ -207,7 +206,7 @@ class OverlayCompositor:
     def composite(self, input_texture, *,
                   sweep_mode=False, sweep_reticle_pos=(0.5, 0.5),
                   sweep_reticle_visible=False, screen_aspect=1.0,
-                  watercolor_mode=False, exposure=0.0):
+                  watercolor_mode=False):
         """Composite markup over ``input_texture``; return a display texture."""
         width, height = input_texture.size
         self._ensure(width, height)
@@ -221,7 +220,6 @@ class OverlayCompositor:
         tryset(s, 'sweep_reticle_visible', sweep_reticle_visible)
         tryset(s, 'screen_aspect', screen_aspect)
         tryset(s, 'WATERCOLOR_MODE', watercolor_mode)
-        tryset(s, 'EXPOSURE', exposure)
 
         self._out_fbo.use()
         self._vao.render()

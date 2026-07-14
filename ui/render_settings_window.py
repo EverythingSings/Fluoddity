@@ -30,6 +30,10 @@ class RenderSettingsWindowMixin:
             imgui.end()
             return
 
+        # Shared appearance controls at the very top (both renderers).
+        self._render_appearance_top()
+        imgui.separator()
+
         if self.state.preferences.rendering.renderer == 1:
             self._render_optix_settings()
         else:
@@ -38,6 +42,50 @@ class RenderSettingsWindowMixin:
         imgui.end()
 
     # ------------------------------------------------------------------ shared
+    def _render_appearance_top(self):
+        """Brightness + Tonemap Softness — shown at the top for both renderers."""
+        r = self.state.preferences.rendering
+        _, r.brightness = imgui.slider_float(
+            "Brightness", r.brightness, 0.01, 10.0, format="%.2f")
+        if imgui.is_item_hovered():
+            imgui.set_tooltip("Global brightness multiplier for the output.")
+        _, r.tonemap_softness = imgui.slider_float(
+            "Tonemap Softness", r.tonemap_softness, 0.1, 5.0, format="%.2f")
+        if imgui.is_item_hovered():
+            imgui.set_tooltip(
+                "Controls highlight compression (asinh stretch).\n"
+                "Low = more linear (brighter highlights).\n"
+                "High = more logarithmic (reveals faint detail).")
+
+    def _render_bloom_controls(self):
+        """Bloom checkbox + sliders — shared, shown inside Post-Process.
+
+        Disabled in watercolor mode (bloom does not apply there).
+        """
+        b = self.state.preferences.bloom
+        watercolor_active = self.state.sim.watercolor_mode
+        if watercolor_active:
+            imgui.begin_disabled()
+        _, b.enabled = imgui.checkbox("Bloom", b.enabled)
+        if imgui.is_item_hovered():
+            imgui.set_tooltip("Bloom is disabled in Watercolor mode."
+                              if watercolor_active else
+                              "Add a glow effect around bright areas.")
+        if b.enabled and not watercolor_active:
+            imgui.indent(20)
+            _, b.threshold = imgui.slider_float("Threshold", b.threshold, 0.0, 2.0, format="%.2f")
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Brightness cutoff for bloom extraction.\nLower = more glow everywhere.")
+            _, b.intensity = imgui.slider_float("Intensity", b.intensity, 0.0, 3.0, format="%.2f")
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Strength of the bloom glow.")
+            _, b.radius = imgui.slider_float("Radius", b.radius, 0.1, 3.0, format="%.2f")
+            if imgui.is_item_hovered():
+                imgui.set_tooltip("Spread of the bloom blur kernel.")
+            imgui.unindent(20)
+        if watercolor_active:
+            imgui.end_disabled()
+
     def _render_camera_section(self):
         """Camera section — identical for both renderers (shared camera state)."""
         default_open = imgui.TreeNodeFlags_.default_open.value
@@ -294,6 +342,8 @@ class RenderSettingsWindowMixin:
             _, p.optix.rz_denoise_enabled = imgui.checkbox(
                 "Denoise (rasterize)", p.optix.rz_denoise_enabled)
 
+            self._render_bloom_controls()
+
         # ---- Timing display ----
         gas_ms = self.state.camera.pathtracer_gas_time_ms
         render_ms = self.state.camera.pathtracer_render_time_ms
@@ -399,13 +449,15 @@ class RenderSettingsWindowMixin:
         self._render_lighting_section()
         self._render_sky_section()
 
-        # ---- Post Process (Firefly clamp only, OptiX formatting) ----
+        # ---- Post Process (Firefly clamp, OptiX formatting; + shared Bloom) ----
         if imgui.collapsing_header("Post Process", default_open):
             _, ti.firefly_clamp = imgui.checkbox("Firefly Clamp", ti.firefly_clamp)
             if ti.firefly_clamp:
                 imgui.set_next_item_width(imgui.get_content_region_avail().x)
                 _, ti.firefly_clamp_max = imgui.drag_float(
                     "##clamp_max", ti.firefly_clamp_max, 0.1, 0.1, 1000.0, "Max: %.1f")
+
+            self._render_bloom_controls()
 
         # Advanced grid resolutions (kept, collapsed by default).
         if imgui.collapsing_header("Grid Resolutions"):

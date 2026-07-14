@@ -30,7 +30,6 @@ class RenderingPrefs:
     rule_seed: float = 0.0
     brightness: float = 3.0  # Global brightness multiplier
     tonemap_softness: float = 2.5  # Asinh tonemap stretch (higher = more highlight compression)
-    exposure: float = 0.0  # Frame blending for motion blur effect (0=disabled, 1=long exposure)
 
 
 @dataclass
@@ -187,8 +186,6 @@ class UIWindowsPrefs:
 
     # UI interaction
     physics_tooltips_enabled: bool = True
-    debug_arrows: bool = False  # Visual debug overlay for velocity field
-    arrow_sensitivity: float = 15.0  # Velocity scale for debug arrows (pow(2, x))
     mouse_mode: str = "Select Particle"  # Mouse interaction mode (currently only "Select Particle")
     menu_close_threshold: float = 80.0  # Distance in pixels before menus auto-close
 
@@ -246,7 +243,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "rule_seed": ("rendering", "rule_seed"),
     "brightness": ("rendering", "brightness"),
     "tonemap_softness": ("rendering", "tonemap_softness"),
-    "exposure": ("rendering", "exposure"),
     # BloomPrefs
     "bloom_enabled": ("bloom", "enabled"),
     "bloom_threshold": ("bloom", "threshold"),
@@ -356,8 +352,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "show_render_settings_window": ("ui_windows", "show_render_settings_window"),
     "show_config_clipboard_window": ("ui_windows", "show_config_clipboard_window"),
     "physics_tooltips_enabled": ("ui_windows", "physics_tooltips_enabled"),
-    "debug_arrows": ("ui_windows", "debug_arrows"),
-    "arrow_sensitivity": ("ui_windows", "arrow_sensitivity"),
     "mouse_mode": ("ui_windows", "mouse_mode"),
     "menu_close_threshold": ("ui_windows", "menu_close_threshold"),
     "physics_group_basics": ("ui_windows", "physics_group_basics"),

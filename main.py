@@ -5,7 +5,7 @@ import numpy as np
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, RenderSpecService, PlottingManager
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, RenderSpecService, PlottingManager
 from parameter_locks import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
@@ -70,7 +70,6 @@ class App:
         self.entity_picker = EntityPicker(self.sim.get_entity_buffer(), entity_stride)
         self.video_service = VideoRecorderService()
         self.config_saver = ConfigSaver()
-        self.arrow_debug_service = ArrowDebugService(self.ctx)
         self.plotting_manager = PlottingManager(self.ctx)
         self.render_spec_service = RenderSpecService()
         self.param_lock_service = ParameterLockService()
@@ -546,23 +545,6 @@ class App:
                                   sweep_reticle_visible, screen_aspect,
                                   rt_active=rt_active)
 
-        # 7.5. Render arrow debug overlay if enabled. It composites into a
-        # Viewer-owned display copy (display-only, never into recorded frames).
-        if ui_state.preferences.ui_windows.debug_arrows:
-            width, height = glfw.get_framebuffer_size(self.window)
-            arrow_texture = self.sim.can
-            arrow_resolution = self.sim.can.size
-            use_zw = False
-            self.viewer.draw_debug_overlay(lambda: self.arrow_debug_service.render(
-                canvas_texture=arrow_texture,
-                cam_pos=tuple(self.camera.position),
-                cam_zoom=self.camera.zoom,
-                canvas_resolution=arrow_resolution,
-                window_size=(width, height),
-                arrow_sensitivity=ui_state.preferences.ui_windows.arrow_sensitivity,
-                use_zw_channels=use_zw,
-            ))
-
         # 7.9. Snapshot camera for next-frame movement detection
         self._snapshot_camera()
 
@@ -687,7 +669,6 @@ class App:
             screen_aspect=screen_aspect,
             watercolor_mode=ui_state.sim.watercolor_mode,
             ink_weight=ui_state.sim.ink_weight,
-            exposure=ui_state.preferences.rendering.exposure,
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
             bloom_enabled=ui_state.preferences.bloom.enabled,
             bloom_threshold=ui_state.preferences.bloom.threshold,
@@ -707,7 +688,6 @@ class App:
             overlay_params=overlay_params,
             watercolor_mode=ui_state.sim.watercolor_mode,
             screen_aspect=screen_aspect,
-            exposure=ui_state.preferences.rendering.exposure,
             mouse_screen_coords=mouse_screen_coords,
             camera_position=tuple(self.camera.position),
             camera_zoom=self.camera.zoom,

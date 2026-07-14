@@ -9,7 +9,10 @@ uniform sampler2D accumulation_buffer;
 uniform bool is_first_frame;
 uniform bool final_sample;
 uniform float BRIGHTNESS;           // Global brightness multiplier (applied before gamma)
-uniform float EXPOSURE;//undo gamma from last frame and blend it with this frame, allows long exposure effect
+// EXPOSURE (frame-blend long-exposure knob) was removed in the 3D-only cleanup
+// — it was always 0. Kept as a compile-time const so the accumulation math is
+// unchanged (EXPOSURE=0 = plain motion-blur accumulation).
+const float EXPOSURE = 0.0;
 uniform float TONEMAP_SOFTNESS;    // Asinh stretch parameter (higher = more highlight compression)
 #define BRIGHTNESS_CONSTANT (3.*BRIGHTNESS)
 uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()

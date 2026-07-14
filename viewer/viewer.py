@@ -61,7 +61,7 @@ class Viewer:
         self._debug_size = (0, 0)
 
     def prepare(self, finished_tex, *, overlay_params=None, watercolor_mode=False,
-                screen_aspect=1.0, exposure=0.0, mouse_screen_coords=(0.5, 0.5),
+                screen_aspect=1.0, mouse_screen_coords=(0.5, 0.5),
                 camera_position=(0.0, 0.0), camera_zoom=1.0,
                 canvas_resolution=(1024, 1024)):
         """Composite display-only overlays over ``finished_tex`` and stash it.
@@ -76,11 +76,11 @@ class Viewer:
 
         self._display_tex = self._composite_overlays(
             finished_tex, overlay_params, watercolor_mode, screen_aspect,
-            exposure, mouse_screen_coords, camera_position, camera_zoom,
+            mouse_screen_coords, camera_position, camera_zoom,
             canvas_resolution)
 
     def _composite_overlays(self, finished_tex, overlay_params, watercolor_mode,
-                            screen_aspect, exposure, mouse_screen_coords,
+                            screen_aspect, mouse_screen_coords,
                             camera_position, camera_zoom, canvas_resolution):
         """Composite UI markup over a finished frame for display only.
 
@@ -101,7 +101,6 @@ class Viewer:
             sweep_reticle_visible=overlay_params.get('sweep_reticle_visible', False),
             screen_aspect=screen_aspect,
             watercolor_mode=watercolor_mode,
-            exposure=exposure,
         )
 
     def draw_debug_overlay(self, render_fn):

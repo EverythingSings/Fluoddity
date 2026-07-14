@@ -11,7 +11,6 @@ uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 
 uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
 uniform bool WATERCOLOR_MODE;       // Whether watercolor mode (flips overlay sign)
-uniform float EXPOSURE;             // Long-exposure amount (unused; kept for compat)
 
 in vec2 uv;
 out vec4 fragColor;

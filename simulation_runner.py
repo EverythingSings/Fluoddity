@@ -119,7 +119,6 @@ class SimulationRunner:
 
         return dict(
             brightness=self.camera.BRIGHTNESS,
-            exposure=ui_state.preferences.rendering.exposure,
             ink_weight=ui_state.sim.ink_weight,
             watercolor_mode=ui_state.sim.watercolor_mode,
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
