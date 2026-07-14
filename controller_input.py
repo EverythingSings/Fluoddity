@@ -230,7 +230,18 @@ def process_controller_input(controller_cam, joystick_state, dt, *,
     lt_normalized = (lt + 1.0) / 2.0 if lt < 0 else lt
     rt_normalized = (rt + 1.0) / 2.0 if rt < 0 else rt
 
-    y_movement = (rt_normalized - lt_normalized) * move_speed * speed_mult * dt
-    if abs(y_movement) > 0.01:
+    # Deadzone on the raw trigger input (not on the per-frame displacement):
+    # gating y_movement after multiplying by move_speed*dt made low move speeds
+    # fall below a fixed threshold and stutter as dt varied frame to frame.
+    TRIGGER_DEADZONE = 0.05
+    lt_normalized = lt_normalized if lt_normalized > TRIGGER_DEADZONE else 0.0
+    rt_normalized = rt_normalized if rt_normalized > TRIGGER_DEADZONE else 0.0
+
+    # Triggers are binary-feeling vs. the analog sticks, so run vertical movement
+    # at half the stick move speed for finer low-speed control.
+    TRIGGER_SPEED_SCALE = 0.5
+    y_input = rt_normalized - lt_normalized
+    if y_input != 0.0:
+        y_movement = y_input * move_speed * speed_mult * dt * TRIGGER_SPEED_SCALE
         controller_cam.move_y(y_movement)
 
