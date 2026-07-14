@@ -11,10 +11,10 @@ from imgui_bundle import imgui
 # The lockable-param lists are derived from the shared param registry in
 # ui/physics_params.py. That module is imported LAZILY (inside _registry())
 # rather than at top level: importing `ui.physics_params` eagerly runs
-# ui/__init__ -> ui.core, which imports back into this package and
-# advanced_drawing, so a top-level import here creates a circular-import cycle.
-# The registry is a leaf module with no such deps; fetching it on first use
-# (well after all packages have finished importing) breaks the cycle.
+# ui/__init__ -> ui.core, which imports back into this package, so a top-level
+# import here creates a circular-import cycle. The registry is a leaf module
+# with no such deps; fetching it on first use (well after all packages have
+# finished importing) breaks the cycle.
 _REGISTRY_CACHE = None
 
 

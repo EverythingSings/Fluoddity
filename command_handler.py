@@ -538,7 +538,6 @@ class CommandHandler:
             spec, gpu_buffers = self.render_spec_service.capture_current_state(
                 self.sim, self.camera, self.controller_cam, ui_state,
                 self.config_saver, self.rule_manager,
-                None,  # no live field texture (drawing removed)
                 name
             )
             saved_path = self.render_spec_service.save_to_disk(spec, gpu_buffers)
@@ -568,7 +567,6 @@ class CommandHandler:
                 spec, gpu_buffers,
                 self.sim, self.camera, self.controller_cam, ui_state,
                 self.config_saver, self.rule_manager,
-                None  # no live field texture (drawing removed)
             )
             if world_size_changed:
                 self.entity_picker.update_buffer(self.sim.get_entity_buffer())
@@ -651,17 +649,36 @@ class CommandHandler:
             if loaded is None:
                 return
             buffers, sim_metadata = loaded
-            # canvas_resolution isn't in sim_metadata; hand the live value through
-            # so write_buffers only reallocates when entity_count actually differs.
             sim_metadata = dict(sim_metadata)
-            sim_metadata['canvas_resolution'] = self.sim.canvas_resolution
+
+            # Particle count + canvas resolution are Editor-owned prefs, but a
+            # simulation dump only makes sense at the world size it was captured
+            # at. So the SAVE wins: sync its entity_count/canvas_resolution into
+            # RenderingPrefs (warning on any change), then let write_buffers
+            # reallocate the GPU buffers to match. Fall back to the live values
+            # if the save predates canvas_resolution in its metadata.
+            r = ui_state.preferences.rendering
+            saved_entity_count = sim_metadata.get('entity_count', r.entity_count)
+            saved_canvas_res = sim_metadata.get('canvas_resolution', r.canvas_resolution)
+            if saved_entity_count != r.entity_count:
+                print(f"[SimulationLoad] Particle count changed by load: "
+                      f"{r.entity_count} -> {saved_entity_count}")
+                r.entity_count = saved_entity_count
+            if saved_canvas_res != r.canvas_resolution:
+                print(f"[SimulationLoad] Canvas resolution changed by load: "
+                      f"{r.canvas_resolution} -> {saved_canvas_res}")
+                r.canvas_resolution = saved_canvas_res
+            # write_buffers reads entity_count/canvas_resolution from this dict.
+            sim_metadata['entity_count'] = saved_entity_count
+            sim_metadata['canvas_resolution'] = saved_canvas_res
+
             rule = self.rule_manager.get_current_rule()
             world_size_changed = self.simulation_saver.write_buffers(
                 self.sim, buffers, sim_metadata, rule=rule)
             if world_size_changed:
                 self.entity_picker.update_buffer(self.sim.get_entity_buffer())
-                self.ui._last_applied_entity_count = ui_state.preferences.rendering.entity_count
-                self.ui._last_applied_canvas_resolution = ui_state.preferences.rendering.canvas_resolution
+                self.ui._last_applied_entity_count = r.entity_count
+                self.ui._last_applied_canvas_resolution = r.canvas_resolution
             print(f"Simulation state loaded: {dir_path.name}")
         except Exception as e:
             print(f"Failed to load simulation state: {e}")

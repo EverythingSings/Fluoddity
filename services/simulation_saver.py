@@ -43,11 +43,16 @@ class SimulationSaver:
         return buffers
 
     def sim_metadata(self, sim) -> dict:
-        """Snapshot the small scalar sim state that pairs with the buffers."""
+        """Snapshot the small scalar sim state that pairs with the buffers.
+
+        Includes entity_count + canvas_resolution so a load can reallocate the
+        GPU buffers to match the saved dump when the live world size differs.
+        """
         return {
             'frame_count': sim.frame_count,
             'can_read_index': sim.can_read_index,
             'entity_count': sim.entity_count,
+            'canvas_resolution': sim.canvas_resolution,
         }
 
     def write_buffers(self, sim, buffers: dict, sim_metadata: dict | None,

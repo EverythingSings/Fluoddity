@@ -99,7 +99,6 @@ class BatchRenderController:
                 spec, gpu_buffers,
                 self.sim, self.camera, self.ui.tracer_controller_cam, ui_state,
                 self.config_saver, self.rule_manager,
-                None,  # no live field texture (drawing removed; render_spec field is data-only)
                 apply_editor_visibility=False,  # headless: don't toggle windows or imgui layout
             )
             if world_size_changed:

@@ -60,12 +60,10 @@ class RenderSpecService:
 
     def capture_current_state(self, sim, camera, controller_cam, ui_state,
                               config_saver: ConfigSaver, rule_manager,
-                              adv_draw_processor, name: str) -> tuple[RenderSpec, dict]:
+                              name: str) -> tuple[RenderSpec, dict]:
         """Snapshot all app state + GPU buffers into a RenderSpec.
 
         Returns (spec, gpu_buffers) where gpu_buffers is a dict of numpy arrays.
-        `adv_draw_processor` is accepted for signature compatibility but unused
-        (the live force/strafe field runtime was removed with the drawing mode).
         """
         # 1. Physics config (reuse existing serialization)
         rule = rule_manager.get_current_rule()
@@ -204,11 +202,11 @@ class RenderSpecService:
     def apply_state(self, spec: RenderSpec, gpu_buffers: dict,
                     sim, camera, controller_cam, ui_state,
                     config_saver: ConfigSaver, rule_manager,
-                    adv_draw_processor, apply_editor_visibility: bool = True) -> bool:
+                    apply_editor_visibility: bool = True) -> bool:
         """Apply a RenderSpec's state + GPU buffers to the running app.
 
         Restores physics, camera, editor state (preferences + imgui layout), and
-        the GPU buffers. `adv_draw_processor` is unused (drawing mode removed).
+        the GPU buffers.
 
         Args:
             apply_editor_visibility: if False, keep current window visibility
