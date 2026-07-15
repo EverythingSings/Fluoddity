@@ -82,7 +82,10 @@ class TracerInterface:
         self.photosphere = False  # use skybox texture for sky
         self._skybox_tex = None  # moderngl.Texture loaded from skybox.jpg
         self.num_samples = 64
-        self.exposure = 1.5
+        # Tonemapping now shares the image pipeline's brightness/softness curve
+        # (pushed in each frame by the orchestrator, matching the other backends).
+        self.brightness = 1.0
+        self.tonemap_softness = 1.0
         self.max_bounces = 0  # 0=unbounded (RR only)
         self.firefly_clamp = False  # per-sample radiance clamping
         self.firefly_clamp_max = 10.0  # max luminance per sample
@@ -490,7 +493,8 @@ class TracerInterface:
         w, h = self._target_tex.width, self._target_tex.height
         prog = self._tonemap_program
         _tryset(prog, 'u_target_size', (w, h))
-        _tryset(prog, 'u_exposure', self.exposure)
+        _tryset(prog, 'u_brightness', self.brightness)
+        _tryset(prog, 'u_tonemap_softness', self.tonemap_softness)
         _tryset(prog, 'u_flip_y', flip_y)
 
         self._target_tex.bind_to_image(0, read=True, write=False)

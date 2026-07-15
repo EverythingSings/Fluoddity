@@ -517,7 +517,6 @@ class CommandHandler:
         # Sun/sky (LightingPrefs) and rt-mode/capture-spp/resolution/firefly
         # (shared RenderingPrefs) are edited directly on their slices — nothing
         # to sync back from ti.
-        p.tracer.exposure = ti.exposure
         p.tracer.max_bounces = ti.max_bounces
         p.tracer.density_resolution_log2 = ti.density_resolution_log2
         p.tracer.color_resolution_log2 = ti.color_resolution_log2

@@ -55,6 +55,25 @@ vec2 sdf_intersect(vec2 a, vec2 b) {
     return (a.x > b.x) ? a : b;
 }
 
+float sdCutHollowSphere( vec3 p, float r, float h, float t )
+{
+  float w = sqrt(r*r-h*h);
+  vec2 q = vec2( length(p.xz), p.y );
+  return ((h*q.x<w*q.y) ? length(q-vec2(w,h)) : 
+                          abs(length(q)-r) ) - t;
+}
+// ====================================================================
+// Collider SDF — separate scene for particle collision
+//
+// collider_scene_sdf() defines the collision geometry (edit this).
+// collider_scene_norm() computes the normal via tetrahedral gradient.
+// collider() returns vec4(sdf, normal) for use in entity_update.
+// ====================================================================
+
+float collider_scene_sdf(vec3 p) {
+    // Simple sphere at origin — replace with your collision geometry
+    return sdCutHollowSphere(p-vec3(0,.5,0),1.5,-1.25,.03);//-(length(p) - .95);
+}
 
 // ====================================================================
 // Scene definition — EDIT THIS
@@ -64,31 +83,11 @@ vec2 sdf_intersect(vec2 a, vec2 b) {
 // ====================================================================
 
 vec2 scene(vec3 p) {
-    //p*=2.;
-    //p.xz = abs(p.xz);
-    //float dts = sd_box(p,vec3(0),vec3(.5));
-    //p-=.5;
-    //dts = min(dts, (length(p)-.25));
-    //dts = min(dts, sd_box(p,vec3(0),vec3(.1,.6,.1)));
-    float dts = sd_box(p,vec3(0),vec3(1));
-    dts = max(p.y+.725,-dts);
-    dts = max(dts,sd_box(p,vec3(0),vec3(2)));
-    return vec2(dts,MAT_DIFFUSE);
-
-
-    // Dark diffuse ground plane at y = -1
-    //vec2 ground = vec2(sd_plane(p, vec3(0.0, 1.0, 0.0), -.80),
-    //                   MAT_DIFFUSE + 0.0);
-    //vec2 wall = vec2(p.x+.95,MAT_DIFFUSE+.2);
-    //vec2 wall2 = vec2(p.z+.95,MAT_DIFFUSE+.4);
-    //ground= sdf_union(ground,wall);
-    //ground = sdf_union(ground, wall2);
-    // Reflective sphere at origin
-    //p-=vec3(.25,.25,.25);
-    //vec2 sphere = vec2(length(p)-.25,
-    //                   MAT_MIRROR + 0.0);
-
-    //return ground;//sdf_union(ground, sphere);
+    return vec2(collider_scene_sdf(p),MAT_GLOSSY);
+    //float dts = sd_box(p,vec3(0),vec3(1));
+    //dts = max(p.y+.725,-dts);
+    //dts = max(dts,sd_box(p,vec3(0),vec3(2)));
+    //return vec2(dts,MAT_DIFFUSE);
 }
 
 
@@ -297,25 +296,7 @@ vec3 eval_brdf_cos(vec3 incident, vec3 light_dir, vec3 normal, vec2 mat,vec3 p) 
 }
 
 
-float sdCutHollowSphere( vec3 p, float r, float h, float t )
-{
-  float w = sqrt(r*r-h*h);
-  vec2 q = vec2( length(p.xz), p.y );
-  return ((h*q.x<w*q.y) ? length(q-vec2(w,h)) : 
-                          abs(length(q)-r) ) - t;
-}
-// ====================================================================
-// Collider SDF — separate scene for particle collision
-//
-// collider_scene_sdf() defines the collision geometry (edit this).
-// collider_scene_norm() computes the normal via tetrahedral gradient.
-// collider() returns vec4(sdf, normal) for use in entity_update.
-// ====================================================================
 
-float collider_scene_sdf(vec3 p) {
-    // Simple sphere at origin — replace with your collision geometry
-    return sdCutHollowSphere(p-vec3(0,.5,0),1.5,-1.25,.03);//-(length(p) - .95);
-}
 
 vec3 collider_scene_norm(vec3 p) {
     const float h = 1e-4;

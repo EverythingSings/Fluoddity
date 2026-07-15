@@ -418,6 +418,9 @@ class RenderSettingsWindowMixin:
         recording_tracer = (self._display_info.get('recording_active', False)
                             and r.rt_mode > 0)
         if ti.is_rendering and not recording_tracer and r.rt_mode == 0:
+            # Match the shared tonemap curve (brightness / softness) before tick.
+            ti.brightness = r.brightness
+            ti.tonemap_softness = r.tonemap_softness
             ti.tick()
 
         # ---- Pathtrace mode button (shared; no per-frame spp slider here) ----
@@ -482,7 +485,6 @@ class RenderSettingsWindowMixin:
                 "Emission", ti.emission_strength, 0.01, 0.0, 100.0, "%.3f")
             if imgui.is_item_hovered():
                 imgui.set_tooltip("Self-emission intensity (0 = off)")
-            _, ti.exposure = imgui.slider_float("Exposure", ti.exposure, 0.1, 10.0)
             _, ti.max_bounces = imgui.drag_int("Max Bounces", ti.max_bounces, 0.1, 0, 64)
             if imgui.is_item_hovered():
                 imgui.set_tooltip("0 = unbounded (Russian roulette only)")
@@ -561,7 +563,6 @@ class RenderSettingsWindowMixin:
             ti._skybox_tex = ti._load_skybox()
             if ti._skybox_tex is None:
                 ti.photosphere = False
-        ti.exposure = p.tracer.exposure
         ti.max_bounces = p.tracer.max_bounces
         # rt-mode / capture-spp / resolution / firefly are shared RenderingPrefs
         # (pushed into ti each frame by the orchestrator); seed them here too so a

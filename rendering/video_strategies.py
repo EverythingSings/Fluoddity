@@ -209,6 +209,9 @@ class TracerVideoStrategy:
         self._samples_done += 1
 
         if frame_complete:
+            # Match the shared tonemap curve used by the other backends.
+            ti.brightness = ui_state.preferences.rendering.brightness
+            ti.tonemap_softness = ui_state.preferences.rendering.tonemap_softness
             display_tex = ti.tonemap_for_video()
             self._frame_started = False
             return display_tex

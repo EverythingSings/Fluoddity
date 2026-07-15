@@ -93,8 +93,9 @@ class TracerPrefs:
     emission_strength: float = 0.0  # emission intensity (0 = off)
     # Sun/sky lighting moved to the shared LightingPrefs slice.
     # rt mode / capture spp / resolution scale / firefly clamp moved to the
-    # shared RenderingPrefs slice (synced with OptiX).
-    exposure: float = 1.5
+    # shared RenderingPrefs slice (synced with OptiX). Tonemapping now uses the
+    # shared Brightness / Tonemap Softness curve (RenderingPrefs), so the old
+    # per-tracer `exposure` knob was removed.
     max_bounces: int = 0  # 0=unbounded (RR only)
     density_resolution_log2: int = 9   # 2^9 = 512
     color_resolution_log2: int = 9     # 2^9 = 512
@@ -301,7 +302,6 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "tracer_density_scale": ("tracer", "density_scale"),
     "tracer_hg_g": ("tracer", "hg_g"),
     "tracer_emission_strength": ("tracer", "emission_strength"),
-    "tracer_exposure": ("tracer", "exposure"),
     "tracer_max_bounces": ("tracer", "max_bounces"),
     "tracer_density_resolution_log2": ("tracer", "density_resolution_log2"),
     "tracer_color_resolution_log2": ("tracer", "color_resolution_log2"),

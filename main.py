@@ -577,6 +577,9 @@ class App:
             )
             ti.aperture = ui_state.camera.aperture
             ti.focal_plane_depth = ui_state.camera.focal_plane_depth
+            # Push the shared tonemap curve so volrender matches the other backends.
+            ti.brightness = ui_state.preferences.rendering.brightness
+            ti.tonemap_softness = ui_state.preferences.rendering.tonemap_softness
 
             # Stereogram: build per-eye (view_proj, region) at the render scale.
             stereo_eyes = None
@@ -794,7 +797,6 @@ class App:
             # Sun/sky (LightingPrefs) and rt-mode/capture-spp/resolution/firefly
             # (shared RenderingPrefs) are edited directly on their slices;
             # nothing to sync back from ti.
-            ui_state.preferences.tracer.exposure = ti.exposure
             ui_state.preferences.tracer.max_bounces = ti.max_bounces
             ui_state.preferences.tracer.density_resolution_log2 = ti.density_resolution_log2
             ui_state.preferences.tracer.color_resolution_log2 = ti.color_resolution_log2

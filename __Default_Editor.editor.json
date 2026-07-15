@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "preferences": {
+    "rendering": {
+      "renderer": 0,
+      "speedmult": 4,
+      "motion_blur": false,
+      "blur_quality": 2,
+      "world_size": 0.06300000101327896,
+      "canvas_aspect_ratio": "1:1",
+      "entity_count": 1000000,
+      "canvas_resolution": 196,
+      "rule_seed": 0.0,
+      "brightness": 0.30000001192092896,
+      "tonemap_softness": 1.0099999904632568,
+      "rt_mode": 1,
+      "rt_samples": 1,
+      "capture_spp": 16,
+      "render_resolution_scale": 0.75,
+      "firefly_clamp": false,
+      "firefly_clamp_max": 21.100000381469727
+    },
+    "bloom": {
+      "enabled": false,
+      "threshold": 0.7699999809265137,
+      "intensity": 0.15000000596046448,
+      "radius": 1.0
+    },
+    "recording": {
+      "max_frames": 600,
+      "motion_blur_samples": 10,
+      "supersample_k": 1,
+      "filename_prefix": "",
+      "recording_motion_blur": true,
+      "recording_blur_quality": 2,
+      "video_end_frame": 0
+    },
+    "generics": {
+      "generic0": 0.0,
+      "generic1": 0.0,
+      "generic2": 0.0,
+      "generic3": 0.0,
+      "generic4": 0.0,
+      "generic5": 0.0,
+      "generic6": 0.0,
+      "generic7": 0.0
+    },
+    "parameter_locks": {
+      "enabled": false
+    },
+    "lighting": {
+      "light_direction": [
+        0.05000000074505806,
+        0.1599999964237213,
+        0.5
+      ],
+      "light_color": [
+        1.0,
+        0.9058823585510254,
+        0.8823529481887817
+      ],
+      "light_intensity": 14.736000061035156,
+      "nee": true,
+      "photosphere": false,
+      "sky_color_top": [
+        0.04901961237192154,
+        0.11822418123483658,
+        0.1666666865348816
+      ],
+      "sky_color_bottom": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "sky_intensity": 0.21899999678134918
+    },
+    "tracer": {
+      "sdf_enabled": true,
+      "colored_extinction": false,
+      "extinction_rgb": [
+        0.6764705777168274,
+        0.9048445820808411,
+        1.0
+      ],
+      "albedo_saturation": 0.9120000004768372,
+      "albedo_brightness": 0.9390000104904175,
+      "density_scale": 1.9999999494757503e-05,
+      "hg_g": 0.15199999511241913,
+      "emission_strength": 0.0,
+      "exposure": 0.10000000149011612,
+      "max_bounces": 0,
+      "density_resolution_log2": 8,
+      "color_resolution_log2": 8,
+      "majorant_resolution_log2": 6
+    },
+    "optix": {
+      "enabled": false,
+      "sphere_radius_scale": 10.0,
+      "shadows_enabled": true,
+      "ambient": 0.12600000202655792,
+      "ao_enabled": true,
+      "ao_num_rays": 16,
+      "ao_radius": 0.33000001311302185,
+      "ambient_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "rz_depth_of_field": true,
+      "albedo_saturation": 0.6370000243186951,
+      "albedo_brightness": 0.9319999814033508,
+      "sphere_size_jitter": 0.0,
+      "use_curves": true,
+      "curve_length": 10.0,
+      "curve_r0": 0.009999999776482582,
+      "curve_r1": 0.28999999165534973,
+      "sdf_enabled": true,
+      "rz_samples": 1,
+      "pt_max_bounces": 0,
+      "pt_rr_start_depth": 4,
+      "pt_global_material": 1,
+      "pt_glossy_ior": 5.0,
+      "pt_emission_intensity": 70.69999694824219,
+      "pt_denoise_enabled": true,
+      "rz_denoise_enabled": true,
+      "pt_env_sky_nee": true
+    },
+    "camera3d": {
+      "fov": 44.0,
+      "aperture": 0.0,
+      "focal_plane_depth": 1.274657964706421,
+      "move_speed": 0.800000011920929,
+      "rotate_speed": 1.399999976158142,
+      "orbit_center": [
+        0.0,
+        -0.4000000059604645,
+        0.0
+      ],
+      "orbit_rate": 0.0,
+      "stereogram": false,
+      "eye_offset": 0.16500000655651093,
+      "stereo_toe_in": true
+    },
+    "ui_windows": {
+      "show_preferences_window": true,
+      "show_controls_window": false,
+      "show_parameter_sweeps_window": false,
+      "show_tutorial_window": false,
+      "show_performance_window": false,
+      "show_generics_window": false,
+      "show_radio_window": false,
+      "show_plotting_window": false,
+      "show_video_recording_window": false,
+      "show_scheduled_renders_window": false,
+      "show_render_settings_window": true,
+      "show_config_clipboard_window": false,
+      "physics_tooltips_enabled": true,
+      "mouse_mode": "Select Particle",
+      "menu_close_threshold": 80.0,
+      "physics_group_basics": true,
+      "physics_group_forces": false,
+      "physics_group_advanced": false,
+      "physics_group_additional": false,
+      "physics_group_notes": false,
+      "load_menu_core_open": true,
+      "load_menu_custom_open": true,
+      "load_menu_advanced_open": true,
+      "render_group_camera": false,
+      "render_group_lighting": false,
+      "render_group_sky": false,
+      "render_group_geometry": false,
+      "render_group_material": false,
+      "render_group_rasterize": false,
+      "render_group_pathtrace": false,
+      "render_group_postprocess": false,
+      "render_group_medium": false,
+      "render_group_grid_resolutions": false,
+      "render_group_opengl_postprocess": false
+    }
+  },
+  "imgui_layout": "[Window][Debug##Default]\nPos=60,46\nSize=400,400\nCollapsed=0\n\n[Window][Main Content]\nSize=356,720\nCollapsed=0\n\n[Window][Sidebar]\nPos=540,236\nSize=356,482\nCollapsed=0\n\n[Window][MainWindow]\nSize=1280,720\nCollapsed=0\n\n[Window][DockSpace Window]\nPos=0,19\nSize=1128,826\nCollapsed=0\n\n[Window][Physics Settings]\nPos=0,19\nSize=180,521\nCollapsed=0\nDockId=0x00000003,0\n\n[Window][##SliderTooltip]\nPos=180,19\nSize=198,251\nCollapsed=0\n\n[Window][Preferences]\nPos=0,542\nSize=180,303\nCollapsed=0\nDockId=0x00000004,0\n\n[Window][Tutorial]\nPos=98,176\nSize=481,1097\nCollapsed=0\n\n[Window][Video Recording]\nPos=120,143\nSize=599,244\nCollapsed=0\n\n[Window][Parameter Sweeps]\nPos=225,61\nSize=533,553\nCollapsed=0\n\n[Window][Controls]\nPos=263,33\nSize=461,476\nCollapsed=0\n\n[Window][Save Config]\nPos=44,263\nSize=264,98\nCollapsed=0\n\n[Window][Delete Config?]\nPos=360,452\nSize=360,75\nCollapsed=0\n\n[Window][Overwrite?]\nPos=514,427\nSize=264,92\nCollapsed=0\n\n[Window][Dear ImGui Demo]\nPos=349,128\nSize=550,680\nCollapsed=0\n\n[Window][Screen Recording]\nPos=0,542\nSize=180,303\nCollapsed=0\nDockId=0x00000004,1\n\n[Window][Performance]\nPos=145,61\nSize=534,575\nCollapsed=0\n\n[Window][Simulation Controls]\nPos=59,60\nSize=430,521\nCollapsed=0\n\n[Window][Sliders]\nPos=342,208\nSize=313,276\nCollapsed=0\n\n[Window][Rule History]\nPos=257,75\nSize=198,244\nCollapsed=0\n\n[Window][Config Clipboard - EXPERIMENTAL]\nPos=687,533\nSize=180,282\nCollapsed=0\n\n[Window][Drawing Controls]\nPos=0,532\nSize=213,597\nCollapsed=0\nDockId=0x00000004,1\n\n[Window][Load Force Field Image]\nPos=361,101\nSize=350,400\nCollapsed=0\n\n[Window][Load Strafe Field Image]\nPos=60,60\nSize=350,400\nCollapsed=0\n\n[Window][Mapping: Sensor Gain##SENSOR_GAIN]\nPos=122,73\nSize=440,206\nCollapsed=0\n\n[Window][Mapping: Drag##DRAG]\nPos=196,216\nSize=440,219\nCollapsed=0\n\n[Window][Mapping: Axial Force##AXIAL_FORCE]\nPos=139,259\nSize=440,217\nCollapsed=0\n\n[Window][Mapping: Lateral Force##LATERAL_FORCE]\nPos=129,276\nSize=440,275\nCollapsed=0\n\n[Window][Mapping: Mutation Scale##MUTATION_SCALE]\nPos=164,155\nSize=440,206\nCollapsed=0\n\n[Window][Mapping: Sensor Distance##SENSOR_DISTANCE]\nPos=72,131\nSize=440,206\nCollapsed=0\n\n[Window][Mapping: Sensor Angle##SENSOR_ANGLE]\nPos=238,94\nSize=440,206\nCollapsed=0\n\n[Window][Mapping: Global Force Mult##GLOBAL_FORCE_MULT]\nPos=145,192\nSize=440,206\nCollapsed=0\n\n[Window][Mapping: Trail Diffusion##TRAIL_DIFFUSION]\nPos=149,359\nSize=440,206\nCollapsed=0\n\n[Window][Mapping: Strafe Power##STRAFE_POWER]\nPos=110,301\nSize=440,206\nCollapsed=0\n\n[Window][Generics]\nPos=503,533\nSize=180,303\nCollapsed=0\n\n[Window][Info]\nPos=10,10\nSize=326,283\nCollapsed=1\n\n[Window][Recursion Settings]\nPos=332,299\nSize=313,425\nCollapsed=0\n\n[Window][Mapping: Hazard Rate##HAZARD_RATE]\nPos=71,372\nSize=440,206\nCollapsed=0\n\n[Window][Mapping: Trail Persistence##TRAIL_PERSISTENCE]\nPos=167,330\nSize=440,206\nCollapsed=0\n\n[Window][Plotting]\nPos=240,325\nSize=487,420\nCollapsed=0\n\n[Window][3D Controls]\nPos=570,19\nSize=230,581\nCollapsed=0\nDockId=0x00000005,1\n\n[Window][Volume Renderer Controls]\nPos=12,18\nSize=361,398\nCollapsed=0\n\n[Window][Tracer]\nPos=874,19\nSize=230,784\nCollapsed=0\nDockId=0x00000005,1\n\n[Window][Sound Controls]\nPos=166,97\nSize=257,575\nCollapsed=0\n\n[Window][Audio Controls]\nPos=511,19\nSize=289,581\nCollapsed=0\nDockId=0x00000005,2\n\n[Window][Radio]\nPos=663,362\nSize=213,164\nCollapsed=0\n\n[Window][Scheduled Renders]\nPos=614,44\nSize=267,310\nCollapsed=0\n\n[Window][OptiX Controls]\nPos=874,19\nSize=230,784\nCollapsed=0\nDockId=0x00000005,0\n\n[Window][OSC Output]\nPos=509,556\nSize=398,180\nCollapsed=0\nDockId=0x00000002,1\n\n[Window][Viewer]\nPos=182,19\nSize=702,826\nCollapsed=0\nDockId=0x00000002,0\n\n[Window][Render settings]\nPos=886,19\nSize=242,826\nCollapsed=0\nDockId=0x00000009,0\n\n[Window][Save Simulation State]\nPos=828,515\nSize=264,98\nCollapsed=0\n\n[Window][Save Editor Settings]\nPos=533,417\nSize=264,98\nCollapsed=0\n\n[Window][Delete Editor Settings?]\nPos=486,452\nSize=311,75\nCollapsed=0\n\n[Window][Delete Simulation State?]\nPos=745,527\nSize=430,75\nCollapsed=0\n\n[Window][Overwrite Render Spec?]\nPos=828,518\nSize=264,92\nCollapsed=0\n\n[Docking][Data]\nDockSpace         ID=0x9522EACB Window=0xD0A6EEBB Pos=0,19 Size=1128,826 Split=X\n  DockNode        ID=0x00000008 Parent=0x9522EACB SizeRef=556,581 Split=X\n    DockNode      ID=0x00000006 Parent=0x00000008 SizeRef=568,1110 Split=X\n      DockNode    ID=0x00000001 Parent=0x00000006 SizeRef=180,1110 Split=Y Selected=0x6A4695A4\n        DockNode  ID=0x00000003 Parent=0x00000001 SizeRef=274,366 Selected=0x55187453\n        DockNode  ID=0x00000004 Parent=0x00000001 SizeRef=274,213 Selected=0x6A4695A4\n      DockNode    ID=0x00000002 Parent=0x00000006 SizeRef=374,1110 CentralNode=1 Selected=0xF8864585\n    DockNode      ID=0x00000005 Parent=0x00000008 SizeRef=230,1110 Selected=0xA7B71445\n  DockNode        ID=0x00000009 Parent=0x9522EACB SizeRef=242,581 Selected=0xB729B81C\n\n"
+}

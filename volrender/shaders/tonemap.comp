@@ -1,10 +1,14 @@
 #version 430
 
-// tonemap.comp — apply exposure + Reinhard tonemap + gamma to resolved HDR.
+// tonemap.comp — apply the SAME brightness + asinh tonemap + gamma curve as the
+// 2D/OptiX image pipeline (shaders/image_pipeline.frag), so volumetric frames go
+// through the shared tonemapping and respond to the Brightness / Tonemap Softness
+// sliders instead of a separate exposure knob.
 //
-//   exposed = rgb * exposure
-//   ldr     = exposed / (1 + exposed)     (Reinhard)
-//   output  = pow(ldr, 1/2.2)             (gamma)
+//   c *= 3*BRIGHTNESS
+//   len = length(c)
+//   c *= asinh(len * SOFTNESS) / (len * SOFTNESS)   (soft highlight compression)
+//   output = pow(c, 1/2.2)                          (gamma)
 //
 // Reads linear HDR from img_input (rgba16f), writes LDR to img_output (rgba8).
 
@@ -14,8 +18,9 @@ layout(rgba16f, binding = 0) readonly  uniform image2D img_input;
 layout(rgba8,   binding = 1) writeonly uniform image2D img_output;
 
 uniform ivec2 u_target_size;
-uniform float u_exposure;   // Tracer exposure slider (default 1.5)
-uniform bool  u_flip_y;     // true for imgui preview, false for fullscreen
+uniform float u_brightness;         // Rendering "Brightness" slider (matches BRIGHTNESS)
+uniform float u_tonemap_softness;   // Rendering "Tonemap Softness" slider (asinh stretch)
+uniform bool  u_flip_y;             // true for imgui preview, false for fullscreen
 
 void main() {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
@@ -25,9 +30,12 @@ void main() {
     vec4 hdr = imageLoad(img_input, pixel);
     vec3 rgb = hdr.rgb;
 
-    // Exposure + Reinhard tonemap
-    rgb *= u_exposure;
-    rgb = rgb / (1.0 + rgb);
+    // Brightness + asinh soft tonemap (same curve as image_pipeline.frag).
+    rgb *= 3.0 * u_brightness;
+    float len = length(rgb);
+    if (len > 0.0) {
+        rgb *= asinh(len * u_tonemap_softness) / (len * u_tonemap_softness);
+    }
 
     // Gamma correction (sRGB approximate)
     rgb = pow(clamp(rgb, 0.0, 1.0), vec3(1.0 / 2.2));
