@@ -16,8 +16,10 @@ from camera_input import sync_orbit_angles_from_camera
 class RenderSettingsWindowMixin:
     """Mixin for the unified Render settings window."""
 
-    # Preview request flag (set by UI, cleared by orchestrator) — OptiX preview.
+    # Preview request flags (set by UI, cleared by orchestrator). One per backend
+    # so the orchestrator can start each render with the real framebuffer size.
     _request_optix_preview: bool = False
+    _request_tracer_preview: bool = False
 
     def _persisted_header(self, label, pref_field):
         """Collapsing header whose open/closed state persists in preferences.
@@ -413,15 +415,9 @@ class RenderSettingsWindowMixin:
 
         r = self.state.preferences.rendering
 
-        # Tick progressive render if active (1 SPP per app frame). Skip during
-        # tracer video recording — the orchestrator drives accumulation.
-        recording_tracer = (self._display_info.get('recording_active', False)
-                            and r.rt_mode > 0)
-        if ti.is_rendering and not recording_tracer and r.rt_mode == 0:
-            # Match the shared tonemap curve (brightness / softness) before tick.
-            ti.brightness = r.brightness
-            ti.tonemap_softness = r.tonemap_softness
-            ti.tick()
+        # The progressive "Re-render Preview" render is now ticked in the main
+        # loop (App.run) and displayed fullscreen in the Viewer, matching the
+        # OptiX preview — no per-window tick or inline image here.
 
         # ---- Pathtrace mode button (shared; no per-frame spp slider here) ----
         # The volumetric tracer has no per-frame sample count, so the OptiX
@@ -434,7 +430,7 @@ class RenderSettingsWindowMixin:
         if rt_active:
             imgui.begin_disabled()
         if imgui.button("Re-render Preview"):
-            self._do_tracer_render(ti)
+            self._request_tracer_preview = True
         if rt_active:
             imgui.end_disabled()
 
@@ -460,8 +456,8 @@ class RenderSettingsWindowMixin:
         # ---- Camera (shared) ----
         self._render_camera_section()
 
-        # ---- Medium (Enable SDF moved to the bottom of this section) ----
-        if self._persisted_header("Medium", "render_group_medium"):
+        # ---- Path Trace (Enable SDF moved to the bottom of this section) ----
+        if self._persisted_header("Path Trace", "render_group_medium"):
             _, ti.colored_extinction = imgui.checkbox(
                 "Colored Extinction", ti.colored_extinction)
             if ti.colored_extinction:
@@ -523,21 +519,6 @@ class RenderSettingsWindowMixin:
             self._render_firefly_clamp()
             self._render_bloom_controls()
 
-        # ---- Image display (only in Off mode; realtime renders fullscreen) ----
-        if r.rt_mode == 0 and ti.display_texture is not None:
-            imgui.separator()
-            tex_id = imgui.ImTextureRef(ti.display_texture.glo)
-            avail_width = imgui.get_content_region_avail().x
-            tex_w, tex_h = ti.display_texture.size
-            aspect = tex_h / tex_w if tex_w > 0 else 1.0
-            display_height = avail_width * aspect
-            imgui.image(
-                tex_id,
-                imgui.ImVec2(avail_width, display_height),
-                uv0=imgui.ImVec2(0, 1),
-                uv1=imgui.ImVec2(1, 0),
-            )
-
     # ---------------------------------------------------- tracer helpers (moved)
     def _apply_tracer_preferences(self, ti):
         """Apply saved tracer preferences to a newly created TracerInterface."""
@@ -575,33 +556,3 @@ class RenderSettingsWindowMixin:
         ti.density_resolution_log2 = p.tracer.density_resolution_log2
         ti.color_resolution_log2 = p.tracer.color_resolution_log2
         ti.majorant_resolution_log2 = p.tracer.majorant_resolution_log2
-
-    def _do_tracer_render(self, ti):
-        """Start a progressive tracer render using the current entity buffer and camera."""
-        if self.tracer_sim is None or self.tracer_camera is None:
-            return
-
-        entity_buffer = self.tracer_sim.get_entity_buffer()
-        entity_count = self.tracer_sim.entity_count
-
-        # Sync DOF from camera state
-        ti.aperture = self.state.camera.aperture
-        ti.focal_plane_depth = self.state.camera.focal_plane_depth
-
-        cam = self.tracer_controller_cam
-        if cam is None:
-            return
-        scale = max(0.1, ti.resolution_scale)
-        render_width = max(1, int(512 * scale))
-        render_height = max(1, int(512 * scale))
-        render_aspect = render_width / render_height
-        view_proj = self.tracer_camera.compute_fps_view_proj(
-            cam.pos, cam.dir, cam.up, cam.fov, render_aspect
-        )
-        cam_right, cam_up = self.tracer_camera.compute_fps_camera_basis(
-            cam.dir, cam.up
-        )
-
-        ti.start_render(entity_buffer, entity_count, view_proj,
-                        width=render_width, height=render_height,
-                        camera_right=cam_right, camera_up=cam_up)

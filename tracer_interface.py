@@ -257,8 +257,10 @@ class TracerInterface:
 
         # Resolve current accumulation into target for display
         self._resolve_current()
-        # Tonemap into display texture
-        self._tonemap_to_display()
+        # Tonemap into display texture. flip_y=False keeps natural OpenGL
+        # orientation — the progressive preview is now shown fullscreen in the
+        # Viewer (like the realtime path), not the flipped imgui thumbnail.
+        self._tonemap_to_display(flip_y=False)
 
         if self._samples_done >= self._render_target_spp:
             self._rendering = False
@@ -340,6 +342,16 @@ class TracerInterface:
         """Reset accumulation buffer (called on camera move or select press in Accumulate mode)."""
         if self._renderer is not None:
             self._renderer.reset_accumulation()
+        self._samples_done = 0
+
+    def clear_preview(self):
+        """Dismiss the progressive "Re-render Preview" so the Viewer returns to
+        the normal render. Mirrors OptiX's cancel_preview + result reset — the
+        orchestrator calls this on mode change (Path Trace: Off), camera move, or
+        sim reset, matching the OptiX preview lifecycle.
+        """
+        self._rendering = False
+        self._render_complete = False
         self._samples_done = 0
 
     # -------------------------------------------------- video recording API

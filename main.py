@@ -187,6 +187,11 @@ class App:
         self._prev_camera_position = np.array([0.0, 0.0])
         self._prev_camera_zoom = 1.0
 
+        # Previous rt_mode, so the orchestrator can clear the volumetric preview
+        # on a mode change (e.g. Accumulate -> Path Trace: Off), mirroring the
+        # OptiX preview lifecycle handled in RendererHost.update().
+        self._prev_tracer_rt_mode = 0
+
         # Physics step tracking for GAS rebuild scheduling
         self._prev_sim_frame_count = 0
 
@@ -420,6 +425,36 @@ class App:
                 and self._pathtracer_interface.preview_active):
             self._pathtracer_interface.tick_preview()
 
+        # Handle volumetric (OpenGL) preview request (one-shot flag from UI).
+        # Mirrors the OptiX preview above: render at the real framebuffer size
+        # (scaled) so it fills the Viewer at the correct resolution/aspect.
+        tracer_preview_just_started = False
+        if getattr(self.ui, '_request_tracer_preview', False):
+            self.ui._request_tracer_preview = False
+            ti_prev = self.ui._tracer_interface
+            if ti_prev is not None:
+                tracer_preview_just_started = True
+                cam = self.controller_cam
+                width_px, height_px = glfw.get_framebuffer_size(self.window)
+                scale = max(0.1, ui_state.preferences.rendering.render_resolution_scale)
+                rw = max(1, int(width_px * scale))
+                rh = max(1, int(height_px * scale))
+                ti_prev.aperture = ui_state.camera.aperture
+                ti_prev.focal_plane_depth = ui_state.camera.focal_plane_depth
+                view_proj = self.camera.compute_fps_view_proj(
+                    cam.pos, cam.dir, cam.up, cam.fov, (rw / max(rh, 1))
+                )
+                cam_right, cam_up = self.camera.compute_fps_camera_basis(
+                    cam.dir, cam.up
+                )
+                entity_buffer = self.sim.get_entity_buffer()
+                entity_count = self.sim.entity_count
+                ti_prev.start_render(
+                    entity_buffer, entity_count, view_proj,
+                    width=rw, height=rh,
+                    camera_right=cam_right, camera_up=cam_up,
+                )
+
         # Route the single OptiX renderer to the camera
         self.camera.optix_interface = self._pathtracer_interface if pt_active else None
         self.camera.optix_resolution_scale = ui_state.preferences.rendering.render_resolution_scale
@@ -447,6 +482,29 @@ class App:
             ti.resolution_scale = r.render_resolution_scale
             ti.firefly_clamp = r.firefly_clamp
             ti.firefly_clamp_max = r.firefly_clamp_max
+            # Push the shared tonemap curve so volrender matches the other backends.
+            ti.brightness = r.brightness
+            ti.tonemap_softness = r.tonemap_softness
+
+            # Tick the progressive "Re-render Preview" render here (1 SPP/frame)
+            # so it accumulates in the main loop — like the OptiX preview — instead
+            # of only advancing while the Render settings window is drawn. Skipped
+            # in realtime modes (driven below) and during recording.
+            if ti.is_rendering and r.rt_mode == 0 and not is_recording:
+                ti.tick()
+
+            # Clear the preview so the Viewer returns to the live render, mirroring
+            # the OptiX preview lifecycle (RendererHost.update): on a mode change
+            # (e.g. Accumulate -> Path Trace: Off), camera move, or sim reset. The
+            # preview only exists at rt_mode 0; realtime modes manage their own
+            # accumulation lifecycle, so only clear there (the mode-change trigger
+            # still fires the frame we land on Off).
+            mode_changed = (r.rt_mode != self._prev_tracer_rt_mode)
+            if (r.rt_mode == 0 and (ti.is_rendering or ti.has_result)
+                    and not tracer_preview_just_started):
+                if mode_changed or self._camera_moved() or needs_gas_rebuild:
+                    ti.clear_preview()
+            self._prev_tracer_rt_mode = r.rt_mode
 
         # 5.2. Sync parameter lock master toggle
         self.param_lock_service.enabled = ui_state.preferences.parameter_locks.enabled
@@ -486,6 +544,18 @@ class App:
         optix_preview_display = (
             pt_preview is not None
             and (pt_preview.preview_active or pt_preview.preview_has_result)
+            and ui_state.preferences.rendering.rt_mode == 0
+            and not is_recording
+        )
+
+        # Volumetric (OpenGL) preview mirrors the OptiX preview: while a
+        # progressive "Re-render Preview" render is accumulating or its result is
+        # showing (rt_mode == 0), display it fullscreen in the Viewer and skip the
+        # normal GL-points sim render.
+        volrender_preview_display = (
+            ti is not None
+            and opengl_renderer
+            and (ti.is_rendering or ti.has_result)
             and ui_state.preferences.rendering.rt_mode == 0
             and not is_recording
         )
@@ -544,7 +614,8 @@ class App:
                 ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
                 screen_aspect,
                 screenshot_in_progress=self.screenshot_in_progress,
-                skip_view_generation=rt_active or optix_preview_display
+                skip_view_generation=(rt_active or optix_preview_display
+                                      or volrender_preview_display)
             )
 
         # 6.2. Frame-synced orbit stepping (deterministic with physics)
@@ -677,6 +748,18 @@ class App:
         # overlays — matches the previous fullscreen behavior).
         ti = self.ui._tracer_interface
         if rt_active and ti is not None and ti.display_texture is not None:
+            self.viewer.prepare(ti.display_texture)
+            return
+
+        # Volumetric preview: a progressive "Re-render Preview" render (rt_mode 0)
+        # is accumulating or done. Its display texture is already tonemapped
+        # (tonemap.comp uses the shared brightness/softness curve), so hand it to
+        # the Viewer directly — matching the OptiX preview's fullscreen display.
+        opengl_renderer = ui_state.preferences.rendering.renderer == 0
+        if (ti is not None and opengl_renderer
+                and (ti.is_rendering or ti.has_result)
+                and ti.display_texture is not None
+                and ui_state.preferences.rendering.rt_mode == 0):
             self.viewer.prepare(ti.display_texture)
             return
 
