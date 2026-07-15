@@ -52,6 +52,7 @@ class TracerInterface:
         self._samples_done = 0
         self._render_view_proj = None
         self._render_target_spp = 0
+        self._video_stereo_eyes = None  # stereogram video: per-eye (vp, region)
         self._render_complete = False
         self._last_spp = 0
 
@@ -342,12 +343,19 @@ class TracerInterface:
 
     def start_video_render(self, entity_buffer: moderngl.Buffer, entity_count: int,
                            view_proj: np.ndarray, width: int, height: int,
-                           camera_right=None, camera_up=None):
+                           camera_right=None, camera_up=None,
+                           stereo_eyes=None):
         """Begin a progressive render sized for video output.
 
         Same as start_render but with caller-specified dimensions matching
         the app window.
+
+        stereo_eyes: Optional list of (view_proj, region) tuples for stereogram
+            video. Each eye accumulates into its disjoint half-region of the
+            same target (no compositing needed — the resolve reads the full
+            buffer). None = single (mono) view.
         """
+        self._video_stereo_eyes = stereo_eyes
         self.start_render(entity_buffer, entity_count, view_proj, width, height,
                           camera_right=camera_right, camera_up=camera_up)
 
@@ -363,10 +371,19 @@ class TracerInterface:
         self._apply_renderer_state()
         medium, sun, sky, render, sdf_enabled = self._build_params()
 
-        self._renderer.accumulate(
-            1, self._render_view_proj, self._target_tex,
-            medium, sun, sky, render, sdf_enabled
-        )
+        eyes = getattr(self, '_video_stereo_eyes', None)
+        if eyes:
+            # Stereo: accumulate each eye into its half-region of the target.
+            for eye_vp, region in eyes:
+                self._renderer.accumulate(
+                    1, eye_vp, self._target_tex,
+                    medium, sun, sky, render, sdf_enabled, region=region
+                )
+        else:
+            self._renderer.accumulate(
+                1, self._render_view_proj, self._target_tex,
+                medium, sun, sky, render, sdf_enabled
+            )
         self._samples_done += 1
 
         if self._samples_done >= self._render_target_spp:

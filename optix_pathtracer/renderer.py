@@ -746,6 +746,8 @@ class PathTracerRenderer:
     _ACCUM_STATE_FIELDS = (
         '_d_accum', '_d_albedo', '_d_normal',
         '_sample_count', '_accum_width', '_accum_height',
+        # Offline substep progress is per-eye too (stereo interleaves eyes).
+        '_offline_substeps_done',
     )
 
     def _snapshot_accum_state(self):
@@ -784,12 +786,15 @@ class PathTracerRenderer:
         if saved is not None:
             self._restore_accum_state(saved)
         else:
+            # Fresh slot: null the buffers (forces _ensure_accum_buffers to
+            # reallocate zeroed) and reset all per-slot counters.
             self._d_accum = None
             self._d_albedo = None
             self._d_normal = None
             self._sample_count = 0
             self._accum_width = 0
             self._accum_height = 0
+            self._offline_substeps_done = 0
         self._active_accum_slot = slot
 
     # ------------------------------------------------------------------
@@ -1902,7 +1907,8 @@ class PathTracerRenderer:
         return self._tex
 
     def render_offline_begin(self, width, height, total_substeps,
-                             spp_per_substep, denoise_enabled=False):
+                             spp_per_substep, denoise_enabled=False,
+                             accum_slot=0):
         """Begin an offline motion-blur render.
 
         Resets the accumulation buffer and stores parameters for the
@@ -1916,7 +1922,9 @@ class PathTracerRenderer:
                 Each sub-step is a GAS refit at a different time instant.
             spp_per_substep: Samples per pixel per sub-step.
             denoise_enabled: Whether to denoise the final composed frame.
+            accum_slot: Accumulation slot (stereogram: one per eye; 0 = default).
         """
+        self.set_accum_slot(accum_slot)
         self._ensure_display(width, height)
         self._ensure_accum_buffers(width, height)
         self.reset_accumulation()
@@ -1932,7 +1940,7 @@ class PathTracerRenderer:
             self._setup_denoiser(width, height)
 
     def render_offline_substep(self, eye, U, V, W,
-                               radius_scale=1.0,
+                               radius_scale=1.0, accum_slot=0,
                                **render_kwargs):
         """Trace spp_per_substep samples for one temporal sub-step.
 
@@ -1954,6 +1962,9 @@ class PathTracerRenderer:
             raise RuntimeError(
                 "Call render_offline_begin() before render_offline_substep()."
             )
+
+        # Select this eye's accumulator (stereogram interleaves both eyes).
+        self.set_accum_slot(accum_slot)
 
         w = self._offline_width
         h = self._offline_height
@@ -2007,7 +2018,8 @@ class PathTracerRenderer:
 
         self._offline_substeps_done += 1
 
-    def render_offline_finish(self, flip_y=True):
+    def render_offline_finish(self, flip_y=True, accum_slot=0,
+                              end_session=True):
         """Denoise (if enabled) and resolve to linear HDR texture.
 
         Must be called after all sub-steps are complete. Returns the
@@ -2015,6 +2027,10 @@ class PathTracerRenderer:
 
         Args:
             flip_y: If True, flip Y axis for OpenGL convention (default).
+            accum_slot: Accumulation slot to resolve (stereogram: per eye).
+            end_session: If True, mark the offline render complete. Set False
+                for the first eye of a stereogram pair so the second eye can
+                still resolve its slot before the session ends.
 
         Returns:
             moderngl.Texture (rgba16f) with linear HDR data.
@@ -2023,6 +2039,8 @@ class PathTracerRenderer:
             raise RuntimeError(
                 "No offline render in progress."
             )
+
+        self.set_accum_slot(accum_slot)
 
         w = self._offline_width
         h = self._offline_height
@@ -2043,7 +2061,8 @@ class PathTracerRenderer:
             unmap_resource(self._pbo_res)
 
         self._tex.write(self._pbo)
-        self._offline_active = False
+        if end_session:
+            self._offline_active = False
         return self._tex
 
     # ------------------------------------------------------------------

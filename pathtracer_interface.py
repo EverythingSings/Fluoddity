@@ -646,6 +646,7 @@ class PathTracerInterface:
         height: int,
         total_substeps: int,
         spp_per_substep: int,
+        accum_slot: int = 0,
     ) -> None:
         """Begin an offline motion-blur render.
 
@@ -686,6 +687,7 @@ class PathTracerInterface:
         self._renderer.render_offline_begin(
             width, height, total_substeps, spp_per_substep,
             denoise_enabled=self._effective_denoise(),
+            accum_slot=accum_slot,
         )
 
     def offline_substep(
@@ -694,12 +696,16 @@ class PathTracerInterface:
         cam_dir: np.ndarray,
         cam_up: np.ndarray,
         fov: float,
+        accum_slot: int = 0,
     ) -> None:
         """Trace one temporal sub-step of an offline motion-blur render.
 
         The caller must update entity positions (via physics step) and ensure
         the entity buffer reflects the new state BEFORE calling. The GAS is
         refitted internally to match the updated positions.
+
+        For stereogram video, pass the eye camera (cam_pos/cam_dir offset per
+        eye) and that eye's ``accum_slot``.
         """
         if self._renderer is None:
             raise RuntimeError(
@@ -730,6 +736,7 @@ class PathTracerInterface:
         self._renderer.render_offline_substep(
             eye, U, V, W,
             radius_scale=self.radius_scale,
+            accum_slot=accum_slot,
             sun_direction=sun_dir_norm,
             sun_intensity=self.sun_intensity,
             sun_color=self.sun_color,
@@ -771,24 +778,29 @@ class PathTracerInterface:
         self._gas_time_ms = self._renderer.last_gas_ms
         self._render_time_ms = self._renderer.last_render_ms
 
-    def finish_offline_render(self, flip_y=True) -> moderngl.Texture | None:
+    def finish_offline_render(self, flip_y=True, accum_slot=0,
+                              end_session=True) -> moderngl.Texture | None:
         """Denoise (if enabled) and tonemap the fully-accumulated offline frame.
 
         Must be called after all sub-steps are complete.
 
         Args:
             flip_y: If True, flip Y axis for OpenGL convention (default).
+            accum_slot: Accumulation slot to resolve (stereogram: per eye).
+            end_session: If False, keep the offline session open so a second
+                eye can still resolve (stereogram). Set True on the last eye.
 
         Returns:
-            moderngl.Texture (rgba8) with the final tonemapped image,
-            or None on failure.
+            moderngl.Texture (rgba16f/rgba8) with the final image, or None.
+            NOTE: the returned texture is the renderer's shared scratch texture;
+            for stereogram, copy it out before resolving the next eye.
         """
         if self._renderer is None:
             return None
 
         try:
             self._display_tex = self._renderer.render_offline_finish(
-                flip_y=flip_y,
+                flip_y=flip_y, accum_slot=accum_slot, end_session=end_session,
             )
             return self._display_tex
         except Exception as e:
