@@ -1,5 +1,5 @@
 #version 330 core
-// Image-pipeline core: temporal accumulation + tonemap + watercolor.
+// Image-pipeline core: temporal accumulation + tonemap.
 // Split out of the old frame_assembly.frag in Step 7 — overlay markup (sweep
 // reticle, draw-trail ring, advanced-drawing field overlay) now lives in a
 // separate overlay pass (overlay.frag / OverlayCompositor) that runs AFTER this,
@@ -15,8 +15,6 @@ uniform float BRIGHTNESS;           // Global brightness multiplier (applied bef
 const float EXPOSURE = 0.0;
 uniform float TONEMAP_SOFTNESS;    // Asinh stretch parameter (higher = more highlight compression)
 #define BRIGHTNESS_CONSTANT (3.*BRIGHTNESS)
-uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()
-uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
 
 in vec2 uv;
 out vec4 fragColor;
@@ -33,12 +31,6 @@ void main() {
     // Sample the input frame
     vec3 current_color = texture(input_frame, uv).rgb;
 
-    // In watercolor mode, convert from log-space optical density to linear transmission
-    if (WATERCOLOR_MODE) {
-        // INK_WEIGHT controls optical density - higher = darker/more opaque
-        #define INK_CONSTANT 10
-        current_color = exp(INK_WEIGHT*INK_CONSTANT * current_color);
-    }
     // Divide by number of samples (for averaging)
     current_color /= float(TOTAL_SAMPLES);
 

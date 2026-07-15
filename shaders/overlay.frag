@@ -10,7 +10,6 @@ uniform bool PARAMETER_SWEEP_MODE;  // Whether parameter sweeps are active
 uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 range)
 uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
-uniform bool WATERCOLOR_MODE;       // Whether watercolor mode (flips overlay sign)
 
 in vec2 uv;
 out vec4 fragColor;
@@ -57,6 +56,6 @@ void main() {
 
     // Sweep reticle
     if(PARAMETER_SWEEP_MODE){
-        fragColor.xyz += sweep_overlay(uv)* (WATERCOLOR_MODE?-1:1);
+        fragColor.xyz += sweep_overlay(uv);
     }
 }

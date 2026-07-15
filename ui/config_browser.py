@@ -93,11 +93,8 @@ class ConfigBrowserMixin:
         # Default to Custom (user directory)
         return self.user_configs_dir / f"{filename}.json"
 
-    def _render_load_submenu_content(self, menu_watercolor_mode: bool):
+    def _render_load_submenu_content(self):
         """Render the content of a load submenu with hierarchical categories.
-
-        Args:
-            menu_watercolor_mode: The watercolor mode for this menu (False=standard, True=watercolor)
 
         Returns:
             Tuple of (filename, category) for the hovered item this frame, or None
@@ -207,7 +204,6 @@ class ConfigBrowserMixin:
                         self._load_filename = filename
                         self._load_category = category_name
                         self._request_load_file = True
-                        self._load_watercolor_override = menu_watercolor_mode
                         self.currently_open_project = filename
                         # Clear hover state so the close/hover code doesn't re-fire
                         self.cached_configs = {}

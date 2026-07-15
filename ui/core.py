@@ -141,9 +141,6 @@ class UI(
         self.currently_previewing: str | None = None  # Currently hovered config filename
         self.currently_previewing_category: str | None = None  # Category of currently hovered config
         self.currently_open_project: str = "_Default"  # Currently open project name
-        # Track which load menu is open: None=neither, False=standard, True=watercolor
-        self.load_menu_watercolor_mode: bool | None = None
-        self._load_watercolor_override: bool | None = None  # Override for load operation
 
         # Delete confirmation state
         self.delete_confirm_filename: str | None = None
@@ -226,7 +223,6 @@ class UI(
         self._delete_category = ""  # Category for delete operation
         self._preview_filename = ""
         self._preview_category = ""  # Category for preview operation
-        self._preview_watercolor_override: bool | None = None  # Session watercolor mode for preview load/restore
 
         # Scheduled renders (render_spec_service injected via constructor above)
         self._init_scheduled_renders_state()
@@ -333,8 +329,6 @@ class UI(
                 self._request_save_config = True
             elif ctrl_pressed and key == self.keybindings.get_key("paste_config_with_ctrl"):
                 self._request_load_config = True
-            elif key == self.keybindings.get_key("toggle_watercolor"):
-                self.state.sim.watercolor_mode = not self.state.sim.watercolor_mode
             elif key == self.keybindings.get_key("reload_shaders"):
                 # Reload shaders
                 self._request_reload = True
@@ -430,8 +424,6 @@ class UI(
         self.state.delete_category = self._delete_category
         self.state.preview_filename = self._preview_filename
         self.state.preview_category = self._preview_category
-        self.state.preview_watercolor_override = self._preview_watercolor_override
-        self.state.load_watercolor_override = self._load_watercolor_override
 
         self._marshal_config_clipboard_state(self.state)
         self._marshal_scheduled_renders_state(self.state)
@@ -471,8 +463,6 @@ class UI(
         self._delete_category = ""
         self._preview_filename = ""
         self._preview_category = ""
-        self._preview_watercolor_override = None
-        self._load_watercolor_override = None
         # Advanced-drawing, field-loader, config-clipboard, and render-spec/queue
         # one-shot flags are reset by their owning mixin's _marshal_*_state above.
 

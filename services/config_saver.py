@@ -84,10 +84,8 @@ class PhysicsConfig:
     rule_seed: float = DEFAULT_RULE_SEED
 
     # Appearance settings
-    ink_weight: float = 1.0
     hue_sensitivity: float = 0.5
     color_by_cohort: bool = True
-    watercolor_mode: bool = False
 
     # Rule data (10 centers * 12 floats = 120 floats)
     rule: np.ndarray = field(default_factory=lambda: np.zeros((10, 12), dtype=np.float32))
@@ -140,10 +138,8 @@ class PhysicsConfig:
                 'rule_seed': self.rule_seed,
             },
             'appearance': {
-                'ink_weight': self.ink_weight,
                 'hue_sensitivity': self.hue_sensitivity,
                 'color_by_cohort': self.color_by_cohort,
-                'watercolor_mode': self.watercolor_mode,
             },
             'rule': self.rule.flatten().tolist(),
             'notes': self.notes,
@@ -231,10 +227,8 @@ class PhysicsConfig:
             initial_conditions=settings.get('initial_conditions', 0),
             num_cohorts=settings.get('num_cohorts', 64),
             rule_seed=settings.get('rule_seed', DEFAULT_RULE_SEED),
-            ink_weight=appearance.get('ink_weight', 1.0),
             hue_sensitivity=appearance.get('hue_sensitivity', 0.5),
             color_by_cohort=appearance.get('color_by_cohort', True),
-            watercolor_mode=appearance.get('watercolor_mode', False),
             rule=rule,
             notes=notes,
             force_field_strength=force_field_strength,
@@ -294,10 +288,8 @@ class ConfigSaver:
             initial_conditions=sim_state.initial_conditions,
             num_cohorts=sim_state.num_cohorts,
             rule_seed=sim_state.rule_seed,
-            ink_weight=sim_state.ink_weight,
             hue_sensitivity=sim_state.hue_sensitivity,
             color_by_cohort=sim_state.color_by_cohort,
-            watercolor_mode=sim_state.watercolor_mode,
             rule=rule.copy(),
             notes=sim_state.notes,
             force_field_strength=field_strengths[0] if field_strengths else None,
@@ -305,15 +297,13 @@ class ConfigSaver:
             canvas_3d_depth=sim_state.canvas_3d_depth,
         )
 
-    def apply_config(self, config: PhysicsConfig, sim_state: SimState,
-                     watercolor_override: bool | None = None) -> np.ndarray:
+    def apply_config(self, config: PhysicsConfig, sim_state: SimState) -> np.ndarray:
         """
         Apply a PhysicsConfig to the simulation state.
 
         Args:
             config: The config to apply
             sim_state: SimState to update (modified in place)
-            watercolor_override: If not None, override config's watercolor_mode
 
         Returns:
             The rule to push to RuleManager
@@ -361,10 +351,8 @@ class ConfigSaver:
         sim_state.rule_seed = config.rule_seed
 
         # Appearance settings
-        sim_state.ink_weight = config.ink_weight
         sim_state.hue_sensitivity = config.hue_sensitivity
         sim_state.color_by_cohort = config.color_by_cohort
-        sim_state.watercolor_mode = watercolor_override if watercolor_override is not None else config.watercolor_mode
 
         # User notes
         sim_state.notes = config.notes
@@ -445,13 +433,12 @@ class ConfigSaver:
         config = self.create_config(sim_state, rule)
         return self.encode_clipboard(config)
 
-    def load_from_string(self, config_string: str, sim_state: SimState,
-                         watercolor_override: bool | None = None) -> np.ndarray | None:
+    def load_from_string(self, config_string: str, sim_state: SimState) -> np.ndarray | None:
         """Decode string and apply to state. Returns rule or None if failed."""
         config = self.decode_clipboard(config_string)
         if config is None:
             return None
-        return self.apply_config(config, sim_state, watercolor_override)
+        return self.apply_config(config, sim_state)
 
     # --- Legacy format support (for migration) ---
 
@@ -476,10 +463,8 @@ class ConfigSaver:
         initial_conditions = 0
         num_cohorts = 64
         rule_seed = DEFAULT_RULE_SEED
-        ink_weight = 1.0
         hue_sensitivity = 0.5
         color_by_cohort = True
-        watercolor_mode = False
         parameter_sweeps_enabled = False
         x_sweeps = _default_sweeps()
         y_sweeps = _default_sweeps()
@@ -499,7 +484,10 @@ class ConfigSaver:
 
         # Version 5+: appearance and sweeps
         if version >= 6 and len(data) >= 405:
-            _, ink_weight, hue_sensitivity, color_by_cohort, watercolor_mode, \
+            # ink_weight (index 1) and watercolor_mode (index 4) are read to keep
+            # byte offsets aligned for the sweep data that follows, then discarded
+            # (watercolor mode was removed).
+            _, _ink_weight, hue_sensitivity, color_by_cohort, _watercolor_mode, \
                 _emboss_intensity, _emboss_smoothness, _emboss_mode = struct.unpack('<fff??ffi', data[378:404])
             parameter_sweeps_enabled, = struct.unpack('?', data[404:405])
             offset = 405
@@ -514,7 +502,7 @@ class ConfigSaver:
             if cohort_sweep_data:
                 cohort_sweeps[cohort_sweep_data[0]] = cohort_sweep_data[1]
         elif len(data) >= 401:
-            _, ink_weight, hue_sensitivity, color_by_cohort, watercolor_mode, \
+            _, _ink_weight, hue_sensitivity, color_by_cohort, _watercolor_mode, \
                 _emboss_intensity, _emboss_smoothness = struct.unpack('<fff??ff', data[378:400])
             parameter_sweeps_enabled, = struct.unpack('?', data[400:401])
             offset = 401
@@ -551,10 +539,8 @@ class ConfigSaver:
             initial_conditions=initial_conditions,
             num_cohorts=num_cohorts,
             rule_seed=rule_seed,
-            ink_weight=ink_weight,
             hue_sensitivity=hue_sensitivity,
             color_by_cohort=color_by_cohort,
-            watercolor_mode=watercolor_mode,
             rule=rule,
         )
 

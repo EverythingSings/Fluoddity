@@ -60,7 +60,6 @@ class UIState:
     load_category: str = ""  # Category for load operation (Core, Custom, Advanced)
     delete_filename: str = ""  # Filename to delete (without extension)
     delete_category: str = ""  # Category for delete operation (Core, Custom, Advanced)
-    load_watercolor_override: bool | None = None  # Override watercolor mode when loading
 
     # Config preview (for Load submenu hover). Preview loads a config to live
     # state remembering the original to restore; it never touches the undo stack.
@@ -68,7 +67,6 @@ class UIState:
     request_clear_preview: bool = False  # Restore the remembered original
     preview_filename: str = ""  # Filename to preview
     preview_category: str = ""  # Category for preview operation
-    preview_watercolor_override: bool | None = None  # Session watercolor mode for preview load/restore
 
     # Config clipboard flags
     request_preview_clipboard_config: bool = False

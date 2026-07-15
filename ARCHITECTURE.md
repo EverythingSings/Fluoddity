@@ -66,7 +66,7 @@ entity_update.glsl   (compute)  — particle sense → rule eval → forces/stra
 canvas_update_3d.glsl (compute)  — trail decay + diffusion into the other canvas buffer
 ```
 
-Then, to display, `Camera.generate_view_texture()` produces the view texture (2D `cam_brush` path, or the 3D path — GL_POINTS or a routed OptiX/path-tracer interface), and the **`ImagePipeline`** (`rendering/image_pipeline.py`) composites it (temporal motion-blur accumulation, tonemap, gamma, emboss/watercolor, SDF preview) **and applies bloom internally**, returning a *finished, markup-free* frame. That finished frame goes two places: to the **video recorder** (file sink, clean) and to the **`Viewer`** (`viewer/`, display sink). The Viewer owns the **`OverlayCompositor`**, which composites UI markup (sweep reticle, draw-trail ring, advanced-drawing field overlay) over the finished frame **for display only** — so recorded video and screenshots capture the clean frame. (The ImagePipeline/OverlayCompositor split replaced the old monolithic `FrameAssembler` + `frame_assembly.frag` in Step 7; the Viewer window + overlay ownership landed in Step 8 of the modularity refactor.)
+Then, to display, `Camera.generate_view_texture()` produces the view texture (2D `cam_brush` path, or the 3D path — GL_POINTS or a routed OptiX/path-tracer interface), and the **`ImagePipeline`** (`rendering/image_pipeline.py`) composites it (temporal motion-blur accumulation, tonemap, gamma, emboss, SDF preview) **and applies bloom internally**, returning a *finished, markup-free* frame. That finished frame goes two places: to the **video recorder** (file sink, clean) and to the **`Viewer`** (`viewer/`, display sink). The Viewer owns the **`OverlayCompositor`**, which composites UI markup (sweep reticle, draw-trail ring, advanced-drawing field overlay) over the finished frame **for display only** — so recorded video and screenshots capture the clean frame. (The ImagePipeline/OverlayCompositor split replaced the old monolithic `FrameAssembler` + `frame_assembly.frag` in Step 7; the Viewer window + overlay ownership landed in Step 8 of the modularity refactor.)
 
 > **Note:** Older docs referenced `fourier4_4.glsl` and an `entity_update → fourier4_4 → frame_assembly` chain. That is out of date; the diffusion shader is `fourier6_6.glsl` and it is *prepended into* `entity_update.glsl`, not a separate dispatch stage.
 
@@ -196,7 +196,7 @@ Plain dataclasses.
 | `cam_brush.vert/.frag` | Camera-space instanced particle rendering (2D view) |
 | `points_3d.vert/.frag` | GL_POINTS 3D particle rendering (baseline 3D backend) |
 | `frame_assembly.vert` | Fullscreen-quad vertex shader shared by `image_pipeline.frag`, `overlay.frag`, and bloom |
-| `image_pipeline.frag` | Image-pipeline core: temporal accumulation + tonemap + gamma + emboss/watercolor + inline SDF preview (volrender includes prepended). Markup-free. |
+| `image_pipeline.frag` | Image-pipeline core: temporal accumulation + tonemap + gamma + emboss + inline SDF preview (volrender includes prepended). Markup-free. |
 | `overlay.frag` | Display-only overlay pass: sweep reticle, draw-trail ring, advanced-drawing field overlay (composited over a finished frame) |
 | `bloom_downsample.frag / bloom_upsample.frag` | Bloom mip chain |
 | `field_drawing.frag` | Force/strafe field painting |

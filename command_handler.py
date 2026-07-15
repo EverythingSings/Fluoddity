@@ -59,11 +59,11 @@ class CommandHandler:
         # Deferred entity selection state (waits one frame for rule buffer to be written)
         self._pending_entity_selection = None  # Tuple of (entity_id, entity_pos, entity_cohort) or None
 
-    def _apply_config_with_locks(self, config, ui_state, watercolor_override=None):
+    def _apply_config_with_locks(self, config, ui_state):
         """Apply config with parameter lock snapshot/restore. Returns rule."""
         pls = self.param_lock_service
         snapshot = pls.snapshot_locked(ui_state.sim, ui_state.preferences) if pls else {}
-        rule = self.config_saver.apply_config(config, ui_state.sim, watercolor_override)
+        rule = self.config_saver.apply_config(config, ui_state.sim)
         if pls:
             pls.restore_locked(ui_state.sim, ui_state.preferences, snapshot)
         self.config_applied_this_frame = True
@@ -78,8 +78,7 @@ class CommandHandler:
         self.sim.apply_rule(rule)
 
     def load_full_config(self, config, ui_state, *, json_filepath=None,
-                         field_snapshot=None, watercolor_override=None,
-                         push_rule=True):
+                         field_snapshot=None, push_rule=True):
         """Load a whole PhysicsConfig to live state: params + rule.
 
         The single "load a full config" primitive. Composes the two steps that
@@ -94,13 +93,12 @@ class CommandHandler:
                 strafe field runtime was removed with the drawing mode). Field
                 data on disk is preserved but no longer applied.
             field_snapshot: Unused (see json_filepath).
-            watercolor_override: If not None, overrides config's watercolor_mode.
             push_rule: True for real (undoable) loads -> pushes onto RuleManager.
                 False for preview -> applies the rule to the GPU directly without
                 ever touching the undo stack.
         """
         pls = self.param_lock_service
-        rule = self._apply_config_with_locks(config, ui_state, watercolor_override)
+        rule = self._apply_config_with_locks(config, ui_state)
 
         if push_rule:
             self._push_and_apply_rule(rule, ui_state)
@@ -442,7 +440,6 @@ class CommandHandler:
             self.load_full_config(
                 config, ui_state,
                 json_filepath=filepath,
-                watercolor_override=ui_state.load_watercolor_override,
                 push_rule=True,
             )
             print(f"Config loaded from {filepath}")
@@ -468,7 +465,6 @@ class CommandHandler:
                 self.load_full_config(
                     config, ui_state,
                     field_snapshot=field_snapshot,
-                    watercolor_override=ui_state.preview_watercolor_override,
                     push_rule=False,
                 )
                 self._preview_restore = None
@@ -487,7 +483,6 @@ class CommandHandler:
                     self.load_full_config(
                         config, ui_state,
                         json_filepath=filepath,
-                        watercolor_override=ui_state.preview_watercolor_override,
                         push_rule=False,
                     )
 

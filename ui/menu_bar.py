@@ -34,7 +34,6 @@ class MenuBarMixin:
                     self._load_filename = "_Default"
                     self._load_category = "Core"
                     self._request_load_file = True
-                    self._load_watercolor_override = None
                 self._delayed_tooltip("Start a fresh config. Loads from _Default")
 
                 imgui.separator()
@@ -45,8 +44,7 @@ class MenuBarMixin:
                     self.save_filename_buffer = self.currently_open_project
                 self._delayed_tooltip("Save the current physics settings including particle rules.")
 
-                # Load submenu with preview - locks to current watercolor mode
-                # Right-click toggles watercolor mode
+                # Load submenu with preview
                 if imgui.begin_menu("Load", not self.force_close_main_menus):
                     any_menu_open_this_frame = True
                     load_submenu_open = True
@@ -57,45 +55,15 @@ class MenuBarMixin:
                                            load_menu_min.x + load_menu_size.x,
                                            load_menu_min.y + load_menu_size.y))
 
-                    # First frame submenu opens: scan config files, reset hover
-                    # state, and lock the session watercolor mode. All config
-                    # apply/restore is delegated to CommandHandler via one-shot
-                    # flags — the UI only tracks what is being previewed.
+                    # First frame submenu opens: scan config files and reset hover
+                    # state. All config apply/restore is delegated to CommandHandler
+                    # via one-shot flags — the UI only tracks what is being previewed.
                     if not self.load_submenu_was_open:
                         self._cache_all_configs()
                         self.currently_previewing = None
                         self.currently_previewing_category = None
-                        # Lock to current watercolor mode when menu opens
-                        self.load_menu_watercolor_mode = self.state.sim.watercolor_mode
 
-                    # Use locked watercolor mode
-                    current_menu_watercolor = self.load_menu_watercolor_mode
-
-                    # Header showing right-click hint (compact two-line format)
-                    mode_text = "Watercolor ON" if current_menu_watercolor else "Watercolor OFF"
-                    imgui.text_disabled("Right-click toggles:")
-                    imgui.text_disabled(f"({mode_text})")
-                    imgui.separator()
-
-                    # Check for right-click anywhere in the menu to toggle watercolor
-                    if imgui.is_window_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                        self.load_menu_watercolor_mode = not self.load_menu_watercolor_mode
-                        current_menu_watercolor = self.load_menu_watercolor_mode
-                        # Re-issue the current preview with the new override so
-                        # CommandHandler reloads it (cache stays untouched). If
-                        # nothing is being previewed, the live watercolor edit
-                        # below is sufficient.
-                        if self.currently_previewing and self.currently_previewing_category:
-                            self._request_preview_config = True
-                            self._preview_filename = self.currently_previewing
-                            self._preview_category = self.currently_previewing_category
-
-                    # Lock watercolor mode to menu's mode + hand it to CommandHandler
-                    # as the override applied to preview loads/restores this frame.
-                    self.state.sim.watercolor_mode = current_menu_watercolor
-                    self._preview_watercolor_override = current_menu_watercolor
-
-                    hovered_this_frame = self._render_load_submenu_content(current_menu_watercolor)
+                    hovered_this_frame = self._render_load_submenu_content()
 
                     # Handle preview on hover — flags only; CommandHandler applies.
                     # hovered_this_frame is a (filename, category) tuple or None.
@@ -206,7 +174,6 @@ class MenuBarMixin:
                     # Trigger file load equivalent to File->Load
                     self._load_filename = self.currently_open_project
                     self._request_load_file = True
-                    self._load_watercolor_override = self.state.sim.watercolor_mode  # Preserve current watercolor mode
                 self._delayed_tooltip(f"Equivalent to File -> Load {self.currently_open_project}")
 
                 # Reset all slider ranges
@@ -438,15 +405,11 @@ class MenuBarMixin:
 
         # Handle submenu close without selection
         if self.load_submenu_was_open and not load_submenu_open:
-            # Submenu just closed - restore the original via CommandHandler, in
-            # the session watercolor mode (consistent with the hover path).
+            # Submenu just closed - restore the original via CommandHandler.
             if self.currently_previewing:
                 self._request_clear_preview = True
-                if self.load_menu_watercolor_mode is not None:
-                    self._preview_watercolor_override = self.load_menu_watercolor_mode
             self.currently_previewing = None
             self.currently_previewing_category = None
             self.cached_configs = {}
-            self.load_menu_watercolor_mode = None  # Clear the watercolor lock
 
         self.load_submenu_was_open = load_submenu_open

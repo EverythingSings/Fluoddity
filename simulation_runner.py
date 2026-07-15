@@ -49,12 +49,10 @@ class SimulationRunner:
 
     def run_simulation_frame(self, ui_state, sweep_mode, sweep_reticle_pos,
                               sweep_reticle_visible, screen_aspect,
-                              watercolor_mode=False,
                               screenshot_in_progress=False,
                               skip_view_generation=False):
         """Run simulation step(s) with frame assembly and video recording."""
         self._screenshot_in_progress = screenshot_in_progress
-        self.camera.watercolor_mode = watercolor_mode
         speedmult = ui_state.preferences.rendering.speedmult
         motion_blur = ui_state.preferences.rendering.motion_blur
 
@@ -87,8 +85,6 @@ class SimulationRunner:
         """
         return dict(
             brightness=self.camera.BRIGHTNESS,
-            ink_weight=ui_state.sim.ink_weight,
-            watercolor_mode=ui_state.sim.watercolor_mode,
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
             bloom_enabled=ui_state.preferences.bloom.enabled,
             bloom_threshold=ui_state.preferences.bloom.threshold,

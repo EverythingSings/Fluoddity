@@ -89,20 +89,12 @@ class RenderSettingsWindowMixin:
                 "High = more logarithmic (reveals faint detail).")
 
     def _render_bloom_controls(self):
-        """Bloom checkbox + sliders — shared, shown inside Post-Process.
-
-        Disabled in watercolor mode (bloom does not apply there).
-        """
+        """Bloom checkbox + sliders — shared, shown inside Post-Process."""
         b = self.state.preferences.bloom
-        watercolor_active = self.state.sim.watercolor_mode
-        if watercolor_active:
-            imgui.begin_disabled()
         _, b.enabled = imgui.checkbox("Bloom", b.enabled)
         if imgui.is_item_hovered():
-            imgui.set_tooltip("Bloom is disabled in Watercolor mode."
-                              if watercolor_active else
-                              "Add a glow effect around bright areas.")
-        if b.enabled and not watercolor_active:
+            imgui.set_tooltip("Add a glow effect around bright areas.")
+        if b.enabled:
             imgui.indent(20)
             _, b.threshold = imgui.slider_float("Threshold", b.threshold, 0.0, 2.0, format="%.2f")
             if imgui.is_item_hovered():
@@ -114,8 +106,6 @@ class RenderSettingsWindowMixin:
             if imgui.is_item_hovered():
                 imgui.set_tooltip("Spread of the bloom blur kernel.")
             imgui.unindent(20)
-        if watercolor_active:
-            imgui.end_disabled()
 
     def _render_pathtrace_mode_row(self, *, show_spp_slider):
         """Pathtrace mode cycling button + shared samples slider.

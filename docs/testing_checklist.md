@@ -8,12 +8,11 @@ Use this after large refactors or significant new features. Items roughly ordere
 - [ ] **c.** File → Load: click config, verify rule + sliders + appearance applied
 - [ ] **d.** Hover preview: hover over config names, verify live preview (particles change)
 - [ ] **e.** Preview restore: move mouse away from menu, verify original state restored
-- [ ] **f.** Watercolor lock: right-click in Load submenu toggles watercolor for all previews
-- [ ] **g.** Category headers: Core/Custom/Advanced collapse/expand, state persists across opens
-- [ ] **h.** N button: shows notes tooltip (blue when notes exist)
-- [ ] **i.** X button: opens delete confirmation, file removed on confirm
-- [ ] **j.** Clipboard: Ctrl+C copies config, Ctrl+V pastes and applies
-- [ ] **k.** Saves preserve: jitter values, custom slider ranges, parameter sweep assignments, notes
+- [ ] **f.** Category headers: Core/Custom/Advanced collapse/expand, state persists across opens
+- [ ] **g.** N button: shows notes tooltip (blue when notes exist)
+- [ ] **h.** X button: opens delete confirmation, file removed on confirm
+- [ ] **i.** Clipboard: Ctrl+C copies config, Ctrl+V pastes and applies
+- [ ] **j.** Saves preserve: jitter values, custom slider ranges, parameter sweep assignments, notes
 
 ## 2. Particle Selection & Rule History
 - [ ] **a.** Left click selects particle, applies its mutated rule (1-frame deferred readback)
@@ -67,10 +66,9 @@ Use this after large refactors or significant new features. Items roughly ordere
 
 ## 7. Appearance & View
 - [ ] **a.** Color by Cohort toggle (hides Hue Sensitivity when on)
-- [ ] **b.** Watercolor Mode toggle (V key), shows Ink Weight when on
-- [ ] **c.** Emboss Mode combo (Off/Canvas/Brush), shows Intensity + Smoothness when on
-- [ ] **d.** Brightness slider affects output
-- [ ] **e.** Exposure slider works
+- [ ] **b.** Emboss Mode combo (Off/Canvas/Brush), shows Intensity + Smoothness when on
+- [ ] **c.** Brightness slider affects output
+- [ ] **d.** Exposure slider works
 
 ## 8. Preferences
 - [ ] **a.** World size change triggers full rebuild (expensive, console output)

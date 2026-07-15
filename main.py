@@ -510,7 +510,7 @@ class App:
         elif ui_state.sim.going:
             self.sim_runner.run_simulation_frame(
                 ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
-                screen_aspect, ui_state.sim.watercolor_mode,
+                screen_aspect,
                 screenshot_in_progress=self.screenshot_in_progress,
                 skip_view_generation=rt_active or optix_preview_display
             )
@@ -661,8 +661,6 @@ class App:
         finished_tex = self.camera.render(
             sim_going=ui_state.sim.going,
             screen_aspect=screen_aspect,
-            watercolor_mode=ui_state.sim.watercolor_mode,
-            ink_weight=ui_state.sim.ink_weight,
             tonemap_softness=ui_state.preferences.rendering.tonemap_softness,
             bloom_enabled=ui_state.preferences.bloom.enabled,
             bloom_threshold=ui_state.preferences.bloom.threshold,
@@ -675,7 +673,6 @@ class App:
         self.viewer.prepare(
             finished_tex,
             overlay_params=overlay_params,
-            watercolor_mode=ui_state.sim.watercolor_mode,
             screen_aspect=screen_aspect,
             mouse_screen_coords=mouse_screen_coords,
             camera_position=tuple(self.camera.position),

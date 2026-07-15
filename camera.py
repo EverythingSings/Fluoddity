@@ -12,8 +12,6 @@ class Camera:
         self.sim = sim
         self.window = window
         self.BRIGHTNESS = 1
-        self.ink_weight = 1
-        self.watercolor_mode = False
 
         # Camera state (2D pan/zoom retained only for sweep-reticle screen mapping)
         self.position = np.array([0.0, 0.0])
@@ -85,8 +83,8 @@ class Camera:
         # Empty VAO for GL_POINTS rendering (reads from SSBO via gl_VertexID)
         self.points_3d_vao = self.ctx.vertex_array(self.points_3d_program, []) if self.points_3d_program else None
 
-        # Image pipeline (temporal accumulation + tonemap + watercolor + SDF +
-        # bloom). Produces a markup-free finished frame. Overlay markup (sweep /
+        # Image pipeline (temporal accumulation + tonemap + SDF + bloom).
+        # Produces a markup-free finished frame. Overlay markup (sweep /
         # draw / field) is composited afterwards by the Viewer for display only,
         # so recorded frames stay clean.
         self.image_pipeline = ImagePipeline(self.ctx)
@@ -222,7 +220,6 @@ class Camera:
 
     def render(self, sim_going: bool = True,
                 screen_aspect: float = 1.0,
-                watercolor_mode: bool = False, ink_weight: float = 1.0,
                 tonemap_softness: float = 1.0,
                 bloom_enabled: bool = False, bloom_threshold: float = 0.8,
                 bloom_intensity: float = 0.5, bloom_radius: float = 1.0):
@@ -232,9 +229,6 @@ class Camera:
         Viewer's job (display) and the video recorder's (file). Returns a
         window-sized, 1:1 finished texture (or None if none is available yet).
         """
-        self.watercolor_mode = watercolor_mode
-        self.ink_weight = ink_weight
-
         # ALWAYS use the (markup-free) finished texture when the sim is running.
         # When paused, regenerate the view so camera panning/zooming still works.
         if sim_going and self.assembled_texture is not None:
@@ -247,8 +241,6 @@ class Camera:
             total_samples=1,
             current_sample_index=0,
             brightness=self.BRIGHTNESS,
-            ink_weight=self.ink_weight,
-            watercolor_mode=watercolor_mode,
             tonemap_softness=tonemap_softness,
             bloom_enabled=bloom_enabled,
             bloom_threshold=bloom_threshold,

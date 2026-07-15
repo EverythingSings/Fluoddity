@@ -40,10 +40,8 @@ class SimState:
     rule_seed: float = 0.42       # Seed for procedural rule generation (fixed default for reproducibility)
 
     # Appearance settings (saved with physics config)
-    ink_weight: float = 1.0  # Watercolor mode: controls optical density in exp()
     hue_sensitivity: float = 0.5
     color_by_cohort: bool = True  # Default True so old saves use cohort coloring
-    watercolor_mode: bool = False
 
     # User notes (saved with physics config)
     notes: str = ""

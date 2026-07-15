@@ -1,7 +1,7 @@
 """ImagePipeline + OverlayCompositor — the split of the old FrameAssembler.
 
 Step 7 pulls the *universal image pipeline* (temporal accumulation, tonemap,
-watercolor, EXPOSURE long-exposure blend, and now bloom) out of the
+EXPOSURE long-exposure blend, and now bloom) out of the
 overlay markup. Renderers own an `ImagePipeline` and return finished (tonemapped,
 bloomed) frames; the Viewer (Step 8) runs an `OverlayCompositor` afterwards to
 draw UI markup (sweep reticle, draw ring, field overlay) over the finished frame
@@ -38,7 +38,7 @@ def _fullscreen_quad_vao(ctx, shader):
 
 
 class ImagePipeline:
-    """Temporal accumulation + tonemap + watercolor + bloom.
+    """Temporal accumulation + tonemap + bloom.
 
     Owns the accumulation buffer and (lazily) a BloomProcessor. Returns a
     finished, tonemapped (and optionally bloomed) texture on the final sample.
@@ -67,14 +67,13 @@ class ImagePipeline:
         }
 
     def assemble_frame(self, input_texture, total_samples, current_sample_index,
-                       brightness=1.0, ink_weight=1.0,
-                       watercolor_mode=False, tonemap_softness=1.0,
+                       brightness=1.0, tonemap_softness=1.0,
                        bloom_enabled=False, bloom_threshold=0.8,
                        bloom_intensity=0.5, bloom_radius=1.0):
         """Accumulate one sample; on the final sample return the finished texture.
 
-        Bloom (when enabled and not in watercolor mode) is applied here, so the
-        returned texture is fully finished.
+        Bloom (when enabled) is applied here, so the returned texture is fully
+        finished.
         """
         input_width, input_height = input_texture.size
         recreate = (
@@ -100,8 +99,6 @@ class ImagePipeline:
         shader['is_first_frame'] = is_first_frame
         shader['final_sample'] = final_sample
         tryset(shader, 'BRIGHTNESS', brightness)
-        tryset(shader, 'INK_WEIGHT', ink_weight)
-        tryset(shader, 'WATERCOLOR_MODE', watercolor_mode)
         tryset(shader, 'TONEMAP_SOFTNESS', tonemap_softness)
 
         self.resources['accumulation_fbo'].use()
@@ -111,7 +108,7 @@ class ImagePipeline:
             return None
 
         result = self.resources['accumulation_texture']
-        if bloom_enabled and not watercolor_mode and result is not None:
+        if bloom_enabled and result is not None:
             result = self._apply_bloom(result, bloom_threshold, bloom_intensity,
                                        bloom_radius, tonemap_softness)
         return result
@@ -186,8 +183,7 @@ class OverlayCompositor:
 
     def composite(self, input_texture, *,
                   sweep_mode=False, sweep_reticle_pos=(0.5, 0.5),
-                  sweep_reticle_visible=False, screen_aspect=1.0,
-                  watercolor_mode=False):
+                  sweep_reticle_visible=False, screen_aspect=1.0):
         """Composite markup over ``input_texture``; return a display texture."""
         width, height = input_texture.size
         self._ensure(width, height)
@@ -200,7 +196,6 @@ class OverlayCompositor:
         tryset(s, 'sweep_reticle_pos', sweep_reticle_pos)
         tryset(s, 'sweep_reticle_visible', sweep_reticle_visible)
         tryset(s, 'screen_aspect', screen_aspect)
-        tryset(s, 'WATERCOLOR_MODE', watercolor_mode)
 
         self._out_fbo.use()
         self._vao.render()

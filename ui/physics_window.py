@@ -240,22 +240,6 @@ class PhysicsWindowMixin:
                         self.state.sim.hue_sensitivity = new_hs
                     self._delayed_tooltip("Controls color variation based on particle velocity.")
 
-                imgui.separator()
-
-                # Watercolor Mode checkbox
-                _, self.state.sim.watercolor_mode = imgui.checkbox(
-                    "Watercolor Mode (V)",
-                    self.state.sim.watercolor_mode
-                )
-
-                # Ink Weight slider (only in watercolor mode, placed right after checkbox)
-                if self.state.sim.watercolor_mode:
-                    _, self.state.sim.ink_weight = imgui.slider_float(
-                        "Ink Weight", self.state.sim.ink_weight, 0.0, 20.0
-                    )
-                    self._delayed_tooltip("Controls optical density in watercolor mode.\nHigher values = darker/more opaque.")
-                self._delayed_tooltip("Enable watercolor rendering effect.")
-
                 imgui.end_menu()
 
             # After all menus: check mouse distance from all menu rectangles
