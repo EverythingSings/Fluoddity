@@ -6,6 +6,7 @@ from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, RenderSpecService, EditorSaver, SimulationSaver, PlottingManager
+from services import stereogram
 from parameter_locks import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
@@ -111,6 +112,9 @@ class App:
         cam.rotate_speed = loaded_prefs.camera3d.rotate_speed
         cam.orbit_center[:] = loaded_prefs.camera3d.orbit_center
         cam.orbit_rate = loaded_prefs.camera3d.orbit_rate
+        cam.stereogram = loaded_prefs.camera3d.stereogram
+        cam.eye_offset = loaded_prefs.camera3d.eye_offset
+        cam.stereo_toe_in = loaded_prefs.camera3d.stereo_toe_in
         # OptiX active is derived each frame from the renderer dropdown.
         cam.optix_enabled = (loaded_prefs.rendering.renderer == 1)
 
@@ -545,10 +549,27 @@ class App:
             )
             ti.aperture = ui_state.camera.aperture
             ti.focal_plane_depth = ui_state.camera.focal_plane_depth
+
+            # Stereogram: build per-eye (view_proj, region) at the render scale.
+            stereo_eyes = None
+            stereo = stereogram.params_from_camera_state(ui_state.camera)
+            if stereo.enabled:
+                stereo_eyes = []
+                for side in stereogram.eye_sides():
+                    ev = stereogram.eye_camera(
+                        cam.pos, cam.dir, cam.up, cam.fov,
+                        rt_width, rt_height, side, stereo,
+                    )
+                    eye_vp = self.camera.compute_fps_view_proj(
+                        ev.pos, ev.dir, ev.up, ev.fov, ev.aspect
+                    )
+                    stereo_eyes.append((eye_vp, ev.viewport))
+
             ti.realtime_tick(entity_buffer, entity_count, view_proj,
                              rt_width, rt_height,
                              sim_going=ui_state.sim.going,
-                             camera_right=cam_right, camera_up=cam_up)
+                             camera_right=cam_right, camera_up=cam_up,
+                             stereo_eyes=stereo_eyes)
 
         # 6.5. Screenshot save and settings restoration
         if self.screenshot_in_progress:
@@ -724,6 +745,9 @@ class App:
         ui_state.preferences.camera3d.rotate_speed = cam.rotate_speed
         ui_state.preferences.camera3d.orbit_center = list(cam.orbit_center)
         ui_state.preferences.camera3d.orbit_rate = cam.orbit_rate
+        ui_state.preferences.camera3d.stereogram = cam.stereogram
+        ui_state.preferences.camera3d.eye_offset = cam.eye_offset
+        ui_state.preferences.camera3d.stereo_toe_in = cam.stereo_toe_in
         # Keep the legacy optix.enabled mirror in sync (renderer enum is the
         # source of truth and persists directly via rendering.renderer).
         ui_state.preferences.optix.enabled = (ui_state.preferences.rendering.renderer == 1)

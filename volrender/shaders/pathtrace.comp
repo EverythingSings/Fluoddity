@@ -31,6 +31,14 @@ uniform mat4  u_inv_view_proj;
 // ---- target ----
 uniform ivec2 u_target_size;       // (width, height) of output image
 
+// ---- stereogram region ----
+// When u_region_size.x <= 0, the whole target is one view (default). Otherwise
+// this dispatch covers only a sub-rectangle: output pixels are offset by
+// u_region_offset and NDC is computed relative to u_region_size (so the eye
+// camera fills exactly its half of the screen with a half-width aspect).
+uniform ivec2 u_region_offset;     // pixel offset of this region's origin
+uniform ivec2 u_region_size;       // (width, height) of this region; <=0 = full
+
 // ---- debug mode ----
 uniform bool  u_debug_raymarch;    // true = fixed-step debug, false = delta tracking
 // COMMENT FLAG: u_debug_steps — number of fixed march steps (tune for quality vs. speed)
@@ -573,15 +581,23 @@ void write_output(ivec2 pixel, vec4 value) {
 
 
 void main() {
-    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-    if (pixel.x >= u_target_size.x || pixel.y >= u_target_size.y)
+    ivec2 local = ivec2(gl_GlobalInvocationID.xy);
+
+    // Stereogram: this dispatch may cover only a sub-rectangle. The local
+    // invocation id addresses the region; the output pixel and NDC basis are
+    // derived from it. When u_region_size.x <= 0, region == full target.
+    bool stereo_region = (u_region_size.x > 0);
+    ivec2 region_size = stereo_region ? u_region_size : u_target_size;
+    if (local.x >= region_size.x || local.y >= region_size.y)
         return;
+    ivec2 pixel = stereo_region ? (local + u_region_offset) : local;
 
     // Initialize RNG early for subpixel jitter and DOF
     rng_init(uvec3(pixel, u_sample_index));
 
     // ---- 1. Build NDC with subpixel jitter (free AA over multiple samples) ----
-    vec2 uv = (vec2(pixel) + vec2(next_float(), next_float())) / vec2(u_target_size);
+    // NDC spans the region, so each eye camera fills its half at half aspect.
+    vec2 uv = (vec2(local) + vec2(next_float(), next_float())) / vec2(region_size);
     vec2 ndc_xy = uv * 2.0 - 1.0;
 
     // ---- 2. Unproject near (z=-1) and far (z=+1) through inv_view_proj ----

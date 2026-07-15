@@ -23,6 +23,13 @@ class Camera:
         self.optix_interface = None  # Set by orchestrator: the OptiX path tracer (or None)
         self.optix_enabled = False   # Transient per-frame flag: OptiX active (renderer==Optix)
         self.optix_resolution_scale = 1.0  # Render resolution multiplier for OptiX
+        # Stereogram params (updated each frame via apply_state). The module is
+        # imported lazily here to avoid a circular import at module load:
+        # camera.py is imported before the services package finishes
+        # initializing (services -> config_saver -> ui -> services).
+        import services.stereogram as _stereogram
+        self._sg = _stereogram
+        self.stereo = self._sg.StereoParams()
 
         self.setup_rendering()
 
@@ -157,43 +164,81 @@ class Camera:
                 and self.controller_cam is not None):
             cam = self.controller_cam
             scale = max(0.1, self.optix_resolution_scale)
-            render_w = max(1, int(width * scale))
-            render_h = max(1, int(height * scale))
-            tex = self.optix_interface.render_frame(
-                entity_buffer=self.sim.get_entity_buffer(),
-                entity_count=self.sim.entity_count,
-                cam_pos=cam.pos,
-                cam_dir=cam.dir,
-                cam_up=cam.up,
-                fov=self.fov_3d,
-                width=render_w,
-                height=render_h,
-            )
-            if tex is not None:
-                # Blit OptiX result into cam_brush_target via FBO
+
+            if self.stereo.enabled:
+                # Two-pass: render each eye at half width, blit into its half.
                 self.cam_brush_fbo.use()
                 self.ctx.viewport = (0, 0, width, height)
                 self.ctx.clear(0, 0, 0, 1)
-                tex.use(location=0)
-                self.program['cam_pos'].value = (0, 0)
-                self.program['cam_zoom'].value = 1.0
-                self.program['tex_size'].value = (float(width), float(height))
-                self.program['window_size'].value = (width, height)
-                self.program['view_tex'].value = 0
-                self.vao.render()
-                return self.cam_brush_target
+                half_w = max(1, width // 2)
+                render_w = max(1, int(half_w * scale))
+                render_h = max(1, int(height * scale))
+                any_rendered = False
+                for side in self._sg.eye_sides():
+                    ev = self._sg.eye_camera(
+                        cam.pos, cam.dir, cam.up, self.fov_3d, width, height,
+                        side, self.stereo,
+                    )
+                    tex = self.optix_interface.render_frame(
+                        entity_buffer=self.sim.get_entity_buffer(),
+                        entity_count=self.sim.entity_count,
+                        cam_pos=ev.pos,
+                        cam_dir=ev.dir,
+                        cam_up=ev.up,
+                        fov=ev.fov,
+                        width=render_w,
+                        height=render_h,
+                    )
+                    if tex is None:
+                        continue
+                    any_rendered = True
+                    # Blit this eye into its screen half.
+                    self.ctx.viewport = ev.viewport
+                    tex.use(location=0)
+                    self.program['cam_pos'].value = (0, 0)
+                    self.program['cam_zoom'].value = 1.0
+                    self.program['tex_size'].value = (float(ev.viewport[2]),
+                                                      float(ev.viewport[3]))
+                    self.program['window_size'].value = (ev.viewport[2],
+                                                          ev.viewport[3])
+                    self.program['view_tex'].value = 0
+                    self.vao.render()
+                self.ctx.viewport = (0, 0, width, height)
+                if any_rendered:
+                    return self.cam_brush_target
+            else:
+                render_w = max(1, int(width * scale))
+                render_h = max(1, int(height * scale))
+                tex = self.optix_interface.render_frame(
+                    entity_buffer=self.sim.get_entity_buffer(),
+                    entity_count=self.sim.entity_count,
+                    cam_pos=cam.pos,
+                    cam_dir=cam.dir,
+                    cam_up=cam.up,
+                    fov=self.fov_3d,
+                    width=render_w,
+                    height=render_h,
+                )
+                if tex is not None:
+                    # Blit OptiX result into cam_brush_target via FBO
+                    self.cam_brush_fbo.use()
+                    self.ctx.viewport = (0, 0, width, height)
+                    self.ctx.clear(0, 0, 0, 1)
+                    tex.use(location=0)
+                    self.program['cam_pos'].value = (0, 0)
+                    self.program['cam_zoom'].value = 1.0
+                    self.program['tex_size'].value = (float(width), float(height))
+                    self.program['window_size'].value = (width, height)
+                    self.program['view_tex'].value = 0
+                    self.vao.render()
+                    return self.cam_brush_target
 
         # GL_POINTS fallback path
         self.cam_brush_fbo.use()
         self.ctx.viewport = (0, 0, width, height)
         self.ctx.clear(0, 0, 0, 1)
 
-        aspect = width / max(height, 1)
         cam = self.controller_cam
-        view_proj = self.compute_fps_view_proj(
-            cam.pos, cam.dir, cam.up, self.fov_3d, aspect
-        )
-        tryset_mat4(self.points_3d_program, 'view_proj', view_proj)
         tryset(self.points_3d_program, 'point_scale', 800.0)
 
         # Enable point size from vertex shader, depth test, and additive blending
@@ -201,7 +246,29 @@ class Camera:
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
         self.ctx.blend_equation = moderngl.FUNC_ADD
 
-        self.points_3d_vao.render(mode=moderngl.POINTS, vertices=self.sim.entity_count)
+        if self.stereo.enabled:
+            # Two-pass: render each eye into its half of the screen.
+            for side in self._sg.eye_sides():
+                ev = self._sg.eye_camera(
+                    cam.pos, cam.dir, cam.up, self.fov_3d, width, height,
+                    side, self.stereo,
+                )
+                self.ctx.viewport = ev.viewport
+                view_proj = self.compute_fps_view_proj(
+                    ev.pos, ev.dir, ev.up, ev.fov, ev.aspect
+                )
+                tryset_mat4(self.points_3d_program, 'view_proj', view_proj)
+                self.points_3d_vao.render(
+                    mode=moderngl.POINTS, vertices=self.sim.entity_count)
+            self.ctx.viewport = (0, 0, width, height)
+        else:
+            aspect = width / max(height, 1)
+            view_proj = self.compute_fps_view_proj(
+                cam.pos, cam.dir, cam.up, self.fov_3d, aspect
+            )
+            tryset_mat4(self.points_3d_program, 'view_proj', view_proj)
+            self.points_3d_vao.render(
+                mode=moderngl.POINTS, vertices=self.sim.entity_count)
 
         self.ctx.disable(moderngl.BLEND)
         self.ctx.enable_only(0)  # Reset to defaults
@@ -217,6 +284,9 @@ class Camera:
         # 3D camera state
         self.fov_3d = state.fov
         self.optix_enabled = state.optix_enabled
+
+        # Stereogram (side-by-side stereo) params
+        self.stereo = self._sg.params_from_camera_state(state)
 
     def render(self, sim_going: bool = True,
                 screen_aspect: float = 1.0,

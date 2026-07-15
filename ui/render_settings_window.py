@@ -175,6 +175,20 @@ class RenderSettingsWindowMixin:
             _, cam.orbit_rate = imgui.slider_float(
                 "Orbit Rate", cam.orbit_rate, -0.05, 0.05, format="%.4f")
 
+            imgui.separator()
+            _, cam.stereogram = imgui.checkbox("Stereogram", cam.stereogram)
+            if cam.stereogram:
+                _, cam.eye_offset = imgui.slider_float(
+                    "Eye Offset", cam.eye_offset, 0.0, 0.5, format="%.3f")
+                # Parallel vs Toe-in convergence toggle
+                if imgui.radio_button("Parallel", not cam.stereo_toe_in):
+                    cam.stereo_toe_in = False
+                imgui.same_line()
+                if imgui.radio_button("Toe-in", cam.stereo_toe_in):
+                    cam.stereo_toe_in = True
+                if cam.stereo_toe_in and imgui.is_item_hovered():
+                    imgui.set_tooltip("Eyes converge on the Focal Depth plane")
+
     def _render_lighting_section(self):
         """Lighting section — shared LightingPrefs, identical for both renderers.
 

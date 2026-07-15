@@ -470,7 +470,8 @@ class VolumeRenderer:
 
     def accumulate(self, n_spp: int, view_proj, target,
                    medium: MediumParams, sun: SunParams, sky: SkyParams,
-                   render: RenderParams, sdf_enabled: bool = False):
+                   render: RenderParams, sdf_enabled: bool = False,
+                   region=None):
         """Dispatch n_spp path-traced samples and add to the accumulator.
 
         Dispatches one sample per compute pass with a memory barrier after
@@ -504,6 +505,16 @@ class VolumeRenderer:
 
         # Target size
         _tryset(prog, 'u_target_size', (w, h))
+
+        # Stereogram region: (offset_x, offset_y, region_w, region_h) or None.
+        # region_size.x <= 0 tells the shader to treat the whole target as one
+        # view (default, non-stereo behavior).
+        if region is not None:
+            rx, ry, rw, rh = region
+        else:
+            rx, ry, rw, rh = 0, 0, 0, 0
+        _tryset(prog, 'u_region_offset', (rx, ry))
+        _tryset(prog, 'u_region_size', (rw, rh))
 
         # Mode flags
         _tryset(prog, 'u_debug_raymarch', False)
@@ -586,9 +597,11 @@ class VolumeRenderer:
         # u_accumulate is true, but avoids an unbound image unit)
         target.bind_to_image(0, read=False, write=True)
 
-        # Dispatch grid
-        gx = math.ceil(w / self._PT_WG_X)
-        gy = math.ceil(h / self._PT_WG_Y)
+        # Dispatch grid — cover only the region when stereo, else the full target
+        dispatch_w = rw if (region is not None and rw > 0) else w
+        dispatch_h = rh if (region is not None and rh > 0) else h
+        gx = math.ceil(dispatch_w / self._PT_WG_X)
+        gy = math.ceil(dispatch_h / self._PT_WG_Y)
 
         # Dispatch one sample at a time with a barrier after each to ensure
         # the read-modify-write on img_accum is consistent.

@@ -166,6 +166,9 @@ class Camera3DPrefs:
     rotate_speed: float = 2.0
     orbit_center: list = field(default_factory=lambda: [0.0, 0.0, 0.0])
     orbit_rate: float = 0.0
+    stereogram: bool = False
+    eye_offset: float = 0.1
+    stereo_toe_in: bool = False
 
 
 @dataclass

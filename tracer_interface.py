@@ -269,7 +269,8 @@ class TracerInterface:
     def realtime_tick(self, entity_buffer: moderngl.Buffer, entity_count: int,
                       view_proj: np.ndarray, width: int, height: int,
                       sim_going: bool = True,
-                      camera_right=None, camera_up=None):
+                      camera_right=None, camera_up=None,
+                      stereo_eyes=None):
         """Perform one realtime tracing step (1 SPP).
 
         In 1spp mode: splat, reset accumulation, trace 1 sample, resolve+tonemap.
@@ -281,6 +282,9 @@ class TracerInterface:
                        If False, skip the splat since entities are unchanged.
             camera_right: Camera right vector (world space) for DOF.
             camera_up: Camera up vector (world space) for DOF.
+            stereo_eyes: Optional list of (view_proj, region) tuples for
+                stereogram mode. Each eye is accumulated into its screen-half
+                region of the same target/accumulator. None = single view.
         """
         self._ensure_renderer()
         self._ensure_textures(width, height)
@@ -306,10 +310,18 @@ class TracerInterface:
         # Accumulate 1 SPP
         self._apply_renderer_state()
         medium, sun, sky, render, sdf_enabled = self._build_params()
-        self._renderer.accumulate(
-            1, self._render_view_proj, self._target_tex,
-            medium, sun, sky, render, sdf_enabled
-        )
+        if stereo_eyes:
+            # Two-pass: accumulate each eye into its half-region of the target.
+            for eye_vp, region in stereo_eyes:
+                self._renderer.accumulate(
+                    1, eye_vp, self._target_tex,
+                    medium, sun, sky, render, sdf_enabled, region=region
+                )
+        else:
+            self._renderer.accumulate(
+                1, self._render_view_proj, self._target_tex,
+                medium, sun, sky, render, sdf_enabled
+            )
         self._samples_done += 1
 
         # Resolve and tonemap for display (no Y-flip for fullscreen rendering)
