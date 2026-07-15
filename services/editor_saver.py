@@ -83,6 +83,20 @@ class EditorSaver:
         if apply_layout and save.imgui_layout:
             imgui.load_ini_settings_from_memory(save.imgui_layout)
 
+    def apply_default(self, prefs_target: PreferencesState) -> bool:
+        """Load the project's __Default_Editor save from the app dir and apply it
+        in place onto prefs_target + imgui layout. Returns False if absent/failed.
+
+        Used on first startup (missing preferences.config) and on "Reset all UI
+        settings" so a code-free default layout can be shipped in the app dir.
+        """
+        from utilities.paths import get_default_editor_save_path
+        save = self.load_from_file(get_default_editor_save_path())
+        if save is None:
+            return False
+        self.apply_save(save, prefs_target)
+        return True
+
     def path_for(self, name: str) -> Path:
         """Resolve the .editor.json path a save with this name would use."""
         return get_editor_saves_dir() / f"{name}.editor.json"

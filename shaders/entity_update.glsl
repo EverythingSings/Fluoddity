@@ -42,13 +42,7 @@ struct PhysicsSetting {
 uniform int frame_count;
 uniform Rule target_rule;
 uniform sampler3D canvas_3d; //trails canvas (RGBA16F packed: R=vx, G=vy, B=vz)
-// DISABLED — legacy 2D force/strafe field. Retained (commented out) for a future
-// field reimplementation; the live drawing runtime was removed in the 3D-only cleanup.
-//uniform sampler2D field_texture; // Force/Strafe field (.xy=force, .zw=strafe)
 uniform ivec3 canvas_3d_size;  // (W, H, D) for non-cube support
-//uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
-//uniform float force_field_strength; // Multiplier for force field effects
-//uniform float strafe_field_strength; // Multiplier for strafe field effects
 uniform vec2 canvas_resolution;
 uniform PhysicsSetting DRAG_SETTING; 
 uniform PhysicsSetting STRAFE_POWER_SETTING;
@@ -65,9 +59,6 @@ layout(rgba16f, binding = 0) uniform image3D can_img;
 uniform float HUE_SENSITIVITY;
 uniform bool COLOR_BY_COHORT;
 uniform bool DISABLE_SYMMETRY;
-// TESTING_MODE (lock z=0, XY plane) and PLANE_SAMPLES (multi-plane Monte Carlo)
-// were removed in the 3D-only cleanup. The shader now always runs the full 3D
-// path with a single tangent-plane sample.
 const bool TESTING_MODE = false;
 const int PLANE_SAMPLES = 1;
 uniform int ABSOLUTE_ORIENTATION; // 0=Off, 1=Y axis, 2=Radial

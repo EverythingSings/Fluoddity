@@ -98,6 +98,11 @@ def get_default_imgui_ini_path() -> Path:
     return get_app_dir() / "default_imgui.ini"
 
 
+def get_default_editor_save_path() -> Path:
+    """Bundled default editor save (preferences + docking) applied on first run / reset."""
+    return get_app_dir() / "__Default_Editor.editor.json"
+
+
 def initialize_user_data():
     """
     Initialize user data directory on first run.

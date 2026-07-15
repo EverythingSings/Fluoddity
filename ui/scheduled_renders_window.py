@@ -42,6 +42,7 @@ class ScheduledRendersWindowMixin:
         self._load_editor_path = ""
         self._editor_saved_time = 0  # timestamp for "Saved!" feedback
         self._editor_save_files = []  # scanned .editor.json paths
+        self._request_reset_ui_settings = False  # Reset all UI settings (Reset menu)
 
         # Simulation state save/load one-shot flags (set from the Extras menu)
         self._request_save_simulation = False
@@ -82,10 +83,12 @@ class ScheduledRendersWindowMixin:
         state.save_editor_name = self._save_editor_name
         state.request_load_editor = self._request_load_editor
         state.load_editor_path = self._load_editor_path
+        state.request_reset_ui_settings = self._request_reset_ui_settings
         self._request_save_editor = False
         # _save_editor_name intentionally not reset (persistent widget text)
         self._request_load_editor = False
         self._load_editor_path = ""
+        self._request_reset_ui_settings = False
 
         # Simulation state save/load
         state.request_save_simulation = self._request_save_simulation

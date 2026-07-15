@@ -85,6 +85,17 @@ if (Test-Path $imguiSource) {
     Write-Host "  Warning: default_imgui.ini not found" -ForegroundColor Yellow
 }
 
+# Copy __Default_Editor.editor.json (optional default editor layout applied on
+# first run / reset). Absent is fine - the app falls back to built-in defaults.
+$defaultEditorSource = "__Default_Editor.editor.json"
+$defaultEditorDest = "dist\Fluoddity\__Default_Editor.editor.json"
+if (Test-Path $defaultEditorSource) {
+    Copy-Item -Path $defaultEditorSource -Destination $defaultEditorDest -Force
+    Write-Host "  Copied __Default_Editor.editor.json" -ForegroundColor Green
+} else {
+    Write-Host "  (no __Default_Editor.editor.json - using built-in defaults)" -ForegroundColor Gray
+}
+
 # Step 6: Copy physics_configs (Core and Advanced folders only - user configs stay in Documents)
 Write-Host "[6/6] Copying bundled physics_configs..." -ForegroundColor Yellow
 

@@ -8,7 +8,7 @@ from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, RenderSpecService, EditorSaver, SimulationSaver, PlottingManager
 from services import stereogram
 from parameter_locks import ParameterLockService
-from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
+from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir, get_user_preferences_path
 from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
 from simulation_runner import SimulationRunner
@@ -49,7 +49,10 @@ class App:
         # Initialize user data directory (creates Documents/Fluoddity on first run)
         initialize_user_data()
 
-        # Load preferences first to get entity_count / canvas_resolution
+        # Load preferences first to get entity_count / canvas_resolution.
+        # Detect first run BEFORE anything can write preferences.config (nothing
+        # writes it until cleanup()), so we can auto-load the default editor save.
+        first_run = not get_user_preferences_path().exists()
         loaded_prefs = load_preferences()
 
         # Xbox controller (FPS camera for 3D view + shader-driven field). Built
@@ -103,20 +106,24 @@ class App:
         self.ui._last_applied_entity_count = loaded_prefs.rendering.entity_count
         self.ui._last_applied_canvas_resolution = loaded_prefs.rendering.canvas_resolution
 
-        # Restore 3D camera settings from preferences
-        cam = self.ui.state.camera
-        cam.fov = loaded_prefs.camera3d.fov
-        cam.aperture = loaded_prefs.camera3d.aperture
-        cam.focal_plane_depth = loaded_prefs.camera3d.focal_plane_depth
-        cam.move_speed = loaded_prefs.camera3d.move_speed
-        cam.rotate_speed = loaded_prefs.camera3d.rotate_speed
-        cam.orbit_center[:] = loaded_prefs.camera3d.orbit_center
-        cam.orbit_rate = loaded_prefs.camera3d.orbit_rate
-        cam.stereogram = loaded_prefs.camera3d.stereogram
-        cam.eye_offset = loaded_prefs.camera3d.eye_offset
-        cam.stereo_toe_in = loaded_prefs.camera3d.stereo_toe_in
-        # OptiX active is derived each frame from the renderer dropdown.
-        cam.optix_enabled = (loaded_prefs.rendering.renderer == 1)
+        # Restore 3D camera settings from preferences.
+        self._sync_camera_from_prefs(loaded_prefs)
+
+        # First run (no preferences.config yet): auto-load the project's default
+        # editor save if present, exactly as if the user did Editor -> Load. This
+        # overlays prefs + docking layout in place; re-sync the camera afterwards
+        # since apply_default mutates the live prefs object.
+        if first_run:
+            if self.editor_saver.apply_default(self.ui.state.preferences):
+                self._sync_camera_from_prefs(self.ui.state.preferences)
+                # Keep the world-size change detector in sync with the overlaid
+                # prefs. The sim is already sized from loaded_prefs above; if the
+                # default save changes entity_count/canvas_resolution, edit them in
+                # Preferences and press Enter to rebuild at the new size.
+                self.ui._last_applied_entity_count = \
+                    self.ui.state.preferences.rendering.entity_count
+                self.ui._last_applied_canvas_resolution = \
+                    self.ui.state.preferences.rendering.canvas_resolution
 
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()
@@ -188,6 +195,27 @@ class App:
         self._load_default_config()
         self.sim.reload()
         self.sim.reset()
+
+    def _sync_camera_from_prefs(self, prefs):
+        """Copy 3D camera settings from preferences into the live Camera.
+
+        Called at startup and again after an editor save is applied (which
+        mutates the prefs object in place), so camera-affecting prefs reach the
+        live camera.
+        """
+        cam = self.ui.state.camera
+        cam.fov = prefs.camera3d.fov
+        cam.aperture = prefs.camera3d.aperture
+        cam.focal_plane_depth = prefs.camera3d.focal_plane_depth
+        cam.move_speed = prefs.camera3d.move_speed
+        cam.rotate_speed = prefs.camera3d.rotate_speed
+        cam.orbit_center[:] = prefs.camera3d.orbit_center
+        cam.orbit_rate = prefs.camera3d.orbit_rate
+        cam.stereogram = prefs.camera3d.stereogram
+        cam.eye_offset = prefs.camera3d.eye_offset
+        cam.stereo_toe_in = prefs.camera3d.stereo_toe_in
+        # OptiX active is derived each frame from the renderer dropdown.
+        cam.optix_enabled = (prefs.rendering.renderer == 1)
 
     @property
     def _pathtracer_interface(self):

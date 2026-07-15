@@ -45,6 +45,7 @@ class UIState:
     request_world_size_change: bool = False
     request_camera_reset: bool = False
     request_pick_focal: bool = False  # N key: set focal plane to nearest entity
+    request_reset_ui_settings: bool = False  # Reset prefs + docking to default editor
 
     # Config save/load (Ctrl+C/Ctrl+V)
     request_save_config: bool = False

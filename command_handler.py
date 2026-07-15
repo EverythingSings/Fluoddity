@@ -213,6 +213,8 @@ class CommandHandler:
             self._handle_save_editor(ui_state)
         if ui_state.request_load_editor:
             self._handle_load_editor(ui_state)
+        if ui_state.request_reset_ui_settings:
+            self._handle_reset_ui_settings(ui_state)
 
         # Simulation state save/load
         if ui_state.request_save_simulation:
@@ -612,6 +614,41 @@ class CommandHandler:
             print(f"Editor settings loaded: {path.name}")
         except Exception as e:
             print(f"Failed to load editor settings: {e}")
+
+    def _handle_reset_ui_settings(self, ui_state):
+        """Reset all UI settings to factory defaults, then overlay the project's
+        __Default_Editor save (prefs + docking layout) if it exists.
+
+        Mirrors _handle_load_editor: mutates the live PreferencesState in place
+        (identity preserved so held references see the update) and restores the
+        imgui docking layout. Falls back cleanly to factory defaults when the
+        default editor save is absent.
+        """
+        from state.preferences_state import PreferencesState, copy_preferences_into
+        # Factory defaults first (identity-preserving), then overlay the default
+        # editor save (no-op if the file isn't present).
+        copy_preferences_into(ui_state.preferences, PreferencesState())
+        if self.editor_saver:
+            self.editor_saver.apply_default(ui_state.preferences)
+        # Re-sync the live 3D camera from the (possibly overlaid) prefs, matching
+        # the startup path so camera-affecting prefs take effect.
+        cam = ui_state.camera
+        p = ui_state.preferences
+        cam.fov = p.camera3d.fov
+        cam.aperture = p.camera3d.aperture
+        cam.focal_plane_depth = p.camera3d.focal_plane_depth
+        cam.move_speed = p.camera3d.move_speed
+        cam.rotate_speed = p.camera3d.rotate_speed
+        cam.orbit_center[:] = p.camera3d.orbit_center
+        cam.orbit_rate = p.camera3d.orbit_rate
+        cam.stereogram = p.camera3d.stereogram
+        cam.eye_offset = p.camera3d.eye_offset
+        cam.stereo_toe_in = p.camera3d.stereo_toe_in
+        cam.optix_enabled = (p.rendering.renderer == 1)
+        # Re-sync the live TracerInterface with the reset preferences.
+        if self.ui._tracer_interface is not None:
+            self.ui._apply_tracer_preferences(self.ui._tracer_interface)
+        print("UI settings reset to defaults")
 
     # --- Simulation state save/load --------------------------------------
 

@@ -192,9 +192,10 @@ class MenuBarMixin:
 
                 # Reset all UI settings
                 if imgui.menu_item("Reset all UI settings", "", False)[0]:
-                    # Reset preferences to defaults (equivalent to deleting preferences.config)
-                    from state.preferences_state import PreferencesState
-                    self.state.preferences = PreferencesState()
+                    # Route through the command handler: reset prefs to factory
+                    # defaults (identity-preserved), then overlay the project's
+                    # __Default_Editor save (prefs + docking) if present.
+                    self._request_reset_ui_settings = True
                 self._delayed_tooltip("Restore all preferences and ui state to factory settings. \nEquivalent to deleting preferences.config, or running this\nprogram for the first time. Physics config saves are not affected.")
 
                 # Reset camera
