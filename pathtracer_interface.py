@@ -257,6 +257,7 @@ class PathTracerInterface:
         fov: float,
         width: int,
         height: int,
+        accum_slot: int = 0,
     ) -> moderngl.Texture | None:
         """Render one path-traced frame based on current render_mode.
 
@@ -288,7 +289,7 @@ class PathTracerInterface:
             return self._render_frame_inner(
                 entity_buffer, entity_count,
                 cam_pos, cam_dir, cam_up, fov,
-                width, height,
+                width, height, accum_slot,
             )
         except Exception as e:
             self._failed = True
@@ -301,7 +302,7 @@ class PathTracerInterface:
         self,
         entity_buffer, entity_count,
         cam_pos, cam_dir, cam_up, fov,
-        width, height,
+        width, height, accum_slot=0,
     ):
         """Inner render logic, called from render_frame() with error wrapping."""
         # 1. Lazy initialization
@@ -400,6 +401,7 @@ class PathTracerInterface:
             reset=reset,
             num_samples=num_samples,
             physics_steps=self.physics_steps,
+            accum_slot=accum_slot,
             **render_kwargs,
         )
         self._ao_frame_index += 1
@@ -619,9 +621,13 @@ class PathTracerInterface:
     # --------------------------------------------------------- accumulation API
 
     def reset_accumulation(self) -> None:
-        """Reset the accumulation buffer (call on camera move in accumulate mode)."""
+        """Reset the accumulation buffer (call on camera move in accumulate mode).
+
+        Clears all accumulation slots so both stereogram eyes reset together
+        (non-stereo just clears slot 0).
+        """
         if self._renderer is not None:
-            self._renderer.reset_accumulation()
+            self._renderer.reset_all_accum_slots()
 
     @property
     def sample_count(self) -> int:

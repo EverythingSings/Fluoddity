@@ -370,6 +370,13 @@ class PathTracerRenderer:
         self._accum_width = 0
         self._accum_height = 0
 
+        # Accumulation slots: in stereogram accumulate mode each eye needs its
+        # own persistent accumulation buffer (they occupy the same pixel
+        # coordinates but see different cameras). A slot swaps only the accum
+        # state in/out; the PBO/texture are transient scratch and shared.
+        self._active_accum_slot = 0
+        self._accum_slots = {}   # slot -> saved accum state dict
+
         # Denoiser resources (lazily initialized)
         self._denoiser = None
         self._denoiser_width = 0
@@ -733,6 +740,57 @@ class PathTracerRenderer:
         if self._d_normal is not None:
             self._d_normal.fill(0)
         self._sample_count = 0
+
+    # -- Accumulation slots (stereogram: one persistent accumulator per eye) --
+
+    _ACCUM_STATE_FIELDS = (
+        '_d_accum', '_d_albedo', '_d_normal',
+        '_sample_count', '_accum_width', '_accum_height',
+    )
+
+    def _snapshot_accum_state(self):
+        return {f: getattr(self, f) for f in self._ACCUM_STATE_FIELDS}
+
+    def _restore_accum_state(self, state):
+        for f in self._ACCUM_STATE_FIELDS:
+            setattr(self, f, state[f])
+
+    def reset_all_accum_slots(self):
+        """Reset the active accumulator and drop all other slots' saved state.
+
+        In stereogram accumulate mode each eye owns a slot; a camera move must
+        clear every eye, not just the one that happened to render last. Dropped
+        slots reallocate zeroed on next use. For non-stereo (only slot 0) this
+        is equivalent to ``reset_accumulation``.
+        """
+        self.reset_accumulation()
+        self._accum_slots.clear()
+
+    def set_accum_slot(self, slot):
+        """Activate accumulation buffer `slot`, preserving each slot's state.
+
+        Used by stereogram accumulate mode so each eye accumulates into its own
+        persistent buffer instead of blending into a shared one. Slot 0 is the
+        default (non-stereo) accumulator. Switching slots stashes the current
+        accum state and swaps in the target slot's; `_ensure_accum_buffers`
+        lazily allocates a fresh (zeroed) buffer the first time a slot is used.
+        """
+        if slot == self._active_accum_slot:
+            return
+        # Stash current slot's live state.
+        self._accum_slots[self._active_accum_slot] = self._snapshot_accum_state()
+        # Restore target slot's state, or start empty (forces reallocation).
+        saved = self._accum_slots.get(slot)
+        if saved is not None:
+            self._restore_accum_state(saved)
+        else:
+            self._d_accum = None
+            self._d_albedo = None
+            self._d_normal = None
+            self._sample_count = 0
+            self._accum_width = 0
+            self._accum_height = 0
+        self._active_accum_slot = slot
 
     # ------------------------------------------------------------------
     # Denoiser (Step 5)
@@ -1739,7 +1797,7 @@ class PathTracerRenderer:
                         radius_scale=1.0,
                         denoise_enabled=False, reset=True,
                         num_samples=1, flip_y=True,
-                        physics_steps=0, **render_kwargs):
+                        physics_steps=0, accum_slot=0, **render_kwargs):
         """Realtime render with configurable sample count and reset behavior.
 
         Manages GAS scheduling internally. The entity buffer must reflect
@@ -1762,6 +1820,9 @@ class PathTracerRenderer:
         Returns:
             moderngl.Texture (rgba8).
         """
+        # Select this eye's accumulator (slot 0 = default / non-stereo).
+        self.set_accum_slot(accum_slot)
+
         if reset:
             self.reset_accumulation()
 

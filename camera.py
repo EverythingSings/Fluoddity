@@ -174,7 +174,11 @@ class Camera:
                 render_w = max(1, int(half_w * scale))
                 render_h = max(1, int(height * scale))
                 any_rendered = False
-                for side in self._sg.eye_sides():
+                # eye_index 0/1 -> accum slots 1/2 so each eye accumulates into
+                # its own persistent buffer in Accumulate mode (slot 0 = the
+                # non-stereo default). Without this the two eyes blend into one
+                # shared accumulator -> "double vision".
+                for eye_index, side in enumerate(self._sg.eye_sides()):
                     ev = self._sg.eye_camera(
                         cam.pos, cam.dir, cam.up, self.fov_3d, width, height,
                         side, self.stereo,
@@ -188,6 +192,7 @@ class Camera:
                         fov=ev.fov,
                         width=render_w,
                         height=render_h,
+                        accum_slot=eye_index + 1,
                     )
                     if tex is None:
                         continue
