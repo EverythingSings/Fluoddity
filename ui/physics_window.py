@@ -9,11 +9,6 @@ class PhysicsWindowMixin:
 
     def render_physics_settings_window(self):
         """Render the Physics Settings window with sliders."""
-        # Apply bluish background when in sweep preview mode (waiting for click to restore sweeps)
-        if self.state.sim.sweep_preview_pending_restore:
-            imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(0.15, 0.20, 0.35, 0.94))
-            imgui.push_style_color(imgui.Col_.title_bg_active, imgui.ImVec4(0.20, 0.30, 0.50, 1.0))
-
         # No p_open parameter - window is uncloseable
         imgui.begin('Physics Settings', flags=imgui.WindowFlags_.menu_bar)
 
@@ -206,10 +201,6 @@ class PhysicsWindowMixin:
         self.render_physics_tooltip()
 
         imgui.end()
-
-        # Pop sweep preview style colors (pushed before imgui.begin)
-        if self.state.sim.sweep_preview_pending_restore:
-            imgui.pop_style_color(2)
 
     def _render_physics_normal_menu_bar(self) -> bool:
         """Render the normal mode menu bar for Physics Settings. Returns whether any menu is open."""

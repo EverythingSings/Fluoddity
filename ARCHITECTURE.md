@@ -108,7 +108,7 @@ Line counts are approximate and will drift; treat them as size signals.
 ### Renderer Packages
 | Package | Lines | Description |
 |---------|-------|-------------|
-| `rendering/` | ~700 | Renderer protocol + lifecycle (Step 7): `renderer.py` (`Renderer` protocol, `RenderCamera`, `VideoStrategy`), `host.py` (`RendererHost` — OptiX lifecycle/prefs-sync/preview), `image_pipeline.py` (`ImagePipeline` accumulation+tonemap+bloom, `OverlayCompositor` display markup), `video_strategies.py` (`TracerVideoStrategy`, `OptixPtVideoStrategy`) |
+| `rendering/` | ~700 | Renderer protocol + lifecycle (Step 7): `renderer.py` (`Renderer` protocol, `RenderCamera`, `VideoStrategy`), `host.py` (`RendererHost` — OptiX lifecycle/prefs-sync/preview), `image_pipeline.py` (`ImagePipeline` accumulation+tonemap+bloom), `video_strategies.py` (`TracerVideoStrategy`, `OptixPtVideoStrategy`) |
 | `optix_pathtracer/` | ~3700 (excl. tests) | The single OptiX renderer (`renderer.py`, `cuda_src.py`, `sdf_scene.py`, `interop.py`) + step tests. `rt_mode` selects rasterize (0) / X-spp (1) / accumulate (2). |
 | `volrender/` | ~1096 | Standalone volumetric path tracer (`renderer.py`, `grid.py`, `majorant.py`, `camera.py`, `params.py`) + `shaders/`, `example/`, `tests/`. `VolumeRenderer`/`VoxelGrid`/`MajorantBuilder` now have a `cleanup()` cascade. |
 
@@ -144,7 +144,7 @@ Mixin-based architecture. The `UI` class in `core.py` multiple-inherits 17 mixin
 | `sim.py` | 914 | GPU particle simulation: buffers, compute dispatch, physics→uniform mapping, sweeps, rules (**user-owned**) |
 | `camera.py` | ~470 | Camera state, coordinate transforms, view-texture generation (2D/3D); owns an `ImagePipeline` and returns a *finished, markup-free* display texture (no screen draw, no overlays — the Viewer owns those) |
 | `config_clipboard/` | ~130 | `ConfigClipboardHandler` (Step 9): the config-clipboard preview/load/delete command handlers, operating on the `ConfigClipboardState`. Window lives in `ui/config_clipboard_window.py`; Ctrl+C save-checkpoint stays in `CommandHandler` |
-| `viewer/` | ~230 | `Viewer` (Step 8): the always-displayed "Viewer" imgui window (docks into the dockspace central node, immune to hide-windows). Owns the `OverlayCompositor`; composites display-only markup over the finished frame and shows it. Single display sink (parallel to the video recorder's file sink). `draw_debug_overlay()` blends arrow-debug into a Viewer-owned copy so recordings stay clean |
+| `viewer/` | ~230 | `Viewer` (Step 8): the always-displayed "Viewer" imgui window (docks into the dockspace central node, immune to hide-windows). Shows the renderer's finished frame. Single display sink (parallel to the video recorder's file sink). `draw_debug_overlay()` blends arrow-debug into a Viewer-owned copy so recordings stay clean |
 
 ### Services (`services/`)
 | File | Lines | Description |
@@ -195,9 +195,8 @@ Plain dataclasses.
 | `camera.vert/.frag` | View texture → screen |
 | `cam_brush.vert/.frag` | Camera-space instanced particle rendering (2D view) |
 | `points_3d.vert/.frag` | GL_POINTS 3D particle rendering (baseline 3D backend) |
-| `frame_assembly.vert` | Fullscreen-quad vertex shader shared by `image_pipeline.frag`, `overlay.frag`, and bloom |
+| `frame_assembly.vert` | Fullscreen-quad vertex shader shared by `image_pipeline.frag` and bloom |
 | `image_pipeline.frag` | Image-pipeline core: temporal accumulation + tonemap + gamma + emboss + inline SDF preview (volrender includes prepended). Markup-free. |
-| `overlay.frag` | Display-only overlay pass: sweep reticle, draw-trail ring, advanced-drawing field overlay (composited over a finished frame) |
 | `bloom_downsample.frag / bloom_upsample.frag` | Bloom mip chain |
 | `field_drawing.frag` | Force/strafe field painting |
 | `field_override/march.frag` | Shader-driven field override (raymarched procedural field) |

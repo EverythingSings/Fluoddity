@@ -1,10 +1,9 @@
 """Viewer package (Step 8 of the modularity refactor).
 
 The Viewer is the always-displayed ImGui window that shows the active
-renderer's finished frame, plus a small overlay pass for UI markup (sweep
-reticle, draw-trail ring, advanced-drawing field overlay). It is the single
-*display* sink for renderer output, parallel to the video recorder (the *file*
-sink). See `docs/component_inventory.md` -> Target-State Directives -> Viewer.
+renderer's finished frame. It is the single *display* sink for renderer
+output, parallel to the video recorder (the *file* sink). See
+`docs/component_inventory.md` -> Target-State Directives -> Viewer.
 """
 from .viewer import Viewer
 

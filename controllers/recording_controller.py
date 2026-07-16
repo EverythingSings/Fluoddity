@@ -81,7 +81,7 @@ class RecordingController:
         recording ends by reaching max_frames.
 
         Returns a RecordingUpdate the orchestrator uses for the rest of the
-        frame (sweep-reticle suppression, video-frame branches, rt gating).
+        frame (video-frame branches, rt gating).
         """
         st = self.state
         p = ui_state.preferences

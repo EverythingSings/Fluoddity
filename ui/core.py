@@ -192,8 +192,6 @@ class UI(
         # One-shot flags (reset after get_state)
         self._left_click_pending = False
         self._right_click_pending = False
-        self._any_left_click_pending = False  # Includes imgui clicks
-        self._any_right_click_pending = False  # Includes imgui clicks
         self._scroll_delta = 0.0
         self._request_reload = False
         self._request_reset = False
@@ -276,12 +274,6 @@ class UI(
         if action != glfw.PRESS:
             return
 
-        # Track ALL clicks (including imgui) for sweep preview restore
-        if button == glfw.MOUSE_BUTTON_LEFT:
-            self._any_left_click_pending = True
-        elif button == glfw.MOUSE_BUTTON_RIGHT:
-            self._any_right_click_pending = True
-
         # Only let clicks through to the sim when they land on the Viewer window
         # (not on a floating imgui panel). The Viewer is itself an imgui window
         # now, so `want_capture_mouse` is true over it too — gate on Viewer hover
@@ -347,9 +339,6 @@ class UI(
             elif key == self.keybindings.get_key("toggle_parameter_sweep"):
                 # Toggle parameter sweeps
                 self.state.sim.parameter_sweeps_enabled = not self.state.sim.parameter_sweeps_enabled
-                # If re-enabling sweeps while in preview mode, clear the preview flag
-                if self.state.sim.parameter_sweeps_enabled and self.state.sim.sweep_preview_pending_restore:
-                    self.state.sim.sweep_preview_pending_restore = False
             elif key == self.keybindings.get_key("randomize_rules"):
                 # Full reset (one-shot, not hold)
                 self._request_full_reset = True
@@ -391,8 +380,6 @@ class UI(
         self.state.mouse_pos = self._mouse_pos
         self.state.left_click_this_frame = self._left_click_pending
         self.state.right_click_this_frame = self._right_click_pending
-        self.state.any_left_click_this_frame = self._any_left_click_pending
-        self.state.any_right_click_this_frame = self._any_right_click_pending
 
         # Continuous mouse state (for draw trail mode) - only over the Viewer
         viewer_hovered = self._viewer_hovered()
@@ -438,8 +425,6 @@ class UI(
         # Reset one-shot flags
         self._left_click_pending = False
         self._right_click_pending = False
-        self._any_left_click_pending = False
-        self._any_right_click_pending = False
         self._scroll_delta = 0.0
         self._request_reload = False
         self._request_reset = False

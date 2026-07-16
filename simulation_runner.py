@@ -47,8 +47,7 @@ class SimulationRunner:
         from rendering import OptixPtVideoStrategy
         return OptixPtVideoStrategy(self.make_video_context(), pt_interface)
 
-    def run_simulation_frame(self, ui_state, sweep_mode, sweep_reticle_pos,
-                              sweep_reticle_visible, screen_aspect,
+    def run_simulation_frame(self, ui_state,
                               screenshot_in_progress=False,
                               skip_view_generation=False):
         """Run simulation step(s) with frame assembly and video recording."""
@@ -79,9 +78,7 @@ class SimulationRunner:
         """Build the kwargs dict for image_pipeline.assemble_frame().
 
         Shared between motion-blur and non-motion-blur paths; only
-        total_samples / current_sample_index differ between them. Overlay
-        markup (sweep reticle, draw ring, field overlay) is NOT included here —
-        it is composited for display only, so recorded frames stay markup-free.
+        total_samples / current_sample_index differ between them.
         """
         return dict(
             brightness=self.camera.BRIGHTNESS,

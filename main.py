@@ -514,25 +514,8 @@ class App:
         # 5.2. Sync parameter lock master toggle
         self.param_lock_service.enabled = ui_state.preferences.parameter_locks.enabled
 
-        # 5.5. Calculate sweep reticle info
-        sweep_reticle_x, sweep_reticle_y, sweep_reticle_visible = self.sim.get_sweep_reticle_position()
-
-        if is_recording or self.screenshot_in_progress:
-            sweep_reticle_visible = False
-
         width, height = glfw.get_framebuffer_size(self.window)
         screen_aspect = width / height if height > 0 else 1.0
-
-        if sweep_reticle_visible:
-            screen_x, screen_y = self.camera.tex_to_screen(
-                (sweep_reticle_x, sweep_reticle_y),
-                self.sim.view_tex.size
-            )
-            sweep_reticle_x = screen_x / width
-            sweep_reticle_y = screen_y / height
-
-        sweep_mode = ui_state.sim.parameter_sweeps_enabled
-        sweep_reticle_pos = (sweep_reticle_x, sweep_reticle_y)
 
         # 6. Run simulation if going. The realtime volumetric tracer only drives
         # the display for the OpenGL renderer (Optix uses the path tracer).
@@ -616,8 +599,7 @@ class App:
                     )
         elif ui_state.sim.going:
             self.sim_runner.run_simulation_frame(
-                ui_state, sweep_mode, sweep_reticle_pos, sweep_reticle_visible,
-                screen_aspect,
+                ui_state,
                 screenshot_in_progress=self.screenshot_in_progress,
                 skip_view_generation=(rt_active or optix_preview_display
                                       or volrender_preview_display)
@@ -690,8 +672,7 @@ class App:
             self._pathtracer_interface.physics_steps = physics_steps
 
         # 7. Render camera view
-        self._render_camera_view(ui_state, sweep_mode, sweep_reticle_pos,
-                                  sweep_reticle_visible, screen_aspect,
+        self._render_camera_view(ui_state, screen_aspect,
                                   rt_active=rt_active)
 
         # 7.9. Snapshot camera for next-frame movement detection
@@ -738,16 +719,14 @@ class App:
         self._prev_camera_position = self.ui.state.camera.position.copy()
         self._prev_camera_zoom = self.ui.state.camera.zoom
 
-    def _render_camera_view(self, ui_state, sweep_mode, sweep_reticle_pos,
-                             sweep_reticle_visible, screen_aspect,
-                             rt_active=False):
+    def _render_camera_view(self, ui_state, screen_aspect, rt_active=False):
         """Prepare the Viewer's display texture for this frame.
 
-        Produces the renderer's finished (markup-free) frame and hands it to the
-        Viewer, which composites display-only overlays and shows it in the
-        "Viewer" ImGui window. No longer draws to the screen directly — the
-        Viewer image fills the docking central node, so mouse coordinates stay
-        in full-window screen space (picking/drawing math unchanged).
+        Produces the renderer's finished frame and hands it to the Viewer, which
+        shows it in the "Viewer" ImGui window. No longer draws to the screen
+        directly — the Viewer image fills the docking central node, so mouse
+        coordinates stay in full-window screen space (picking/drawing math
+        unchanged).
         """
         # Realtime tracer mode: display the path-traced image fullscreen (no
         # overlays — matches the previous fullscreen behavior).
@@ -785,19 +764,6 @@ class App:
             self.viewer.prepare(tonemapped)
             return
 
-        width, height = glfw.get_framebuffer_size(self.window)
-        mouse_x_norm = ui_state.mouse_pos[0] / width if width > 0 else 0.5
-        mouse_y_norm = ui_state.mouse_pos[1] / height if height > 0 else 0.5
-        mouse_screen_coords = (mouse_x_norm, mouse_y_norm)
-
-        # Build overlay markup params (sweep reticle). These composite over the
-        # finished frame for DISPLAY only; the recorded frame stays markup-free.
-        overlay_params = {
-            'sweep_mode': sweep_mode,
-            'sweep_reticle_pos': sweep_reticle_pos,
-            'sweep_reticle_visible': sweep_reticle_visible,
-        }
-
         finished_tex = self.camera.render(
             sim_going=ui_state.sim.going,
             screen_aspect=screen_aspect,
@@ -808,17 +774,8 @@ class App:
             bloom_radius=ui_state.preferences.bloom.radius,
         )
 
-        # Hand the finished (markup-free) frame to the Viewer, which composites
-        # display-only overlays and shows it in the Viewer window.
-        self.viewer.prepare(
-            finished_tex,
-            overlay_params=overlay_params,
-            screen_aspect=screen_aspect,
-            mouse_screen_coords=mouse_screen_coords,
-            camera_position=tuple(self.camera.position),
-            camera_zoom=self.camera.zoom,
-            canvas_resolution=self.sim.get_canvas_dimensions(),
-        )
+        # Hand the finished frame to the Viewer, which shows it in the Viewer window.
+        self.viewer.prepare(finished_tex)
 
     def _save_screenshot(self, ui_state):
         """Save screenshot and restore settings."""

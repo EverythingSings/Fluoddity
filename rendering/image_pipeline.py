@@ -1,17 +1,13 @@
-"""ImagePipeline + OverlayCompositor — the split of the old FrameAssembler.
+"""ImagePipeline — the universal image pipeline split out of the old FrameAssembler.
 
 Step 7 pulls the *universal image pipeline* (temporal accumulation, tonemap,
-EXPOSURE long-exposure blend, and now bloom) out of the
-overlay markup. Renderers own an `ImagePipeline` and return finished (tonemapped,
-bloomed) frames; the Viewer (Step 8) runs an `OverlayCompositor` afterwards to
-draw UI markup (sweep reticle, draw ring, field overlay) over the finished frame
-for *display only* — so recorded video frames stay markup-free.
+EXPOSURE long-exposure blend, and now bloom) out of the renderers. Renderers own
+an `ImagePipeline` and return finished (tonemapped, bloomed) frames.
 
 - `ImagePipeline` drives `shaders/image_pipeline.frag` and internally applies
   `BloomProcessor`. Same accumulation contract as the old FrameAssembler
   (`assemble_frame(..., total_samples, current_sample_index)` returns the
   finished texture on the final sample, else None).
-- `OverlayCompositor` drives `shaders/overlay.frag` over a finished frame.
 """
 from __future__ import annotations
 
@@ -42,7 +38,6 @@ class ImagePipeline:
 
     Owns the accumulation buffer and (lazily) a BloomProcessor. Returns a
     finished, tonemapped (and optionally bloomed) texture on the final sample.
-    Overlay markup is NOT applied here — that is the OverlayCompositor's job.
     """
 
     def __init__(self, ctx):
@@ -144,67 +139,3 @@ class ImagePipeline:
         if self._bloom_processor is not None:
             self._bloom_processor.cleanup()
             self._bloom_processor = None
-
-
-class OverlayCompositor:
-    """Draws UI markup over a finished frame for display only.
-
-    Runs `shaders/overlay.frag`: the parameter-sweep reticle. Input is a
-    finished (tonemapped) texture; output is a display-only texture (never
-    sent to the video recorder).
-    """
-
-    def __init__(self, ctx):
-        self.ctx = ctx
-        self._shader = None
-        self._vao = None
-        self._out_tex = None
-        self._out_fbo = None
-        self._size = (0, 0)
-
-    def _ensure(self, width, height):
-        if self._shader is None:
-            vert = read_shader('shaders/frame_assembly.vert')
-            frag = read_shader('shaders/overlay.frag')
-            self._shader = self.ctx.program(vertex_shader=vert, fragment_shader=frag)
-            self._vao = _fullscreen_quad_vao(self.ctx, self._shader)
-        if self._size != (width, height):
-            if self._out_tex is not None:
-                self._out_fbo.release()
-                self._out_tex.release()
-            self._out_tex = self.ctx.texture((width, height), 4, dtype='f4')
-            self._out_tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
-            self._out_fbo = self.ctx.framebuffer(color_attachments=[self._out_tex])
-            self._size = (width, height)
-
-    def has_markup(self, *, sweep_mode, sweep_reticle_visible):
-        """Whether any overlay would actually draw (lets callers skip the pass)."""
-        return sweep_mode and sweep_reticle_visible
-
-    def composite(self, input_texture, *,
-                  sweep_mode=False, sweep_reticle_pos=(0.5, 0.5),
-                  sweep_reticle_visible=False, screen_aspect=1.0):
-        """Composite markup over ``input_texture``; return a display texture."""
-        width, height = input_texture.size
-        self._ensure(width, height)
-
-        input_texture.use(location=0)
-
-        s = self._shader
-        s['input_frame'] = 0
-        tryset(s, 'PARAMETER_SWEEP_MODE', sweep_mode)
-        tryset(s, 'sweep_reticle_pos', sweep_reticle_pos)
-        tryset(s, 'sweep_reticle_visible', sweep_reticle_visible)
-        tryset(s, 'screen_aspect', screen_aspect)
-
-        self._out_fbo.use()
-        self._vao.render()
-        return self._out_tex
-
-    def cleanup(self):
-        for attr in ('_out_fbo', '_out_tex', '_vao', '_shader'):
-            obj = getattr(self, attr, None)
-            if obj is not None:
-                obj.release()
-                setattr(self, attr, None)
-        self._size = (0, 0)

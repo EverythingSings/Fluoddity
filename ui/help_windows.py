@@ -77,8 +77,7 @@ class HelpWindowsMixin:
             imgui.bullet_text("The swept parameter will vary from slider_min to slider_max")
             imgui.bullet_text("Each slider has up/down buttons to its left which\nwiden/narrow the slider range.")
             imgui.bullet_text("Right click on sliders to manually set ranges")
-            imgui.bullet_text("When using X and or Y sweeps, click anywhere on the canvas to\nset slider values. Then when you turn sweeps off,\neverywhere will behave like the region you clicked. ")
-            imgui.bullet_text("Right click will temporarily disable sweeps allowing you to see\nthe effects of your slider values. Click anywhere to end the 'preview'.")
+            imgui.bullet_text("With sweeps on, click a particle to copy its swept values\ninto the sliders. Turn sweeps off and everywhere will\nbehave like the particle you clicked.")
 
             imgui.spacing()
             imgui.text("Sweep Directions")

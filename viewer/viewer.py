@@ -1,22 +1,19 @@
-"""Viewer window + overlay pass.
+"""Viewer window.
 
 The Viewer displays the active renderer's *finished, markup-free* frame in an
-always-present ImGui window that fills the docking central node. It owns an
-`OverlayCompositor` and runs a small overlay pass so UI markup (sweep reticle,
-draw-trail ring, advanced-drawing field overlay) is composited over the finished
-frame **for display only** — recorded video and screenshots keep the clean frame.
+always-present ImGui window that fills the docking central node.
 
 Two-phase per frame:
 
-1. `prepare(finished_tex, overlay_params, ...)` runs during the GL phase of the
-   frame (called from the orchestrator right after the renderer produces its
-   finished frame). It composites overlays into a display texture and stashes it.
+1. `prepare(finished_tex)` runs during the GL phase of the frame (called from the
+   orchestrator right after the renderer produces its finished frame). It stashes
+   the finished texture for display.
 2. `render_window(hidden)` runs inside the ImGui frame (called from `UI.render()`
    render dispatch). It draws the stashed display texture as an ImGui image
    filling the central dock node. It is **immune to the show/hide-windows button**
    (the `hidden` flag is accepted for symmetry but never hides the Viewer).
 
-Keeping the overlay GL pass out of the ImGui draw (phase 1) mirrors the
+Keeping GL work out of the ImGui draw (phase 1) mirrors the
 video-recorder-as-file / viewer-as-display symmetry and keeps FBO work off the
 ImGui render path.
 """
@@ -26,20 +23,17 @@ import moderngl
 import numpy as np
 from imgui_bundle import imgui
 
-from rendering import OverlayCompositor
-
 
 class Viewer:
-    """Always-displayed window that shows the renderer's finished frame + markup."""
+    """Always-displayed window that shows the renderer's finished frame."""
 
     WINDOW_NAME = "Viewer"
 
     def __init__(self, ctx, window):
         self.ctx = ctx
         self.window = window
-        self.overlay_compositor = OverlayCompositor(ctx)
-        # The texture actually shown on screen this frame (finished frame with
-        # display-only overlays composited). None until the first prepare().
+        # The texture actually shown on screen this frame (the renderer's
+        # finished frame). None until the first prepare().
         self._display_tex = None
         self._tex_ref = None
         self._tex_glo = None  # cache: only rebuild the ImTextureRef when glo changes
@@ -60,47 +54,14 @@ class Viewer:
         self._debug_vao = None
         self._debug_size = (0, 0)
 
-    def prepare(self, finished_tex, *, overlay_params=None,
-                screen_aspect=1.0, mouse_screen_coords=(0.5, 0.5),
-                camera_position=(0.0, 0.0), camera_zoom=1.0,
-                canvas_resolution=(1024, 1024)):
-        """Composite display-only overlays over ``finished_tex`` and stash it.
+    def prepare(self, finished_tex):
+        """Stash the renderer's finished frame for display this frame.
 
         Call during the GL phase (after the renderer produces its finished
         frame). ``finished_tex`` must be a window-sized, 1:1 display texture.
         Passing ``None`` clears the Viewer (nothing to show this frame).
         """
-        if finished_tex is None:
-            self._display_tex = None
-            return
-
-        self._display_tex = self._composite_overlays(
-            finished_tex, overlay_params, screen_aspect,
-            mouse_screen_coords, camera_position, camera_zoom,
-            canvas_resolution)
-
-    def _composite_overlays(self, finished_tex, overlay_params,
-                            screen_aspect, mouse_screen_coords,
-                            camera_position, camera_zoom, canvas_resolution):
-        """Composite UI markup over a finished frame for display only.
-
-        Returns the composited display texture, or ``finished_tex`` unchanged
-        when there is no markup to draw. Never mutates the recorded frame.
-        """
-        if not overlay_params:
-            return finished_tex
-        comp = self.overlay_compositor
-        if not comp.has_markup(
-                sweep_mode=overlay_params.get('sweep_mode', False),
-                sweep_reticle_visible=overlay_params.get('sweep_reticle_visible', False)):
-            return finished_tex
-        return comp.composite(
-            finished_tex,
-            sweep_mode=overlay_params.get('sweep_mode', False),
-            sweep_reticle_pos=overlay_params.get('sweep_reticle_pos', (0.5, 0.5)),
-            sweep_reticle_visible=overlay_params.get('sweep_reticle_visible', False),
-            screen_aspect=screen_aspect,
-        )
+        self._display_tex = finished_tex
 
     def draw_debug_overlay(self, render_fn):
         """Render a display-only debug overlay (e.g. arrow debug) over the frame.
@@ -225,7 +186,6 @@ class Viewer:
         imgui.pop_style_var()
 
     def cleanup(self):
-        self.overlay_compositor.cleanup()
         for attr in ('_debug_fbo', '_debug_tex', '_debug_vao', '_debug_shader'):
             obj = getattr(self, attr, None)
             if obj is not None:

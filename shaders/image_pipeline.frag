@@ -1,9 +1,7 @@
 #version 330 core
 // Image-pipeline core: temporal accumulation + tonemap.
-// Split out of the old frame_assembly.frag in Step 7 — overlay markup (sweep
-// reticle, draw-trail ring, advanced-drawing field overlay) now lives in a
-// separate overlay pass (overlay.frag / OverlayCompositor) that runs AFTER this,
-// so the accumulation texture this produces is markup-free (correct for video).
+// Split out of the old frame_assembly.frag in Step 7. Produces a markup-free
+// accumulation texture (correct for video); there is no overlay pass anymore.
 uniform sampler2D input_frame;
 uniform sampler2D accumulation_buffer;
 uniform bool is_first_frame;

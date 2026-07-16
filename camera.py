@@ -13,7 +13,7 @@ class Camera:
         self.window = window
         self.BRIGHTNESS = 1
 
-        # Camera state (2D pan/zoom retained only for sweep-reticle screen mapping)
+        # Camera state (2D pan/zoom retained for screen_to_ray_3d picking math)
         self.position = np.array([0.0, 0.0])
         self.zoom = 1.0
 
@@ -91,9 +91,7 @@ class Camera:
         self.points_3d_vao = self.ctx.vertex_array(self.points_3d_program, []) if self.points_3d_program else None
 
         # Image pipeline (temporal accumulation + tonemap + SDF + bloom).
-        # Produces a markup-free finished frame. Overlay markup (sweep /
-        # draw / field) is composited afterwards by the Viewer for display only,
-        # so recorded frames stay clean.
+        # Produces a finished frame the Viewer displays and the recorder captures.
         self.image_pipeline = ImagePipeline(self.ctx)
         self.assembled_texture = None
 
@@ -404,46 +402,3 @@ class Camera:
         direction = direction / np.linalg.norm(direction)
 
         return (cam.pos.copy(), direction)
-
-    def tex_to_screen(self, coord_tuple, tex_size: tuple = None):
-        """
-        Transform texture coordinates to screen coordinates.
-
-        Args:
-            coord_tuple: (tex_x, tex_y) texture coordinates where (0,0) is top-left
-            tex_size: (width, height) of texture. If None, uses self.sim.view_tex.size
-
-        Returns:
-            (x, y) screen coordinates where (0,0) is top-left of screen
-        """
-        tex_x, tex_y = coord_tuple
-        width, height = glfw.get_framebuffer_size(self.window)
-
-        in_pos_x = tex_x * 2 - 1
-        in_pos_y = tex_y * 2 - 1
-
-        if tex_size is None:
-            tex_size = self.sim.view_tex.size
-        tex_aspect = tex_size[0] / tex_size[1]
-        window_aspect = width / height
-
-        if tex_aspect > window_aspect:
-            scale_x = 1.0
-            scale_y = window_aspect / tex_aspect
-        else:
-            scale_x = tex_aspect / window_aspect
-            scale_y = 1.0
-
-        scale_x /= self.zoom
-        scale_y /= self.zoom
-
-        pos_x = in_pos_x * scale_x
-        pos_y = in_pos_y * scale_y
-
-        pos_x -= self.position[0] / self.zoom
-        pos_y += self.position[1] / self.zoom
-
-        x_screen = (pos_x + 1) / 2 * width
-        y_screen = (1 - (pos_y + 1) / 2) * height
-
-        return (x_screen, y_screen)

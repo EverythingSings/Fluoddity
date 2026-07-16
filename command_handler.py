@@ -185,17 +185,13 @@ class CommandHandler:
         if ui_state.request_randomize_mutations:
             self._handle_randomize_mutations(ui_state)
 
-        # Handle sweep preview restore
-        restored_sweep_preview = self._handle_sweep_preview_restore(ui_state)
-
         # Handle mouse clicks
-        if not restored_sweep_preview:
-            canvas_aspect_ratio = ui_state.preferences.rendering.canvas_aspect_ratio
-            #convert aspect string to tuple of floats
-            canvas_aspect_ratio = tuple(float(x) for x in canvas_aspect_ratio.split(":"))
-            #convert to ratio
-            canvas_aspect_ratio = canvas_aspect_ratio[1]/canvas_aspect_ratio[0]
-            self._handle_mouse_clicks(ui_state, canvas_aspect_ratio)
+        canvas_aspect_ratio = ui_state.preferences.rendering.canvas_aspect_ratio
+        #convert aspect string to tuple of floats
+        canvas_aspect_ratio = tuple(float(x) for x in canvas_aspect_ratio.split(":"))
+        #convert to ratio
+        canvas_aspect_ratio = canvas_aspect_ratio[1]/canvas_aspect_ratio[0]
+        self._handle_mouse_clicks(ui_state, canvas_aspect_ratio)
 
         # Handle config save/load/delete
         self._handle_config_commands(ui_state)
@@ -300,47 +296,43 @@ class CommandHandler:
             if self.camera.controller_cam is not None:
                 sync_orbit_angles_from_camera(ui_state.camera, self.camera.controller_cam)
 
-    def _handle_sweep_preview_restore(self, ui_state):
-        """Handle sweep preview restore: ANY click re-enables sweeps. Returns True if restored."""
-        if ui_state.sim.sweep_preview_pending_restore:
-            if ui_state.any_left_click_this_frame or ui_state.any_right_click_this_frame:
-                ui_state.sim.parameter_sweeps_enabled = True
-                ui_state.sim.sweep_preview_pending_restore = False
-                return True
-        return False
-
     def _handle_mouse_clicks(self, ui_state, canvas_aspect_ratio):
-        """Handle left/right mouse click behavior based on mode."""
-        if ui_state.left_click_this_frame:
-            if ui_state.sim.parameter_sweeps_enabled:
-                self._handle_sweep_click(ui_state, canvas_aspect_ratio)
-            elif ui_state.preferences.ui_windows.mouse_mode == "Select Particle":
-                self._handle_entity_pick(ui_state, canvas_aspect_ratio)
+        """Handle left/right mouse click behavior based on mode.
 
-        elif ui_state.right_click_this_frame:
-            if ui_state.sim.parameter_sweeps_enabled:
-                if self.sim.has_active_xy_sweep() or self.sim.has_active_cohort_sweep():
-                    ui_state.sim.parameter_sweeps_enabled = False
-                    ui_state.sim.sweep_preview_pending_restore = True
-            elif ui_state.preferences.ui_windows.mouse_mode == "Select Particle":
-                if self.rule_manager.length() > 1:
-                    prev_rule, prev_seed = self.rule_manager.pop_rule()
-                    if prev_seed is not None:
-                        ui_state.sim.rule_seed = prev_seed
-                    self.sim.apply_rule(prev_rule)
-
-    def _handle_sweep_click(self, ui_state, canvas_aspect_ratio):
-        """Handle left click when parameter sweeps are enabled (3D ray pick).
-
-        Only cohort sweeps make sense in 3D (XY sweeps have no 3D analogue).
+        Parameter sweeps take priority over the Select-Particle rule picker:
+        while sweeps are enabled, a left-click copies the clicked entity's swept
+        slider values (no rule change), so the pick never disturbs the active
+        rule. Otherwise, in "Select Particle" mode left-click loads the entity's
+        rule and right-click pops the rule stack.
         """
-        if not self.sim.has_active_cohort_sweep():
+        if ui_state.sim.parameter_sweeps_enabled:
+            if ui_state.left_click_this_frame:
+                self._handle_sweep_click(ui_state)
             return
 
+        if ui_state.preferences.ui_windows.mouse_mode != "Select Particle":
+            return
+
+        if ui_state.left_click_this_frame:
+            self._handle_entity_pick(ui_state, canvas_aspect_ratio)
+        elif ui_state.right_click_this_frame:
+            if self.rule_manager.length() > 1:
+                prev_rule, prev_seed = self.rule_manager.pop_rule()
+                if prev_seed is not None:
+                    ui_state.sim.rule_seed = prev_seed
+                self.sim.apply_rule(prev_rule)
+
+    def _handle_sweep_click(self, ui_state):
+        """Left click while parameter sweeps are enabled: copy the clicked
+        entity's swept slider values into the sliders (via the entity-picker
+        raycast). Does NOT read back or change the entity's rule — sweep mode
+        only edits slider values, not behavior.
+        """
         ray_origin, ray_dir = self.camera.screen_to_ray_3d(ui_state.mouse_pos)
         entity_id, entity_pos, entity_cohort, _depth = self._pick_entity_3d(
             ui_state, ray_origin, ray_dir)
-        self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
+        if 0 <= entity_id < self.sim.entity_count:
+            self.sim.update_sliders_from_particle(entity_pos, entity_cohort)
 
     def _handle_entity_pick(self, ui_state, canvas_aspect_ratio):
         """Handle entity selection via left click in Select Particle mode (3D ray pick)."""

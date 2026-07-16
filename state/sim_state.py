@@ -52,8 +52,6 @@ class SimState:
 
     # Parameter sweep settings
     parameter_sweeps_enabled: bool = False
-    # Sweep preview: right-click temporarily disables sweeps, next click re-enables
-    sweep_preview_pending_restore: bool = False
     # Dictionary mapping parameter names to their sweep modes
     # 0.0 = no sweep, 1.0 = normal sweep (min to max), -1.0 = inverse sweep (max to min)
     x_sweeps: dict[str, float] = field(default_factory=lambda: {
