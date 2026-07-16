@@ -155,6 +155,7 @@ class OptixPrefs:
     pt_denoise_enabled: bool = False
     rz_denoise_enabled: bool = False  # Denoise in rasterize mode (separate beauty pass)
     pt_env_sky_nee: bool = False  # Use cosine-lobe environment sky for NEE instead of directional sun
+    pt_sun_exp: float = 15.0  # "Sun Sharpness": cos-lobe sky sun exponent (1..256), only used when pt_env_sky_nee
 
 
 @dataclass
@@ -346,6 +347,7 @@ _FLAT_KEY_MAP: dict[str, tuple[str, str]] = {
     "three_d_pt_denoise_enabled": ("optix", "pt_denoise_enabled"),
     "three_d_rz_denoise_enabled": ("optix", "rz_denoise_enabled"),
     "three_d_pt_env_sky_nee": ("optix", "pt_env_sky_nee"),
+    "three_d_pt_sun_exp": ("optix", "pt_sun_exp"),
     # Camera3DPrefs
     "three_d_fov": ("camera3d", "fov"),
     "three_d_aperture": ("camera3d", "aperture"),

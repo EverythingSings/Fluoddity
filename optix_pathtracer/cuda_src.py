@@ -139,7 +139,11 @@ struct Params
     float              pick_dir_x;     // offset 392
     float              pick_dir_y;     // offset 396
     float              pick_dir_z;     // offset 400
-    // sizeof(Params) = 408 (trailing pad to 8-byte alignment)
+
+    // Cos-lobe sky sun sharpness (UI "Sun Sharpness"): exponent of the sun's
+    // cosine-power lobe. Packs into the old trailing pad at 404.
+    float              sun_exp;        // offset 404
+    // sizeof(Params) = 408 (8-byte aligned)
 };
 __constant__ Params params;
 }
@@ -470,9 +474,9 @@ static __forceinline__ __device__ float pdf_cosine_power_lobe(
     return (exponent + 1.0f) * 0.15915494f * powf(cos_theta, exponent);
 }
 
-// Environment sky exponents (hardcoded)
+// Environment sky exponent (hardcoded). The sun's cosine-lobe exponent is now
+// a runtime uniform (params.sun_exp, UI "Sun Sharpness").
 #define ENV_SKY_EXP  1.0f
-#define ENV_SUN_EXP  15.0f
 
 // --- photosphere equirectangular texture lookup ------------------------------
 static __forceinline__ __device__ float3 sample_photosphere(float3 dir)
@@ -491,7 +495,7 @@ static __forceinline__ __device__ float3 eval_env_sky(float3 dir)
         if (params.env_sky_nee) {
             // Add sun lobe on top of photosphere
             float sun_cos = fmaxf(dot3(dir, params.sun_direction), 0.0f);
-            float3 sun_contrib = powf(sun_cos, ENV_SUN_EXP)
+            float3 sun_contrib = powf(sun_cos, params.sun_exp)
                                * params.sun_color * params.sun_intensity;
             photo = photo + sun_contrib;
         }
@@ -503,7 +507,7 @@ static __forceinline__ __device__ float3 eval_env_sky(float3 dir)
     float3 sky_contrib = powf(sky_cos, ENV_SKY_EXP) * params.sky_color_top;
 
     float sun_cos = fmaxf(dot3(dir, params.sun_direction), 0.0f);
-    float3 sun_contrib = powf(sun_cos, ENV_SUN_EXP)
+    float3 sun_contrib = powf(sun_cos, params.sun_exp)
                        * params.sun_color * params.sun_intensity;
 
     return sky_contrib + sun_contrib;
@@ -524,13 +528,13 @@ static __forceinline__ __device__ float eval_env_sky_pdf(float3 dir)
                                   fmaxf(params.photosphere_avg_g,
                                         params.photosphere_avg_b));
             float w_photo = photo_bright;
-            float w_sun   = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+            float w_sun   = params.sun_intensity / (params.sun_exp + 1.0f);
             float w_total = w_photo + w_sun;
             if (w_total < 1e-10f) return 0.079577f;  // 1/(4*pi) fallback
             float p_photo = w_photo / w_total;
             return p_photo * photo_pdf
                  + (1.0f - p_photo) * pdf_cosine_power_lobe(
-                       dir, params.sun_direction, ENV_SUN_EXP);
+                       dir, params.sun_direction, params.sun_exp);
         }
         // Photosphere only, no sun lobe in NEE
         return photo_pdf;
@@ -541,13 +545,13 @@ static __forceinline__ __device__ float eval_env_sky_pdf(float3 dir)
                        fmaxf(params.sky_color_top.y,
                              params.sky_color_top.z));
     float w_sky_raw = sky_bright / (ENV_SKY_EXP + 1.0f);
-    float w_sun_raw = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+    float w_sun_raw = params.sun_intensity / (params.sun_exp + 1.0f);
     float w_total = w_sky_raw + w_sun_raw;
     if (w_total < 1e-10f) return 0.079577f;  // 1/(4*pi) fallback
     float p_sky = w_sky_raw / w_total;
     float3 up = mk3(0.0f, 1.0f, 0.0f);
     return p_sky * pdf_cosine_power_lobe(dir, up, ENV_SKY_EXP)
-         + (1.0f - p_sky) * pdf_cosine_power_lobe(dir, params.sun_direction, ENV_SUN_EXP);
+         + (1.0f - p_sky) * pdf_cosine_power_lobe(dir, params.sun_direction, params.sun_exp);
 }
 
 static __forceinline__ __device__ void sample_env_sky(
@@ -560,7 +564,7 @@ static __forceinline__ __device__ void sample_env_sky(
                                   fmaxf(params.photosphere_avg_g,
                                         params.photosphere_avg_b));
             float w_photo = photo_bright;
-            float w_sun   = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+            float w_sun   = params.sun_intensity / (params.sun_exp + 1.0f);
             float w_total = w_photo + w_sun;
 
             if (w_total < 1e-10f) {
@@ -576,7 +580,7 @@ static __forceinline__ __device__ void sample_env_sky(
                 out_dir = sample_cosine_hemisphere(up, rng);
             } else {
                 out_dir = sample_cosine_power_lobe(
-                    params.sun_direction, ENV_SUN_EXP, rng);
+                    params.sun_direction, params.sun_exp, rng);
             }
             out_pdf = eval_env_sky_pdf(out_dir);
         } else {
@@ -593,7 +597,7 @@ static __forceinline__ __device__ void sample_env_sky(
                        fmaxf(params.sky_color_top.y,
                              params.sky_color_top.z));
     float w_sky_raw = sky_bright / (ENV_SKY_EXP + 1.0f);
-    float w_sun_raw = params.sun_intensity / (ENV_SUN_EXP + 1.0f);
+    float w_sun_raw = params.sun_intensity / (params.sun_exp + 1.0f);
     float w_total = w_sky_raw + w_sun_raw;
 
     if (w_total < 1e-10f) {
@@ -609,7 +613,7 @@ static __forceinline__ __device__ void sample_env_sky(
     if (next_float(rng) < p_sky) {
         out_dir = sample_cosine_power_lobe(up, ENV_SKY_EXP, rng);
     } else {
-        out_dir = sample_cosine_power_lobe(params.sun_direction, ENV_SUN_EXP, rng);
+        out_dir = sample_cosine_power_lobe(params.sun_direction, params.sun_exp, rng);
     }
 
     out_pdf = eval_env_sky_pdf(out_dir);

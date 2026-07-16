@@ -106,6 +106,8 @@ class PathTracerInterface:
 
         # Environment sky NEE
         self.env_sky_nee: bool = False
+        # Cos-lobe sky sun sharpness (UI "Sun Sharpness")
+        self.sun_exp: float = 15.0
 
         # Photosphere
         self.photosphere: bool = False
@@ -374,6 +376,7 @@ class PathTracerInterface:
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
             env_sky_nee=self.env_sky_nee,
+            sun_exp=self.sun_exp,
             photosphere=self.photosphere,
             photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
             photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
@@ -527,6 +530,7 @@ class PathTracerInterface:
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
             env_sky_nee=self.env_sky_nee,
+            sun_exp=self.sun_exp,
             photosphere=self.photosphere,
             photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
             photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,
@@ -766,6 +770,7 @@ class PathTracerInterface:
             curve_r0=self.curve_r0,
             curve_r1=self.curve_r1,
             env_sky_nee=self.env_sky_nee,
+            sun_exp=self.sun_exp,
             photosphere=self.photosphere,
             photosphere_avg_r=self._photosphere_avg_color[0] if self.photosphere else 0.0,
             photosphere_avg_g=self._photosphere_avg_color[1] if self.photosphere else 0.0,

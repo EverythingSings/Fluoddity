@@ -150,6 +150,7 @@ class RendererHost:
         pt.sdf_enabled = p.optix.sdf_enabled
         pt.sun_sampling = p.lighting.nee
         pt.env_sky_nee = p.optix.pt_env_sky_nee
+        pt.sun_exp = p.optix.pt_sun_exp
         pt.photosphere = p.lighting.photosphere
         # Path-trace-only
         pt.max_bounces = p.optix.pt_max_bounces

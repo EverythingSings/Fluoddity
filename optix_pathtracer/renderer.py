@@ -137,6 +137,8 @@ PARAMS_DTYPE = np.dtype({
         # at 380; pick_out (pointer) is 8-byte aligned at 384.
         "pick_mode", "pick_out",
         "pick_dir_x", "pick_dir_y", "pick_dir_z",
+        # Cos-lobe sky sun sharpness (packs into old trailing pad at 404)
+        "sun_exp",
     ],
     "formats": [
         "u8", "u8", "u4", "u4", "u8",
@@ -198,6 +200,8 @@ PARAMS_DTYPE = np.dtype({
         # Single-ray entity picking
         "i4", "u8",
         "f4", "f4", "f4",
+        # Cos-lobe sky sun sharpness
+        "f4",
     ],
     "offsets": [
         0, 8, 16, 20, 24,
@@ -259,6 +263,8 @@ PARAMS_DTYPE = np.dtype({
         # Single-ray entity picking
         380, 384,
         392, 396, 400,
+        # Cos-lobe sky sun sharpness
+        404,
     ],
     "itemsize": 408,
 })
@@ -1271,6 +1277,7 @@ class PathTracerRenderer:
                                 use_curves=False, curve_length=1.0,
                                 curve_r0=1.0, curve_r1=0.5,
                                 env_sky_nee=False,
+                                sun_exp=15.0,
                                 photosphere=False,
                                 photosphere_avg_r=0.0,
                                 photosphere_avg_g=0.0,
@@ -1328,7 +1335,16 @@ class PathTracerRenderer:
         h_params["sun_dir_x"] = sun_direction[0]
         h_params["sun_dir_y"] = sun_direction[1]
         h_params["sun_dir_z"] = sun_direction[2]
-        h_params["sun_intensity"] = sun_intensity
+        # Keep the sun's total radiated power constant as sharpness changes.
+        # A cosine-power lobe cos^n integrates to 2*pi/(n+1) over the hemisphere,
+        # so its integrated power falls as 1/(n+1). Compensate by scaling
+        # intensity by (n+1), normalized to the default exponent so `intensity`
+        # keeps its meaning at the default Sun Sharpness (15). Only the cos-lobe
+        # sky uses sun_exp; leave the directional-sun path untouched.
+        eff_sun_intensity = sun_intensity
+        if env_sky_nee:
+            eff_sun_intensity *= (sun_exp + 1.0) / (15.0 + 1.0)
+        h_params["sun_intensity"] = eff_sun_intensity
         h_params["radius_scale"] = radius_scale
         h_params["sky_top_r"] = sky_color_top[0]
         h_params["sky_top_g"] = sky_color_top[1]
@@ -1410,6 +1426,7 @@ class PathTracerRenderer:
         h_params["curve_r0"] = curve_r0
         h_params["curve_r1"] = curve_r1
         h_params["env_sky_nee"] = 1 if env_sky_nee else 0
+        h_params["sun_exp"] = sun_exp
 
         # Photosphere
         h_params["photosphere_enabled"] = 1 if photosphere else 0
@@ -1517,6 +1534,7 @@ class PathTracerRenderer:
                use_curves=False, curve_length=1.0,
                curve_r0=1.0, curve_r1=0.5,
                env_sky_nee=False,
+               sun_exp=15.0,
                photosphere=False,
                photosphere_avg_r=0.0,
                photosphere_avg_g=0.0,
@@ -1618,6 +1636,7 @@ class PathTracerRenderer:
                     curve_r0=curve_r0,
                     curve_r1=curve_r1,
                     env_sky_nee=env_sky_nee,
+                    sun_exp=sun_exp,
                     photosphere=photosphere,
                     photosphere_avg_r=photosphere_avg_r,
                     photosphere_avg_g=photosphere_avg_g,

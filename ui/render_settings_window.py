@@ -224,6 +224,14 @@ class RenderSettingsWindowMixin:
                         "with a cosine-lobe environment model.\n"
                         "Sky color controls hemisphere glow,\n"
                         "sun direction/color/intensity control sun disk.")
+                if self.state.preferences.optix.pt_env_sky_nee:
+                    _, self.state.preferences.optix.pt_sun_exp = imgui.slider_float(
+                        "Sun Sharpness", self.state.preferences.optix.pt_sun_exp,
+                        1.0, 256.0, format="%.0f")
+                    if imgui.is_item_hovered():
+                        imgui.set_tooltip(
+                            "Exponent of the sun's cosine-power lobe.\n"
+                            "Higher = tighter, sharper sun disk.")
             changed_photo, lit.photosphere = imgui.checkbox(
                 "Photosphere", lit.photosphere)
             if imgui.is_item_hovered():
