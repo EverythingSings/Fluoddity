@@ -91,11 +91,14 @@ class PhysicsWindowMixin:
                     imgui.end_combo()
 
             # Initial Conditions (with per-option tooltips)
-            initial_options = ["Grid", "Random", "Ring"]
+            # NOTE: index order matches RESET_MODE in entity_update.glsl
+            # (0=Flat Grid, 1=Random, 2=Ring, 3=3d Grid)
+            initial_options = ["Flat Grid", "Random", "Ring", "3d Grid"]
             initial_tooltips = [
-                "Particles start in a grid, organized by cohort",
+                "Particles start in a flat grid on the floor plane, organized by cohort",
                 "Particles are spread uniformly across the canvas",
-                "Particles start distributed around a circle, organized by cohort"
+                "Particles start distributed around a circle, organized by cohort",
+                "Particles start in a 3D grid filling the volume, organized by cohort"
             ]
             imgui.set_next_item_width(100)
             with lock_widget(pls, 'initial_conditions', "Initial Conditions", defer_alt_click=True) as w:
@@ -109,6 +112,14 @@ class PhysicsWindowMixin:
                         if is_selected:
                             imgui.set_item_default_focus()
                     imgui.end_combo()
+
+            # Initialization Spacing
+            imgui.set_next_item_width(100)
+            with lock_widget(pls, 'init_spacing', "Initialization Spacing") as w:
+                changed_is, new_is = imgui.slider_float(w.label, self.state.sim.init_spacing, 0.0, 1.0, "%.2f")
+            if changed_is and not w.alt_clicked:
+                self.state.sim.init_spacing = new_is
+            self._delayed_tooltip("Scales the initial spacing between cohorts.\nGrid modes: shrinks the gaps between globs (glob size unchanged);\nat 0 all globs spawn stacked at the center.\nRing / Random: multiplies the overall spawn size.")
 
             # Number of Cohorts
             imgui.set_next_item_width(100)

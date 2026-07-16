@@ -66,7 +66,8 @@ uniform float ORIENTATION_MIX; // Blend factor for orientation calculations
 uniform float GRAVITY_FORCE;  // Gravity-like force [-1,1]
 uniform float GRAVITY_STRAFE; // Gravity-like strafe [-1,1]
 uniform int BOUNDARY_CONDITIONS_MODE; //0-1-2 == BOUNCE-RESET-WRAP
-uniform int RESET_MODE; //0-1-2 == GRID-RANDOM-RING
+uniform int RESET_MODE; //0-1-2-3 == FLAT_GRID-RANDOM-RING-GRID_3D
+uniform float INIT_SPACING; //0..1 spacing multiplier for reset() (1=default)
 uniform int COHORTS; //each cohort gets its own rule and starting location
 uniform float RULE_SEED;
 uniform bool WRITE_RULES; // Set true for one frame when rule buffer readback is needed
@@ -106,8 +107,6 @@ void report(float val, uint plot_num) {
 // OUTPUT_PROJECTION true: 4 fourier outputs -> 2D force/strafe. false: 6 outputs -> 3D force/strafe
 #define INPUT_PROJECTION false
 #define OUTPUT_PROJECTION false
-#define GRID_2D_MODE true
-//#define CRUNCH true
                             //Entities with index > ACTIVE_COUNT aren't rendered or updated
 int get_particle_cohorts() {
     return COHORTS;
@@ -228,6 +227,10 @@ int get_particle_boundary_conditions() {
 
 int get_particle_reset_mode() {
     return RESET_MODE;
+}
+
+float get_particle_init_spacing() {
+    return INIT_SPACING;
 }
 
 float get_particle_hue_sensitivity() {
@@ -357,27 +360,31 @@ void reset(uint index){
     vec3 pos=cohort_scale*vec3(hash(vec2(cohort_val)),hash(vec2(cohort_val+index+2.142)),hash(vec2(cohort_val+index+7.531)));
     vec3 vel=.00005*(vec3(hash(vec2(cohort_val,index)),hash(vec2(cohort_val,pos.y)),hash(vec2(index,pos.z+3.77)))*2-1);
 
-    //RESET_MODE: 0=Grid, 1=Random, 2=Ring/Sphere
+    //RESET_MODE: 0=Flat Grid, 1=Random, 2=Ring/Sphere, 3=3d Grid
     int reset_mode = get_particle_reset_mode();
     int cohorts = get_particle_cohorts();
+    // Spacing (0..1): for grids, shrinks the distance between cohort cells while
+    // keeping each glob (cell_radius) the same size. At 0 all cells collapse to
+    // the origin (replaces the old CRUNCH define). For Random/Ring it is applied
+    // below as a plain multiplier on the final position.
+    float init_spacing = get_particle_init_spacing();
     if(reset_mode == 0) {
-#ifdef GRID_2D_MODE
-        //GRID 2D: position cohorts in a 2D grid on the XZ plane, Y near the bottom
+        //FLAT GRID: position cohorts in a 2D grid on the XZ plane, Y near the bottom
         int grid_side = int(ceil(sqrt(float(cohorts))));
         int total_slots = grid_side * grid_side;
         int offset = (total_slots - cohorts) / 2;
         int slot = int(cohort_val) + offset;
         int gx = slot % grid_side;
         int gz = slot / grid_side;
-        // Grid cell center in [-0.9, 0.9] for X and Z, Y near bottom
+        // Grid cell center in [-0.9, 0.9] for X and Z, Y near bottom.
+        // Spacing scales the XZ spread and pulls Y toward center; at spacing 0
+        // every cell shares the origin.
         vec3 cell_center = vec3(
             1.8 * ((float(gx) + 0.5) / float(grid_side) - 0.5),
             -0.85,
             1.8 * ((float(gz) + 0.5) / float(grid_side) - 0.5)
         );
-        #ifdef CRUNCH
-            cell_center.xz=vec2(0);
-        #endif
+        cell_center.xz *= init_spacing;
         // Rejection-sample a disk in XZ, thin spread in Y
         float cell_radius = 0.09 / float(grid_side) / CANVAS_SCALE;
         vec2 candidate_xz;
@@ -392,8 +399,9 @@ void reset(uint index){
         }
         float candidate_y = (hash(vec2(cohort_val + index, 3.0 + seed_offset)) * 2.0 - 1.0) * 0.1;
         pos = cell_center + vec3(candidate_xz.x, candidate_y, candidate_xz.y) * cell_radius;
-#else
-        //GRID: position cohorts in a centered 3D grid (next-largest cube with gaps)
+    }
+    else if(reset_mode == 3) {
+        //3D GRID: position cohorts in a centered 3D grid (next-largest cube with gaps)
         int grid_side = int(ceil(pow(float(cohorts), 1.0/3.0)));
         int total_slots = grid_side * grid_side * grid_side;
         // Center the filled slots within the cube: skip (total_slots - cohorts)/2 at the start
@@ -402,11 +410,9 @@ void reset(uint index){
         int gx = slot % grid_side;
         int gy = (slot / grid_side) % grid_side;
         int gz = slot / (grid_side * grid_side);
-        // Grid cell center in [-0.9, 0.9]
+        // Grid cell center in [-0.9, 0.9], scaled toward origin by spacing
         vec3 cell_center = 1.8 * ((vec3(gx, gy, gz) + 0.5) / float(grid_side) - 0.5);
-        #ifdef CRUNCH
-            cell_center.xyz=vec3(0);
-        #endif
+        cell_center *= init_spacing;
         // Rejection-sample a sphere inscribed in the grid cell for isotropic distribution
         float cell_radius = 0.09 / float(grid_side)/CANVAS_SCALE;
         vec3 candidate;
@@ -421,7 +427,6 @@ void reset(uint index){
             seed_offset += 3.0;
         }
         pos = cell_center + candidate * cell_radius;
-#endif
     }
     else if(reset_mode == 1) {
         //RANDOM: rejection-sample from the sphere inscribing the unit cube
@@ -436,7 +441,7 @@ void reset(uint index){
             if (dot(candidate, candidate) <= 1.0) break;
             seed_offset += 3.0;
         }
-        pos = candidate;    
+        pos = candidate * init_spacing;
     }
     else if(reset_mode == 2) {
         //SPHERE: arrange cohorts on a spherical shell
@@ -444,7 +449,7 @@ void reset(uint index){
         float cos_theta = hash(vec2(cohort_val, 5.0)) * 2.0 - 1.0;
         float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
         float radius = 0.5;
-        pos = .5*vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta) * radius;
+        pos = .5*vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta) * radius * init_spacing;
     }
     float hue = 0;
     if(get_particle_color_by_cohort()) {hue = hash(vec2(floor(cohort_val)));}

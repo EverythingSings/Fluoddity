@@ -155,6 +155,7 @@ LOCKABLE_EXTRA_SIM_PARAMS: list[tuple[str, str]] = [
     ('rule_seed', 'Rule Seed'),
     ('boundary_conditions', 'Boundary Conditions'),
     ('initial_conditions', 'Initial Conditions'),
+    ('init_spacing', 'Initialization Spacing'),
     ('num_cohorts', 'Number of Cohorts'),
     ('GRAVITY_FORCE', 'Gravity Force'),
     ('GRAVITY_STRAFE', 'Gravity Strafe'),

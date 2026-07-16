@@ -79,7 +79,8 @@ class PhysicsConfig:
     gravity_force: float = 0.0
     gravity_strafe: float = 0.0
     boundary_conditions: int = 0  # 0=Bounce, 1=Reset, 2=Wrap
-    initial_conditions: int = 0   # 0=Grid, 1=Random, 2=Ring
+    initial_conditions: int = 0   # 0=Flat Grid, 1=Random, 2=Ring, 3=3d Grid
+    init_spacing: float = 1.0     # 0..1 spacing between init cohorts (absent in old saves=1.0)
     num_cohorts: int = 64
     rule_seed: float = DEFAULT_RULE_SEED
 
@@ -134,6 +135,7 @@ class PhysicsConfig:
                 'gravity_strafe': self.gravity_strafe,
                 'boundary_conditions': self.boundary_conditions,
                 'initial_conditions': self.initial_conditions,
+                'init_spacing': self.init_spacing,
                 'num_cohorts': self.num_cohorts,
                 'rule_seed': self.rule_seed,
             },
@@ -225,6 +227,7 @@ class PhysicsConfig:
             gravity_strafe=settings.get('gravity_strafe', 0.0),
             boundary_conditions=settings.get('boundary_conditions', 0),
             initial_conditions=settings.get('initial_conditions', 0),
+            init_spacing=settings.get('init_spacing', 1.0),
             num_cohorts=settings.get('num_cohorts', 64),
             rule_seed=settings.get('rule_seed', DEFAULT_RULE_SEED),
             hue_sensitivity=appearance.get('hue_sensitivity', 0.5),
@@ -286,6 +289,7 @@ class ConfigSaver:
             gravity_strafe=sim_state.GRAVITY_STRAFE,
             boundary_conditions=sim_state.boundary_conditions,
             initial_conditions=sim_state.initial_conditions,
+            init_spacing=sim_state.init_spacing,
             num_cohorts=sim_state.num_cohorts,
             rule_seed=sim_state.rule_seed,
             hue_sensitivity=sim_state.hue_sensitivity,
@@ -347,6 +351,7 @@ class ConfigSaver:
         sim_state.GRAVITY_STRAFE = config.gravity_strafe
         sim_state.boundary_conditions = config.boundary_conditions
         sim_state.initial_conditions = config.initial_conditions
+        sim_state.init_spacing = config.init_spacing
         sim_state.num_cohorts = config.num_cohorts
         sim_state.rule_seed = config.rule_seed
 

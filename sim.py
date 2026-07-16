@@ -152,6 +152,7 @@ class Sim:
         # set global and conditionally global uniforms
         tryset(self.entity_update_program, 'BOUNDARY_CONDITIONS_MODE', self._state.boundary_conditions)
         tryset(self.entity_update_program, 'RESET_MODE', self._state.initial_conditions)
+        tryset(self.entity_update_program, 'INIT_SPACING', self._state.init_spacing)
         tryset(self.entity_update_program, 'COHORTS', self._state.num_cohorts)
         self._assign_physics_setting('HAZARD_RATE_SETTING', self._state.HAZARD_RATE, 'Hazard Rate', 'HAZARD_RATE', 0.0, 0.05)
         self._assign_physics_setting('TRAIL_PERSISTENCE_SETTING', self._state.TRAIL_PERSISTENCE, 'Trail Persistence', 'TRAIL_PERSISTENCE', 0.0, 1.0)
