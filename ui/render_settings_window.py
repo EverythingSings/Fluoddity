@@ -79,11 +79,11 @@ class RenderSettingsWindowMixin:
         """Brightness + Tonemap Softness — shown at the top for both renderers."""
         r = self.state.preferences.rendering
         _, r.brightness = imgui.slider_float(
-            "Brightness", r.brightness, 0.01, 10.0, format="%.2f")
+            "Brightness", r.brightness, 0.01, 2.5, format="%.2f")
         if imgui.is_item_hovered():
             imgui.set_tooltip("Global brightness multiplier for the output.")
         _, r.tonemap_softness = imgui.slider_float(
-            "Tonemap Softness", r.tonemap_softness, 0.1, 5.0, format="%.2f")
+            "Tonemap Softness", r.tonemap_softness, 0.1, 4.0, format="%.2f")
         if imgui.is_item_hovered():
             imgui.set_tooltip(
                 "Controls highlight compression (asinh stretch).\n"
