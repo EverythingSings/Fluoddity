@@ -607,12 +607,36 @@ class CommandHandler:
             if save is None:
                 return
             self.editor_saver.apply_save(save, ui_state.preferences)
+            # Re-sync the live 3D camera from the newly-loaded prefs, matching
+            # the reset/startup path (stereogram, DOF, orbit, etc. otherwise
+            # stay stale until restart).
+            self._sync_camera_from_prefs(ui_state)
             # Re-sync the live TracerInterface with the newly-loaded preferences.
             if self.ui._tracer_interface is not None:
                 self.ui._apply_tracer_preferences(self.ui._tracer_interface)
             print(f"Editor settings loaded: {path.name}")
         except Exception as e:
             print(f"Failed to load editor settings: {e}")
+
+    def _sync_camera_from_prefs(self, ui_state):
+        """Push camera-affecting preferences into the live CameraState.
+
+        Shared by the editor-load and reset paths so the live camera reflects
+        newly-applied 3D camera prefs (fov, DOF, orbit, stereogram) without an
+        app restart.
+        """
+        cam = ui_state.camera
+        p = ui_state.preferences
+        cam.fov = p.camera3d.fov
+        cam.aperture = p.camera3d.aperture
+        cam.focal_plane_depth = p.camera3d.focal_plane_depth
+        cam.move_speed = p.camera3d.move_speed
+        cam.rotate_speed = p.camera3d.rotate_speed
+        cam.orbit_center[:] = p.camera3d.orbit_center
+        cam.orbit_rate = p.camera3d.orbit_rate
+        cam.stereogram = p.camera3d.stereogram
+        cam.eye_offset = p.camera3d.eye_offset
+        cam.stereo_toe_in = p.camera3d.stereo_toe_in
 
     def _handle_reset_ui_settings(self, ui_state):
         """Reset all UI settings to factory defaults, then overlay the project's
@@ -631,19 +655,9 @@ class CommandHandler:
             self.editor_saver.apply_default(ui_state.preferences)
         # Re-sync the live 3D camera from the (possibly overlaid) prefs, matching
         # the startup path so camera-affecting prefs take effect.
-        cam = ui_state.camera
+        self._sync_camera_from_prefs(ui_state)
         p = ui_state.preferences
-        cam.fov = p.camera3d.fov
-        cam.aperture = p.camera3d.aperture
-        cam.focal_plane_depth = p.camera3d.focal_plane_depth
-        cam.move_speed = p.camera3d.move_speed
-        cam.rotate_speed = p.camera3d.rotate_speed
-        cam.orbit_center[:] = p.camera3d.orbit_center
-        cam.orbit_rate = p.camera3d.orbit_rate
-        cam.stereogram = p.camera3d.stereogram
-        cam.eye_offset = p.camera3d.eye_offset
-        cam.stereo_toe_in = p.camera3d.stereo_toe_in
-        cam.optix_enabled = (p.rendering.renderer == 1)
+        ui_state.camera.optix_enabled = (p.rendering.renderer == 1)
         # Re-sync the live TracerInterface with the reset preferences.
         if self.ui._tracer_interface is not None:
             self.ui._apply_tracer_preferences(self.ui._tracer_interface)

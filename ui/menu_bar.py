@@ -107,6 +107,11 @@ class MenuBarMixin:
                 if imgui.menu_item("Preferences", "", self.state.preferences.ui_windows.show_preferences_window)[0]:
                     self.state.preferences.ui_windows.show_preferences_window = not self.state.preferences.ui_windows.show_preferences_window
 
+                # Render settings toggle (moved here from Extras).
+                if imgui.menu_item("Render settings", "", self.state.preferences.ui_windows.show_render_settings_window)[0]:
+                    self.state.preferences.ui_windows.show_render_settings_window = not self.state.preferences.ui_windows.show_render_settings_window
+                self._delayed_tooltip("Per-renderer controls: RT mode, capture, camera,\nmedium/geometry, lighting, sky, and post-process.\nShows the active renderer's settings (Preferences -> Renderer).")
+
                 imgui.separator()
 
                 # Save Editor Settings... (opens the editor-save popup)
@@ -312,13 +317,6 @@ class MenuBarMixin:
                     self.state.preferences.ui_windows.show_plotting_window
                 )
                 self._delayed_tooltip("GPU histogram visualization from report()\ncalls in entity_update.glsl.")
-
-                # Render settings window toggle (unified per-renderer controls)
-                _, self.state.preferences.ui_windows.show_render_settings_window = imgui.checkbox(
-                    "Render settings",
-                    self.state.preferences.ui_windows.show_render_settings_window
-                )
-                self._delayed_tooltip("Per-renderer controls: RT mode, capture, camera,\nmedium/geometry, lighting, sky, and post-process.\nShows the active renderer's settings (Preferences -> Renderer).")
 
                 # Radio window toggle
                 _, self.state.preferences.ui_windows.show_radio_window = imgui.checkbox(
