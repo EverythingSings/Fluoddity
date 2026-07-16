@@ -320,7 +320,7 @@ class RenderSettingsWindowMixin:
                 _, p.optix.curve_r1 = imgui.slider_float(
                     "Curve R1", p.optix.curve_r1, 0.01, 5.0, format="%.2f")
 
-            _, p.optix.sdf_enabled = imgui.checkbox("Enable SDF", p.optix.sdf_enabled)
+            _, p.optix.sdf_enabled = imgui.checkbox("Enable Dish", p.optix.sdf_enabled)
 
         # ---- Material (moved to between Geometry and Lighting) ----
         if self._persisted_header("Material", "render_group_material"):
@@ -484,8 +484,8 @@ class RenderSettingsWindowMixin:
             _, ti.max_bounces = imgui.drag_int("Max Bounces", ti.max_bounces, 0.1, 0, 64)
             if imgui.is_item_hovered():
                 imgui.set_tooltip("0 = unbounded (Russian roulette only)")
-            # Enable SDF at the bottom of Medium (was a separate "SDF Scene" header)
-            _, ti.sdf_enabled = imgui.checkbox("Enable SDF", ti.sdf_enabled)
+            # Enable Dish at the bottom of Medium (was a separate "SDF Scene" header)
+            _, ti.sdf_enabled = imgui.checkbox("Enable Dish", ti.sdf_enabled)
 
         # ---- Lighting (shared) + Sky (shared) ----
         self._render_lighting_section()

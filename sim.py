@@ -28,6 +28,10 @@ class Sim:
         self._state = SimState()
         self._camera_state = None  # Will be set by apply_camera_state
 
+        # Active renderer's "Enable Dish" (SDF collider) toggle, pushed by the
+        # orchestrator each frame. When False, the collider block is skipped.
+        self.collider_enabled = False
+
         # Deferred rule buffer update mechanism (avoids 192MB/frame write cost)
         self._pending_rule_buffer_update = False  # Set true to trigger rule buffer write next frame
         self._pending_entity_id = None  # Entity ID to read back after rule buffer is written
@@ -126,6 +130,9 @@ class Sim:
         tryset(self.entity_update_program, 'frame_count', self.frame_count)
         tryset(self.entity_update_program, 'canvas_3d', 1)
         tryset(self.entity_update_program, 'canvas_3d_size', (self.canvas_resolution, self.canvas_resolution, self.canvas_resolution))
+
+        # Active renderer's "Enable Dish" toggle gates the SDF collider block.
+        tryset(self.entity_update_program, 'enable_collider', int(self.collider_enabled))
 
         # (Legacy force/strafe field uniforms removed with the drawing mode.)
 

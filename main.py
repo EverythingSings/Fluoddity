@@ -375,6 +375,11 @@ class App:
             reposition_orbit_camera(self.controller_cam, ui_state.camera)
         self.controller_cam.fov = ui_state.camera.fov
         self.sim.apply_state(ui_state.sim)
+        # "Enable Dish" (SDF collider) comes from the active renderer's prefs.
+        if ui_state.preferences.rendering.renderer == 1:
+            self.sim.collider_enabled = ui_state.preferences.optix.sdf_enabled
+        else:
+            self.sim.collider_enabled = ui_state.preferences.tracer.sdf_enabled
         self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)
         self.camera.BRIGHTNESS = ui_state.preferences.rendering.brightness

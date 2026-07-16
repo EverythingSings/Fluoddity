@@ -74,6 +74,9 @@ uniform bool WRITE_RULES; // Set true for one frame when rule buffer readback is
 uniform vec4 generic03;
 uniform vec4 generic47;
 
+// "Enable Dish" toggle from the active renderer: gates the SDF collider block.
+uniform int enable_collider;      // 0=Off, non-zero = collide with the dish SDF
+
 // Radio feature uniforms
 uniform int RADIO_ENABLED;        // 0=Off, >0 = enabled mode
 uniform float RADIO_TARGET_FREQ;  // Target frequency
@@ -801,12 +804,14 @@ void main() {
         e.pz = 0.0;
         e.vz = 0.0;
     }
-    vec4 bonk = collider(vec3(e.px,e.py,e.pz))-vec4(.01,0,0,0);
-    if(bonk.x<0){
-        vec3 n = bonk.x*-bonk.yzw*.91;
-        e.px+=n.x;
-        e.py+=n.y;
-        e.pz+=n.z;
+    if(enable_collider != 0){
+        vec4 bonk = collider(vec3(e.px,e.py,e.pz))-vec4(.01,0,0,0);
+        if(bonk.x<0){
+            vec3 n = bonk.x*-bonk.yzw*.91;
+            e.px+=n.x;
+            e.py+=n.y;
+            e.pz+=n.z;
+        }
     }
     // DISABLED — legacy 2D ADVANCED DRAWING force / strafe (applied to XY only).
     // Retained (commented out) for a future field reimplementation; the live
