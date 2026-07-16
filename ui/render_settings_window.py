@@ -311,11 +311,12 @@ class RenderSettingsWindowMixin:
             _, p.optix.sphere_radius_scale = imgui.slider_float(
                 "Sphere Scale", p.optix.sphere_radius_scale,
                 0.1, 10.0, format="%.1fx")
-            _, p.optix.sphere_size_jitter = imgui.slider_float(
-                "Sphere Jitter", p.optix.sphere_size_jitter,
-                0.0, 1.0, format="%.2f")
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("Per-sphere radius jitter to reduce banding artifacts")
+            if not p.optix.use_curves:
+                _, p.optix.sphere_size_jitter = imgui.slider_float(
+                    "Sphere Jitter", p.optix.sphere_size_jitter,
+                    0.0, 1.0, format="%.2f")
+                if imgui.is_item_hovered():
+                    imgui.set_tooltip("Per-sphere radius jitter to reduce banding artifacts")
 
             _, p.optix.use_curves = imgui.checkbox("Curves", p.optix.use_curves)
             if imgui.is_item_hovered():
