@@ -83,6 +83,9 @@ class RenderSpecService:
             'focal_plane_depth': cam.focal_plane_depth,
             'move_speed': cam.move_speed,
             'rotate_speed': cam.rotate_speed,
+            'stereogram': cam.stereogram,
+            'eye_offset': cam.eye_offset,
+            'stereo_toe_in': cam.stereo_toe_in,
         }
 
         # 3. Controller cam state (FPS camera)
@@ -265,6 +268,9 @@ class RenderSpecService:
             ui_state.camera.focal_plane_depth = cam_data.get('focal_plane_depth', 5.0)
             ui_state.camera.move_speed = cam_data.get('move_speed', 2.0)
             ui_state.camera.rotate_speed = cam_data.get('rotate_speed', 2.0)
+            ui_state.camera.stereogram = cam_data.get('stereogram', False)
+            ui_state.camera.eye_offset = cam_data.get('eye_offset', 0.1)
+            ui_state.camera.stereo_toe_in = cam_data.get('stereo_toe_in', False)
 
         # 3. Apply controller cam state (FPS camera)
         ccam_data = spec.controller_cam_state

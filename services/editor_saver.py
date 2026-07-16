@@ -23,6 +23,32 @@ from utilities.paths import get_editor_saves_dir
 
 EDITOR_SAVE_VERSION = 1
 
+# Windows whose saved position/size must never be restored from a layout .ini.
+# The Scheduled Renders window is the interface used to *load* render specs, so
+# relocating/resizing it on load is disorienting — it's pinned to its live
+# geometry regardless of what a save captured.
+_LAYOUT_IMMUNE_WINDOWS = ("Scheduled Renders",)
+
+
+def _strip_window_sections(ini: str, titles: tuple[str, ...]) -> str:
+    """Remove the `[Window][<title>]` blocks for the given window titles from an
+    imgui .ini string. Windows with no entry keep their current live geometry
+    when the .ini is applied, so this makes them immune to layout restore.
+    """
+    if not ini:
+        return ini
+    drop_headers = {f"[Window][{t}]" for t in titles}
+    out_lines = []
+    skipping = False
+    for line in ini.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("["):
+            # A new section begins — decide whether to skip it.
+            skipping = stripped in drop_headers
+        if not skipping:
+            out_lines.append(line)
+    return "".join(out_lines)
+
 
 @dataclass
 class EditorSave:
@@ -81,7 +107,8 @@ class EditorSaver:
             copy_preferences_into(prefs_target, loaded)
 
         if apply_layout and save.imgui_layout:
-            imgui.load_ini_settings_from_memory(save.imgui_layout)
+            layout = _strip_window_sections(save.imgui_layout, _LAYOUT_IMMUNE_WINDOWS)
+            imgui.load_ini_settings_from_memory(layout)
 
     def apply_default(self, prefs_target: PreferencesState) -> bool:
         """Load the project's __Default_Editor save from the app dir and apply it

@@ -73,6 +73,26 @@ def get_videos_dir() -> Path:
     return get_user_data_dir() / "Videos"
 
 
+def get_stereo_videos_dir() -> Path:
+    """Get path to Videos/Stereo directory (side-by-side stereo videos)."""
+    return get_videos_dir() / "Stereo"
+
+
+def get_stereo_videos_flipped_dir() -> Path:
+    """Get path to Videos/Stereo/Flipped directory (left/right-swapped copies)."""
+    return get_stereo_videos_dir() / "Flipped"
+
+
+def get_stereo_screenshots_dir() -> Path:
+    """Get path to Screenshots/Stereo directory (side-by-side stereo shots)."""
+    return get_screenshots_dir() / "Stereo"
+
+
+def get_stereo_screenshots_flipped_dir() -> Path:
+    """Get path to Screenshots/Stereo/Flipped directory (left/right-swapped copies)."""
+    return get_stereo_screenshots_dir() / "Flipped"
+
+
 def get_render_specs_dir() -> Path:
     """Get path to RenderSpecs directory for scheduled render specifications."""
     return get_user_data_dir() / "RenderSpecs"
@@ -116,6 +136,8 @@ def initialize_user_data():
     get_user_physics_configs_dir().mkdir(exist_ok=True)
     get_screenshots_dir().mkdir(exist_ok=True)
     get_videos_dir().mkdir(exist_ok=True)
+    get_stereo_videos_flipped_dir().mkdir(parents=True, exist_ok=True)
+    get_stereo_screenshots_flipped_dir().mkdir(parents=True, exist_ok=True)
     get_render_specs_dir().mkdir(exist_ok=True)
     get_editor_saves_dir().mkdir(exist_ok=True)
     get_simulation_saves_dir().mkdir(exist_ok=True)

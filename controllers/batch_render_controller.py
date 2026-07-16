@@ -121,7 +121,7 @@ class BatchRenderController:
         elif phase == 'start_recording':
             # GPU state has settled for one frame. Start recording.
             ui_state.sim.going = True
-            self.video_service.start()
+            self.video_service.start(stereo=ui_state.camera.stereogram)
             self.phase = 'recording'
             display_name = self.queue_names[self.index]
             print(f"[RenderQueue] Recording started for: {display_name}")

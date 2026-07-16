@@ -819,11 +819,16 @@ class App:
         """Save screenshot and restore settings."""
         if self.camera.assembled_texture is not None:
             from utilities.save_frame_gpu import save_frame_gpu
+            from utilities.paths import (
+                get_stereo_screenshots_dir, get_stereo_screenshots_flipped_dir,
+            )
+            from utilities.ffmpeg_recorder import flip_stereo_eyes
             import datetime
             import os
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             prefix = ui_state.preferences.recording.filename_prefix or "screenshot"
             flip_y = False  # always-3D orientation
+            stereo = ui_state.camera.stereogram
             filename = save_frame_gpu(
                 self.camera.assembled_texture,
                 self.ctx,
@@ -832,11 +837,18 @@ class App:
                 flip_y=flip_y
             )
             if filename and os.path.exists(filename):
-                screenshots_dir = get_screenshots_dir()
+                # Stereo shots go to Screenshots/Stereo, kept separate from mono.
+                screenshots_dir = (get_stereo_screenshots_dir() if stereo
+                                   else get_screenshots_dir())
                 screenshots_dir.mkdir(parents=True, exist_ok=True)
                 new_filename = screenshots_dir / f"{prefix}_{timestamp}.png"
                 os.rename(filename, new_filename)
                 print(f"Screenshot saved: {new_filename}")
+
+                # Also emit a left/right-swapped copy for cross-eye viewers.
+                if stereo:
+                    flipped = get_stereo_screenshots_flipped_dir() / new_filename.name
+                    flip_stereo_eyes(new_filename, flipped, is_video=False)
 
         # Restore saved settings
         ui_state.preferences.rendering.speedmult = self.screenshot_saved_settings['speedmult']

@@ -20,10 +20,17 @@ class VideoRecorderService:
         """Current recording frame count."""
         return self.recorder.current_frame
 
-    def start(self) -> None:
-        """Start recording."""
+    def start(self, stereo: bool = False) -> None:
+        """Start recording.
+
+        Args:
+            stereo: If True, the current camera is in stereogram mode, so the
+                video is routed to Videos/Stereo and a left/right-swapped copy
+                is written to Videos/Stereo/Flipped when recording finishes.
+        """
         if not self.recorder.active:
             self.recorder.finished_naturally = False
+            self.recorder.stereo = stereo
             self.recorder.active = True
 
     def stop(self) -> None:

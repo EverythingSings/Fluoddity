@@ -1,7 +1,10 @@
 from .save_frame_gpu import save_frame_gpu, reset_gpu_frame_counter
-from .ffmpeg_recorder import FFmpegVideoRecorder
-from .paths import get_videos_dir
+from .ffmpeg_recorder import FFmpegVideoRecorder, flip_stereo_eyes
+from .paths import (
+    get_videos_dir, get_stereo_videos_dir, get_stereo_videos_flipped_dir,
+)
 from datetime import datetime
+from pathlib import Path
 
 class VidSaver:
     def __init__(self):
@@ -10,6 +13,8 @@ class VidSaver:
         self.recorder = None
         self.ssk_w = 2
         self.finished_naturally = False  # True when recording ended by reaching max_frames
+        self.stereo = False  # captured at recording start; routes output + triggers flip
+        self._output_path = None  # path of the in-progress / last-written video
 
     def frame(self, ctx, tex, max_frames=-1, ssk_w=2, filename_prefix="", flip_y=True):
         if not self.active:
@@ -35,12 +40,14 @@ class VidSaver:
                 print(f"  Finishing current video and starting new one...")
                 self.recorder.close()
 
-            # Create timestamped filename in Videos folder
+            # Create timestamped filename. Stereo videos go to Videos/Stereo so
+            # they're kept separate from monoscopic output.
             timestamp = datetime.now().strftime('%H-%M-%S')
             prefix = filename_prefix if filename_prefix else "animation"
-            videos_dir = get_videos_dir()
+            videos_dir = get_stereo_videos_dir() if self.stereo else get_videos_dir()
             videos_dir.mkdir(parents=True, exist_ok=True)
             output_path = str(videos_dir / f"{prefix}-{timestamp}.mp4")
+            self._output_path = output_path
 
             self.recorder = FFmpegVideoRecorder(
                 width=output_width,
@@ -68,10 +75,19 @@ class VidSaver:
     def finish(self):
         '''Save video and reset everything for another recording'''
 
+        wrote_video = self.recorder is not None
         if self.recorder is not None:
             self.recorder.close()
             self.recorder = None
 
+        # For stereo recordings, also emit a left/right-swapped copy into
+        # Videos/Stereo/Flipped for cross-eye viewers. Non-fatal on failure.
+        if wrote_video and self.stereo and self._output_path:
+            src = Path(self._output_path)
+            dst = get_stereo_videos_flipped_dir() / src.name
+            flip_stereo_eyes(src, dst, is_video=True)
+
+        self._output_path = None
         reset_gpu_frame_counter()
         self.current_frame = 0
         self.active = False

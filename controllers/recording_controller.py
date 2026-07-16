@@ -58,7 +58,7 @@ class RecordingController:
             scheduled_start_frame = video_end_frame - video_simulation_frames
 
             if video_end_frame == 0 or scheduled_start_frame <= self.sim.frame_count:
-                self.video_service.start()
+                self.video_service.start(stereo=ui_state.camera.stereogram)
             else:
                 st.video_pending = True
                 st.video_scheduled_start_frame = scheduled_start_frame
@@ -69,7 +69,7 @@ class RecordingController:
         if st.video_pending and self.sim.frame_count >= st.video_scheduled_start_frame:
             st.video_pending = False
             st.video_scheduled_start_frame = 0
-            self.video_service.start()
+            self.video_service.start(stereo=ui_state.camera.stereogram)
 
     def update(self, ui_state, *, pathtracer_interface, sim_runner,
                on_finished_naturally):

@@ -40,6 +40,65 @@ def find_ffmpeg():
         "Download FFmpeg from: https://ffmpeg.org/download.html"
     )
 
+# Filter graph that swaps the left/right halves of a side-by-side stereo frame
+# (crop each half, then hstack them in the opposite order). Same graph works for
+# both video and stills; only the codec args differ.
+_STEREO_SWAP_FILTER = (
+    "[0:v]split[a][b]; "
+    "[a]crop=iw/2:ih:0:0[right]; "
+    "[b]crop=iw/2:ih:iw/2:0[left]; "
+    "[left][right]hstack"
+)
+
+
+def flip_stereo_eyes(input_path, output_path, is_video: bool) -> bool:
+    """Write a left/right-eye-swapped copy of a side-by-side stereo file.
+
+    Cross-eye viewers want the eyes swapped relative to wall-eye (parallel)
+    viewing; this produces that alternate copy. Runs ffmpeg synchronously.
+
+    Args:
+        input_path: Source stereo file (video or image).
+        output_path: Destination for the swapped copy. Parent dirs are created.
+        is_video: True for .mp4 (libx264 + copy audio), False for stills.
+
+    Returns:
+        True on success. On any failure (ffmpeg missing, non-zero exit) a
+        warning is printed and False is returned — the original is left intact.
+    """
+    input_path = str(input_path)
+    output_path = str(output_path)
+    try:
+        ffmpeg_cmd = find_ffmpeg()
+    except FileNotFoundError as e:
+        print(f"[stereo-flip] Skipped (ffmpeg not found): {e}")
+        return False
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [ffmpeg_cmd, '-y', '-i', input_path,
+           '-filter_complex', _STEREO_SWAP_FILTER]
+    if is_video:
+        cmd += ['-c:v', 'libx264', '-crf', '18', '-c:a', 'copy']
+    cmd += [output_path]
+
+    try:
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except OSError as e:
+        print(f"[stereo-flip] Failed to launch ffmpeg: {e}")
+        return False
+
+    if result.returncode != 0:
+        err = result.stderr.decode('utf-8', 'replace') if result.stderr else ''
+        print(f"[stereo-flip] ffmpeg failed (code {result.returncode}) for "
+              f"{input_path}:\n{err}")
+        return False
+
+    print(f"[stereo-flip] Wrote swapped-eye copy: {output_path}")
+    return True
+
+
 class FFmpegVideoRecorder:
     """
     Video recorder that pipes frames directly to ffmpeg without intermediate PNG files.
