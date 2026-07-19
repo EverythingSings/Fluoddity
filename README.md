@@ -9,7 +9,7 @@ Sometimes I'll see a meandering river, a candle flame, or branching lightning. S
 <img width="1920" height="1129" alt="lavalamp_20260120_152543" src="https://github.com/user-attachments/assets/6bf3ce1c-8a7f-487f-ad9e-1da67f73686c" />
 <img width="1920" height="1129" alt="lavalamp_20260120_152527" src="https://github.com/user-attachments/assets/f1c1b933-f5fd-4802-b2b6-7887d483b71d" />
 
-Fluoddity is a 2d particle system designed for realtime exploration. I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them). There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it. 
+Fluoddity is a 2d particle system designed for realtime exploration. I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (~~3d generalization chief among them~~ https://github.com/aphid91/Fluoddity3D). There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it. 
 The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models: 
 https://cargocollective.com/sagejenson/physarum
 
