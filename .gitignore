@@ -12,9 +12,14 @@ __pycache__/
 
 # Virtual Environment
 Scratch.venv/
+.venv/
 venv/
 ENV/
 env/
+
+# Optional OptiX runtime build outputs
+optix_renderer/*.ptx
+run-*.log
 
 # IDE
 .vscode/

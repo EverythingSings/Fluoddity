@@ -1,7 +1,16 @@
 """3D Controls window: FPS camera settings and 3D simulation parameters."""
 from imgui_bundle import imgui
 from camera_input import sync_orbit_angles_from_camera
-from optix_interface import OptiXInterface
+
+
+def _optix_available() -> bool:
+    """Probe the optional OptiX stack without making it a UI import dependency."""
+    try:
+        from optix_interface import OptiXInterface
+
+        return OptiXInterface.is_available()
+    except (ImportError, OSError):
+        return False
 
 
 class ThreeDWindowMixin:
@@ -20,7 +29,7 @@ class ThreeDWindowMixin:
             )
 
             # OptiX Spheres toggle
-            optix_available = OptiXInterface.is_available()
+            optix_available = _optix_available()
             if not optix_available:
                 imgui.begin_disabled()
             _, self.state.camera.optix_enabled = imgui.checkbox(

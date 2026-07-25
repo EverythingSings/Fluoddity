@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "label": "bowl material search base",
+  "note": "Dense velocity curves in the diffuse ceramic SDF bowl for autonomous visual search",
+  "set": {
+    "preferences": {
+      "entity_count": 1000000,
+      "canvas_resolution": 192,
+      "brightness": 0.85,
+      "tonemap_softness": 2.25,
+      "bloom_enabled": false,
+      "motion_blur": false,
+      "recording_motion_blur": false,
+      "recording_blur_quality": 1,
+      "max_frames": 300,
+      "supersample_k": 1,
+      "speedmult": 1,
+      "three_d_rt_mode": 0,
+      "three_d_optix_resolution_scale": 1.0,
+      "three_d_optix_sphere_radius_scale": 2.4,
+      "three_d_optix_sphere_size_jitter": 0.18,
+      "three_d_optix_use_curves": true,
+      "three_d_optix_curve_length": 0.8,
+      "three_d_optix_curve_r0": 1.6,
+      "three_d_optix_curve_r1": 0.2,
+      "three_d_optix_sdf_enabled": true,
+      "three_d_optix_light_direction": [0.35, 0.8, -0.45],
+      "three_d_optix_light_color": [1.0, 0.94, 0.86],
+      "three_d_optix_light_intensity": 3.5,
+      "three_d_optix_shadows_enabled": true,
+      "three_d_optix_ambient": 0.12,
+      "three_d_optix_sky_color_top": [0.08, 0.1, 0.16],
+      "three_d_optix_sky_color_bottom": [0.015, 0.02, 0.03],
+      "three_d_optix_albedo_saturation": 0.95,
+      "three_d_optix_albedo_brightness": 1.15,
+      "three_d_orbit_rate": 0.0
+    },
+    "camera": {
+      "fov": 48.0,
+      "orbit_rate": 0.0
+    },
+    "controller": {
+      "pos": [0.0, 0.15, -3.4],
+      "yaw": 0.0,
+      "pitch": -0.06
+    }
+  },
+  "actions": [
+    {
+      "name": "window_size",
+      "width": 1280,
+      "height": 720,
+      "hidden": true
+    },
+    "optix_on",
+    "hide_ui",
+    "new_simulation",
+    "resume"
+  ]
+}

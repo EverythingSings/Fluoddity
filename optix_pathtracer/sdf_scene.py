@@ -95,7 +95,10 @@ static __forceinline__ __device__ float2 sdf_scene(float3 p)
     dts = fmaxf(dts, sd_box(p, mk3(0.0f, 0.0f, 0.0f), mk3(2.0f, 2.0f, 2.0f)));
     float2 platform = make_float2(dts, (float)MAT_DIFFUSE);
 
-    float2 collider = make_float2(collider_scene_sdf(p), (float)MAT_GLOSSY);
+    // The collider is the presentation bowl. Keep it diffuse so its concave
+    // interior remains readable against a dark environment instead of acting
+    // like a black mirror with only a bright specular rim.
+    float2 collider = make_float2(collider_scene_sdf(p), (float)MAT_DIFFUSE);
 
     return collider;//sdf_union(platform, collider);
 }
@@ -137,11 +140,9 @@ static __forceinline__ __device__ float3 sdf_get_albedo(float2 mat, float3 p)
 {
     int id = (int)floorf(mat.y);
     if (id == MAT_DIFFUSE) {
-        // Checkerboard ground pattern
-        float3 pp = mk3(p.x * 4.0f, p.y * 4.0f, p.z * 4.0f);
-        float checker = fmodf(fabsf(floorf(pp.x) + floorf(pp.z)), 2.0f);
-        float grey = 0.02f + 0.6f *-0.02f;// checker;
-        return mk3(grey, grey, grey);
+        // Warm ceramic white: bright enough to describe the full bowl surface
+        // while preserving shading and contact with the simulated material.
+        return mk3(0.88f, 0.84f, 0.78f);
     }
     return mk3(0.9f, 0.9f, 0.9f);  // bright reflector/glossy
 }

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "label": "stream performance baseline",
+  "note": "One-million-particle RTX baseline with brighter particle shading",
+  "set": {
+    "preferences": {
+      "entity_count": 1000000,
+      "canvas_resolution": 192,
+      "brightness": 0.7,
+      "tonemap_softness": 3.0,
+      "bloom_enabled": false,
+      "motion_blur": false,
+      "speedmult": 1,
+      "three_d_optix_sphere_radius_scale": 1.35,
+      "three_d_optix_light_intensity": 2.0,
+      "three_d_optix_ambient": 0.45,
+      "three_d_optix_albedo_brightness": 1.4
+    },
+    "camera": {
+      "fov": 42.0,
+      "orbit_rate": 0.0005
+    },
+    "controller": {
+      "pos": [0.0, 0.2, -4.0],
+      "yaw": 0.0,
+      "pitch": -0.03
+    }
+  },
+  "actions": [
+    {
+      "name": "window_size",
+      "width": 1280,
+      "height": 720
+    },
+    "optix_on",
+    "hide_ui",
+    "new_simulation",
+    "resume"
+  ]
+}

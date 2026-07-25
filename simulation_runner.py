@@ -585,6 +585,10 @@ class SimulationRunner:
 
             # Start offline render at (optionally scaled) window resolution
             width, height = glfw.get_framebuffer_size(self.window)
+            capture_width = ui_state.preferences.three_d_optix_capture_width
+            capture_height = ui_state.preferences.three_d_optix_capture_height
+            if capture_width > 0 and capture_height > 0:
+                width, height = capture_width, capture_height
             scale = max(0.1, ui_state.preferences.three_d_optix_resolution_scale)
             width = max(1, int(width * scale))
             height = max(1, int(height * scale))

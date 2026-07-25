@@ -8,6 +8,7 @@ from ui import UI
 from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, ArrowDebugService, MultiLoadService, RenderSpecService
 from services.field_handler import FieldHandler
 from services.parameter_lock_service import ParameterLockService
+from services.stream_operator import StreamOperatorService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir
 from state import load_preferences, save_preferences, SimState
 from command_handler import CommandHandler
@@ -86,6 +87,7 @@ class App:
         self.advanced_drawing_processor = AdvancedDrawingProcessor(self.ctx)
         self.plotting_manager = PlottingManager(self.ctx)
         self.render_spec_service = RenderSpecService()
+        self.stream_operator = StreamOperatorService()
         self.ui.multi_load_service = self.multi_load_service
         self.ui.advanced_drawing_processor = self.advanced_drawing_processor
         self.ui.plotting_manager = self.plotting_manager
@@ -217,6 +219,7 @@ class App:
 
         # 1. Get current UI state
         ui_state = self.ui.get_state()
+        self.stream_operator.apply_pending(self, ui_state)
         tiling_mode = (ui_state.sim.current_view_option == 2)
         self.plotting_manager.enabled = ui_state.preferences.show_plotting_window
 
@@ -862,6 +865,7 @@ class App:
             'video_max_frames': ui_state.preferences.max_frames,
         })
         self.ui.render()
+        self.stream_operator.update_status(self, ui_state, dt)
 
     def _camera_moved(self):
         """Check if the camera has moved since last frame (3D or 2D)."""

@@ -1,0 +1,7 @@
+-r requirements.txt
+
+# Native Windows RTX renderer. setup_optix_windows.ps1 installs PyOptiX
+# separately because its source build needs the MSVC and CUDA environments.
+cupy-cuda13x[ctk]>=14,<15
+cuda-python>=13.3,<14
+nvidia-cuda-nvcc>=13.3,<14

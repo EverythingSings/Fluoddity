@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "label": "stream baseline",
+  "note": "Conservative RTX exposure and slow autonomous orbit",
+  "set": {
+    "sim": {
+      "MUTATION_SCALE": 0.04,
+      "TRAIL_PERSISTENCE": 0.95,
+      "TRAIL_DIFFUSION": 0.85
+    },
+    "camera": {
+      "fov": 46.0,
+      "orbit_center": [0.0, 0.0, 0.0],
+      "orbit_rate": 0.0003
+    },
+    "controller": {
+      "pos": [0.0, 0.0, -4.5],
+      "yaw": 0.0,
+      "pitch": 0.0
+    },
+    "preferences": {
+      "brightness": 0.35,
+      "tonemap_softness": 3.5,
+      "exposure": 0.0,
+      "bloom_enabled": false,
+      "three_d_optix_light_intensity": 0.7,
+      "three_d_optix_ambient": 0.08,
+      "three_d_optix_albedo_brightness": 0.45,
+      "three_d_optix_resolution_scale": 1.0
+    }
+  },
+  "actions": [
+    "optix_on",
+    "hide_ui",
+    "new_simulation",
+    "resume"
+  ]
+}
