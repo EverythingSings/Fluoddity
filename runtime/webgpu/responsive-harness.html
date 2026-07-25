@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WebGPU responsive smoke harness</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-width: 100%;
+      min-height: 100%;
+      background: #111;
+    }
+    iframe {
+      display: block;
+      border: 0;
+      background: #050609;
+    }
+  </style>
+</head>
+<body>
+  <iframe
+    id="artifact-frame"
+    title="Responsive WebGPU artifact"
+    sandbox="allow-scripts"
+  ></iframe>
+  <script>
+    (() => {
+      "use strict";
+      const query = new URLSearchParams(location.search);
+      const width = Math.max(240, Number(query.get("width")) || 800);
+      const height = Math.max(180, Number(query.get("height")) || 600);
+      const artifact =
+        query.get("artifact") ||
+        "/artifacts/networked-art/everything.html";
+      const frame = document.getElementById("artifact-frame");
+      frame.style.width = `${width}px`;
+      frame.style.height = `${height}px`;
+      frame.getBoundingClientRect();
+      frame.src = `${artifact}?responsive-smoke=1`;
+      document.documentElement.dataset.responsiveRequested =
+        `${width}x${height}`;
+
+      addEventListener("message", (event) => {
+        if (
+          event.source !== frame.contentWindow ||
+          !event.data ||
+          event.data.schema !==
+            "networked.art.everything.responsive-result.v1"
+        ) {
+          return;
+        }
+        document.documentElement.dataset.responsiveControls =
+          event.data.controls;
+        document.documentElement.dataset.responsiveSliders =
+          event.data.sliders;
+        document.documentElement.dataset.responsiveReachable =
+          event.data.reachable;
+        document.documentElement.dataset.responsiveObscured =
+          event.data.obscured;
+        document.documentElement.dataset.responsiveFunctional =
+          event.data.functional;
+        document.documentElement.dataset.responsiveScrollable =
+          event.data.scrollable;
+        document.documentElement.dataset.responsiveViewport =
+          event.data.viewport;
+      });
+    })();
+  </script>
+</body>
+</html>

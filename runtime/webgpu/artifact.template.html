@@ -1,0 +1,1462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; media-src data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'"
+  >
+  <title>networked.art/everything</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      --ink: rgba(246, 246, 241, 0.96);
+      --muted: rgba(246, 246, 241, 0.58);
+      --glass: rgba(9, 10, 13, 0.72);
+      --line: rgba(255, 255, 255, 0.14);
+      --accent: rgb(183, 241, 121);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #050609;
+    }
+
+    body {
+      color: var(--ink);
+      user-select: none;
+      -webkit-user-select: none;
+      overscroll-behavior: none;
+    }
+
+    #artifact {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(43, 47, 55, 0.62), transparent 58%),
+        #050609;
+    }
+
+    #stage {
+      display: block;
+      width: min(100vw, 100vh);
+      height: min(100vw, 100vh);
+      max-width: 100%;
+      max-height: 100%;
+      outline: none;
+      cursor: crosshair;
+      touch-action: none;
+      background: #050609;
+      box-shadow: 0 0 80px rgba(0, 0, 0, 0.65);
+    }
+
+    #chrome {
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    body.ui-hidden #chrome {
+      opacity: 0;
+    }
+
+    body.thumbnail-mode #artifact {
+      place-items: start;
+    }
+
+    .masthead,
+    .controls,
+    .status {
+      position: absolute;
+      pointer-events: auto;
+      border: 1px solid var(--line);
+      background: var(--glass);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(18px) saturate(120%);
+      -webkit-backdrop-filter: blur(18px) saturate(120%);
+    }
+
+    .masthead {
+      top: max(14px, env(safe-area-inset-top));
+      left: max(14px, env(safe-area-inset-left));
+      padding: 11px 14px 10px;
+      border-radius: 14px;
+    }
+
+    h1 {
+      max-width: min(64vw, 560px);
+      margin: 0;
+      overflow: hidden;
+      font-size: clamp(15px, 2.4vw, 22px);
+      font-weight: 560;
+      letter-spacing: -0.025em;
+      line-height: 1.08;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .controls {
+      right: max(14px, env(safe-area-inset-right));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      width: min(332px, calc(100vw - 28px));
+      max-height: calc(100dvh - 28px);
+      padding: 12px;
+      border-radius: 18px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.3fr;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+
+    button {
+      min-height: 38px;
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.055);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    button:hover { background: rgba(255, 255, 255, 0.11); }
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .slider {
+      display: grid;
+      grid-template-columns: 82px 1fr 40px;
+      align-items: center;
+      gap: 8px;
+      min-height: 29px;
+    }
+
+    .slider label,
+    .slider output {
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .slider output {
+      text-align: right;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: ew-resize;
+    }
+
+    .hint {
+      margin: 9px 2px 0;
+      color: rgba(246, 246, 241, 0.43);
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    .status {
+      left: max(14px, env(safe-area-inset-left));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      max-width: min(52vw, 520px);
+      padding: 9px 12px;
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.035em;
+      line-height: 1.35;
+    }
+
+    .status[data-error="true"] {
+      color: rgb(255, 197, 177);
+      border-color: rgba(255, 125, 91, 0.35);
+      background: rgba(45, 12, 8, 0.84);
+    }
+
+    .status[data-quiet="true"] {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #unsupported {
+      position: fixed;
+      z-index: 5;
+      display: none;
+      width: min(480px, calc(100vw - 40px));
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(8, 9, 12, 0.9);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      text-align: center;
+    }
+
+    #unsupported.visible { display: block; }
+
+    #unsupported h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    #unsupported p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 680px), (max-height: 620px) {
+      .controls {
+        padding: 9px;
+        border-radius: 14px;
+      }
+
+      .slider {
+        grid-template-columns: 72px minmax(0, 1fr) 36px;
+        gap: 6px;
+        min-height: 27px;
+      }
+
+      .hint {
+        display: none;
+      }
+
+      .button-row {
+        margin-bottom: 8px;
+      }
+
+      .status {
+        bottom: auto;
+        top: max(14px, env(safe-area-inset-top));
+        left: auto;
+        right: max(14px, env(safe-area-inset-right));
+        max-width: 45vw;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .controls {
+        left: max(14px, env(safe-area-inset-left));
+        right: max(14px, env(safe-area-inset-right));
+        width: auto;
+      }
+
+      .status {
+        top: calc(max(14px, env(safe-area-inset-top)) + 54px);
+        max-width: calc(100vw - 28px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="artifact" data-artifact-schema="networked.art.everything.webgpu-artifact.v1">
+    <canvas id="stage" tabindex="0" aria-label="Interactive networked.art/everything artwork"></canvas>
+
+    <section id="chrome" aria-label="Artwork controls">
+      <header class="masthead">
+        <h1 id="title">networked.art/everything</h1>
+      </header>
+
+      <aside class="controls">
+        <div class="button-row">
+          <button id="pause" type="button" aria-pressed="false">Pause</button>
+          <button id="reset" type="button">Reset</button>
+          <button id="variation" type="button">New variation</button>
+        </div>
+
+        <div class="slider">
+          <label for="force">Motion</label>
+          <input id="force" type="range" min="0" max="2" step="0.01">
+          <output id="force-value" for="force"></output>
+        </div>
+        <div class="slider">
+          <label for="persistence">Persistence</label>
+          <input id="persistence" type="range" min="0" max="1" step="0.001">
+          <output id="persistence-value" for="persistence"></output>
+        </div>
+        <div class="slider">
+          <label for="draw-power">Draw force</label>
+          <input id="draw-power" type="range" min="0.1" max="5" step="0.05" value="1">
+          <output id="draw-power-value" for="draw-power"></output>
+        </div>
+        <div class="slider">
+          <label for="brightness">Brightness</label>
+          <input id="brightness" type="range" min="0.5" max="8" step="0.05" value="3">
+          <output id="brightness-value" for="brightness"></output>
+        </div>
+
+        <p class="hint">
+          Drag to bend the flow. Right-drag erases. Space pauses; R resets;
+          N creates a variation; H hides the interface.
+        </p>
+      </aside>
+
+      <div id="status" class="status" role="status" aria-live="polite">
+        Loading…
+      </div>
+    </section>
+
+    <section id="unsupported" role="alert">
+      <h2>This artwork can’t run here</h2>
+      <p>
+        Open it in a current hardware-accelerated browser.
+      </p>
+    </section>
+  </main>
+
+  <noscript>This artwork requires JavaScript.</noscript>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const TITLE = @@EVERYTHING_TITLE_JSON@@;
+    const REQUESTED_PARTICLE_COUNT = @@EVERYTHING_PARTICLE_COUNT@@;
+    const REQUESTED_RESOLUTION = @@EVERYTHING_RESOLUTION@@;
+    const CONFIG = @@EVERYTHING_CONFIG_JSON@@;
+    const SHADERS = Object.freeze({
+      brush: @@EVERYTHING_WGSL_BRUSH@@,
+      entity: @@EVERYTHING_WGSL_ENTITY@@,
+      trail: @@EVERYTHING_WGSL_TRAIL@@,
+      particles: @@EVERYTHING_WGSL_PARTICLES@@,
+      accumulate: @@EVERYTHING_WGSL_ACCUMULATE@@,
+      present: @@EVERYTHING_WGSL_PRESENT@@,
+    });
+
+    const ARTIFACT_SCHEMA = "networked.art.everything.webgpu-artifact.v1";
+    const MAX_ARTIFACT_BYTES = 95000000;
+    const ENTITY_STRIDE = 48;
+    const RULE_BYTES = 320;
+    const SETTINGS_BYTES = 12 * 32;
+    const GLOBALS_BYTES = 256;
+    const FLOAT_FORMAT = "rgba16float";
+    const WORKGROUP_SIZE = 64;
+
+    const stage = document.getElementById("stage");
+    const titleNode = document.getElementById("title");
+    const statusNode = document.getElementById("status");
+    const unsupportedNode = document.getElementById("unsupported");
+    const pauseButton = document.getElementById("pause");
+    const resetButton = document.getElementById("reset");
+    const variationButton = document.getElementById("variation");
+    const query = new URLSearchParams(location.search);
+    const thumbnailMode = query.get("thumbnail") === "1";
+    const responsiveSmokeMode = query.get("responsive-smoke") === "1";
+    if (thumbnailMode) {
+      document.body.classList.add("ui-hidden", "thumbnail-mode");
+    }
+
+    const publicState = {
+      schema: ARTIFACT_SCHEMA,
+      title: TITLE,
+      ready: false,
+      running: false,
+      phase: "boot",
+      frame: 0,
+      particles: 0,
+      resolution: 0,
+      error: null,
+    };
+    Object.defineProperty(window, "__EVERYTHING_ARTIFACT__", {
+      value: publicState,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+
+    document.title = TITLE;
+    titleNode.textContent = TITLE;
+
+    let device = null;
+    let context = null;
+    let canvasFormat = null;
+    let resolution = 0;
+    let particleCount = 0;
+    let frame = 0;
+    let paused = false;
+    let needsClear = true;
+    let animationHandle = 0;
+    let globalsBuffer = null;
+    let settingsBuffer = null;
+    let entityBuffer = null;
+    let ruleBuffer = null;
+    let sampler = null;
+    let textures = null;
+    let pipelines = null;
+    let bindGroups = null;
+    let trailIndex = 0;
+    let accumulationIndex = 0;
+    const pointer = {
+      currentX: 0.5,
+      currentY: 0.5,
+      previousX: 0.5,
+      previousY: 0.5,
+      down: false,
+      erase: false,
+    };
+
+    const controls = {
+      drawSize: 0.031,
+      drawPower: 1.0,
+      exposure: 0.0,
+      brightness: 3.0,
+      tonemapSoftness: 2.5,
+      particleScale: 1.0,
+      ruleSeed: finiteOr(CONFIG.settings && CONFIG.settings.rule_seed, 0.42),
+    };
+
+    function finiteOr(value, fallback) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : fallback;
+    }
+
+    function clamp(value, minimum, maximum) {
+      return Math.min(maximum, Math.max(minimum, value));
+    }
+
+    function setStatus(message, isError = false, quiet = false) {
+      statusNode.textContent = quiet ? "" : message;
+      statusNode.dataset.error = isError ? "true" : "false";
+      statusNode.dataset.quiet = quiet ? "true" : "false";
+    }
+
+    function updateResponsiveContract() {
+      const root = document.documentElement;
+      const panel = document.querySelector(".controls");
+      const sliders = Array.from(document.querySelectorAll(".slider"));
+      const panelRect = panel.getBoundingClientRect();
+      const panelStyle = getComputedStyle(panel);
+      const visibleCount = sliders.filter((slider) => {
+        const style = getComputedStyle(slider);
+        const rect = slider.getBoundingClientRect();
+        return (
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      }).length;
+      let reachableCount = visibleCount;
+      if (responsiveSmokeMode) {
+        const originalScrollTop = panel.scrollTop;
+        const previousFocus = document.activeElement;
+        reachableCount = 0;
+        for (const slider of sliders) {
+          const input = slider.querySelector('input[type="range"]');
+          input.scrollIntoView({ block: "nearest", inline: "nearest" });
+          const inputRect = input.getBoundingClientRect();
+          const visiblePanelRect = panel.getBoundingClientRect();
+          const centerX = inputRect.left + inputRect.width * 0.5;
+          const centerY = inputRect.top + inputRect.height * 0.5;
+          const hit = document.elementFromPoint(centerX, centerY);
+          input.focus({ preventScroll: true });
+          const insidePanel =
+            inputRect.top >= visiblePanelRect.top - 0.5 &&
+            inputRect.bottom <= visiblePanelRect.bottom + 0.5 &&
+            inputRect.left >= visiblePanelRect.left - 0.5 &&
+            inputRect.right <= visiblePanelRect.right + 0.5;
+          const hitTarget = hit === input || input.contains(hit);
+          if (insidePanel && hitTarget && document.activeElement === input) {
+            reachableCount += 1;
+          }
+        }
+        panel.scrollTop = originalScrollTop;
+        if (
+          previousFocus instanceof HTMLElement &&
+          previousFocus !== document.body &&
+          previousFocus !== document.documentElement
+        ) {
+          previousFocus.focus({ preventScroll: true });
+        } else if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+      }
+      const panelContained =
+        panelRect.top >= -0.5 &&
+        panelRect.left >= -0.5 &&
+        panelRect.right <= innerWidth + 0.5 &&
+        panelRect.bottom <= innerHeight + 0.5;
+      const overflowReachable =
+        panel.scrollHeight <= panel.clientHeight + 1 ||
+        panelStyle.overflowY === "auto" ||
+        panelStyle.overflowY === "scroll";
+      const passes =
+        visibleCount === sliders.length &&
+        reachableCount === sliders.length &&
+        panelContained &&
+        overflowReachable;
+
+      root.dataset.responsiveControls = passes ? "pass" : "fail";
+      root.dataset.responsiveSliders = `${visibleCount}/${sliders.length}`;
+      root.dataset.responsiveReachable = `${reachableCount}/${sliders.length}`;
+      root.dataset.responsiveObscured =
+        reachableCount === sliders.length ? "pass" : "fail";
+      root.dataset.responsiveViewport = `${innerWidth}x${innerHeight}`;
+      root.dataset.responsiveScrollable =
+        panel.scrollHeight > panel.clientHeight + 1 ? "true" : "false";
+    }
+
+    function runResponsiveControlSmoke() {
+      updateResponsiveContract();
+      if (!responsiveSmokeMode) {
+        document.documentElement.dataset.responsiveFunctional = "not-requested";
+        return;
+      }
+      if (innerWidth < 1 || innerHeight < 1) {
+        setTimeout(runResponsiveControlSmoke, 0);
+        return;
+      }
+
+      const bindings = [
+        ["force", "force-value"],
+        ["persistence", "persistence-value"],
+        ["draw-power", "draw-power-value"],
+        ["brightness", "brightness-value"],
+      ];
+      let functional = true;
+      for (const [inputId, outputId] of bindings) {
+        const input = document.getElementById(inputId);
+        const output = document.getElementById(outputId);
+        const originalValue = input.value;
+        const originalOutput = output.textContent;
+        const minimum = finiteOr(input.min, 0);
+        const maximum = finiteOr(input.max, minimum + 1);
+        input.value = String(minimum + (maximum - minimum) * 0.37);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        functional =
+          functional &&
+          output.textContent.length > 0 &&
+          output.textContent !== originalOutput;
+        input.value = originalValue;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      document.documentElement.dataset.responsiveFunctional =
+        functional ? "pass" : "fail";
+      updateResponsiveContract();
+      if (parent !== window) {
+        parent.postMessage(
+          {
+            schema: "networked.art.everything.responsive-result.v1",
+            controls: document.documentElement.dataset.responsiveControls,
+            sliders: document.documentElement.dataset.responsiveSliders,
+            reachable:
+              document.documentElement.dataset.responsiveReachable,
+            obscured:
+              document.documentElement.dataset.responsiveObscured,
+            functional:
+              document.documentElement.dataset.responsiveFunctional,
+            scrollable:
+              document.documentElement.dataset.responsiveScrollable,
+            viewport: document.documentElement.dataset.responsiveViewport,
+          },
+          "*",
+        );
+      }
+    }
+
+    addEventListener("resize", () => {
+      requestAnimationFrame(
+        responsiveSmokeMode
+          ? runResponsiveControlSmoke
+          : updateResponsiveContract,
+      );
+    });
+    new MutationObserver(() => {
+      if (responsiveSmokeMode) {
+        requestAnimationFrame(runResponsiveControlSmoke);
+      }
+    }).observe(unsupportedNode, { attributes: true, attributeFilter: ["class"] });
+    updateResponsiveContract();
+
+    function updatePublicState(patch) {
+      Object.assign(publicState, patch);
+    }
+
+    function showUnsupported(message, detail = null) {
+      unsupportedNode.classList.add("visible");
+      setStatus(detail || message, true);
+      updatePublicState({
+        ready: false,
+        running: false,
+        phase: "unsupported",
+        error: detail || message,
+      });
+      drawFallback();
+    }
+
+    function drawFallback() {
+      if (context) return;
+      const size = clamp(Math.floor(REQUESTED_RESOLUTION), 256, 1024);
+      stage.width = size;
+      stage.height = size;
+      const fallback = stage.getContext("2d");
+      if (!fallback) return;
+      const gradient = fallback.createRadialGradient(
+        size * 0.5, size * 0.45, size * 0.02,
+        size * 0.5, size * 0.5, size * 0.62,
+      );
+      gradient.addColorStop(0, "#35443a");
+      gradient.addColorStop(0.42, "#17211e");
+      gradient.addColorStop(1, "#050609");
+      fallback.fillStyle = gradient;
+      fallback.fillRect(0, 0, size, size);
+      fallback.globalCompositeOperation = "lighter";
+      for (let index = 0; index < 120; index += 1) {
+        const angle = index * 2.3999632297;
+        const radius = Math.sqrt(index / 120) * size * 0.38;
+        const x = size * 0.5 + Math.cos(angle) * radius;
+        const y = size * 0.5 + Math.sin(angle) * radius;
+        fallback.fillStyle = `hsla(${72 + (index % 42)}, 60%, 65%, 0.09)`;
+        fallback.beginPath();
+        fallback.arc(x, y, 2 + (index % 5), 0, Math.PI * 2);
+        fallback.fill();
+      }
+    }
+
+    function describeGpuError(error) {
+      if (error instanceof Error) return error.message;
+      return String(error);
+    }
+
+    async function compileShader(label, code) {
+      const module = device.createShaderModule({ label, code });
+      if (typeof module.getCompilationInfo === "function") {
+        const info = await module.getCompilationInfo();
+        const failures = info.messages.filter((message) => message.type === "error");
+        if (failures.length) {
+          const report = failures
+            .slice(0, 8)
+            .map((message) => {
+              const location = message.lineNum
+                ? `:${message.lineNum}:${message.linePos || 1}`
+                : "";
+              return `${label}${location} ${message.message}`;
+            })
+            .join("\n");
+          throw new Error(report);
+        }
+      }
+      return module;
+    }
+
+    function additiveTarget(format) {
+      const component = {
+        srcFactor: "src-alpha",
+        dstFactor: "one",
+        operation: "add",
+      };
+      return {
+        format,
+        blend: { color: component, alpha: component },
+        writeMask: GPUColorWrite.ALL,
+      };
+    }
+
+    async function createPipelines() {
+      const modules = {};
+      for (const [name, source] of Object.entries(SHADERS)) {
+        modules[name] = await compileShader(`everything ${name}`, source);
+      }
+
+      const [
+        brush,
+        entity,
+        trail,
+        particles,
+        accumulate,
+        present,
+      ] = await Promise.all([
+        device.createRenderPipelineAsync({
+          label: "everything pre-update brush",
+          layout: "auto",
+          vertex: { module: modules.brush, entryPoint: "vs_main" },
+          fragment: {
+            module: modules.brush,
+            entryPoint: "fs_main",
+            targets: [additiveTarget(FLOAT_FORMAT)],
+          },
+          primitive: { topology: "triangle-strip" },
+        }),
+        device.createComputePipelineAsync({
+          label: "everything entity update",
+          layout: "auto",
+          compute: { module: modules.entity, entryPoint: "cs_main" },
+        }),
+        device.createRenderPipelineAsync({
+          label: "everything trail resolve",
+          layout: "auto",
+          vertex: { module: modules.trail, entryPoint: "vs_main" },
+          fragment: {
+            module: modules.trail,
+            entryPoint: "fs_main",
+            targets: [{ format: FLOAT_FORMAT }],
+          },
+          primitive: { topology: "triangle-list" },
+        }),
+        device.createRenderPipelineAsync({
+          label: "everything particle color",
+          layout: "auto",
+          vertex: { module: modules.particles, entryPoint: "vs_main" },
+          fragment: {
+            module: modules.particles,
+            entryPoint: "fs_main",
+            targets: [additiveTarget(FLOAT_FORMAT)],
+          },
+          primitive: { topology: "triangle-strip" },
+        }),
+        device.createRenderPipelineAsync({
+          label: "everything temporal accumulation",
+          layout: "auto",
+          vertex: { module: modules.accumulate, entryPoint: "vs_main" },
+          fragment: {
+            module: modules.accumulate,
+            entryPoint: "fs_main",
+            targets: [{ format: FLOAT_FORMAT }],
+          },
+          primitive: { topology: "triangle-list" },
+        }),
+        device.createRenderPipelineAsync({
+          label: "everything present",
+          layout: "auto",
+          vertex: { module: modules.present, entryPoint: "vs_main" },
+          fragment: {
+            module: modules.present,
+            entryPoint: "fs_main",
+            targets: [{ format: canvasFormat }],
+          },
+          primitive: { topology: "triangle-list" },
+        }),
+      ]);
+
+      return { brush, entity, trail, particles, accumulate, present };
+    }
+
+    function createFloatTexture(label) {
+      return device.createTexture({
+        label,
+        size: [resolution, resolution, 1],
+        format: FLOAT_FORMAT,
+        usage:
+          GPUTextureUsage.RENDER_ATTACHMENT |
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_SRC |
+          GPUTextureUsage.COPY_DST,
+      });
+    }
+
+    function textureResource(texture) {
+      return texture.createView();
+    }
+
+    function createTextures() {
+      return {
+        brush: createFloatTexture("everything brush"),
+        particles: createFloatTexture("everything current particles"),
+        trails: [
+          createFloatTexture("everything trail A"),
+          createFloatTexture("everything trail B"),
+        ],
+        accumulations: [
+          createFloatTexture("everything accumulation A"),
+          createFloatTexture("everything accumulation B"),
+        ],
+      };
+    }
+
+    function createBindGroups() {
+      const brush = device.createBindGroup({
+        label: "everything brush bindings",
+        layout: pipelines.brush.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: entityBuffer } },
+          { binding: 1, resource: { buffer: globalsBuffer } },
+        ],
+      });
+
+      const entity = textures.trails.map((trailTexture, index) =>
+        device.createBindGroup({
+          label: `everything entity bindings ${index}`,
+          layout: pipelines.entity.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: entityBuffer } },
+            { binding: 1, resource: { buffer: globalsBuffer } },
+            { binding: 2, resource: textureResource(trailTexture) },
+            { binding: 3, resource: sampler },
+            { binding: 4, resource: { buffer: ruleBuffer } },
+            { binding: 5, resource: { buffer: settingsBuffer } },
+          ],
+        }),
+      );
+
+      const trail = textures.trails.map((trailTexture, index) =>
+        device.createBindGroup({
+          label: `everything trail bindings ${index}`,
+          layout: pipelines.trail.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: globalsBuffer } },
+            { binding: 1, resource: textureResource(trailTexture) },
+            { binding: 2, resource: textureResource(textures.brush) },
+            { binding: 3, resource: sampler },
+            { binding: 4, resource: { buffer: settingsBuffer } },
+          ],
+        }),
+      );
+
+      const particles = device.createBindGroup({
+        label: "everything particle bindings",
+        layout: pipelines.particles.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: entityBuffer } },
+          { binding: 1, resource: { buffer: globalsBuffer } },
+        ],
+      });
+
+      const accumulate = textures.accumulations.map((accumulationTexture, index) =>
+        device.createBindGroup({
+          label: `everything accumulation bindings ${index}`,
+          layout: pipelines.accumulate.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: globalsBuffer } },
+            { binding: 1, resource: textureResource(accumulationTexture) },
+            { binding: 2, resource: textureResource(textures.particles) },
+            { binding: 3, resource: sampler },
+          ],
+        }),
+      );
+
+      const present = textures.accumulations.map((accumulationTexture, index) =>
+        device.createBindGroup({
+          label: `everything present bindings ${index}`,
+          layout: pipelines.present.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: globalsBuffer } },
+            { binding: 1, resource: textureResource(accumulationTexture) },
+            { binding: 2, resource: sampler },
+          ],
+        }),
+      );
+
+      return { brush, entity, trail, particles, accumulate, present };
+    }
+
+    const settingDefinitions = [
+      ["axial_force", "Axial Force", "AXIAL_FORCE"],
+      ["lateral_force", "Lateral Force", "LATERAL_FORCE"],
+      ["sensor_gain", "Sensor Gain", "SENSOR_GAIN"],
+      ["mutation_scale", "Mutation Scale", "MUTATION_SCALE"],
+      ["drag", "Drag", "DRAG"],
+      ["strafe_power", "Strafe Power", "STRAFE_POWER"],
+      ["sensor_angle", "Sensor Angle", "SENSOR_ANGLE"],
+      ["global_force_mult", "Global Force Mult", "GLOBAL_FORCE_MULT"],
+      ["sensor_distance", "Sensor Distance", "SENSOR_DISTANCE"],
+      ["hazard_rate", "Hazard Rate", "HAZARD_RATE"],
+      ["trail_persistence", "Trail Persistence", "TRAIL_PERSISTENCE"],
+      ["trail_diffusion", "Trail Diffusion", "TRAIL_DIFFUSION"],
+    ];
+
+    function sweepValue(axis, key) {
+      if (!CONFIG.parameter_sweeps_enabled) return 0;
+      const sweeps = CONFIG.sweeps && CONFIG.sweeps[axis];
+      return finiteOr(sweeps && sweeps[key], 0);
+    }
+
+    function writeSettings() {
+      const data = new Float32Array(SETTINGS_BYTES / 4);
+      settingDefinitions.forEach(([physicsKey, rangeKey, sweepKey], index) => {
+        const range =
+          (CONFIG.slider_ranges && CONFIG.slider_ranges[rangeKey]) ||
+          [0, 1, 0, 1];
+        const base = index * 8;
+        data[base] = finiteOr(CONFIG.physics && CONFIG.physics[physicsKey], 0);
+        data[base + 1] = finiteOr(range[0], 0);
+        data[base + 2] = finiteOr(range[1], 1);
+        data[base + 3] = sweepValue("x", sweepKey);
+        data[base + 4] = sweepValue("y", sweepKey);
+        data[base + 5] = sweepValue("cohort", sweepKey);
+        data[base + 6] = finiteOr(
+          CONFIG.jitters && CONFIG.jitters[sweepKey],
+          0,
+        );
+      });
+      device.queue.writeBuffer(settingsBuffer, 0, data);
+    }
+
+    function writeRule() {
+      const rule = new Float32Array(CONFIG.rule);
+      if (rule.byteLength !== RULE_BYTES) {
+        throw new Error(`Expected an 80-float rule, received ${rule.length}.`);
+      }
+      device.queue.writeBuffer(ruleBuffer, 0, rule);
+    }
+
+    function writeGlobals() {
+      const bytes = new ArrayBuffer(GLOBALS_BYTES);
+      const floats = new Float32Array(bytes);
+      const uints = new Uint32Array(bytes);
+
+      floats[0] = resolution;
+      floats[1] = resolution;
+      floats[2] = 1.0;
+
+      floats[4] = pointer.currentX;
+      floats[5] = pointer.currentY;
+      floats[6] = pointer.previousX;
+      floats[7] = pointer.previousY;
+
+      floats[8] = controls.drawSize;
+      floats[9] = controls.drawPower;
+      floats[10] = 0.0;
+      floats[11] = controls.exposure;
+
+      floats[12] = finiteOr(CONFIG.appearance && CONFIG.appearance.hue_sensitivity, 0.5);
+      floats[13] = finiteOr(CONFIG.settings && CONFIG.settings.orientation_mix, 1.0);
+      floats[14] = controls.brightness;
+      floats[15] = controls.tonemapSoftness;
+
+      floats[16] = finiteOr(CONFIG.appearance && CONFIG.appearance.ink_weight, 1.0);
+      floats[17] = controls.particleScale;
+
+      uints[20] = frame >>> 0;
+      uints[21] = particleCount >>> 0;
+      uints[22] = clamp(
+        Math.floor(finiteOr(CONFIG.settings && CONFIG.settings.num_cohorts, 64)),
+        1,
+        144,
+      ) >>> 0;
+      uints[23] = clamp(
+        Math.floor(finiteOr(CONFIG.settings && CONFIG.settings.boundary_conditions, 0)),
+        0,
+        2,
+      ) >>> 0;
+
+      uints[24] = clamp(
+        Math.floor(finiteOr(CONFIG.settings && CONFIG.settings.initial_conditions, 0)),
+        0,
+        2,
+      ) >>> 0;
+      uints[25] = clamp(
+        Math.floor(finiteOr(CONFIG.settings && CONFIG.settings.absolute_orientation, 0)),
+        0,
+        2,
+      ) >>> 0;
+      uints[26] = CONFIG.settings && CONFIG.settings.disable_symmetry ? 1 : 0;
+      uints[27] = !CONFIG.appearance || CONFIG.appearance.color_by_cohort ? 1 : 0;
+
+      uints[28] = pointer.down ? 1 : 0;
+      uints[29] = pointer.erase ? 1 : 0;
+      uints[30] = 0;
+      uints[31] = CONFIG.appearance && CONFIG.appearance.watercolor_mode ? 1 : 0;
+
+      floats[32] = controls.ruleSeed;
+      device.queue.writeBuffer(globalsBuffer, 0, bytes);
+    }
+
+    function beginColorPass(encoder, label, view, clear = false) {
+      return encoder.beginRenderPass({
+        label,
+        colorAttachments: [{
+          view,
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          loadOp: clear ? "clear" : "load",
+          storeOp: "store",
+        }],
+      });
+    }
+
+    function encodeClear(encoder, texture, label) {
+      const pass = beginColorPass(
+        encoder,
+        `Clear ${label}`,
+        textureResource(texture),
+        true,
+      );
+      pass.end();
+    }
+
+    function resetSimulation(newVariation = false) {
+      if (newVariation) {
+        controls.ruleSeed = (controls.ruleSeed + 0.13750352375) % 1;
+      }
+      frame = 0;
+      trailIndex = 0;
+      accumulationIndex = 0;
+      needsClear = true;
+      updatePublicState({ frame: 0 });
+    }
+
+    function setPaused(nextPaused) {
+      paused = Boolean(nextPaused);
+      pauseButton.textContent = paused ? "Resume" : "Pause";
+      pauseButton.setAttribute("aria-pressed", paused ? "true" : "false");
+      updatePublicState({
+        running: !paused,
+        phase: paused ? "paused" : "running",
+      });
+      setStatus(paused ? "Paused" : "Running", false, !paused);
+      return paused;
+    }
+
+    function encodeFrame() {
+      writeGlobals();
+
+      const encoder = device.createCommandEncoder({
+        label: `everything frame ${frame}`,
+      });
+
+      if (needsClear) {
+        encodeClear(encoder, textures.trails[0], "trail A");
+        encodeClear(encoder, textures.trails[1], "trail B");
+        encodeClear(encoder, textures.accumulations[0], "accumulation A");
+        encodeClear(encoder, textures.accumulations[1], "accumulation B");
+        encodeClear(encoder, textures.brush, "brush");
+        encodeClear(encoder, textures.particles, "particles");
+        needsClear = false;
+      }
+
+      {
+        const pass = beginColorPass(
+          encoder,
+          "Pre-update particle brush",
+          textureResource(textures.brush),
+          true,
+        );
+        pass.setPipeline(pipelines.brush);
+        pass.setBindGroup(0, bindGroups.brush);
+        pass.draw(4, particleCount);
+        pass.end();
+      }
+
+      {
+        const pass = encoder.beginComputePass({ label: "Entity update" });
+        pass.setPipeline(pipelines.entity);
+        pass.setBindGroup(0, bindGroups.entity[trailIndex]);
+        pass.dispatchWorkgroups(Math.ceil(particleCount / WORKGROUP_SIZE));
+        pass.end();
+      }
+
+      const nextTrailIndex = 1 - trailIndex;
+      {
+        const pass = beginColorPass(
+          encoder,
+          "Trail resolve",
+          textureResource(textures.trails[nextTrailIndex]),
+          false,
+        );
+        pass.setPipeline(pipelines.trail);
+        pass.setBindGroup(0, bindGroups.trail[trailIndex]);
+        pass.draw(3);
+        pass.end();
+      }
+      trailIndex = nextTrailIndex;
+
+      {
+        const pass = beginColorPass(
+          encoder,
+          "Current particle color",
+          textureResource(textures.particles),
+          true,
+        );
+        pass.setPipeline(pipelines.particles);
+        pass.setBindGroup(0, bindGroups.particles);
+        pass.draw(4, particleCount);
+        pass.end();
+      }
+
+      const nextAccumulationIndex = 1 - accumulationIndex;
+      {
+        const pass = beginColorPass(
+          encoder,
+          "Temporal accumulation",
+          textureResource(textures.accumulations[nextAccumulationIndex]),
+          false,
+        );
+        pass.setPipeline(pipelines.accumulate);
+        pass.setBindGroup(0, bindGroups.accumulate[accumulationIndex]);
+        pass.draw(3);
+        pass.end();
+      }
+      accumulationIndex = nextAccumulationIndex;
+
+      {
+        const pass = beginColorPass(
+          encoder,
+          "Present",
+          context.getCurrentTexture().createView(),
+          true,
+        );
+        pass.setPipeline(pipelines.present);
+        pass.setBindGroup(0, bindGroups.present[accumulationIndex]);
+        pass.draw(3);
+        pass.end();
+      }
+
+      device.queue.submit([encoder.finish()]);
+      frame = (frame + 1) >>> 0;
+      pointer.previousX = pointer.currentX;
+      pointer.previousY = pointer.currentY;
+    }
+
+    function animate() {
+      if (!device) return;
+      if (!paused) {
+        try {
+          encodeFrame();
+          updatePublicState({
+            running: true,
+            phase: "running",
+            frame,
+          });
+        } catch (error) {
+          const detail = describeGpuError(error);
+          setStatus(detail, true);
+          updatePublicState({
+            running: false,
+            phase: "error",
+            error: detail,
+          });
+          return;
+        }
+      }
+      animationHandle = requestAnimationFrame(animate);
+    }
+
+    function updatePointer(event) {
+      const bounds = stage.getBoundingClientRect();
+      pointer.currentX = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+      pointer.currentY = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
+    }
+
+    function bindInteractions() {
+      stage.addEventListener("contextmenu", (event) => event.preventDefault());
+      stage.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        stage.focus({ preventScroll: true });
+        updatePointer(event);
+        pointer.previousX = pointer.currentX;
+        pointer.previousY = pointer.currentY;
+        pointer.down = true;
+        pointer.erase = event.button === 2 || event.buttons === 2;
+        stage.setPointerCapture(event.pointerId);
+      });
+      stage.addEventListener("pointermove", (event) => {
+        event.preventDefault();
+        updatePointer(event);
+        if (event.buttons === 2) pointer.erase = true;
+      });
+      const releasePointer = (event) => {
+        updatePointer(event);
+        pointer.down = false;
+        pointer.erase = false;
+        if (stage.hasPointerCapture(event.pointerId)) {
+          stage.releasePointerCapture(event.pointerId);
+        }
+      };
+      stage.addEventListener("pointerup", releasePointer);
+      stage.addEventListener("pointercancel", releasePointer);
+
+      pauseButton.addEventListener("click", () => {
+        setPaused(!paused);
+      });
+      resetButton.addEventListener("click", () => resetSimulation(false));
+      variationButton.addEventListener("click", () => resetSimulation(true));
+
+      document.addEventListener("keydown", (event) => {
+        const target = event.target;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLButtonElement
+        ) {
+          return;
+        }
+        const key = event.key.toLowerCase();
+        if (key === " ") {
+          event.preventDefault();
+          pauseButton.click();
+        } else if (key === "r") {
+          resetSimulation(false);
+        } else if (key === "n") {
+          resetSimulation(true);
+        } else if (key === "h") {
+          document.body.classList.toggle("ui-hidden");
+        }
+      });
+    }
+
+    function bindRange(inputId, outputId, initialValue, apply, digits = 2) {
+      const input = document.getElementById(inputId);
+      const output = document.getElementById(outputId);
+      input.value = String(initialValue);
+      const update = () => {
+        const value = finiteOr(input.value, initialValue);
+        output.value = value.toFixed(digits);
+        output.textContent = value.toFixed(digits);
+        apply(value);
+      };
+      input.addEventListener("input", update);
+      update();
+    }
+
+    function bindControls() {
+      const forceInitial =
+        finiteOr(CONFIG.physics && CONFIG.physics.global_force_mult, 1.0);
+      const forceRange =
+        (CONFIG.slider_ranges && CONFIG.slider_ranges["Global Force Mult"]) ||
+        [0, 2];
+      const forceInput = document.getElementById("force");
+      forceInput.min = String(Math.min(finiteOr(forceRange[0], 0), forceInitial));
+      forceInput.max = String(Math.max(finiteOr(forceRange[1], 2), forceInitial));
+
+      const persistenceInitial =
+        finiteOr(CONFIG.physics && CONFIG.physics.trail_persistence, 0.938);
+      bindRange(
+        "force",
+        "force-value",
+        forceInitial,
+        (value) => {
+          CONFIG.physics.global_force_mult = value;
+          if (device) writeSettings();
+        },
+      );
+      bindRange(
+        "persistence",
+        "persistence-value",
+        persistenceInitial,
+        (value) => {
+          CONFIG.physics.trail_persistence = value;
+          if (device) writeSettings();
+        },
+        3,
+      );
+      bindRange(
+        "draw-power",
+        "draw-power-value",
+        controls.drawPower,
+        (value) => { controls.drawPower = value; },
+      );
+      bindRange(
+        "brightness",
+        "brightness-value",
+        controls.brightness,
+        (value) => { controls.brightness = value; },
+      );
+    }
+
+    const artifactApi = Object.freeze({
+      schema: ARTIFACT_SCHEMA,
+      snapshot() {
+        return Object.freeze({ ...publicState });
+      },
+      pause() {
+        return setPaused(true);
+      },
+      resume() {
+        return setPaused(false);
+      },
+      toggle() {
+        return setPaused(!paused);
+      },
+      reset() {
+        resetSimulation(false);
+      },
+      variation() {
+        resetSimulation(true);
+      },
+      setPhysics(name, value) {
+        if (!settingDefinitions.some(([key]) => key === name)) {
+          throw new RangeError(`Unknown artwork physics parameter: ${name}`);
+        }
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          throw new TypeError(`Physics parameter ${name} must be finite.`);
+        }
+        CONFIG.physics[name] = number;
+        if (device) writeSettings();
+        return number;
+      },
+      setVisual(name, value) {
+        const allowed = new Set([
+          "drawSize",
+          "drawPower",
+          "exposure",
+          "brightness",
+          "tonemapSoftness",
+          "particleScale",
+        ]);
+        if (!allowed.has(name)) {
+          throw new RangeError(`Unknown artwork visual parameter: ${name}`);
+        }
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          throw new TypeError(`Visual parameter ${name} must be finite.`);
+        }
+        controls[name] = number;
+        return number;
+      },
+    });
+    Object.defineProperty(window, "EverythingArtifact", {
+      value: artifactApi,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+
+    async function initialize() {
+      bindControls();
+      bindInteractions();
+      runResponsiveControlSmoke();
+
+      if (!("gpu" in navigator)) {
+        showUnsupported("This artwork is unavailable in this browser.");
+        return;
+      }
+
+      updatePublicState({ phase: "adapter" });
+      setStatus("Loading…");
+      const adapter = await navigator.gpu.requestAdapter({
+        powerPreference: "high-performance",
+      });
+      if (!adapter) {
+        showUnsupported("No compatible graphics device was found.");
+        return;
+      }
+
+      const safeStorageBytes = Math.min(
+        Number(adapter.limits.maxStorageBufferBindingSize),
+        Number(adapter.limits.maxBufferSize),
+      );
+      const safeParticleCount = Math.floor(safeStorageBytes / ENTITY_STRIDE);
+      particleCount = clamp(
+        Math.floor(REQUESTED_PARTICLE_COUNT),
+        4096,
+        Math.max(4096, safeParticleCount),
+      );
+      resolution = clamp(
+        Math.floor(REQUESTED_RESOLUTION),
+        256,
+        Math.min(1024, Number(adapter.limits.maxTextureDimension2D)),
+      );
+
+      updatePublicState({
+        phase: "device",
+        particles: particleCount,
+        resolution,
+      });
+      setStatus("Loading…");
+      device = await adapter.requestDevice({
+        requiredLimits: {
+          maxStorageBufferBindingSize: particleCount * ENTITY_STRIDE,
+          maxBufferSize: particleCount * ENTITY_STRIDE,
+        },
+      });
+
+      device.addEventListener("uncapturederror", (event) => {
+        const detail = describeGpuError(event.error);
+        setStatus(detail, true);
+        updatePublicState({ error: detail, phase: "gpu-error" });
+      });
+      device.lost.then((info) => {
+        cancelAnimationFrame(animationHandle);
+        const detail = `Graphics device lost: ${info.message || info.reason}`;
+        setStatus(detail, true);
+        updatePublicState({
+          ready: false,
+          running: false,
+          phase: "device-lost",
+          error: detail,
+        });
+      });
+
+      stage.width = resolution;
+      stage.height = resolution;
+      context = stage.getContext("webgpu");
+      if (!context) throw new Error("Could not create the artwork canvas.");
+      canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({
+        device,
+        format: canvasFormat,
+        alphaMode: "opaque",
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      globalsBuffer = device.createBuffer({
+        label: "everything globals",
+        size: GLOBALS_BYTES,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      settingsBuffer = device.createBuffer({
+        label: "everything physics settings",
+        size: SETTINGS_BYTES,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      ruleBuffer = device.createBuffer({
+        label: "everything Fourier rule",
+        size: RULE_BYTES,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      entityBuffer = device.createBuffer({
+        label: "everything entities",
+        size: particleCount * ENTITY_STRIDE,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      sampler = device.createSampler({
+        label: "everything linear repeat sampler",
+        addressModeU: "repeat",
+        addressModeV: "repeat",
+        magFilter: "linear",
+        minFilter: "linear",
+      });
+
+      writeSettings();
+      writeRule();
+      writeGlobals();
+
+      textures = createTextures();
+      setStatus("Loading…");
+      pipelines = await createPipelines();
+      bindGroups = createBindGroups();
+
+      updatePublicState({
+        ready: true,
+        running: true,
+        phase: "running",
+        error: null,
+      });
+      setStatus("Running", false, true);
+      animationHandle = requestAnimationFrame(animate);
+    }
+
+    initialize().catch((error) => {
+      const detail = describeGpuError(error);
+      showUnsupported("The artwork could not start.", detail);
+    });
+  })();
+  </script>
+</body>
+</html>
