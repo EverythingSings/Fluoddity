@@ -3,6 +3,9 @@
 *.png
 *_ffmpeg.log
 
+# Local Optix-Redo search/render evidence
+artifacts/optix-redo-search/
+
 # Python
 __pycache__/
 *.py[cod]

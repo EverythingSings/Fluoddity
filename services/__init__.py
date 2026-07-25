@@ -6,6 +6,8 @@ from .render_spec import RenderSpecService
 from .editor_saver import EditorSaver
 from .simulation_saver import SimulationSaver
 from .plotting_manager import PlottingManager
+from .search_operator import SearchOperatorService
 
 __all__ = ['RuleManager', 'EntityPicker', 'VideoRecorderService', 'ConfigSaver',
-           'RenderSpecService', 'EditorSaver', 'SimulationSaver', 'PlottingManager']
+           'RenderSpecService', 'EditorSaver', 'SimulationSaver', 'PlottingManager',
+           'SearchOperatorService']

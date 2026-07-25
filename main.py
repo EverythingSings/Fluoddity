@@ -5,7 +5,7 @@ import numpy as np
 from camera import Camera
 from sim import Sim, SIZE_OF_ENTITY_STRUCT
 from ui import UI
-from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, RenderSpecService, EditorSaver, SimulationSaver, PlottingManager
+from services import RuleManager, EntityPicker, VideoRecorderService, ConfigSaver, RenderSpecService, EditorSaver, SimulationSaver, PlottingManager, SearchOperatorService
 from services import stereogram
 from parameter_locks import ParameterLockService
 from utilities.paths import initialize_user_data, get_user_physics_configs_dir, get_app_physics_configs_dir, get_screenshots_dir, get_user_preferences_path
@@ -83,6 +83,7 @@ class App:
             editor_saver=self.editor_saver,
             simulation_saver=self.simulation_saver)
         self.param_lock_service = ParameterLockService()
+        self.search_operator = SearchOperatorService()
 
         # Viewer: the always-displayed "Viewer" ImGui window that shows the
         # active renderer's finished frame and composites display-only overlays.
@@ -271,6 +272,7 @@ class App:
 
         # 1. Get current UI state
         ui_state = self.ui.get_state()
+        self.search_operator.apply_pending(self, ui_state)
         self.plotting_manager.enabled = ui_state.preferences.ui_windows.show_plotting_window
 
         # Derive the transient "OptiX active" flag from the renderer dropdown.
@@ -699,6 +701,7 @@ class App:
         self.ctx.viewport = (0, 0, width, height)
         self.ctx.clear(0.0, 0.0, 0.0, 1.0)
         self.ui.render()
+        self.search_operator.update_status(self, ui_state, dt)
 
     def _camera_moved(self):
         """Check if the camera has moved since last frame (3D or 2D)."""
