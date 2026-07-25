@@ -13,6 +13,7 @@ __pycache__/
 
 # Virtual Environment
 Scratch.venv/
+.venv/
 venv/
 ENV/
 env/
@@ -42,3 +43,9 @@ physics_configs/Custom/
 build/
 dist/
 *.spec.bak
+
+# Rust build artifacts
+target/
+
+# Local launch and automation logs
+/run-*.log

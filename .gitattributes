@@ -1,0 +1,10 @@
+* text=auto whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+# Generated and creative media are binary.
+*.exe binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ppm binary
+*.wav binary
+*.mp4 binary

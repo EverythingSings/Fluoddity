@@ -236,15 +236,25 @@ Implementation status:
 - Done: objective zones are drawn over the dish with active/dormant colors.
 - Done: first counterforce, an antibiotic band that visibly suppresses trail activity.
 - Done: Trial 2 copy and HUD frame the counterforce as an antibiotic scar/route problem instead of raw hazard diagnostics.
+- Done: Trial 2 now shows an antibiotic-route readout (`Route absent`, `Partial route`, `Route stable`) so the counterforce has immediate state feedback.
+- Done: Trial 2 now emits short route feedback cues when a route starts forming and when it survives the scar, so the first counterforce has a reward signal beyond the progress bar.
 - Done: game mode starts with the editor sidebar hidden and mouse drawing framed as nutrient gel.
 - Done: keyboard and controller navigation for the briefing, retry, and next-trial flow.
 - Done: second counterforce, a rival bloom source that grows into zone-control pressure.
 - Done: first-play ramp reduced to one zone before hazards and rivals are introduced.
 - Done: Trial 1 uses shorter protocol copy and simplified running HUD language, emphasizing specimen stability instead of timer and zone diagnostics.
+- Done: Trial 1 now shows a first-contact specimen readout (`Specimen dormant`, `Specimen responding`, `Specimen stabilizing`) so the first nutrient-gel response is explicit without adding more mechanics.
+- Done: Trial 1 now emits a short `Specimen response detected` lab feedback cue the first time the culture wakes, giving the first player action an immediate reward signal without adding another HUD system.
 - Done: Trial definitions now carry `onboarding_focus`, and launch-contract smoke verifies the first briefing suppresses objective overlays before revealing the first marked culture zone.
 - Done: visual smoke now emits overlay counts/flags and can assert the onboarding reveal order through the actual launch/render path.
 - Done: `--game` uses the player-facing window title `Xenoculture: Trial Dish`, while Fluoddity remains the engine/package identity until a deliberate build rename.
 - Done: Steam Deck packet reports now stamp both `Xenoculture: Trial Dish` and the Fluoddity engine/package lineage so hardware notes identify the tested shell without forcing a build rename.
+- Done: `scripts/summarize_steam_input_handoff.py` turns a filled Steam Input handoff into release-gate evidence and blocks blank/incomplete Steamworks import/default-config/glyph notes with `--require-ready`.
+- Done: `scripts/summarize_steam_deck_preflight.py` turns a filled Deck preflight report into release-gate evidence and blocks blank/incomplete reports with `--require-ready`, including missing tester/device/FPS/defect notes.
+- Done: `scripts/summarize_package_validation.py` turns a filled native Linux or Proton launch validation report into release-gate evidence and blocks blank/incomplete package/runtime reports with `--require-ready`.
+- Done: `scripts/summarize_release_readiness.py` aggregates Steam Input, Deck preflight, package/runtime validation, playtest, and post-playtest tuning summaries into final markdown and checked-schema JSON release-readiness gates.
+- Done: `scripts/prepare_steam_deck_packet.py` writes a checked packet manifest with build identity, readiness status, artifact byte counts, and SHA-256 hashes for hardware/Steamworks handoff.
+- Done: `scripts/prepare_steam_deck_packet.py` now validates the generated packet manifest before reporting success, so stale hashes or readiness snapshot mismatches fail the handoff command.
 - Done: starter specimen primer so early trials begin with a visible culture response.
 - Done: Irradiate Strain and Revert Strain unlock in Trial 3, mapped to existing rule history commands.
 - Done: Irradiate Strain has limited charges and cooldown, making mutation a deliberate trial tool rather than a spam action.
@@ -254,10 +264,16 @@ Implementation status:
 - Done: Trial 3 briefing and running status now introduce rival pressure plus mutation economy with compact culture/rival language instead of raw territory math.
 - Done: final Trial 3 win can restart the Trial Dish sequence cleanly from Trial 1.
 - Done: station guidance updates during each trial so tutorial text introduces one current problem at a time.
+- Done: Trial 3 guidance now prioritizes loaded strain archives over positive containment status, so using Irradiate immediately teaches the Revert decision instead of only saying to keep the site margin.
 - Done: Trial Dish HUD shows compact controller/keyboard prompts for start, retry, next, irradiate, and revert states.
 - Done: Trial Dish tool labels distinguish ready, recharge, depleted, archive-ready, no-archive, and spent states.
 - Done: progress bars now include semantic objective status such as active sites, hold time, and rival pressure.
+- Done: late Trial 2/3 assays now show a compact timer-pressure readout, with Trial 3 warning when the territory assay is closing soon.
+- Done: Trial 3 now shows a containment margin/readout so the rival pressure reads as winning, tied, or losing instead of only raw site counts.
+- Done: Trial 3 now shows a mutation readout (`Baseline strain`, `Mutated strain; archive ready`, `Archive restored`) so irradiation/revert state is visible without reading raw charge counters.
 - Done: result screens now include a next-step line for unlocked assays, retry focus, or final sequence completion.
+- Done: result screens now include a next-experiment hint, turning wins/failures into a specific retry or comparison idea instead of only reporting the diagnosis.
+- Done: Trial 1 failure copy now stays on the first-dish lesson, using specimen/marked-circle sustain language instead of later route/scar terminology.
 - Done: Trial 3 readouts now reflect site margin and mutation economy instead of always reporting the same result.
 - Done: each Trial Dish briefing now separates an alien-space-lab story beat from the protocol instructions.
 - Done: game-mode runtime startup has a repeatable smoke script.
@@ -270,7 +286,9 @@ Implementation status:
 - Done: running Trial Dish controls stack cleanly, and multi-zone markers are positioned clear of the default HUD panel.
 - Done: game mode uses a calmer runtime visual profile than the editor, with reduced world size, dimmer brightness, no bloom, and canvas-first rendering for the introductory Trial Dish path.
 - Done: visual smoke captures the early active Trial 1 response so objective activation can be inspected, not only dormant overlays.
+- Done: visual smoke asserts the Trial 1 specimen readout, proving the first-contact HUD feedback is driven by runtime activity state.
 - Done: visual smoke can apply smoke-only nutrient pulses across objective zones, proving Trial 2 and Trial 3 active-zone HUD/overlay feedback without manual input.
+- Done: visual smoke asserts the Trial 2 route readout, proving the antibiotic-band HUD feedback is driven by runtime zone state.
 - Done: visual smoke now emits and asserts trial gameplay state, so active-zone captures fail if objective status or progress does not respond.
 - Done: fed visual smoke can carry Trial 1 and Trial 2 to `won` states through the normal runtime path.
 - Done: game mode has a controller lab cursor: right stick aims nutrient gel, R2 applies it, and the HUD surfaces the control path.
@@ -294,12 +312,21 @@ Implementation status:
 - Done: initial Steam Input action manifest artifact exists for Trial Dish and editor action sets, with smoke validation for required actions and localization tokens.
 - Done: Trial 3 rival pressure now claims a visible far-side zone early enough that the player sees an actual territory problem, and visual smoke asserts that rival-zone pressure.
 - Done: visual smoke can fast-forward Trial 3 into a rendered result screen and assert a won Rival Bloom resolution with culture 2 / rival 1 site control.
+- Done: fed result visual smoke asserts next-experiment hints on Trial 1 win, Trial 2 win/failure, and Trial 3 win result screens.
+- Done: visual smoke asserts the Trial 3 containment readout, proving the rival-pressure HUD feedback is driven by runtime territory state.
+- Done: visual smoke asserts the Trial 3 mutation readout, proving mutation state is serialized through the render path.
+- Done: visual smoke can now drive smoke-only Irradiate Strain and Revert Strain requests, proving rendered Trial 3 HUD states for baseline, mutated/archive-ready, and restored strains.
+- Done: visual smoke now serializes station guidance and asserts the mutated Trial 3 archive/revert instruction through the rendered app path.
+- Done: visual smoke can seed elapsed assay time and assert the late Trial 3 timer-pressure readout through a rendered capture.
 - Done: visual smoke can fast-forward Trial 2 into a rendered failure result and assert an incomplete hold, with failure copy that distinguishes late stabilization from missing zones.
 - Done: default `--game` now gates raw editor shortcuts and persisted help/field-loader windows behind `--allow-editor-in-game`, keeping the first player shell focused on Trial Dishes.
 - Done: the orchestrator defensively filters editor-only one-shot commands in default `--game`, while preserving Trial Dish actions such as Start, Retry, Pause, Sterilize Dish, Irradiate, Revert, and Exit.
 - Done: the Steam Deck preflight report now summarizes automated evidence, including controller-mode visual prompt captures, so hardware testers see what local gates already proved.
-- Done: `scripts/write_trial_dish_playtest_report.py` writes a focused manual playtest report for onboarding, readability, controller confidence, friction, and threshold tuning.
+- Done: `scripts/write_trial_dish_playtest_report.py` writes a focused manual playtest report for onboarding, readability, controller confidence, action-feedback timing, meaningful choice, flow balance, friction, and threshold tuning.
 - Done: `scripts/prepare_steam_deck_packet.py` generates the hardware-pass packet in one command.
+- Done: packet refreshes preserve filled playtest/package reports by default;
+  blank-template replacement requires `--replace-manual-reports`, and direct
+  report writers require `--force`.
 - Done: `scripts/summarize_trial_dish_playtest.py` turns a filled playtest report into tuning-ready evidence and rejects blank templates when `--require-ready` is used.
 - Done: `scripts/write_trial_dish_tuning_reference.py` generates the current Trial Dish thresholds and mechanics values so playtest findings can map directly to tuning changes.
 - Done: `scripts/write_trial_dish_tuning_plan.py` combines the playtest summary with the tuning reference into a post-playtest action plan and blocks on incomplete evidence.
@@ -311,6 +338,7 @@ Implementation status:
 - Done: `schemas/trial_definitions.schema.json` documents the exported Trial Dish contract, and `scripts/smoke_trial_definitions_schema.py` validates the generated export against it.
 - Done: `scripts/smoke_trial_runtime_contract.py` verifies each exported trial matches the `TrialService.load_trial()` runtime state for tools, timers, hazards, rival pressure, primer settings, win condition, and zones.
 - Done: `scripts/prepare_steam_deck_packet.py` copies the checked Trial Dish schema into `artifacts/trial_definitions.schema.json` so the hardware packet carries the data contract beside the export.
+- Done: `scripts/smoke_game_v1_done_definition.py` pins the explicit V1 done definition to runtime evidence for a fresh Trial 1 loop: objective, tool, input response, progress feedback, success, failure, and retry/next result context.
 - Next: use the manual playtest report on real hardware and tune thresholds against that evidence.
 
 ## Not V1

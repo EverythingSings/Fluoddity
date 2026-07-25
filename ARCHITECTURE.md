@@ -1,8 +1,16 @@
 # Fluoddity Architecture
 
-Fluoddity is a GPU-accelerated 2D particle simulation for generative art. Thousands of particles follow neural-net-like "Rules" that govern how they respond to trail density, producing emergent patterns ranging from flowing rivers to branching lightning. The physics engine is a generalization of [Sage Jenson's physarum transport model](https://cargocollective.com/sagejenson/physarum). Built with Python, ModernGL (OpenGL compute shaders), GLFW, and Dear ImGui.
+Fluoddity is a GPU-accelerated 2D particle simulation for generative art. Thousands of particles follow neural-net-like "Rules" that govern how they respond to trail density, producing emergent patterns ranging from flowing rivers to branching lightning. The physics engine is a generalization of [Sage Jenson's physarum transport model](https://cargocollective.com/sagejenson/physarum).
 
-## Core Architecture: Orchestrator Pattern
+## Maintained Runtime and Delivery Surfaces
+
+- **Python/OpenGL prototype and editor** — the repository-root application uses Python 3.12, ModernGL/OpenGL compute shaders, GLFW, and Dear ImGui. It remains the fastest tuning and V1 game-design surface.
+- **Rust/wgpu native shipping candidate** — `runtime/rust-wgpu-spike/` is the active native runtime despite its legacy directory name. It consumes exported Trial Dish/config contracts and has automated quality, input, trial, rendering, determinism, video, packaging, and timing gates. Full Python/GLSL shader parity and actual Steam Deck hardware validation remain open.
+- **WebGPU networked.art artifact** — `runtime/webgpu/` builds a self-contained, no-runtime-network HTML artifact at `artifacts/networked-art/everything.html`. It is a bounded generative-art surface rather than the complete editor/game shell.
+
+The three surfaces share behavior and data contracts where practical, but they are not interchangeable builds of one implementation. Validation must name the surface it actually exercised.
+
+## Python/OpenGL Core Architecture: Orchestrator Pattern
 
 ```
                         App (main.py)
@@ -46,68 +54,68 @@ Physics runs entirely on the GPU via GLSL compute shaders. `Sim` manages shader 
 ## File Map
 
 ### Orchestration Layer
-| File | Lines | Description |
-|------|-------|-------------|
-| `main.py` | 357 | App orchestrator: init, frame loop, recording/screenshot state machines |
-| `command_handler.py` | 417 | Processes one-shot UI commands (resets, config save/load, mouse clicks, history) |
-| `simulation_runner.py` | 250 | Physics stepping + frame assembly (motion blur / non-motion blur) |
-| `camera_input.py` | 89 | WASD/QE camera movement + scroll-to-zoom (standalone function) |
+| File | Description |
+|------|-------------|
+| `main.py` | App orchestrator: init, frame loop, recording/screenshot state machines |
+| `command_handler.py` | Processes one-shot UI commands (resets, config save/load, mouse clicks, history) |
+| `simulation_runner.py` | Physics stepping + frame assembly (motion blur / non-motion blur) |
+| `camera_input.py` | WASD/QE camera movement + scroll-to-zoom (standalone function) |
 
 ### UI Package (`ui/`)
 Mixin-based architecture. The `UI` class in `core.py` inherits all mixins via multiple inheritance, so every method shares the same `self` for access to shared state. See [`ui/README.md`](ui/README.md) for details.
 
-| File | Lines | Description |
-|------|-------|-------------|
-| `core.py` | 634 | UI class definition, `__init__`, GLFW callbacks, `get_state()`, render dispatch |
-| `physics_window.py` | 728 | Physics settings panel: all slider groups, multi-load mode |
-| `slider_widgets.py` | 386 | Slider with range menu, context menus, jitter, sweep/range buttons |
-| `help_windows.py` | 355 | Controls, tutorial, parameter sweeps, performance, video recording windows |
-| `menu_bar.py` | 282 | File/Reset/Help/Extras menus, load submenu with preview, auto-close |
-| `history_window.py` | 245 | Rule history display, tooltip shader rendering |
-| `preferences_window.py` | 232 | World size, physics frequency, mouse mode, view, appearance settings |
-| `config_browser.py` | 230 | Config file scanning, caching, hierarchical load submenu rendering |
-| `popup_modals.py` | 85 | Save/Overwrite/Delete confirmation dialogs |
+| File | Description |
+|------|-------------|
+| `core.py` | UI class definition, `__init__`, GLFW callbacks, `get_state()`, render dispatch |
+| `physics_window.py` | Physics settings panel: all slider groups, multi-load mode |
+| `slider_widgets.py` | Slider with range menu, context menus, jitter, sweep/range buttons |
+| `help_windows.py` | Controls, tutorial, parameter sweeps, performance, video recording windows |
+| `menu_bar.py` | File/Reset/Help/Extras menus, load submenu with preview, auto-close |
+| `history_window.py` | Rule history display, tooltip shader rendering |
+| `preferences_window.py` | World size, physics frequency, mouse mode, view, appearance settings |
+| `config_browser.py` | Config file scanning, caching, hierarchical load submenu rendering |
+| `popup_modals.py` | Save/Overwrite/Delete confirmation dialogs |
 
 ### Simulation & Rendering
-| File | Lines | Description |
-|------|-------|-------------|
-| `sim.py` | 869 | GPU particle simulation: shaders, buffers, physics dispatch, parameter sweeps |
-| `camera.py` | 316 | Camera state, coordinate transforms, screen rendering |
+| File | Description |
+|------|-------------|
+| `sim.py` | GPU particle simulation: shaders, buffers, physics dispatch, parameter sweeps |
+| `camera.py` | Camera state, coordinate transforms, screen rendering |
 
 ### Services (`services/`)
 Stateless or near-stateless helpers owned by the orchestrator.
 
-| File | Lines | Description |
-|------|-------|-------------|
-| `config_saver.py` | 565 | Save/load physics configs (JSON + legacy binary formats) |
-| `multi_load_service.py` | 150 | Mix up to 64 configs simultaneously, cohort assignment |
-| `arrow_debug_service.py` | 93 | Debug overlay rendering trail flow vectors as arrows |
-| `entity_picker.py` | 63 | Find nearest particle to mouse click (CPU readback) |
-| `rule_manager.py` | 60 | Rule history stack with push/pop/undo |
-| `video_recorder.py` | 45 | Thin facade over VidSaver for video recording |
+| File | Description |
+|------|-------------|
+| `config_saver.py` | Save/load physics configs (JSON + legacy binary formats) |
+| `multi_load_service.py` | Mix up to 64 configs simultaneously, cohort assignment |
+| `arrow_debug_service.py` | Debug overlay rendering trail flow vectors as arrows |
+| `entity_picker.py` | Find nearest particle to mouse click (CPU readback) |
+| `rule_manager.py` | Rule history stack with push/pop/undo |
+| `video_recorder.py` | Thin facade over VidSaver for video recording |
 
 ### State (`state/`)
 Plain dataclasses. No logic, just fields with defaults.
 
-| File | Lines | Description |
-|------|-------|-------------|
-| `sim_state.py` | 113 | Physics parameters (ALL_CAPS), rule seed, view options, sweep config |
-| `preferences_state.py` | 86 | User preferences: motion blur, recording, mouse mode, keybindings |
-| `ui_state.py` | 72 | Combined state snapshot returned by `UI.get_state()` |
-| `multi_load_state.py` | 24 | Multi-load toggle and config list |
-| `camera_state.py` | 11 | Camera position + zoom |
-| `recording_state.py` | 7 | Recording active flag |
+| File | Description |
+|------|-------------|
+| `sim_state.py` | Physics parameters (ALL_CAPS), rule seed, view options, sweep config |
+| `preferences_state.py` | User preferences: motion blur, recording, mouse mode, keybindings |
+| `ui_state.py` | Combined state snapshot returned by `UI.get_state()` |
+| `multi_load_state.py` | Multi-load toggle and config list |
+| `camera_state.py` | Camera position + zoom |
+| `recording_state.py` | Recording active flag |
 
 ### Utilities (`utilities/`)
-| File | Lines | Description |
-|------|-------|-------------|
-| `ffmpeg_recorder.py` | 272 | FFmpeg pipe-based video encoder |
-| `save_frame_gpu.py` | 248 | GPU-side screenshot with supersampling |
-| `frame_assembler.py` | 195 | Temporal accumulation (motion blur) + final composite |
-| `keybinding_management.py` | 146 | Rebindable keyboard shortcuts |
-| `paths.py` | 117 | Platform-aware path resolution (app dir vs user Documents) |
-| `gl_helpers.py` | 114 | OpenGL utilities (tryset, readback_rule, buffer helpers) |
-| `vid_saver.py` | 75 | Frame-buffered video saver (wraps ffmpeg_recorder) |
+| File | Description |
+|------|-------------|
+| `ffmpeg_recorder.py` | FFmpeg pipe-based video encoder |
+| `save_frame_gpu.py` | GPU-side screenshot with supersampling |
+| `frame_assembler.py` | Temporal accumulation (motion blur) + final composite |
+| `keybinding_management.py` | Rebindable keyboard shortcuts |
+| `paths.py` | Platform-aware path resolution (app dir vs user Documents) |
+| `gl_helpers.py` | OpenGL utilities (tryset, readback_rule, buffer helpers) |
+| `vid_saver.py` | Frame-buffered video saver (wraps ffmpeg_recorder) |
 
 ### Shaders (`shaders/`)
 | File | Description |
@@ -185,10 +193,24 @@ State machine: idle → (optional pending wait for scheduled frame) → recordin
 ### Screenshot
 2-frame state machine: pending → in_progress → save + restore. On the override frame, settings are temporarily maxed for quality (motion blur enabled, blur_quality=1, speedmult=motion_blur_samples).
 
-## Technologies
-- **Python 3.12** - Application logic
-- **ModernGL** - OpenGL 4.3 compute shader dispatch + rendering
-- **GLFW** - Window management, input
-- **imgui_bundle** (Dear ImGui) - Immediate-mode GUI
-- **NumPy** - CPU-side array operations
-- **FFmpeg** - Video encoding (via subprocess pipe)
+## Technologies by Surface
+
+### Python/OpenGL
+
+- **Python 3.12** — application logic
+- **ModernGL** — OpenGL 4.3 compute shader dispatch and rendering
+- **GLFW** — window management and input
+- **imgui_bundle** (Dear ImGui) — immediate-mode editor and prototype UI
+- **NumPy** — CPU-side array operations
+- **FFmpeg** — desktop video encoding
+
+### Native
+
+- **Rust + wgpu** — native application, compute, and rendering runtime
+- **WGSL** — native compute and presentation shaders
+- **FFmpeg** — package-local offline MP4 export and window-frame capture
+
+### Browser Artifact
+
+- **WebGPU + WGSL + JavaScript** — self-contained networked.art/everything runtime
+- **Single-file HTML packaging** — embedded shaders/config with no runtime network or persistence dependency

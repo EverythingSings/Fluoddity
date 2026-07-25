@@ -542,10 +542,13 @@ For parameters that vary spatially in complex ways (e.g., "high drag in the cent
 
 ## Verification Plan
 
-Since there are no automated tests, verification is manual:
+Automated contract and smoke coverage now exists, but the behavioral and
+visual A/B evidence required by this proposal remains manual:
 
 1. **Phase 0**: Load any config, verify all sliders/sweeps/jitter work identically to before. Toggle multi-load, verify behavior matches. Compare screenshots.
 2. **Phase 1**: A/B test — run old and new shader side by side with same params, verify identical canvas output after N frames. Use `WRITE_RULES` readback to verify rule values match.
 3. **Phase 2**: Load multi-load configs, verify particle assignment and ring behavior matches. Test all assignment modes (Cohorts, Random).
 4. **Phase 3**: Paint force/strafe field, verify particle behavior matches. Then test new capability: texture-driven drag or sensor_gain.
-5. **Each phase**: Run `python main.py`, exercise all features in `docs/testing_checklist.md`.
+5. **Each phase**: Run `python scripts/smoke_game_v1.py`, then run
+   `python main.py` and exercise the relevant manual checks in
+   `docs/testing_checklist.md`.

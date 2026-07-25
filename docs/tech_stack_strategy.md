@@ -1,10 +1,15 @@
 # Tech Stack Strategy
 
-This project should keep Python for the current V1 game prototype, but it should not assume Python is the final shipping runtime.
+This project keeps Python for the current V1 game prototype while actively developing a Rust/wgpu native shipping candidate. The native work is no longer a hypothetical future spike; its operational migration plan lives in `docs/native_runtime_migration.md`. A separate self-contained WebGPU artifact serves networked.art/everything and is not the complete game shell.
+
+The policy is to keep Python for the current V1 game prototype and not assume Python is the final shipping runtime.
+Promote the native candidate only against explicit parity and hardware evidence.
 
 The core asset is not Python. The core asset is the GPU simulation, the shader pipeline, the rule/mutation model, the visual identity, and the emerging Xenoculture: Trial Dish game loop. Python is currently the fastest way to wrap those assets in enough UI, launch behavior, controller handling, and smoke coverage to learn whether there is a game here.
 
-## Current Stack
+## Current Surfaces
+
+### Python/OpenGL Prototype
 
 - Python 3.12: app orchestration, state containers, UI glue, command handling, packaging scripts.
 - ModernGL: OpenGL 4.3 context and compute/fragment shader dispatch.
@@ -16,6 +21,23 @@ The core asset is not Python. The core asset is the GPU simulation, the shader p
 - PyInstaller: current standalone packaging path for Windows and Linux/Steam Deck experiments.
 
 In practice, most of the interesting runtime work already happens on the GPU. Python is mostly the conductor.
+
+### Rust/wgpu Native Candidate
+
+- Rust: native application, Trial Dish state, input, packaging, validation, and video-export logic.
+- wgpu + WGSL: native compute and presentation pipeline across modern GPU backends.
+- Exported Trial Dish definitions and Core physics configs: data contracts shared with the Python prototype.
+- Automated rustfmt, clippy, unit, config, input, trial, rendering, determinism, video, package, and timing gates.
+
+The native runtime is the current shipping candidate, but the repository still records expected incomplete Python/GLSL shader parity. Local Windows and headless validation must not be described as Steam Deck hardware proof.
+
+### WebGPU networked.art Artifact
+
+- WebGPU + WGSL + JavaScript in one generated HTML file.
+- Embedded config and shaders with no runtime network or persistence dependency.
+- A bounded generative-art control surface for networked.art/everything, not a port of every editor or Trial Dish feature.
+
+At compact embed sizes, all controls must remain reachable in a scrollable panel at normal browser zoom. The responsive browser smoke is part of this surface's release check.
 
 ## Why Keep Python For V1
 
@@ -38,22 +60,23 @@ For the next prototype phase, Python is acceptable if we keep changes layered ar
 
 The concern is not raw performance first. The concern is product reliability, portability, input polish, and long-term maintainability.
 
-## Port Decision Rule
+## Runtime Decision Rule
 
-Do not port while we are still answering "what is the game?"
+Do not discard the productive Python prototype while we are still answering "what is the game?" The native port can advance in parallel only when it preserves explicit behavior/data contracts and proves each capability with bounded evidence.
 
-Start a serious port or runtime split when at least two of these are true:
+The runtime split is now active because the prototype has enough stable verbs
+and exported data contracts to define a behavioral target, while a shipping
+candidate needs:
 
-- Trial Dishes are fun enough that we want a Steam page and public demo.
-- The prototype has a stable set of game verbs, not just editor tools renamed as lab tools.
-- Steam Deck testing shows packaging, controller, or frame pacing problems caused by Python/GLFW/imgui_bundle rather than game code.
-- The UI needs to move away from ImGui into a custom controller-first interface.
-- The shader/runtime layer needs a backend that OpenGL cannot comfortably provide.
-- We need automated content pipelines, save compatibility, localization, achievements, Steam Input glyphs, or Steamworks integration.
+- native packaging and predictable launch behavior;
+- a custom controller-first presentation layer rather than editor-first ImGui;
+- a modern cross-platform GPU backend;
+- explicit content, save, localization, achievement, Steam Input, and Steamworks boundaries;
+- target-platform evidence for frame pacing, suspend/resume, input, and package behavior.
 
-Until then, porting is probably premature.
+The remaining decision is promotion, not whether to start. Treat Rust/wgpu as the shipping candidate only to the extent its current validation covers; keep the Python prototype as the tuning and comparison surface until parity gaps are resolved or consciously accepted.
 
-## Likely Final Runtime Options
+## Runtime Options and Current Direction
 
 ### Rust + wgpu
 
@@ -71,7 +94,7 @@ Cons:
 - slower iteration than Python;
 - all current ImGui/editor glue must be rewritten or bridged.
 
-This is the strongest candidate if the game remains a custom simulation-first thing.
+This is the active shipping candidate because the game remains a custom simulation-first thing.
 
 ### Godot
 
@@ -107,10 +130,26 @@ Cons:
 ## Recommended Path
 
 1. Keep the Python/ModernGL prototype through V1 Trial Dishes.
-2. Keep the simulation logic, trial definitions, onboarding focus, tool names, game identity, and game-state model cleanly separated from editor windows. Trial Dish authored data now lives in `services/trial_definitions.py` and exports as a normalized JSON/schema runtime contract, so tuning/report tools and future ports do not have to depend on service internals.
-3. Add smoke tests around game rules, exported trial data, and launch behavior so a future port has a behavioral target.
-4. Do one real Steam Deck hardware pass before committing to shipping Python.
-5. If V1 is promising, prototype a tiny Rust + wgpu spike that runs one dish shader and one objective overlay.
-6. Decide final runtime after that spike, not before.
+2. Advance `runtime/rust-wgpu-spike/` as the native shipping candidate despite its legacy directory name. Close or explicitly accept shader-parity gaps before calling the port complete.
+3. Keep simulation logic, trial definitions, onboarding focus, tool names, game identity, and game-state models separate from editor windows. Trial Dish authored data in `services/trial_definitions.py` exports as a normalized JSON/schema runtime contract so Python and native validation target the same content.
+4. Keep automated game-rule, exported-data, launch, native-runtime, and package checks as behavioral gates rather than treating compilation as parity.
+5. Maintain the WebGPU artifact as a focused networked.art/everything delivery surface. Preserve its self-contained sandbox contract and normal-zoom responsive controls without implying full game/editor parity.
+6. Do one real Steam Deck hardware pass, then complete Steamworks input, glyph,
+   suspend/resume, package, and performance evidence before making Deck or
+   store-readiness claims.
 
 The important constraint: avoid writing new game systems in a way that only makes sense inside Python ImGui callbacks. V1 can be Python. The game should not become Python-shaped.
+
+## Native Runtime Candidate Gates
+
+The original native spike gate established the minimum shape of a useful port:
+
+- native 1280x800 launch profile;
+- wgpu compute pass mutating particle-like state on the GPU;
+- nonblank Fluoddity-like frame output;
+- one exported Trial Dish definition loaded through the data contract;
+- controller-only start, pause, applicator movement, and apply;
+- one objective overlay;
+- short frame-timing report.
+
+The active candidate now goes beyond that minimum, but promotion still depends on the full migration gates, explicit shader-parity status, target-platform packaging, and hardware evidence. `docs/native_runtime_migration.md` is the source of truth for those phases and acceptance gates.

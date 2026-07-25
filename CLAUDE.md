@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Fluoddity is a GPU-accelerated 2D particle simulation for generative art. Thousands of particles follow neural-net-like "Rules" governing their response to trail density, producing emergent patterns. Physics runs entirely on the GPU via GLSL compute shaders. Built with Python 3.12, ModernGL (OpenGL 4.3), GLFW, imgui_bundle, NumPy, and FFmpeg.
+Fluoddity is a GPU-accelerated 2D particle simulation for generative art. Thousands of particles follow neural-net-like "Rules" governing their response to trail density, producing emergent patterns.
+
+The repository maintains three runtime/delivery surfaces:
+
+- The Python 3.12 / ModernGL / OpenGL prototype and editor at the repository root.
+- The Rust/wgpu native shipping candidate under `runtime/rust-wgpu-spike/`.
+- A self-contained WebGPU HTML artifact for networked.art/everything under `runtime/webgpu/`, built into `artifacts/networked-art/everything.html`.
 
 ## Commands
 
@@ -19,11 +25,18 @@ python main.py
 # Manual build
 python -m PyInstaller --clean --noconfirm Fluoddity.spec
 Move-Item -Path "dist\Fluoddity\_internal\shaders" -Destination "dist\Fluoddity\shaders"
+
+# Automated validation entry points
+python scripts/smoke_game_v1.py
+python scripts/smoke_native_validation_suite.py
+python scripts/build_webgpu_artifact.py
+python scripts/smoke_webgpu_artifact.py --require-thumbnail
+python scripts/smoke_webgpu_responsive.py --skip-build
 ```
 
-There are no automated tests. Verification is manual (see `docs/testing_checklist.md`).
+The repository has automated Python smoke suites, Rust formatting/clippy/unit tests, native runtime gates, and WebGPU artifact checks. Use `docs/testing_checklist.md` for the remaining visual, controller, packaging, and hardware checks. Passing local checks does not establish full native shader parity or Steam Deck hardware validation.
 
-## Architecture
+## Python/OpenGL Prototype Architecture
 
 **Orchestrator pattern** — the `App` class in `main.py` coordinates all components. Components never talk to each other directly.
 
@@ -75,7 +88,7 @@ No additional wiring needed — the orchestrator pattern handles the rest.
 
 - **`sim.py` is user-owned** — do not restructure without asking. It has its own hardcoded param lists in `entity_update()` and `_write_multi_load_ssbo()`.
 - **Windows platform** — use forward slashes or `os.path`; use `rm` not `del` in bash commands.
-- **No test suite** — changes must be verified manually.
+- **Layered validation** — run the relevant automated smoke suite, then complete the applicable manual checks in `docs/testing_checklist.md`.
 - **Shaders must be in `shaders/`** relative to the executable for builds to work.
 
 ## Key Documentation

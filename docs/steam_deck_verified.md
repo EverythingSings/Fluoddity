@@ -12,6 +12,12 @@ The Steam launch option should run:
 ./run_steam_deck.sh
 ```
 
+For the Rust/wgpu native package candidate, use the launch contract in
+`artifacts/native_steam_launch_contract.md`. The current native package exposes
+`XenocultureTrialDish.exe` for Windows/Proton and `XenocultureTrialDish` for
+Deck/Linux, with `run_steam_deck.ps1` / `run_steam_deck.sh` as package-local
+player launch wrappers.
+
 For source/development runs:
 
 ```bash
@@ -26,6 +32,45 @@ The Deck profile sets:
 - gamepad and keyboard navigation flags for ImGui.
 
 The same profile can be enabled with `FLUODDITY_STEAM_DECK=1`.
+
+## Native Video Export Validation
+
+High-resolution export is a native-runtime delivery gate separate from the
+800p interactive Verified performance gate. The publishable workflow is
+package-local offline export: a fixed 60 Hz simulation timeline is rendered at
+the requested resolution and encoded to H.264 `yuv420p` MP4 with BT.709
+metadata and faststart layout. The export writes a structured JSON report; a
+PPM poster is opt-in.
+
+Build the Deck/Linux package with a redistributable static FFmpeg executable
+that exposes `libx264` and its matching license:
+
+```bash
+FLUODDITY_FFMPEG_BUNDLE=/absolute/path/to/ffmpeg \
+FLUODDITY_FFMPEG_LICENSE=/absolute/path/to/LICENSE \
+bash runtime/rust-wgpu-spike/scripts/package-deck.sh
+```
+
+Then run a short package-local proof on the actual target:
+
+```bash
+VIDEO_SECONDS=1 WIDTH=3840 HEIGHT=2160 FPS=60 \
+bash dist/FluoddityNative/run_export_video.sh
+```
+
+Probe and fully decode the resulting MP4, review its adjacent JSON report, and
+record the selected adapter/backend, device/OS, storage, thermal behavior, and
+export duration. The adapter should report Vulkan on Steam Deck.
+
+`run_record_video.sh` is a separate 60 FPS presented window-frame capture path.
+It writes one encoded frame and advances one 60 Hz trial-time step per redraw;
+it is not wall-clock-real-time when GPU readback or encoding cannot sustain the
+requested FPS. It must not be described as real-time recording in release
+evidence.
+
+A passing Windows 4K/60 smoke proves only the Windows runtime, adapter, and
+selected FFmpeg build. It does not satisfy the Linux package, Vulkan, storage,
+or actual Deck hardware gates above.
 
 ## Verified Gates
 
@@ -85,19 +130,25 @@ These are release-blocking gates for a Steam build.
 - Done: Trial Dish glyph map now resolves to checked placeholder SVG assets under `steam_input/glyphs/`, and packaging smoke fails if any mapped glyph file is missing, malformed, unlabeled, or externally referenced.
 - Done: visual smoke checks the displayed controller prompt fallback text, so the Deck-facing HUD path is covered before the official Steam glyph renderer is wired in.
 - Done: Steam Input handoff report generation validates the manifest/glyph map and writes the recommended TrialDish default bindings for the Steamworks import pass.
-- Done: Steam Deck packaging smoke validates that `scripts/build_linux.sh` copies Steam Input artifacts and generates `run_steam_deck.sh` with the Deck profile.
+- Done: Steam Deck packaging smoke validates that `scripts/build_linux.sh` copies Steam Input artifacts, generates `dist/Fluoddity/steam_input/steam_input_handoff.md`, and generates `run_steam_deck.sh` with the Deck profile.
 - Done: the generated Deck launch wrapper runs `--steam-deck --game`, so the packaged Steam target opens the Trial Dish player shell rather than the raw editor.
 - Done: shell-contract smoke verifies `--steam-deck --game` combines Deck defaults with player-shell editor gating.
 - Done: `scripts/steam_deck_preflight.py` runs the automated Deck-target gates and writes a manual hardware validation report skeleton.
 - Done: the preflight report extracts high-signal automated evidence, including controller-mode visual prompt captures and paused controller suppression evidence when visual smokes are run.
 - Done: the preflight report links back to the generated packet index, so hardware testers start from the same report order.
-- Done: `scripts/write_trial_dish_playtest_report.py` writes a controller-first manual playtest report for game-feel, onboarding, readability, and threshold tuning evidence.
-- Done: `scripts/prepare_steam_deck_packet.py` writes a packet index, Trial Dish definitions JSON/schema, Steam Input handoff, Trial Dish playtest report, playtest summary, tuning reference, tuning plan, and Deck preflight report together for a hardware pass.
+- Done: `scripts/write_trial_dish_playtest_report.py` writes a controller-first manual playtest report for game-feel, onboarding, readability, action-feedback timing, meaningful choice, flow balance, friction, and threshold tuning evidence.
+- Done: `scripts/prepare_steam_deck_packet.py` writes a packet index, Trial Dish definitions JSON/schema, Steam Input handoff, Trial Dish playtest report, playtest summary, tuning reference, tuning plan, package/runtime validation report, and Deck preflight report together for a hardware pass.
+- Done: the Steam Deck packet includes `artifacts/steam_deck_packet_manifest.json` plus a checked schema, giving hardware/Steamworks handoff a hashed inventory of generated evidence.
+- Done: packet preparation validates `artifacts/steam_deck_packet_manifest.json` before reporting success, so stale artifact hashes or release-readiness snapshot mismatches block the handoff command.
 - Done: generated packet reports stamp the player-facing game title `Xenoculture: Trial Dish` separately from the Fluoddity engine/package lineage.
-- Done: generated packet reports are stamped with branch, commit, clean/dirty state, and changed-path count so hardware notes can be traced back to the tested prototype snapshot.
+- Done: `scripts/summarize_steam_input_handoff.py` rejects blank Steam Input handoff reports and requires Steamworks import/default-config/glyph evidence before that gate is ready.
+- Done: `scripts/summarize_steam_deck_preflight.py` rejects blank hardware preflight reports, requires key tester/device/FPS/defect notes, and summarizes missing manual Deck/Steamworks evidence.
+- Done: `scripts/summarize_package_validation.py` rejects blank package/runtime validation reports and requires native Linux or Proton launch evidence before that gate is ready.
+- Done: `scripts/summarize_release_readiness.py` aggregates Steam Input, Deck preflight, package/runtime validation, playtest, and tuning readiness into final blocking markdown and checked-schema JSON release summaries.
+- Done: generated packet reports are stamped with branch, commit, clean/dirty state, changed-path count, and a dirty-content fingerprint so hardware notes can be traced back to the exact tested prototype snapshot.
 - Done: default `--game` gates raw editor shortcuts and persisted editor/help windows behind `--allow-editor-in-game`.
 - Done: default `--game` defensively clears editor-only command flags before command processing, and the shell-contract smoke verifies Trial Dish actions still pass through.
-- Done: local Windows Deck-sized performance smoke passed on this workstation: `avg_fps=452.74`, `avg_frame_ms=2.21`, `worst_frame_ms=5.37` for a 5 second `--deck-performance` run at 1280x800.
+- Done: local Windows Deck-sized performance smoke passed on this workstation: `avg_fps=60.27`, `avg_frame_ms=16.59`, `worst_frame_ms=20.10` for a 5 second `--deck-performance` run at 1280x800. This is local workstation evidence only; the 30 FPS gate still needs actual Steam Deck hardware.
 
 ## Known Verified Blockers
 
@@ -108,6 +159,9 @@ These are release-blocking gates for a Steam build.
 - The current Python/OpenGL stack needs native Linux and/or Proton validation on actual Deck hardware.
 - Automated performance smoke passes locally, but the 30 FPS Verified gate still needs actual Deck hardware evidence.
 - Steam Input still needs a real Steamworks import/configuration pass and official platform glyph rendering; current controller prompts are mapped to checked placeholder SVG glyph assets.
+- Native 4K/60 MP4 export has local validation tooling, but still needs a
+  package-local run, probe/full-decode, and performance/thermal notes on actual
+  Steam Deck hardware before Deck video export is claimed.
 
 ## Manual Deck Test Pass
 
@@ -119,6 +173,16 @@ Before manual testing, run:
 python scripts/prepare_steam_deck_packet.py
 ```
 
+Use the project Python interpreter for this command. On Windows, if `python`
+resolves to another tool environment, run:
+
+```bash
+.venv/Scripts/python.exe scripts/prepare_steam_deck_packet.py --python .venv/Scripts/python.exe
+```
+
+For Linux package builds, `scripts/build_linux.sh` honors `PYTHON=/path/to/python`
+so PyInstaller and generated package reports use the intended environment.
+
 For a packet that also reruns local automated gates:
 
 ```bash
@@ -126,15 +190,29 @@ python scripts/prepare_steam_deck_packet.py --run-automated --with-visual --with
 ```
 
 These write `artifacts/steam_deck_packet_index.md`,
+`artifacts/steam_deck_packet_manifest.json`,
+`artifacts/steam_deck_packet_manifest.schema.json`,
 `artifacts/trial_definitions.json`, `artifacts/trial_definitions.schema.json`,
 `artifacts/steam_input_handoff.md`, `artifacts/trial_dish_playtest.md`,
 `artifacts/trial_dish_playtest_summary.md`,
 `artifacts/trial_dish_tuning_reference.md`, `artifacts/trial_dish_tuning_plan.md`,
+`artifacts/package_validation.md`, `artifacts/package_validation_summary.md`,
 and
-`artifacts/steam_deck_preflight.md` with a shared build stamp, a hardware-pass
+`artifacts/steam_deck_preflight.md`, `artifacts/steam_deck_preflight_summary.md`,
+and `artifacts/steam_deck_visual_evidence.md` with a shared build stamp, a hardware-pass
 runbook, the Trial Dish data contract, the Steam Input import checklist, manual playtest sheet,
 tuning-readiness summary, current tuning reference, post-playtest tuning plan,
+package/runtime validation sheet,
 automated smoke output, and the checklist below.
+`scripts/prepare_steam_deck_packet.py` validates the generated packet manifest
+before reporting success; rerun `python scripts/validate_steam_deck_packet_manifest.py`
+after any manual edits to packet artifacts.
+Packet refreshes preserve existing `trial_dish_playtest.md` and
+`package_validation.md` manual evidence. Pass `--replace-manual-reports` only
+to deliberately reset both to blank templates; direct report-writer calls
+require `--force` to overwrite. A preserved report with mismatched build,
+tester, or device metadata is retained but its summary is marked not-ready for
+the current packet.
 
 1. Launch from Steam with `./run_steam_deck.sh` and confirm it opens the Trial Dish player shell.
 2. Confirm the app starts directly, without console prompts, launchers, compatibility warnings, or setup dialogs.
@@ -150,6 +228,17 @@ automated smoke output, and the checklist below.
 12. Confirm controller prompts use official Steam/Deck glyph rendering or an approved shipped fallback.
 13. Confirm suspend/resume does not leave the GL context black or frozen.
 14. Confirm a clean restart preserves preferences without corrupting user data.
+15. Build `dist/FluoddityNative/` on Deck/Linux with the explicit static
+    `FLUODDITY_FFMPEG_BUNDLE` and `FLUODDITY_FFMPEG_LICENSE` inputs.
+16. Run `VIDEO_SECONDS=1 WIDTH=3840 HEIGHT=2160 FPS=60 bash
+    dist/FluoddityNative/run_export_video.sh`; confirm it uses package-local
+    data and FFmpeg and writes an MP4 plus adjacent JSON report.
+17. Probe and fully decode that MP4; confirm H.264, `yuv420p`, 3840x2160,
+    60 FPS, BT.709 tags, faststart layout, requested frame count/duration, and
+    no residual partial file.
+18. Record Vulkan adapter, export duration, storage location, thermal behavior,
+    and any throttling or defects as Deck evidence, not as a continuation of
+    the Windows smoke result.
 
 ## Next Engineering Steps
 

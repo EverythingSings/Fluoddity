@@ -1,7 +1,7 @@
 
 ![bubbles 12 46 01 (1)](https://github.com/user-attachments/assets/ecd4a0dc-a11f-45b3-b603-b4e27e8e576b)
 # Fluoddity
-I struggle to describe Fluoddity. Think somewhere between interactive lava lamp and evolvable ant farm. 
+I struggle to describe Fluoddity. Think somewhere between interactive lava lamp and evolvable ant farm.
 Sometimes I'll see a meandering river, a candle flame, or branching lightning. Sometimes it's more like looking under a microscope as little amoebas devour each other and break apart. And sometimes, it's stranger than all that.
 
 ## WebGL Demo: https://aphid91.github.io/Fluoddity-Core/
@@ -9,14 +9,14 @@ Sometimes I'll see a meandering river, a candle flame, or branching lightning. S
 <img width="1920" height="1129" alt="lavalamp_20260120_152543" src="https://github.com/user-attachments/assets/6bf3ce1c-8a7f-487f-ad9e-1da67f73686c" />
 <img width="1920" height="1129" alt="lavalamp_20260120_152527" src="https://github.com/user-attachments/assets/f1c1b933-f5fd-4802-b2b6-7887d483b71d" />
 
-Fluoddity is a 2d particle system designed for realtime exploration. I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them). There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it. 
-The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models: 
+Fluoddity is a 2d particle system designed for realtime exploration. I've been tinkering with this idea for years, and it still feels like there's an ocean of possibilities I have yet to fully explore (3d generalization chief among them). There is a well considered algorithm that runs the actual physics, with an extensively Claude-Coded user interface built around it.
+The physics engine itself is a generalization of this excellent Sage Jenson page about physarum transport models:
 https://cargocollective.com/sagejenson/physarum
 
-I strongly recommend reading at least the first few paragraphs if you want to understand how this project works. 
+I strongly recommend reading at least the first few paragraphs if you want to understand how this project works.
 ## Fluoddity-Core: https://github.com/aphid91/Fluoddity-Core
 The algorithm that drives the Fluoddity particle system is pretty simple, but Fluoddity itself has a lot of bells and whistles. Fluoddity-Core exists as a minimal shell that is easier to understand and tinker with. It has just enough machinery to load and run a basic Fluoddity config with no UI fluff. Fluoddity-Core also hosts a Claude-Code port of the core engine to webgl that runs on github pages (This is the demo linked above).
-Any advice or criticism is welcome. This is a toy I made for myself and I am more artist than engineer. 
+Any advice or criticism is welcome. This is a toy I made for myself and I am more artist than engineer.
 
 ## Features
  - "physics sliders" to customize simulation parameters.
@@ -26,7 +26,7 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
  - save strings with copy/paste from clipboard
  - parameter sweeps mode allows varying physics sliders across the canvas. X and Y sweeps for exploring 2d parameter space.
  - variable physics frequency with motion blur
- - ffmpeg based video recording
+ - FFmpeg-based desktop recording and native high-resolution MP4 export
  - Emboss visual effect (currently the only use for traditional density trails)
  - Experimental system for mixing different saved configs.
 ## Design
@@ -45,11 +45,11 @@ Particle trails have a velocity/flow vector which records the net "current" of p
 ### Behavior - Rules
 Particle behavior is governed by a somewhat arbitrary black box function called a 'Rule'. I use a simple sum of sin waves because i wanted smooth, periodic noise. Trail sensor values are fed into this noise function, and the outputs are used to accelerate and reposition the particle.
 ### "Strafe"
-In addition to forces causing acceleration, each paricle has a limited ability to "strafe", changing position independently from velocity. This is the least "principled" of my generalizations, but it is incredibly simple and enables some really beautiful patterns. Strafe allows particles to leave velocity trails which disagree with their direction of travel, enabling things like "swimming upstream" without turning around or "sidle to the left" without losing track of which way is "forward". 
+In addition to forces causing acceleration, each paricle has a limited ability to "strafe", changing position independently from velocity. This is the least "principled" of my generalizations, but it is incredibly simple and enables some really beautiful patterns. Strafe allows particles to leave velocity trails which disagree with their direction of travel, enabling things like "swimming upstream" without turning around or "sidle to the left" without losing track of which way is "forward".
 ### Symmetry
 The traditional physarum model has some important symmetries that we would like to impose on our otherwise arbitrary noise functions. These symmetries can be toggled (or dialed down) in additional settings.
 
-- Rotational: 
+- Rotational:
 Rotate the whole world by 90°, and nothing should change: the dynamics are independent of global orientation. Particles should never favor the bottom left corner of the screen, for example. Achieving this symmetry is as simple as calculating all sensors/forces in a local coordinate system where "up" == particle velocity.
 
 - Chiral:
@@ -64,7 +64,7 @@ Enforcing these symmetries drastically reduces the prevalence of boring and dege
 - Particle internal state/ memory. Current particle behavior is memoryless aside from velocity persistence.
 - Trails need not correspond to particle velocity. "Trail vector" could be just another output of the Rule function. Trail dimensionality could be increased.
 - A more universal framework for describing these kinds of systems. One could generalize all the way to continuous cellular automata + continuous turmites.
-  
+
 ### Requirements
 
 - Python 3.x
@@ -84,13 +84,41 @@ pip install requirements, then run main.py
 OR
 Download a release and run Fluoddity.exe 
 
+## Runtime and Delivery Surfaces
+
+This repository maintains three related surfaces:
+
+- The repository-root Python/ModernGL/OpenGL application is the prototype,
+  editor, and current V1 tuning surface.
+- `runtime/rust-wgpu-spike/` is the active Rust/wgpu native shipping candidate
+  despite the legacy `spike` directory name. Its local validation is extensive,
+  but full Python/GLSL shader parity and actual Steam Deck hardware validation
+  are not complete.
+- `runtime/webgpu/` builds a self-contained WebGPU HTML artifact for
+  networked.art/everything. It is a focused generative-art surface, not the full
+  editor or Trial Dish game.
+
+Build and validate the browser artifact with:
+
+```bash
+python scripts/build_webgpu_artifact.py
+python scripts/smoke_webgpu_artifact.py --require-thumbnail
+python scripts/smoke_webgpu_responsive.py --skip-build
+python scripts/audit_webgpu_artifact_parity.py --require-complete
+```
+
+The generated upload is `artifacts/networked-art/everything.html`. At compact
+embed sizes its control panel must remain scrollable with every slider
+reachable and functional at normal browser zoom; users should never need to
+zoom out to reveal controls.
+
 ## Game Prototype
 
 This fork is starting to grow a game shell around the simulation. The current V1 player-facing shell is **Xenoculture: Trial Dish**, an alien petri-dish xenotech game mode documented in [docs/game_v1_prototype.md](docs/game_v1_prototype.md).
 
 For now, Fluoddity remains the engine/repo/package name. The executable and build folders still use Fluoddity while the `--game` window uses the Xenoculture title.
 
-Current stack and porting strategy are tracked in [docs/tech_stack_strategy.md](docs/tech_stack_strategy.md).
+Current stack and porting strategy are tracked in [docs/tech_stack_strategy.md](docs/tech_stack_strategy.md). The native Steam/Steam Deck migration plan is tracked in [docs/native_runtime_migration.md](docs/native_runtime_migration.md).
 
 Run the first Xenoculture: Trial Dish shell with:
 
@@ -128,13 +156,21 @@ Run the V1 prototype smoke suite:
 python scripts/smoke_game_v1.py
 ```
 
+Use the project interpreter for validation. On Windows, if `python` resolves to
+another tool's virtualenv, run the suite through the repo venv:
+
+```bash
+.venv/Scripts/python.exe scripts/smoke_game_v1.py --python .venv/Scripts/python.exe
+```
+
 Run the visual V1 checks, including rendered success and failure result screens:
 
 ```bash
 python scripts/smoke_game_v1.py --with-visual --with-fed-results
 ```
 
-Use a specific interpreter when validating a venv or platform install:
+Use `--python` when the umbrella smoke should launch child checks with a
+specific interpreter:
 
 ```bash
 python scripts/smoke_game_v1.py --python .venv/Scripts/python.exe
@@ -152,15 +188,70 @@ Record game-mode frame timing at the Deck-sized profile:
 python scripts/smoke_game_performance.py --extra-arg=--deck-performance
 ```
 
+Run the ordered Rust/wgpu native validation suite:
+
+```bash
+python scripts/smoke_native_validation_suite.py
+```
+
+This builds the native runtime once, runs rustfmt/clippy, Rust unit tests, and native config/input/trial/preset/rule/parameter/visual/determinism/video/package/timing gates sequentially, then writes `artifacts/native_validation_suite.md` plus `.json`.
+
+The suite deliberately permits the shader-parity audit to report `incomplete`;
+a green native suite means its bounded gates behaved as expected, not that the
+native runtime has full Python/GLSL parity or has been validated on Steam Deck
+hardware.
+
+The native runtime's primary high-resolution capture path is an offline export.
+It advances the simulation on a fixed 60 Hz timeline and renders the final
+presentation pass independently of encoding speed. A 4K/60 H.264 master can be
+exported from source with:
+
+```bash
+cargo run --manifest-path runtime/rust-wgpu-spike/Cargo.toml --release -- --trial artifacts/trial_definitions.json --trial-id rival_bloom --config physics_configs/Core/Bubbles.json --video-out artifacts/native-4k60.mp4 --video-report artifacts/native-4k60.json --video-seconds 10 --render-width 3840 --render-height 2160 --video-fps 60
+```
+
+The MP4 uses H.264, `yuv420p`, BT.709 metadata, and faststart layout. The JSON
+report records the render, codec, timeline, trial, and output details. Add
+`--out artifacts/native-4k60.ppm` only when an uncompressed poster frame is
+wanted; poster generation is opt-in during video export.
+
+Run the focused export proof with:
+
+```bash
+python scripts/smoke_native_video_export.py
+```
+
+Native packages expose `run_export_video.ps1` / `run_export_video.sh` for the
+offline master workflow and `run_record_video.ps1` / `run_record_video.sh` for
+60 FPS presented window-frame capture. The latter writes one encoded frame and
+advances one 60 Hz trial-time step per presented redraw; it is not a
+wall-clock-real-time screen recorder when the render/readback/encoder path
+cannot sustain the requested rate. See
+[runtime/rust-wgpu-spike/README.md](runtime/rust-wgpu-spike/README.md) for
+FFmpeg bundle and platform validation requirements.
+
 Prepare a Steam Deck hardware validation report:
 
 ```bash
 python scripts/prepare_steam_deck_packet.py
+python scripts/validate_steam_deck_packet_manifest.py
 ```
 
 This writes a packet index, Trial Dish definitions JSON/schema, Steam Input
 handoff, manual playtest sheet, playtest summary, tuning reference, tuning plan,
-and Steam Deck preflight report under `artifacts/`.
+package/runtime validation sheet, release readiness summaries, a hashed packet
+manifest, Steam Deck preflight report, and visual evidence index under `artifacts/`. Packet preparation
+also validates the generated manifest before reporting success; rerun
+`python scripts/validate_steam_deck_packet_manifest.py` after any manual artifact
+edits.
+
+Existing `trial_dish_playtest.md` and `package_validation.md` evidence is
+preserved when the packet is refreshed. Use `--replace-manual-reports` only
+when you intentionally want fresh blank templates; the individual report
+writers likewise require `--force` before replacing an existing file.
+Preserved evidence whose build, tester, or device does not match the requested
+packet is retained but marked not-ready rather than silently credited to the
+new packet.
 
 For a packet that also reruns local automated gates:
 
@@ -204,6 +295,9 @@ bash scripts/build_linux.sh
 ./dist/Fluoddity/run_steam_deck.sh
 ```
 
+Set `PYTHON=/path/to/python` before `bash scripts/build_linux.sh` when the
+default `python` is not the project interpreter.
+
 The generated Deck wrapper launches the player shell with `--steam-deck --game`.
 
 For source runs without packaging:
@@ -212,7 +306,7 @@ For source runs without packaging:
 python main.py --steam-deck --game
 ```
 
-Steam Input artifacts live under `steam_input/` and are copied into `dist/Fluoddity/steam_input/` by `scripts/build_linux.sh`. This includes the initial action manifest, Trial Dish prompt glyph map, checked placeholder SVG glyphs, and a generated handoff report for the Steamworks import pass. Local smokes verify the manifest, localization tokens, prompt action ids, glyph metadata, packaged glyph file presence, active HUD prompt-to-glyph path, and recommended default bindings. A real Steamworks import/default configuration pass and official Steam/Deck glyph rendering pass are still required before this should be treated as final store-package input support.
+Steam Input source artifacts live under `steam_input/` and are copied into `dist/Fluoddity/steam_input/` by `scripts/build_linux.sh`. The build also generates `dist/Fluoddity/steam_input/steam_input_handoff.md` for the Steamworks import pass. Local smokes verify the manifest, localization tokens, prompt action ids, glyph metadata, packaged glyph file presence, active HUD prompt-to-glyph path, and recommended default bindings. A real Steamworks import/default configuration pass and official Steam/Deck glyph rendering pass are still required before this should be treated as final store-package input support.
 
 ## Building
 
