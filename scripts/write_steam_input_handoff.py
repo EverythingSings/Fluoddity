@@ -169,6 +169,15 @@ def write_report(output: Path, glyph_map: dict, localizations: dict[str, str], b
             "- [ ] Official Steam/Deck glyph rendering integration.",
             "- [ ] Actual Steam Deck controller-only playthrough.",
             "",
+            "## Import Notes",
+            "",
+            "- Steamworks app / branch:",
+            "- Imported manifest version:",
+            "- Default configuration name:",
+            "- Glyph rendering path:",
+            "- Tester / device:",
+            "- Defects or remaps:",
+            "",
         ]
     )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 
@@ -12,11 +13,14 @@ if str(ROOT) not in sys.path:
 
 from services.game_identity import ENGINE_NAME, GAME_TITLE
 
-TEMPLATE = ROOT / "artifacts" / "trial_dish_playtest_summary_template.md"
-FILLED = ROOT / "artifacts" / "trial_dish_playtest_summary_filled.md"
-SUMMARY = ROOT / "artifacts" / "trial_dish_playtest_summary_smoke.md"
-REFERENCE = ROOT / "artifacts" / "trial_dish_tuning_reference_smoke.md"
-PLAN = ROOT / "artifacts" / "trial_dish_tuning_plan_smoke.md"
+SMOKE_DIR = ROOT / "artifacts" / "trial_dish_playtest_summary_smoke" / str(os.getpid())
+TEMPLATE = SMOKE_DIR / "trial_dish_playtest_summary_template.md"
+FILLED = SMOKE_DIR / "trial_dish_playtest_summary_filled.md"
+NO_VERDICT = SMOKE_DIR / "trial_dish_playtest_summary_no_verdict.md"
+CONTRADICTORY = SMOKE_DIR / "trial_dish_playtest_summary_contradictory.md"
+SUMMARY = SMOKE_DIR / "trial_dish_playtest_summary_smoke.md"
+REFERENCE = SMOKE_DIR / "trial_dish_tuning_reference_smoke.md"
+PLAN = SMOKE_DIR / "trial_dish_tuning_plan_smoke.md"
 
 
 def require(condition: bool, message: str) -> None:
@@ -36,6 +40,9 @@ def write_filled_report(text: str) -> None:
         "| Visual readability |  |  |": "| Visual readability | 3 | Trial 3 got noisy near the far sites. |",
         "| Controller confidence |  |  |": "| Controller confidence | 4 | R2 feed was clear. |",
         "| Objective clarity |  |  |": "| Objective clarity | 4 | Hold progress was readable. |",
+        "| Action-feedback loop |  |  |": "| Action-feedback loop | 4 | Specimen and route feedback arrived quickly. |",
+        "| Meaningful choice |  |  |": "| Meaningful choice | 3 | Mutation mattered, but revert timing needs clearer stakes. |",
+        "| Flow balance |  |  |": "| Flow balance | 3 | Trial 3 pressure spiked near timeout. |",
         "| Friction/struggle |  |  |": "| Friction/struggle | 3 | Rival pressure needs stronger intro. |",
         "| Desire to retry |  |  |": "| Desire to retry | 5 | Wanted another Trial 3 attempt. |",
         "- Trial 1 threshold/hold time:": "- Trial 1 threshold/hold time: keep hold time, lower activation threshold slightly.",
@@ -111,6 +118,53 @@ def main() -> int:
     require("trial_dish_tuning_plan_status=blocked" in blocked_plan.stdout, "blocked plan should report blocked")
 
     write_filled_report(template_text)
+    filled_text = FILLED.read_text(encoding="utf-8")
+    no_verdict_text = filled_text.replace(
+        "- [x] Needs threshold/copy/visual tuning before another hardware pass.",
+        "- [ ] Needs threshold/copy/visual tuning before another hardware pass.",
+    ).replace(
+        "- [ ] Complete all three Trial Dishes with controller-only input.",
+        "- [x] Complete all three Trial Dishes with controller-only input.",
+    )
+    NO_VERDICT.write_text(no_verdict_text, encoding="utf-8")
+    no_verdict_proc = run(
+        [
+            python,
+            "scripts/summarize_trial_dish_playtest.py",
+            "--input",
+            str(NO_VERDICT),
+            "--output",
+            str(SUMMARY),
+            "--require-ready",
+        ]
+    )
+    require(
+        no_verdict_proc.returncode == 2,
+        "checked setup goals must not satisfy the dedicated verdict gate",
+    )
+
+    contradictory_text = filled_text.replace(
+        "- [ ] Ready for another hardware pass without tuning.",
+        "- [x] Ready for another hardware pass without tuning.",
+    )
+    CONTRADICTORY.write_text(contradictory_text, encoding="utf-8")
+    contradictory_proc = run(
+        [
+            python,
+            "scripts/summarize_trial_dish_playtest.py",
+            "--input",
+            str(CONTRADICTORY),
+            "--output",
+            str(SUMMARY),
+            "--require-ready",
+        ]
+    )
+    require(contradictory_proc.returncode == 2, "multiple verdicts must not be tuning-ready")
+    require(
+        "Select exactly one verdict checkbox." in SUMMARY.read_text(encoding="utf-8"),
+        "contradictory verdict summary should explain the conflict",
+    )
+
     filled_proc = run(
         [
             python,
@@ -126,7 +180,39 @@ def main() -> int:
     require("trial_dish_playtest_status=ready" in filled_proc.stdout, "filled summary should report ready")
     summary_text = SUMMARY.read_text(encoding="utf-8")
     require("- Status: tuning-ready" in summary_text, "summary should mark filled report tuning-ready")
+    require("Completed ratings: 9/9" in summary_text, "summary should require all design-contract ratings")
+    require("Meaningful choice" in summary_text, "summary should include design-contract ratings")
     require("Trial 3 rival strength/timer/tool cooldowns" in summary_text, "summary should include tuning targets")
+    stale_proc = run(
+        [
+            python,
+            "scripts/summarize_trial_dish_playtest.py",
+            "--input",
+            str(FILLED),
+            "--output",
+            str(SUMMARY),
+            "--expected-build",
+            "different-build",
+            "--require-ready",
+        ]
+    )
+    require(stale_proc.returncode == 2, "stale playtest evidence must not be tuning-ready")
+    require(
+        "`Build / commit` does not match this packet" in SUMMARY.read_text(encoding="utf-8"),
+        "stale playtest summary should name the build mismatch",
+    )
+    filled_proc = run(
+        [
+            python,
+            "scripts/summarize_trial_dish_playtest.py",
+            "--input",
+            str(FILLED),
+            "--output",
+            str(SUMMARY),
+            "--require-ready",
+        ]
+    )
+    require(filled_proc.returncode == 0, "fresh summary should recover after mismatch probe")
     plan_proc = run(
         [
             python,

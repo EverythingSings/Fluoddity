@@ -24,6 +24,8 @@ PLAYTEST_GOALS = [
     "Measure whether Trial 1, Trial 2, and Trial 3 thresholds feel fair under controller play.",
     "Record where the player feels friction, confusion, boredom, or loss of agency.",
     "Capture whether Rival Bloom creates a real counterpoint instead of just visual noise.",
+    "Confirm the core action-feedback-reward loop lands within 10-60 seconds.",
+    "Capture whether mutation/revert creates a meaningful choice rather than an obvious best move.",
 ]
 
 SESSION_CHECKS = [
@@ -72,6 +74,9 @@ RATING_ROWS = [
     "Visual readability",
     "Controller confidence",
     "Objective clarity",
+    "Action-feedback loop",
+    "Meaningful choice",
+    "Flow balance",
     "Friction/struggle",
     "Desire to retry",
 ]
@@ -83,6 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tester", default="", help="Optional tester name/handle.")
     parser.add_argument("--device", default="", help="Optional device name, such as Steam Deck OLED.")
     parser.add_argument("--build-id", default="", help="Optional build label to stamp into the report.")
+    parser.add_argument("--force", action="store_true", help="Replace an existing report.")
     return parser.parse_args()
 
 
@@ -176,6 +182,13 @@ def write_report(output: Path, tester: str, device: str, build_id: str) -> Path:
 
 def main() -> int:
     args = parse_args()
+    output_path = args.output if args.output.is_absolute() else ROOT / args.output
+    if output_path.exists() and not args.force:
+        print(
+            f"refusing to replace existing manual report without --force: {output_path}",
+            file=sys.stderr,
+        )
+        return 2
     output = write_report(args.output, args.tester, args.device, args.build_id)
     print(f"trial_dish_playtest_report={output}")
     return 0

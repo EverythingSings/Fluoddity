@@ -70,6 +70,14 @@ def main() -> int:
     text = BUILD_SCRIPT.read_text(encoding="utf-8")
     require("set -euo pipefail" in text, "build script should fail on packaging errors")
     require(
+        'PYTHON="${PYTHON:-python}"' in text,
+        "build script should allow selecting the project Python interpreter",
+    )
+    require(
+        '"$PYTHON" -m PyInstaller --clean --noconfirm Fluoddity.spec' in text,
+        "build script should use the selected Python interpreter for PyInstaller",
+    )
+    require(
         "rm -rf dist/Fluoddity/steam_input" in text,
         "build script should clear stale packaged Steam Input artifacts",
     )
@@ -80,6 +88,10 @@ def main() -> int:
     require(
         "cp -R steam_input/* dist/Fluoddity/steam_input/" in text,
         "build script should copy Steam Input artifacts into the distribution",
+    )
+    require(
+        '"$PYTHON" scripts/write_steam_input_handoff.py --output dist/Fluoddity/steam_input/steam_input_handoff.md' in text,
+        "build script should generate packaged Steam Input handoff report",
     )
     require(
         "cat > dist/Fluoddity/run_steam_deck.sh" in text,

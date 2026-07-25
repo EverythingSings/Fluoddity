@@ -24,6 +24,9 @@ REQUIRED_RATINGS = [
     "Visual readability",
     "Controller confidence",
     "Objective clarity",
+    "Action-feedback loop",
+    "Meaningful choice",
+    "Flow balance",
     "Friction/struggle",
     "Desire to retry",
 ]
@@ -35,6 +38,12 @@ REQUIRED_TUNING_ROWS = [
     "HUD/copy changes",
     "Visual noise/readability changes",
 ]
+
+VERDICT_OPTIONS = {
+    "Ready for another hardware pass without tuning.",
+    "Needs threshold/copy/visual tuning before another hardware pass.",
+    "Needs mechanics changes before another hardware pass.",
+}
 
 
 @dataclass(frozen=True)
@@ -73,6 +82,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Exit nonzero when the report is still missing required tuning evidence.",
     )
+    parser.add_argument("--expected-build", default="", help="Expected packet build identity.")
+    parser.add_argument("--expected-tester", default="", help="Expected tester when supplied by the packet.")
+    parser.add_argument("--expected-device", default="", help="Expected device when supplied by the packet.")
     return parser.parse_args()
 
 
@@ -113,9 +125,17 @@ def parse_ratings(text: str) -> list[Rating]:
 
 def selected_verdicts(text: str) -> list[str]:
     verdicts: list[str] = []
+    in_verdict_section = False
     for line in text.splitlines():
+        if line.strip() == "## Verdict":
+            in_verdict_section = True
+            continue
+        if in_verdict_section and line.startswith("## "):
+            break
+        if not in_verdict_section:
+            continue
         match = re.match(r"- \[[xX]\]\s+(.+)$", line.strip())
-        if match:
+        if match and match.group(1).strip() in VERDICT_OPTIONS:
             verdicts.append(match.group(1).strip())
     return verdicts
 
@@ -132,7 +152,13 @@ def parse_tuning_notes(text: str) -> dict[str, str]:
     return notes
 
 
-def summarize(path: Path) -> PlaytestSummary:
+def summarize(
+    path: Path,
+    *,
+    expected_build: str = "",
+    expected_tester: str = "",
+    expected_device: str = "",
+) -> PlaytestSummary:
     source = resolve_path(path)
     text = source.read_text(encoding="utf-8")
     fields = metadata_fields(text)
@@ -144,6 +170,16 @@ def summarize(path: Path) -> PlaytestSummary:
     for field in REQUIRED_FIELDS:
         if not fields.get(field):
             missing.append(f"Missing `{field}` metadata.")
+    for label, expected in (
+        ("Build / commit", expected_build),
+        ("Tester", expected_tester),
+        ("Device", expected_device),
+    ):
+        if expected and fields.get(label, "") != expected:
+            missing.append(
+                f"`{label}` does not match this packet "
+                f"(expected `{expected}`, found `{fields.get(label) or '(missing)'}`)."
+            )
 
     rated = {rating.dimension for rating in ratings}
     for row in REQUIRED_RATINGS:
@@ -152,6 +188,8 @@ def summarize(path: Path) -> PlaytestSummary:
 
     if not verdicts:
         missing.append("No verdict checkbox is selected.")
+    elif len(verdicts) > 1:
+        missing.append("Select exactly one verdict checkbox.")
 
     for row in REQUIRED_TUNING_ROWS:
         if not tuning_notes.get(row):
@@ -207,7 +245,12 @@ def write_summary(summary: PlaytestSummary, output: Path) -> Path:
 
 def main() -> int:
     args = parse_args()
-    summary = summarize(args.input)
+    summary = summarize(
+        args.input,
+        expected_build=args.expected_build,
+        expected_tester=args.expected_tester,
+        expected_device=args.expected_device,
+    )
     output = write_summary(summary, args.output)
     print(f"trial_dish_playtest_summary={output}")
     print(f"trial_dish_playtest_status={'ready' if summary.tuning_ready else 'not_ready'}")

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "xenoculture.release_readiness.v1",
+  "title": "Xenoculture Release Readiness Summary",
+  "type": "object",
+  "required": ["schema", "status", "ready", "gates", "blocking_next_steps"],
+  "properties": {
+    "schema": { "const": "xenoculture.release_readiness.v1" },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "not-ready"]
+    },
+    "ready": { "type": "boolean" },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/gate" }
+    },
+    "blocking_next_steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blocker" }
+    }
+  },
+  "$defs": {
+    "gate": {
+      "type": "object",
+      "required": ["name", "source", "status", "ready", "next_step"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "minLength": 1 },
+        "ready": { "type": "boolean" },
+        "next_step": { "type": "string", "minLength": 1 }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "required": ["gate", "next_step"],
+      "properties": {
+        "gate": { "type": "string", "minLength": 1 },
+        "next_step": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -3,9 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-python -m pip install -r requirements.txt
-python -m pip install pyinstaller
-python -m PyInstaller --clean --noconfirm Fluoddity.spec
+PYTHON="${PYTHON:-python}"
+
+"$PYTHON" -m pip install -r requirements.txt
+"$PYTHON" -m pip install pyinstaller
+"$PYTHON" -m PyInstaller --clean --noconfirm Fluoddity.spec
 
 if [[ -d dist/Fluoddity/_internal/shaders ]]; then
   rm -rf dist/Fluoddity/shaders
@@ -21,6 +23,7 @@ cp -R physics_configs/Advanced dist/Fluoddity/physics_configs/Advanced
 rm -rf dist/Fluoddity/steam_input
 mkdir -p dist/Fluoddity/steam_input
 cp -R steam_input/* dist/Fluoddity/steam_input/
+"$PYTHON" scripts/write_steam_input_handoff.py --output dist/Fluoddity/steam_input/steam_input_handoff.md
 
 cat > dist/Fluoddity/run_steam_deck.sh <<'EOF'
 #!/usr/bin/env bash

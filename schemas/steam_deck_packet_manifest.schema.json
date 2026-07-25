@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "xenoculture.steam_deck_packet_manifest.v1",
+  "title": "Xenoculture Steam Deck Packet Manifest",
+  "type": "object",
+  "required": [
+    "schema",
+    "generated",
+    "game",
+    "engine_package",
+    "build",
+    "host",
+    "tester",
+    "device",
+    "options",
+    "release_readiness",
+    "native_video",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "xenoculture.steam_deck_packet_manifest.v1"
+    },
+    "generated": {
+      "type": "string",
+      "minLength": 1
+    },
+    "game": {
+      "type": "string",
+      "minLength": 1
+    },
+    "engine_package": {
+      "type": "string",
+      "minLength": 1
+    },
+    "build": {
+      "type": "string",
+      "minLength": 1
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tester": {
+      "type": "string"
+    },
+    "device": {
+      "type": "string"
+    },
+    "options": {
+      "type": "object",
+      "required": [
+        "preflight_automated_gates",
+        "native_validation_suite",
+        "visual_captures",
+        "fed_result_captures",
+        "seconds",
+        "min_fps"
+      ],
+      "properties": {
+        "preflight_automated_gates": {
+          "type": "string",
+          "enum": [
+            "run",
+            "skipped"
+          ]
+        },
+        "native_validation_suite": {
+          "const": "run"
+        },
+        "visual_captures": {
+          "type": "boolean"
+        },
+        "fed_result_captures": {
+          "type": "boolean"
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "min_fps": {
+          "type": "number"
+        }
+      }
+    },
+    "release_readiness": {
+      "type": "object",
+      "required": [
+        "status",
+        "ready",
+        "gate_count",
+        "blocking_count"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "not-ready"
+          ]
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "gate_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "blocking_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "native_video": {
+      "type": "object",
+      "required": [
+        "status",
+        "evidence_scope",
+        "host",
+        "gpu_adapter",
+        "wgpu_backend",
+        "steam_deck_hardware_verified",
+        "width",
+        "height",
+        "fps",
+        "frames",
+        "codec",
+        "pixel_format",
+        "timeline_mode",
+        "video_path",
+        "video_sha256",
+        "smoke_report_path",
+        "export_report_path"
+      ],
+      "properties": {
+        "status": {
+          "const": "pass"
+        },
+        "evidence_scope": {
+          "const": "local-host-offscreen-export"
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gpu_adapter": {
+          "type": "string"
+        },
+        "wgpu_backend": {
+          "type": "string"
+        },
+        "steam_deck_hardware_verified": {
+          "const": false
+        },
+        "width": {
+          "const": 3840
+        },
+        "height": {
+          "const": 2160
+        },
+        "fps": {
+          "const": 60
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "codec": {
+          "const": "h264"
+        },
+        "pixel_format": {
+          "const": "yuv420p"
+        },
+        "timeline_mode": {
+          "const": "offline-fixed-step"
+        },
+        "video_path": {
+          "const": "artifacts/native-wgpu/native_video_export_smoke.mp4"
+        },
+        "video_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "smoke_report_path": {
+          "const": "artifacts/native_video_export_smoke.json"
+        },
+        "export_report_path": {
+          "const": "artifacts/native-wgpu/native_video_export_smoke.metadata.json"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": [
+        "path",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}
