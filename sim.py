@@ -174,6 +174,7 @@ class Sim:
         tryset(self.entity_update_program, 'canvas_3d_z', 7)
         tryset(self.entity_update_program, 'canvas_3d_size', (CANVAS_3D_DIM, CANVAS_3D_DIM, CANVAS_3D_DIM))
         tryset(self.entity_update_program, 'WORLD_SIZE', 1.0)
+        tryset(self.entity_update_program, 'GRAVITY', (0.0, -8E-05, 0.0))
 
         # Advanced drawing field texture
         tryset(self.entity_update_program, 'field_texture', 5)

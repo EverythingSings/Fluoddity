@@ -35,6 +35,9 @@ struct PhysicsSetting {
     float jitter;       // 0.0 = off, higher = more randomness (proportional to result)
 };
 uniform float WORLD_SIZE;
+// Downward acceleration gives the volume a preferred floor so forms settle
+// and evolve from accumulated material instead of a diffuse free-floating cloud.
+uniform vec3 GRAVITY;
 uniform int frame_count;
 uniform Rule target_rule;
 uniform sampler3D canvas_3d_x; //trails canvas X channel (R32F, 3D)
@@ -816,6 +819,9 @@ void main() {
     e.vx = e.vx*drag + force3.x;
     e.vy = e.vy*drag + force3.y;
     e.vz = e.vz*drag + force3.z;
+    e.vx += GRAVITY.x;
+    e.vy += GRAVITY.y;
+    e.vz += GRAVITY.z;
 
     //Move: add e.vel and strafe to e.pos (now 3D)
     float strafe_power = calculate_setting(get_particle_strafe_power(),epos2,cohort);
