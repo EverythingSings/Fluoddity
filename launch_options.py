@@ -24,9 +24,13 @@ class LaunchOptions:
     visual_smoke_frame: int = 8
     visual_smoke_trial: int = 1
     visual_smoke_start: bool = False
+    visual_smoke_elapsed: float = 0.0
     visual_smoke_pause: bool = False
     visual_smoke_feed: bool = False
     visual_smoke_resolve: bool = False
+    visual_smoke_transition_action: str = ""
+    visual_smoke_mutate: bool = False
+    visual_smoke_revert: bool = False
     visual_smoke_controller_cursor: bool = False
     visual_smoke_controller_feed: bool = False
     performance_smoke_seconds: float = 0.0
@@ -89,6 +93,12 @@ def parse_launch_options(argv: list[str] | None = None) -> LaunchOptions:
         help="Start the selected Trial Dish automatically before a visual smoke capture.",
     )
     parser.add_argument(
+        "--visual-smoke-elapsed",
+        type=float,
+        default=0.0,
+        help="Seed the selected Trial Dish elapsed time before a visual smoke capture.",
+    )
+    parser.add_argument(
         "--visual-smoke-pause",
         action="store_true",
         help="Pause the selected Trial Dish after smoke startup. Requires --visual-smoke-start.",
@@ -102,6 +112,22 @@ def parse_launch_options(argv: list[str] | None = None) -> LaunchOptions:
         "--visual-smoke-resolve",
         action="store_true",
         help="Fast-forward the selected Trial Dish to its result state before a visual smoke capture.",
+    )
+    parser.add_argument(
+        "--visual-smoke-transition-action",
+        choices=("retry", "next", "restart", "sterilize"),
+        default="",
+        help="Apply a smoke-only Trial Dish transition before capture.",
+    )
+    parser.add_argument(
+        "--visual-smoke-mutate",
+        action="store_true",
+        help="Apply one smoke-only Irradiate Strain request before a visual smoke capture.",
+    )
+    parser.add_argument(
+        "--visual-smoke-revert",
+        action="store_true",
+        help="Apply one smoke-only Irradiate Strain request and then Revert Strain before a visual smoke capture.",
     )
     parser.add_argument(
         "--visual-smoke-controller-cursor",
@@ -155,9 +181,13 @@ def parse_launch_options(argv: list[str] | None = None) -> LaunchOptions:
         visual_smoke_frame=max(1, args.visual_smoke_frame),
         visual_smoke_trial=args.visual_smoke_trial,
         visual_smoke_start=args.visual_smoke_start,
+        visual_smoke_elapsed=max(0.0, args.visual_smoke_elapsed),
         visual_smoke_pause=args.visual_smoke_pause,
         visual_smoke_feed=args.visual_smoke_feed,
         visual_smoke_resolve=args.visual_smoke_resolve,
+        visual_smoke_transition_action=args.visual_smoke_transition_action,
+        visual_smoke_mutate=args.visual_smoke_mutate or args.visual_smoke_revert,
+        visual_smoke_revert=args.visual_smoke_revert,
         visual_smoke_controller_cursor=args.visual_smoke_controller_cursor,
         visual_smoke_controller_feed=args.visual_smoke_controller_feed,
         performance_smoke_seconds=max(0.0, args.performance_smoke_seconds),

@@ -25,9 +25,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frame", type=int, default=10, help="Rendered frame to capture.")
     parser.add_argument("--trial", type=int, default=1, choices=(1, 2, 3), help="Trial Dish number to capture.")
     parser.add_argument("--start", action="store_true", help="Start the selected trial before capture.")
+    parser.add_argument("--elapsed", type=float, default=0.0, help="Seed trial elapsed time before capture.")
     parser.add_argument("--pause", action="store_true", help="Pause the selected trial before capture.")
     parser.add_argument("--feed", action="store_true", help="Apply smoke-only nutrient pulses before capture.")
     parser.add_argument("--resolve", action="store_true", help="Fast-forward the selected trial to a result state before capture.")
+    parser.add_argument(
+        "--transition-action",
+        choices=("retry", "next", "restart", "sterilize"),
+        default="",
+        help="Apply a smoke-only Trial Dish transition before capture.",
+    )
+    parser.add_argument("--mutate", action="store_true", help="Apply one smoke-only Irradiate Strain request before capture.")
+    parser.add_argument("--revert", action="store_true", help="Apply smoke-only Irradiate Strain, then Revert Strain before capture.")
     parser.add_argument(
         "--controller-cursor",
         action="store_true",
@@ -114,6 +123,84 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help="Fail unless the normalized result summary contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-result-summary-not-contains",
+        action="append",
+        default=[],
+        help="Fail if the normalized result summary contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-result-hint-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized result experiment hint contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-result-hint-not-contains",
+        action="append",
+        default=[],
+        help="Fail if the normalized result experiment hint contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-result-next-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized result next-step line contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-result-next-not-contains",
+        action="append",
+        default=[],
+        help="Fail if the normalized result next-step line contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-transition-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized briefing transition message contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-containment-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized containment readout contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-route-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized antibiotic route readout contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-specimen-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized Trial 1 specimen readout contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-mutation-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized mutation readout contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-guidance-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized station guidance message contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-feedback-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized transient lab feedback line contains this text. Repeatable.",
+    )
+    parser.add_argument(
+        "--expect-timer-contains",
+        action="append",
+        default=[],
+        help="Fail unless the normalized timer pressure readout contains this text. Repeatable.",
     )
     parser.add_argument(
         "--expect-prompt-contains",
@@ -266,6 +353,19 @@ def assert_trial_state(
     expected_result_title: str | None,
     expected_result_readout: str | None,
     expected_result_summary_contains: list[str],
+    expected_result_summary_not_contains: list[str],
+    expected_result_hint_contains: list[str],
+    expected_result_hint_not_contains: list[str],
+    expected_result_next_contains: list[str],
+    expected_result_next_not_contains: list[str],
+    expected_transition_contains: list[str],
+    expected_containment_contains: list[str],
+    expected_route_contains: list[str],
+    expected_specimen_contains: list[str],
+    expected_mutation_contains: list[str],
+    expected_guidance_contains: list[str],
+    expected_feedback_contains: list[str],
+    expected_timer_contains: list[str],
     expected_prompt_contains: list[str],
     expected_display_prompt_contains: list[str],
     expected_glyph_contains: list[str],
@@ -290,6 +390,19 @@ def assert_trial_state(
         and expected_result_title is None
         and expected_result_readout is None
         and not expected_result_summary_contains
+        and not expected_result_summary_not_contains
+        and not expected_result_hint_contains
+        and not expected_result_hint_not_contains
+        and not expected_result_next_contains
+        and not expected_result_next_not_contains
+        and not expected_transition_contains
+        and not expected_containment_contains
+        and not expected_route_contains
+        and not expected_specimen_contains
+        and not expected_mutation_contains
+        and not expected_guidance_contains
+        and not expected_feedback_contains
+        and not expected_timer_contains
         and not expected_prompt_contains
         and not expected_display_prompt_contains
         and not expected_glyph_contains
@@ -381,6 +494,104 @@ def assert_trial_state(
             raise AssertionError(
                 f"expected result summary to contain {expected!r}, got {summary_value!r}"
             )
+    for rejected_text in expected_result_summary_not_contains:
+        rejected = normalize_smoke_text(rejected_text)
+        if rejected in summary_value:
+            raise AssertionError(
+                f"expected result summary not to contain {rejected!r}, got {summary_value!r}"
+            )
+
+    hint_value = fields.get("result_hint", "-")
+    for expected_text in expected_result_hint_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in hint_value:
+            raise AssertionError(
+                f"expected result hint to contain {expected!r}, got {hint_value!r}"
+            )
+    for rejected_text in expected_result_hint_not_contains:
+        rejected = normalize_smoke_text(rejected_text)
+        if rejected in hint_value:
+            raise AssertionError(
+                f"expected result hint not to contain {rejected!r}, got {hint_value!r}"
+            )
+
+    next_value = fields.get("result_next", "-")
+    for expected_text in expected_result_next_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in next_value:
+            raise AssertionError(
+                f"expected result next step to contain {expected!r}, got {next_value!r}"
+            )
+    for rejected_text in expected_result_next_not_contains:
+        rejected = normalize_smoke_text(rejected_text)
+        if rejected in next_value:
+            raise AssertionError(
+                f"expected result next step not to contain {rejected!r}, got {next_value!r}"
+            )
+
+    transition_value = fields.get("transition", "-")
+    for expected_text in expected_transition_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in transition_value:
+            raise AssertionError(
+                f"expected transition message to contain {expected!r}, got {transition_value!r}"
+            )
+
+    containment_value = fields.get("containment", "-")
+    for expected_text in expected_containment_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in containment_value:
+            raise AssertionError(
+                f"expected containment readout to contain {expected!r}, got {containment_value!r}"
+            )
+
+    route_value = fields.get("route", "-")
+    for expected_text in expected_route_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in route_value:
+            raise AssertionError(
+                f"expected route readout to contain {expected!r}, got {route_value!r}"
+            )
+
+    specimen_value = fields.get("specimen", "-")
+    for expected_text in expected_specimen_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in specimen_value:
+            raise AssertionError(
+                f"expected specimen readout to contain {expected!r}, got {specimen_value!r}"
+            )
+
+    mutation_value = fields.get("mutation", "-")
+    for expected_text in expected_mutation_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in mutation_value:
+            raise AssertionError(
+                f"expected mutation readout to contain {expected!r}, got {mutation_value!r}"
+            )
+
+    guidance_value = fields.get("guidance", "-")
+    for expected_text in expected_guidance_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in guidance_value:
+            raise AssertionError(
+                f"expected guidance to contain {expected!r}, got {guidance_value!r}"
+            )
+
+    feedback_value = fields.get("feedback", "-")
+    for expected_text in expected_feedback_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in feedback_value:
+            raise AssertionError(
+                f"expected feedback to contain {expected!r}, got {feedback_value!r}"
+            )
+
+    timer_value = fields.get("timer", "-")
+    for expected_text in expected_timer_contains:
+        expected = normalize_smoke_text(expected_text)
+        if expected not in timer_value:
+            raise AssertionError(
+                f"expected timer readout to contain {expected!r}, got {timer_value!r}"
+            )
 
     prompt_value = fields.get("prompts", "-")
     for expected_text in expected_prompt_contains:
@@ -434,6 +645,16 @@ def assert_trial_state(
         f"cursor={cursor_value} cursor_draw={cursor_draw_value} "
         f"result_title={fields.get('result_title', '-')} "
         f"result_readout={fields.get('result_readout', '-')} "
+        f"result_hint={fields.get('result_hint', '-')} "
+        f"result_next={fields.get('result_next', '-')} "
+        f"transition={fields.get('transition', '-')} "
+        f"specimen={specimen_value} "
+        f"route={route_value} "
+        f"mutation={mutation_value} "
+        f"guidance={guidance_value} "
+        f"feedback={feedback_value} "
+        f"timer={timer_value} "
+        f"containment={containment_value} "
         f"prompts={fields.get('prompts', '-')} "
         f"display_prompts={fields.get('display_prompts', '-')} "
         f"glyphs={fields.get('glyphs', '-')}"
@@ -455,6 +676,12 @@ def main() -> int:
             state_name = "controller_feed" if args.controller_feed else "controller_cursor"
         elif args.resolve:
             state_name = "result"
+        elif args.transition_action:
+            state_name = f"{args.transition_action}_transition"
+        elif args.revert:
+            state_name = "reverted"
+        elif args.mutate:
+            state_name = "mutated"
         else:
             state_name = "running" if args.start else "briefing"
         output = ROOT / "artifacts" / "visual_smoke" / f"trial{args.trial}_{state_name}.png"
@@ -482,12 +709,20 @@ def main() -> int:
     ]
     if args.start:
         cmd.append("--visual-smoke-start")
+    if args.elapsed > 0.0:
+        cmd.extend(["--visual-smoke-elapsed", str(args.elapsed)])
     if args.pause:
         cmd.append("--visual-smoke-pause")
     if args.feed:
         cmd.append("--visual-smoke-feed")
     if args.resolve:
         cmd.append("--visual-smoke-resolve")
+    if args.transition_action:
+        cmd.extend(["--visual-smoke-transition-action", args.transition_action])
+    if args.mutate:
+        cmd.append("--visual-smoke-mutate")
+    if args.revert:
+        cmd.append("--visual-smoke-revert")
     if args.controller_cursor:
         cmd.append("--visual-smoke-controller-cursor")
     if args.controller_feed:
@@ -545,6 +780,19 @@ def main() -> int:
         args.expect_result_title,
         args.expect_result_readout,
         args.expect_result_summary_contains,
+        args.expect_result_summary_not_contains,
+        args.expect_result_hint_contains,
+        args.expect_result_hint_not_contains,
+        args.expect_result_next_contains,
+        args.expect_result_next_not_contains,
+        args.expect_transition_contains,
+        args.expect_containment_contains,
+        args.expect_route_contains,
+        args.expect_specimen_contains,
+        args.expect_mutation_contains,
+        args.expect_guidance_contains,
+        args.expect_feedback_contains,
+        args.expect_timer_contains,
         args.expect_prompt_contains,
         args.expect_display_prompt_contains,
         args.expect_glyph_contains,

@@ -123,6 +123,7 @@ def smoke_full_trial_dish_playthrough() -> None:
     service.process_requests(trial, request_state(request_trial_retry=True))
     assert_true(trial.trial_index == 1, "Retry should stay on Trial 2")
     assert_true(trial.briefing_active, "Retry should reset Trial 2 to briefing")
+    assert_true("Retry loaded" in trial.transition_message, "Retry should explain the loaded assay")
     service.process_requests(trial, request_state(request_trial_start=True))
     run_updates_until_result(
         service,
@@ -135,17 +136,24 @@ def smoke_full_trial_dish_playthrough() -> None:
 
     service.process_requests(trial, request_state(request_trial_next=True))
     assert_true(trial.trial_index == 2, "Next should load Trial 3")
+    assert_true("Next assay loaded" in trial.transition_message, "Next should explain the loaded assay")
     service.process_requests(trial, request_state(request_trial_start=True))
     assert_true(trial.irradiation_ready, "Trial 3 should begin with irradiation ready")
+    assert_true(trial.mutation_readout == "Baseline strain", "Trial 3 should begin with baseline strain readout")
     ui = request_state(request_randomize_mutations=True)
     service.process_requests(trial, ui)
     assert_true(ui.request_randomize_mutations, "Ready irradiation should pass to command handler")
     assert_true(trial.preserved_strain_available, "Irradiation should create a revert archive")
+    assert_true(
+        trial.mutation_readout == "Mutated strain; archive ready",
+        "irradiation should show archive-ready mutated strain",
+    )
     trial.irradiation_cooldown_remaining = 0.0
     ui = request_state(request_revert_strain=True)
     service.process_requests(trial, ui)
     assert_true(ui.request_revert_strain, "Ready revert should pass to command handler")
     assert_true(not trial.preserved_strain_available, "Revert should consume the archive")
+    assert_true(trial.mutation_readout == "Archive restored", "revert should show restored archive readout")
 
     trial.elapsed_seconds = trial.failure_seconds - 0.1
     service.update(trial, request_state(), 1, 0.2, ZoneTexture(trial, {"A", "B"}))
@@ -156,6 +164,7 @@ def smoke_full_trial_dish_playthrough() -> None:
     service.process_requests(trial, request_state(request_trial_restart_sequence=True))
     assert_true(trial.trial_index == 0, "Final restart should return to Trial 1")
     assert_true(trial.briefing_active, "Final restart should return to briefing")
+    assert_true("Sequence restarted" in trial.transition_message, "Final restart should explain the sequence reset")
 
 
 def smoke_trial_sequence() -> None:
@@ -175,6 +184,7 @@ def smoke_trial_sequence() -> None:
     assert_true(trial.primer_remaining > 0.0, "starter primer should be armed")
     assert_true("nutrient gel" in trial.guidance_message.lower(), "Trial 1 should guide nutrient gel use")
     assert_true("Specimen" in trial.objective_status, "Trial 1 should use biological objective status")
+    assert_true(trial.specimen_readout == "Specimen dormant", "Trial 1 should start with dormant specimen readout")
 
     service.load_trial(trial, 1)
     assert_true(not trial.irradiation_unlocked, "Trial 2 should not unlock irradiation yet")
@@ -185,6 +195,7 @@ def smoke_trial_sequence() -> None:
     service.process_requests(trial, request_state(request_reset=True))
     assert_true(trial.briefing_active, "sterilize should return to briefing")
     assert_true("sterilized" in trial.guidance_message.lower(), "sterilize should show station feedback")
+    assert_true("sterilized" in trial.transition_message.lower(), "sterilize should show briefing transition feedback")
 
     service.process_requests(trial, request_state(request_trial_start=True, request_reset=True))
     assert_true(trial.briefing_active, "sterilize should outrank simultaneous start")
@@ -192,9 +203,11 @@ def smoke_trial_sequence() -> None:
 
     service.load_trial(trial, 2)
     assert_true("sterilized" not in trial.guidance_message.lower(), "new trial load should clear sterilize feedback")
+    assert_true(trial.transition_message == "", "new trial load should clear transition feedback")
     assert_true(trial.irradiation_unlocked, "Trial 3 should unlock irradiation")
     assert_true(trial.revert_unlocked, "Trial 3 should unlock revert")
     assert_true(not trial.revert_ready, "revert should require a preserved archive")
+    assert_true(trial.mutation_readout == "Baseline strain", "Trial 3 briefing should expose baseline strain readout")
     assert_true("rival bloom" in trial.story_line.lower(), "Trial 3 should establish rival fiction")
     assert_true(len(trial.protocol_steps) == 3, "Trial 3 briefing should keep mutation onboarding compact")
 
@@ -218,7 +231,21 @@ def smoke_trial_sequence() -> None:
     assert_true(ui.request_randomize_mutations, "ready irradiation should pass through")
     assert_true(trial.irradiation_charges == 2, "irradiation should consume a charge")
     assert_true(trial.preserved_strain_available, "irradiation should preserve archive")
+    assert_true(
+        trial.mutation_readout == "Mutated strain; archive ready",
+        "irradiation should update mutation readout",
+    )
     assert_true("archive" in trial.guidance_message.lower(), "irradiation should surface archive guidance")
+    trial.zones[0].active = True
+    trial.zones[1].active = True
+    trial.zones[2].rival_controlled = True
+    service._update_zone_control_counts(trial)
+    service._update_guidance(trial)
+    assert_true(trial.containment_margin > 0, "test setup should be ahead while archive is loaded")
+    assert_true(
+        "archive" in trial.guidance_message.lower(),
+        "archive guidance should outrank positive containment guidance after irradiation",
+    )
 
     ui = request_state(request_randomize_mutations=True)
     service.process_requests(trial, ui)
@@ -232,6 +259,7 @@ def smoke_trial_sequence() -> None:
     assert_true(trial.revert_charges == 0, "revert should consume its charge")
     assert_true(not trial.preserved_strain_available, "revert should consume archive")
     assert_true(trial.current_tool == "Revert Strain", "ready revert should mark current tool")
+    assert_true(trial.mutation_readout == "Archive restored", "revert should update mutation readout")
 
     ui = request_state(request_revert_strain=True)
     service.process_requests(trial, ui)
@@ -254,6 +282,7 @@ def smoke_trial_sequence() -> None:
     assert_true(trial.result_grade == "Contained", "narrow territory win should get contained grade")
     assert_true("Irradiation pulses used: 1" in trial.result_summary, "result should mention irradiation usage")
     assert_true("reverts used: 1" in trial.result_summary, "result should mention revert usage")
+    assert_true("without reverting" in trial.result_experiment_hint, "revert win should suggest a no-revert comparison")
     assert_true("zone" not in trial.result_summary.lower(), "territory result should use culture-site language")
     assert_true(trial.objective_status == "Assay complete.", "territory win should update objective status")
     assert_true("Sequence complete" in trial.result_next_step, "final win should explain sequence completion")
@@ -269,6 +298,7 @@ def smoke_trial_sequence() -> None:
     service.process_requests(trial, ui)
     assert_true(trial.trial_index == 0, "restart sequence should return to Trial 1")
     assert_true(trial.briefing_active, "restart sequence should return to briefing")
+    assert_true("Sequence restarted" in trial.transition_message, "restart sequence should explain the reset")
 
 
 def smoke_activity_sampling() -> None:
@@ -282,8 +312,19 @@ def smoke_activity_sampling() -> None:
 
     service.update(trial, request_state(), 1, 0.25, FakeTexture(0.01))
     assert_true(trial.zones[0].active, "dense texture should activate Trial 1 zone")
+    assert_true(trial.specimen_readout == "Specimen responding", "active Trial 1 zone should show responding readout")
+    assert_true(trial.first_response_seen, "active Trial 1 zone should mark first response seen")
+    assert_true("response detected" in trial.tool_feedback.lower(), "first active Trial 1 zone should show a response cue")
     assert_true("responding" in trial.guidance_message.lower(), "active Trial 1 zone should shift guidance")
     assert_true("responding" in trial.objective_status.lower(), "active Trial 1 zone should show biological hold status")
+
+    trial.progress = 0.5
+    service.update(trial, request_state(), 2, 0.25, FakeTexture(0.01))
+    assert_true(trial.specimen_readout == "Specimen stabilizing", "progressing Trial 1 should show stabilizing readout")
+    assert_true("response detected" in trial.tool_feedback.lower(), "first response cue should remain briefly visible")
+
+    service.reset(trial)
+    assert_true(not trial.first_response_seen, "reset should clear first response cue state")
 
 
 def smoke_result_guidance() -> None:
@@ -298,6 +339,7 @@ def smoke_result_guidance() -> None:
     assert_true(trial.guidance_title == "Assay Result", "win should switch guidance to result mode")
     assert_true(trial.result_summary == trial.guidance_message, "result guidance should mirror result summary")
     assert_true(trial.result_grade in {"Rapid", "Stable", "Fragile"}, "Trial 1 result should use lab readout labels")
+    assert_true("antibiotic scar" in trial.result_experiment_hint, "Trial 1 win should point to the next experiment")
     assert_true("Trial 2" in trial.result_next_step, "Trial 1 win should preview Trial 2")
 
     service.load_trial(trial, 0)
@@ -308,7 +350,18 @@ def smoke_result_guidance() -> None:
     assert_true(trial.guidance_title == "Assay Result", "failure should switch guidance to result mode")
     assert_true(trial.objective_status == "Assay failed.", "failure should update objective status")
     assert_true(trial.result_grade == "Unstable", "failed hold trial should use unstable readout")
+    assert_true("wake every marked site" in trial.result_experiment_hint, "failure should suggest a specific retry experiment")
     assert_true("Retry" in trial.result_next_step, "failure should explain retry focus")
+
+    service.load_trial(trial, 0)
+    trial.status = "running"
+    trial.zones[0].active = True
+    trial.elapsed_seconds = trial.failure_seconds
+    service.update(trial, request_state(), 1, 0.20, None)
+    assert_true(trial.failed, "late active Trial 1 culture should still fail at timeout")
+    assert_true("not sustained long enough" in trial.result_summary, "late Trial 1 failure should use specimen sustain language")
+    assert_true("marked circle" in trial.result_experiment_hint, "late Trial 1 failure should suggest holding the marked circle")
+    assert_true("scar" not in trial.result_next_step.lower(), "Trial 1 failure should not mention Trial 2 scar language")
 
 
 def smoke_guidance_progression() -> None:
@@ -319,7 +372,22 @@ def smoke_guidance_progression() -> None:
     service.process_requests(trial, request_state(request_trial_start=True))
     service.update(trial, request_state(), 1, 0.25, FakeTexture(0.0))
     assert_true("red scar" in trial.guidance_message.lower(), "Trial 2 should explain the red scar")
-    assert_true("Stable sites" in trial.objective_status, "Trial 2 should show stable site progress")
+    assert_true("Route absent" in trial.route_readout, "Trial 2 should expose missing route state")
+    assert_true("Route absent" in trial.objective_status, "Trial 2 should show route progress")
+
+    service.update(trial, request_state(), 2, 0.25, ZoneTexture(trial, {"A", "B"}))
+    assert_true("Partial route" in trial.route_readout, "Trial 2 should expose partial route state")
+    assert_true(trial.route_forming_seen, "Trial 2 partial route should mark forming feedback seen")
+    assert_true("route forming" in trial.tool_feedback.lower(), "Trial 2 partial route should show forming feedback")
+
+    service.update(trial, request_state(), 3, 0.25, ZoneTexture(trial, {"A", "B", "C"}))
+    assert_true(trial.route_readout == "Route stable", "Trial 2 should expose stable route state")
+    assert_true(trial.route_stable_seen, "Trial 2 stable route should mark stable feedback seen")
+    assert_true("survived the scar" in trial.tool_feedback.lower(), "Trial 2 stable route should show survival feedback")
+
+    service.reset(trial)
+    assert_true(not trial.route_forming_seen, "Trial 2 reset should clear route forming feedback state")
+    assert_true(not trial.route_stable_seen, "Trial 2 reset should clear route stable feedback state")
 
     service.load_trial(trial, 2)
     service.process_requests(trial, request_state(request_trial_start=True))
@@ -327,9 +395,17 @@ def smoke_guidance_progression() -> None:
     assert_true("irradiation" in trial.guidance_message.lower(), "Trial 3 should explain irradiation")
     assert_true("Culture" in trial.objective_status, "Trial 3 should show culture territory status")
     assert_true("rival" in trial.objective_status, "Trial 3 should show rival territory pressure")
+    assert_true(trial.timer_readout == "", "Trial 3 should not warn before the assay is near closing")
+    assert_true(trial.containment_margin == 0, "Trial 3 should start with tied containment")
+    assert_true("Containment tied" in trial.containment_readout, "Trial 3 should expose tied containment")
+
+    trial.elapsed_seconds = trial.failure_seconds - 10.0
+    service.update(trial, request_state(), 2, 0.25, ZoneTexture(trial, {"A", "B"}))
+    assert_true(trial.timer_readout == "Assay closing soon", "Trial 3 should warn when the assay is closing")
+    assert_true("closes in" in trial.objective_status, "Trial 3 objective should keep exact close timing")
 
     trial.elapsed_seconds = trial.failure_seconds - 0.1
-    service.update(trial, request_state(), 2, 0.25, ZoneTexture(trial, {"A", "B"}))
+    service.update(trial, request_state(), 3, 0.25, ZoneTexture(trial, {"A", "B"}))
     assert_true(trial.won, "Trial 3 territory advantage should win")
     assert_true("Culture held 2 sites" in trial.result_summary, "Trial 3 result should use culture-site language")
     assert_true("Player controlled" not in trial.result_summary, "Trial 3 result should avoid raw player territory phrasing")
@@ -368,9 +444,13 @@ def smoke_territory_grades() -> None:
     trial.zones[0].active = True
     trial.zones[1].active = True
     trial.zones[2].active = True
+    service._update_zone_control_counts(trial)
+    assert_true(trial.containment_margin == 3, "three culture sites should produce a positive containment margin")
+    assert_true("Containing by 3 sites" in trial.containment_readout, "positive margin should read as containment")
     service._settle_territory_trial(trial)
     assert_true(trial.won, "3 culture sites should win")
     assert_true(trial.result_grade == "Clean Dominance", "clean sweep should reward low-mutation control")
+    assert_true("deliberate mutation" in trial.result_experiment_hint, "clean win should suggest mutation comparison")
 
     service.load_trial(trial, 2)
     trial.status = "running"
@@ -385,9 +465,13 @@ def smoke_territory_grades() -> None:
     trial.status = "running"
     trial.zones[0].active = True
     trial.zones[1].rival_controlled = True
+    service._update_zone_control_counts(trial)
+    assert_true(trial.containment_margin == 0, "one culture and one rival site should tie containment")
+    assert_true("Containment tied" in trial.containment_readout, "tie should read as tied containment")
     service._settle_territory_trial(trial)
     assert_true(trial.failed, "tie should fail territory trial")
     assert_true(trial.result_grade == "Stalemate", "tie should report stalemate")
+    assert_true("one extra marked site" in trial.result_experiment_hint, "stalemate should suggest one-site improvement")
 
 
 def smoke_controller_final_restart() -> None:

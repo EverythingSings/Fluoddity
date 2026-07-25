@@ -841,6 +841,9 @@ class UI(
             if trial.story_line:
                 imgui.text_wrapped(trial.story_line)
                 imgui.spacing()
+            if trial.transition_message:
+                imgui.text_colored(imgui.ImVec4(0.50, 0.78, 1.0, 1.0), trial.transition_message)
+                imgui.spacing()
             imgui.text_wrapped(trial.briefing)
             imgui.spacing()
             for step in trial.protocol_steps:
@@ -875,9 +878,25 @@ class UI(
             return
 
         intro_trial = trial.minimal_onboarding
+        if intro_trial and trial.specimen_readout:
+            if trial.specimen_readout == "Specimen dormant":
+                color = imgui.ImVec4(1.0, 0.82, 0.35, 1.0)
+            elif trial.specimen_readout == "Specimen responding":
+                color = imgui.ImVec4(0.72, 0.90, 1.0, 1.0)
+            else:
+                color = imgui.ImVec4(0.35, 1.0, 0.65, 1.0)
+            imgui.text_colored(color, trial.specimen_readout)
         if trial.hazard_enabled:
             if trial.trial_id == "antibiotic_band":
                 imgui.text(f"Counterforce: {trial.hazard_name}")
+                if trial.route_readout:
+                    if trial.route_readout == "Route stable":
+                        color = imgui.ImVec4(0.35, 1.0, 0.65, 1.0)
+                    elif trial.route_readout.startswith("Partial"):
+                        color = imgui.ImVec4(1.0, 0.82, 0.35, 1.0)
+                    else:
+                        color = imgui.ImVec4(1.0, 0.35, 0.35, 1.0)
+                    imgui.text_colored(color, trial.route_readout)
             else:
                 imgui.text(f"Hazard: {trial.hazard_name} ({int(trial.hazard_strength * 100)}%)")
         if trial.rival_enabled:
@@ -885,10 +904,30 @@ class UI(
                 f"Rival pressure: culture {trial.player_controlled_zones} sites / "
                 f"rival {trial.rival_controlled_zones}"
             )
+            if trial.containment_readout:
+                if trial.containment_margin > 0:
+                    color = imgui.ImVec4(0.35, 1.0, 0.65, 1.0)
+                elif trial.containment_margin < 0:
+                    color = imgui.ImVec4(1.0, 0.35, 0.35, 1.0)
+                else:
+                    color = imgui.ImVec4(1.0, 0.82, 0.35, 1.0)
+                imgui.text_colored(color, trial.containment_readout)
+        if trial.mutation_readout:
+            if "Baseline" in trial.mutation_readout:
+                color = imgui.ImVec4(0.72, 0.90, 1.0, 1.0)
+            elif "archive ready" in trial.mutation_readout:
+                color = imgui.ImVec4(1.0, 0.82, 0.35, 1.0)
+            elif "restored" in trial.mutation_readout:
+                color = imgui.ImVec4(0.35, 1.0, 0.65, 1.0)
+            else:
+                color = imgui.ImVec4(1.0, 0.58, 0.35, 1.0)
+            imgui.text_colored(color, trial.mutation_readout)
         if trial.tool_feedback and trial.tool_feedback_seconds > 0.0:
             imgui.text_disabled(trial.tool_feedback)
         if not intro_trial:
             imgui.text(f"Time: {trial.elapsed_seconds:05.1f}s / {trial.failure_seconds:05.1f}s")
+        if trial.timer_readout:
+            imgui.text_colored(imgui.ImVec4(1.0, 0.82, 0.35, 1.0), trial.timer_readout)
         if trial.objective_status:
             imgui.text_wrapped(trial.objective_status)
         progress_label = (
@@ -925,6 +964,9 @@ class UI(
                 imgui.text(f"Readout: {trial.result_grade}")
             if trial.result_summary:
                 imgui.text_wrapped(trial.result_summary)
+            if trial.result_experiment_hint:
+                imgui.spacing()
+                imgui.text_wrapped(trial.result_experiment_hint)
             if trial.result_next_step:
                 imgui.spacing()
                 imgui.text_wrapped(trial.result_next_step)
@@ -946,6 +988,9 @@ class UI(
                 imgui.text(f"Readout: {trial.result_grade}")
             if trial.result_summary:
                 imgui.text_wrapped(trial.result_summary)
+            if trial.result_experiment_hint:
+                imgui.spacing()
+                imgui.text_wrapped(trial.result_experiment_hint)
             if trial.result_next_step:
                 imgui.spacing()
                 imgui.text_wrapped(trial.result_next_step)

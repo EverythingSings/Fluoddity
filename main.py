@@ -196,6 +196,8 @@ class App:
         self.prev_view_option = 0
         self.visual_smoke_frame_count = 0
         self.visual_smoke_completed = False
+        self.visual_smoke_mutation_applied = False
+        self.visual_smoke_revert_applied = False
         self.game_cursor_screen_pos = None
         self.performance_smoke_completed = False
         self._performance_smoke_start = None
@@ -217,11 +219,17 @@ class App:
         self.ui.state.trial.game_mode = True
         trial_index = self.launch_options.visual_smoke_trial - 1
         self.trial_service.load_trial(self.ui.state.trial, trial_index)
+        if self.launch_options.visual_smoke_output and self.launch_options.visual_smoke_transition_action:
+            self._apply_visual_smoke_transition_action(self.ui.state.trial)
         if (
             (self.launch_options.visual_smoke_output and self.launch_options.visual_smoke_start)
             or self.launch_options.performance_smoke_seconds > 0.0
         ):
             self.trial_service.start_trial(self.ui.state.trial)
+            if self.launch_options.visual_smoke_output and self.launch_options.visual_smoke_elapsed > 0.0:
+                self.ui.state.trial.elapsed_seconds = self.launch_options.visual_smoke_elapsed
+                self.trial_service._update_objective_status(self.ui.state.trial)
+                self.trial_service._update_guidance(self.ui.state.trial)
             self.ui.state.sim.going = True
             if self.launch_options.visual_smoke_output and self.launch_options.visual_smoke_pause:
                 self.ui.state.trial.paused = True
@@ -398,6 +406,17 @@ class App:
         result_title = self._visual_smoke_token(trial.result_title)
         result_readout = self._visual_smoke_token(trial.result_grade)
         result_summary = self._visual_smoke_token(trial.result_summary)
+        result_hint = self._visual_smoke_token(trial.result_experiment_hint)
+        result_next = self._visual_smoke_token(trial.result_next_step)
+        transition_message = self._visual_smoke_token(trial.transition_message)
+        specimen_readout = self._visual_smoke_token(trial.specimen_readout)
+        route_readout = self._visual_smoke_token(trial.route_readout)
+        containment_readout = self._visual_smoke_token(trial.containment_readout)
+        mutation_readout = self._visual_smoke_token(trial.mutation_readout)
+        timer_readout = self._visual_smoke_token(trial.timer_readout)
+        guidance_title = self._visual_smoke_token(trial.guidance_title)
+        guidance_message = self._visual_smoke_token(trial.guidance_message)
+        tool_feedback = self._visual_smoke_token(trial.tool_feedback)
         prompt_specs = self.ui.trial_action_prompt_specs(
             trial,
             self.ui.keybindings,
@@ -422,9 +441,18 @@ class App:
             f"status={trial.status} "
             f"active_zones={active_zones}/{len(trial.zones)} "
             f"rival_zones={rival_zones} "
+            f"containment_margin={trial.containment_margin} "
+            f"containment={containment_readout} "
             f"zone_overlays={len(zone_overlays)} "
             f"hazard_overlay={int(hazard_overlay is not None)} "
             f"rival_overlay={int(rival_overlay is not None)} "
+            f"specimen={specimen_readout} "
+            f"route={route_readout} "
+            f"mutation={mutation_readout} "
+            f"timer={timer_readout} "
+            f"guidance_title={guidance_title} "
+            f"guidance={guidance_message} "
+            f"feedback={tool_feedback} "
             f"progress={trial.progress:.3f} "
             f"elapsed={trial.elapsed_seconds:.2f} "
             f"paused={int(trial.paused)} "
@@ -434,6 +462,9 @@ class App:
             f"result_title={result_title} "
             f"result_readout={result_readout} "
             f"result_summary={result_summary} "
+            f"result_hint={result_hint} "
+            f"result_next={result_next} "
+            f"transition={transition_message} "
             f"prompts={prompt_text} "
             f"display_prompts={display_prompt_text} "
             f"glyphs={prompt_glyphs}"
@@ -445,6 +476,18 @@ class App:
     def _visual_smoke_token(text):
         """Normalize smoke-only text fields into whitespace-free tokens."""
         return "_".join(str(text or "").strip().split()) or "-"
+
+    def _apply_visual_smoke_transition_action(self, trial) -> None:
+        """Apply a pre-capture Trial Dish transition for UI smoke coverage."""
+        action = self.launch_options.visual_smoke_transition_action
+        if action == "retry":
+            self.trial_service.retry_trial(trial)
+        elif action == "next":
+            self.trial_service.next_trial(trial)
+        elif action == "restart":
+            self.trial_service.restart_sequence(trial)
+        elif action == "sterilize":
+            self.trial_service.sterilize(trial)
 
     def orchestrate_frame(self):
         """Main orchestration logic - reads UI state, coordinates components."""
@@ -468,10 +511,28 @@ class App:
         self._apply_game_controller_cursor(ui_state, dt)
         self._apply_input_scheme(ui_state, controller_actions)
         self._apply_controller_actions(controller_actions, ui_state)
+        self._apply_visual_smoke_tool_requests(ui_state)
         if ui_state.request_exit:
             glfw.set_window_should_close(self.window, True)
 
+        trial_strain_reset_requested = (
+            ui_state.trial.game_mode
+            and (
+                ui_state.request_trial_next
+                or ui_state.request_trial_retry
+                or ui_state.request_trial_restart_sequence
+                or ui_state.request_reset
+                or ui_state.request_full_reset
+            )
+        )
         self.trial_service.process_requests(ui_state.trial, ui_state)
+        if trial_strain_reset_requested:
+            self.command_handler.restore_trial_strain_baseline(ui_state)
+            if ui_state.request_full_reset:
+                # In the player shell, Full Reset is a dish sterilization, not
+                # the editor's zero-rule operation.
+                ui_state.request_full_reset = False
+                ui_state.request_reset = True
         if ui_state.trial.game_mode:
             if (
                 ui_state.trial.briefing_active
@@ -696,6 +757,38 @@ class App:
             ui_state.trial.elapsed_seconds,
             ui_state.trial.failure_seconds + max(dt, 1.0 / 30.0),
         )
+
+    def _apply_visual_smoke_tool_requests(self, ui_state) -> None:
+        """Drive one-shot Trial Dish tool requests for visual smoke captures."""
+        trial = ui_state.trial
+        if not (
+            self.launch_options.visual_smoke_output
+            and trial.game_mode
+            and not trial.briefing_active
+            and not trial.won
+            and not trial.failed
+            and not trial.paused
+        ):
+            return
+
+        if (
+            self.launch_options.visual_smoke_mutate
+            and not self.visual_smoke_mutation_applied
+            and trial.irradiation_ready
+        ):
+            ui_state.request_randomize_mutations = True
+            self.visual_smoke_mutation_applied = True
+            return
+
+        if (
+            self.launch_options.visual_smoke_revert
+            and self.visual_smoke_mutation_applied
+            and not self.visual_smoke_revert_applied
+            and trial.revert_ready
+        ):
+            trial.irradiation_cooldown_remaining = 0.0
+            ui_state.request_revert_strain = True
+            self.visual_smoke_revert_applied = True
 
     def _apply_game_controller_cursor(self, ui_state, dt):
         """Use the right stick and right trigger as the game-mode lab applicator."""

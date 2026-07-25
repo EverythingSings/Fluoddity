@@ -31,6 +31,7 @@ class TrialState:
     running_hint: str = "Apply nutrient gel until the marked culture zone stabilizes."
     guidance_title: str = "Station Guidance"
     guidance_message: str = "Awaiting protocol start."
+    transition_message: str = ""
     onboarding_focus: str = "single_culture"
     protocol_steps: list[str] = field(default_factory=lambda: [
         "Observe the marked zone.",
@@ -42,6 +43,9 @@ class TrialState:
     current_tool: str = "Nutrient Gel"
     tool_feedback: str = ""
     tool_feedback_seconds: float = 0.0
+    first_response_seen: bool = False
+    route_forming_seen: bool = False
+    route_stable_seen: bool = False
     irradiation_charges: int = 0
     irradiation_max_charges: int = 0
     irradiation_cooldown_seconds: float = 0.0
@@ -62,9 +66,14 @@ class TrialState:
     elapsed_seconds: float = 0.0
     progress: float = 0.0
     objective_status: str = "Awaiting protocol."
+    specimen_readout: str = ""
+    route_readout: str = ""
+    mutation_readout: str = ""
+    timer_readout: str = ""
     result_title: str = ""
     result_grade: str = ""
     result_summary: str = ""
+    result_experiment_hint: str = ""
     result_next_step: str = ""
     visual_smoke_feed: bool = False
     hold_seconds: float = 12.0
@@ -73,6 +82,8 @@ class TrialState:
     win_condition: str = "hold_all_zones"
     player_controlled_zones: int = 0
     rival_controlled_zones: int = 0
+    containment_margin: int = 0
+    containment_readout: str = ""
     hazard_enabled: bool = False
     hazard_name: str = "Antibiotic Band"
     hazard_center_x: float = 0.50

@@ -40,6 +40,10 @@ class CommandHandler:
         # Deferred entity selection state (waits one frame for rule buffer to be written)
         self._pending_entity_selection = None  # Tuple of (entity_id, entity_pos, entity_cohort) or None
 
+        # Trial Dish irradiation is reversible within a run and must also be
+        # discarded when the dish/retry/sequence resets.
+        self._trial_strain_baseline = None
+
     def _apply_config_with_locks(self, config, ui_state, watercolor_override=None):
         """Apply config with parameter lock snapshot/restore. Returns rule."""
         pls = self.param_lock_service
@@ -200,9 +204,36 @@ class CommandHandler:
         """Handle randomize mutations (M key)."""
         current_rule = self.rule_manager.get_current_rule()
         if current_rule is not None:
+            trial = getattr(ui_state, "trial", None)
+            if (
+                self._trial_strain_baseline is None
+                and trial is not None
+                and trial.game_mode
+                and trial.irradiation_unlocked
+            ):
+                baseline_seed = self.rule_manager.get_current_seed()
+                if baseline_seed is None:
+                    baseline_seed = ui_state.sim.rule_seed
+                self._trial_strain_baseline = (
+                    current_rule.copy(),
+                    baseline_seed,
+                    self.rule_manager.snapshot_history(),
+                )
             ui_state.sim.rule_seed = random.random()
             self.rule_manager.push_rule(current_rule.copy(), ui_state.sim.rule_seed)
             self.sim.apply_rule(current_rule)
+
+    def restore_trial_strain_baseline(self, ui_state) -> bool:
+        """Restore and forget the pre-irradiation rule when a dish run resets."""
+        if self._trial_strain_baseline is None:
+            return False
+
+        baseline_rule, baseline_seed, history_snapshot = self._trial_strain_baseline
+        self.rule_manager.restore_history(history_snapshot)
+        ui_state.sim.rule_seed = baseline_seed
+        self.sim.apply_rule(baseline_rule)
+        self._trial_strain_baseline = None
+        return True
 
     def _handle_revert_strain(self, ui_state):
         """Restore the previous strain rule/seed from rule history."""

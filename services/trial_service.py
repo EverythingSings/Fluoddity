@@ -34,12 +34,16 @@ class TrialService:
         trial.onboarding_focus = definition.get("onboarding_focus", "single_culture")
         trial.guidance_title = "Station Guidance"
         trial.guidance_message = "Awaiting protocol start."
+        trial.transition_message = ""
         trial.protocol_steps = list(definition.get("protocol_steps", []))
         trial.unlocked_tools = list(definition.get("unlocked_tools", ["Nutrient Gel"]))
         trial.default_tool = definition.get("current_tool", "Nutrient Gel")
         trial.current_tool = trial.default_tool
         trial.tool_feedback = ""
         trial.tool_feedback_seconds = 0.0
+        trial.first_response_seen = False
+        trial.route_forming_seen = False
+        trial.route_stable_seen = False
         trial.irradiation_max_charges = definition.get("irradiation_charges", 0)
         trial.irradiation_charges = trial.irradiation_max_charges
         trial.irradiation_cooldown_seconds = definition.get("irradiation_cooldown_seconds", 0.0)
@@ -61,6 +65,8 @@ class TrialService:
         trial.win_condition = definition.get("win_condition", "hold_all_zones")
         trial.player_controlled_zones = 0
         trial.rival_controlled_zones = 0
+        trial.containment_margin = 0
+        trial.containment_readout = ""
         trial.hazard_enabled = definition.get("hazard_enabled", False)
         trial.hazard_name = definition.get("hazard_name", "Antibiotic Band")
         trial.hazard_center_x = definition.get("hazard_center_x", 0.5)
@@ -81,9 +87,15 @@ class TrialService:
 
     def next_trial(self, trial: TrialState) -> None:
         self.load_trial(trial, min(trial.trial_index + 1, len(TRIAL_DEFINITIONS) - 1))
+        trial.transition_message = f"Next assay loaded: {trial.title}."
 
     def restart_sequence(self, trial: TrialState) -> None:
         self.load_trial(trial, 0)
+        trial.transition_message = "Sequence restarted at Trial 1."
+
+    def retry_trial(self, trial: TrialState) -> None:
+        self.load_trial(trial, trial.trial_index)
+        trial.transition_message = f"Retry loaded: {trial.title} reset."
 
     def reset(self, trial: TrialState) -> None:
         trial.status = "briefing"
@@ -91,14 +103,23 @@ class TrialService:
         trial.elapsed_seconds = 0.0
         trial.progress = 0.0
         trial.objective_status = "Awaiting protocol."
+        trial.specimen_readout = ""
+        trial.route_readout = ""
+        trial.mutation_readout = ""
+        trial.timer_readout = ""
         trial.result_title = ""
         trial.result_grade = ""
         trial.result_summary = ""
+        trial.result_experiment_hint = ""
         trial.result_next_step = ""
+        trial.transition_message = ""
         trial.guidance_title = "Station Guidance"
         trial.guidance_message = "Awaiting protocol start."
         trial.tool_feedback = ""
         trial.tool_feedback_seconds = 0.0
+        trial.first_response_seen = False
+        trial.route_forming_seen = False
+        trial.route_stable_seen = False
         trial.current_tool = trial.default_tool
         trial.irradiation_charges = trial.irradiation_max_charges
         trial.irradiation_cooldown_remaining = 0.0
@@ -106,8 +127,11 @@ class TrialService:
         trial.preserved_strain_available = False
         trial.irradiation_uses = 0
         trial.revert_uses = 0
+        self._update_mutation_readout(trial)
         trial.player_controlled_zones = 0
         trial.rival_controlled_zones = 0
+        trial.containment_margin = 0
+        trial.containment_readout = ""
         trial.primer_remaining = 0.0
         for zone in trial.zones:
             zone.active = False
@@ -120,6 +144,7 @@ class TrialService:
     def sterilize(self, trial: TrialState) -> None:
         """Reset the current dish as an explicit game/lab action."""
         self.reset(trial)
+        trial.transition_message = "Dish sterilized. The current assay has been reset."
         trial.guidance_title = "Dish Sterilized"
         trial.guidance_message = "Dish sterilized. Review the protocol before restarting the assay."
         trial.objective_status = "Sterilized; awaiting protocol."
@@ -128,6 +153,7 @@ class TrialService:
         """Move a briefing into the running assay state."""
         trial.status = "running"
         trial.paused = False
+        trial.transition_message = ""
         if trial.primer_enabled:
             trial.primer_remaining = trial.primer_seconds
         self._update_objective_status(trial)
@@ -139,22 +165,27 @@ class TrialService:
             return
 
         if ui_state.request_trial_next:
+            self._clear_strain_requests(ui_state)
             self.next_trial(trial)
             return
 
         if ui_state.request_trial_restart_sequence:
+            self._clear_strain_requests(ui_state)
             self.restart_sequence(trial)
             return
 
         if ui_state.request_trial_retry:
-            self.load_trial(trial, trial.trial_index)
+            self._clear_strain_requests(ui_state)
+            self.retry_trial(trial)
             return
 
         if ui_state.request_reset or ui_state.request_full_reset:
+            self._clear_strain_requests(ui_state)
             self.sterilize(trial)
             return
 
         if ui_state.request_trial_start and trial.briefing_active:
+            self._clear_strain_requests(ui_state)
             self.start_trial(trial)
             return
 
@@ -190,6 +221,7 @@ class TrialService:
                 trial.current_tool = "Revert Strain"
                 trial.tool_feedback = "Archived strain restored."
                 trial.tool_feedback_seconds = 2.5
+                self._update_mutation_readout(trial)
                 self._update_guidance(trial)
             else:
                 ui_state.request_revert_strain = False
@@ -209,6 +241,7 @@ class TrialService:
                 trial.current_tool = "Irradiate Strain"
                 trial.tool_feedback = "Strain archived. Irradiation pulse applied."
                 trial.tool_feedback_seconds = 2.5
+                self._update_mutation_readout(trial)
                 self._update_guidance(trial)
             else:
                 ui_state.request_randomize_mutations = False
@@ -218,6 +251,12 @@ class TrialService:
                     trial.tool_feedback = "Irradiation array is recharging."
                 trial.tool_feedback_seconds = 1.8
                 self._update_guidance(trial)
+
+    @staticmethod
+    def _clear_strain_requests(ui_state) -> None:
+        """Consume tool requests that must not leak across a trial transition."""
+        ui_state.request_revert_strain = False
+        ui_state.request_randomize_mutations = False
 
     def update(self, trial: TrialState, ui_state, frame_count: int, dt: float,
                activity_texture=None) -> None:
@@ -306,58 +345,195 @@ class TrialService:
             )
 
         self._update_zone_control_counts(trial)
+        self._update_route_readout(trial)
+        self._update_specimen_readout(trial)
 
     def _update_zone_control_counts(self, trial: TrialState) -> None:
+        previous_player_controlled = trial.player_controlled_zones
         trial.player_controlled_zones = sum(1 for zone in trial.zones if zone.active)
         trial.rival_controlled_zones = sum(1 for zone in trial.zones if zone.rival_controlled)
+        if (
+            trial.trial_id == "bloom"
+            and previous_player_controlled == 0
+            and trial.player_controlled_zones > 0
+            and not trial.first_response_seen
+        ):
+            trial.first_response_seen = True
+            trial.tool_feedback = "Specimen response detected."
+            trial.tool_feedback_seconds = 3.0
+        if trial.rival_enabled:
+            trial.containment_margin = trial.player_controlled_zones - trial.rival_controlled_zones
+            if trial.containment_margin > 0:
+                trial.containment_readout = f"Containing by {trial.containment_margin} site"
+                if trial.containment_margin != 1:
+                    trial.containment_readout += "s"
+            elif trial.containment_margin < 0:
+                deficit = abs(trial.containment_margin)
+                trial.containment_readout = f"Rival ahead by {deficit} site"
+                if deficit != 1:
+                    trial.containment_readout += "s"
+            else:
+                trial.containment_readout = "Containment tied"
+        else:
+            trial.containment_margin = 0
+            trial.containment_readout = ""
+
+    def _update_specimen_readout(self, trial: TrialState) -> None:
+        if trial.trial_id != "bloom" or trial.briefing_active:
+            trial.specimen_readout = ""
+            return
+
+        active_count = trial.player_controlled_zones
+        if active_count <= 0:
+            trial.specimen_readout = "Specimen dormant"
+        elif trial.progress < 0.35:
+            trial.specimen_readout = "Specimen responding"
+        else:
+            trial.specimen_readout = "Specimen stabilizing"
+
+    def _update_route_readout(self, trial: TrialState) -> None:
+        if trial.trial_id != "antibiotic_band" or trial.briefing_active:
+            trial.route_readout = ""
+            return
+
+        active_count = trial.player_controlled_zones
+        total_zones = max(1, len(trial.zones))
+        if active_count <= 0:
+            trial.route_readout = "Route absent"
+        elif active_count < total_zones:
+            trial.route_readout = f"Partial route {active_count}/{total_zones}"
+            if not trial.route_forming_seen:
+                trial.route_forming_seen = True
+                trial.tool_feedback = "Antibiotic route forming."
+                trial.tool_feedback_seconds = 2.5
+        else:
+            trial.route_readout = "Route stable"
+            if not trial.route_stable_seen:
+                trial.route_forming_seen = True
+                trial.route_stable_seen = True
+                trial.tool_feedback = "Route survived the scar."
+                trial.tool_feedback_seconds = 3.0
+
+    def _update_mutation_readout(self, trial: TrialState) -> None:
+        if not trial.irradiation_unlocked:
+            trial.mutation_readout = ""
+            return
+
+        if trial.revert_uses > 0:
+            trial.mutation_readout = "Archive restored"
+        elif trial.preserved_strain_available:
+            trial.mutation_readout = "Mutated strain; archive ready"
+        elif trial.irradiation_uses > 0:
+            trial.mutation_readout = "Mutated strain; archive spent"
+        elif trial.irradiation_charges <= 0:
+            trial.mutation_readout = "Mutation cells depleted"
+        else:
+            trial.mutation_readout = "Baseline strain"
+
+    def _update_timer_readout(self, trial: TrialState) -> None:
+        if (
+            trial.briefing_active
+            or trial.paused
+            or trial.won
+            or trial.failed
+            or trial.minimal_onboarding
+        ):
+            trial.timer_readout = ""
+            return
+
+        remaining = max(0.0, trial.failure_seconds - trial.elapsed_seconds)
+        if trial.win_condition == "territory_at_timeout":
+            if remaining <= 5.0:
+                trial.timer_readout = "Final seconds"
+            elif remaining <= 15.0:
+                trial.timer_readout = "Assay closing soon"
+            else:
+                trial.timer_readout = ""
+            return
+
+        if remaining <= 8.0:
+            trial.timer_readout = "Stability window closing"
+        elif remaining <= 20.0 and trial.player_controlled_zones < len(trial.zones):
+            trial.timer_readout = "Assay window narrowing"
+        else:
+            trial.timer_readout = ""
 
     def _update_objective_status(self, trial: TrialState) -> None:
         if trial.briefing_active:
             trial.objective_status = "Awaiting protocol."
+            self._update_route_readout(trial)
+            self._update_specimen_readout(trial)
+            self._update_mutation_readout(trial)
+            self._update_timer_readout(trial)
             return
 
         if trial.paused:
             trial.objective_status = "Assay paused."
+            self._update_route_readout(trial)
+            self._update_specimen_readout(trial)
+            self._update_mutation_readout(trial)
+            self._update_timer_readout(trial)
             return
 
         if trial.won:
             trial.objective_status = "Assay complete."
+            self._update_route_readout(trial)
+            self._update_specimen_readout(trial)
+            self._update_mutation_readout(trial)
+            self._update_timer_readout(trial)
             return
 
         if trial.failed:
             trial.objective_status = "Assay failed."
+            self._update_route_readout(trial)
+            self._update_specimen_readout(trial)
+            self._update_mutation_readout(trial)
+            self._update_timer_readout(trial)
             return
 
         if trial.win_condition == "territory_at_timeout":
             remaining = max(0.0, trial.failure_seconds - trial.elapsed_seconds)
+            readout = trial.containment_readout or "Containment tied"
             trial.objective_status = (
                 f"Culture {trial.player_controlled_zones} sites; "
                 f"rival {trial.rival_controlled_zones}; "
+                f"{readout}; "
                 f"closes in {remaining:0.1f}s."
             )
+            self._update_route_readout(trial)
+            self._update_specimen_readout(trial)
+            self._update_mutation_readout(trial)
+            self._update_timer_readout(trial)
             return
 
         active_count = trial.player_controlled_zones
         total_zones = len(trial.zones)
         hold_remaining = max(0.0, trial.hold_seconds * (1.0 - trial.progress))
         if trial.trial_id == "bloom":
+            self._update_specimen_readout(trial)
             if active_count == total_zones:
                 trial.objective_status = (
-                    f"Specimen responding; hold {hold_remaining:0.1f}s."
+                    f"{trial.specimen_readout}; hold {hold_remaining:0.1f}s."
                 )
             else:
-                trial.objective_status = "Specimen dormant; feed the marked circle."
+                trial.objective_status = f"{trial.specimen_readout}; feed the marked circle."
+            self._update_route_readout(trial)
+            self._update_mutation_readout(trial)
+            self._update_timer_readout(trial)
             return
 
         if trial.trial_id == "antibiotic_band":
+            self._update_route_readout(trial)
             if active_count == total_zones:
                 trial.objective_status = (
-                    f"All culture sites awake; hold {hold_remaining:0.1f}s."
+                    f"{trial.route_readout}; hold {hold_remaining:0.1f}s."
                 )
             else:
                 trial.objective_status = (
-                    f"Stable sites: {active_count}/{total_zones}; bridge the red scar."
+                    f"{trial.route_readout}; bridge the red scar."
                 )
+            self._update_mutation_readout(trial)
+            self._update_timer_readout(trial)
             return
 
         if active_count == total_zones:
@@ -370,6 +546,10 @@ class TrialService:
                 f"Zones active: {active_count}/{total_zones}; "
                 "wake every marked zone."
             )
+        self._update_route_readout(trial)
+        self._update_specimen_readout(trial)
+        self._update_mutation_readout(trial)
+        self._update_timer_readout(trial)
 
     def _update_guidance(self, trial: TrialState) -> None:
         """Show one current instruction so the first game path stays readable."""
@@ -413,14 +593,18 @@ class TrialService:
 
         if trial.trial_id == "rival_bloom":
             trial.guidance_title = "Containment Race"
-            if trial.rival_controlled_zones >= active_count and trial.elapsed_seconds > 10.0:
-                trial.guidance_message = "The rival is matching your culture. Reclaim the center before the assay closes."
+            if trial.containment_margin < 0:
+                trial.guidance_message = "The rival is ahead. Reclaim a marked site before the assay closes."
             elif trial.preserved_strain_available:
                 trial.guidance_message = "A strain archive is loaded. Revert if the irradiated behavior collapses."
             elif trial.irradiation_ready and trial.irradiation_uses == 0:
                 trial.guidance_message = "Irradiation is ready. Use it only if the current strain stops spreading."
             elif trial.irradiation_cooldown_remaining > 0.0:
                 trial.guidance_message = "Irradiation is recharging. Feed stable routes while the mutation settles."
+            elif trial.containment_margin == 0 and trial.elapsed_seconds > 10.0:
+                trial.guidance_message = "The rival is matching your culture. Reclaim the center before the assay closes."
+            elif trial.containment_margin > 0:
+                trial.guidance_message = "You are containing the bloom. Keep the margin until the assay closes."
             else:
                 trial.guidance_message = "Hold more marked sites than the rival bloom when the assay closes."
             return
@@ -460,6 +644,12 @@ class TrialService:
                 f"reverts used: {trial.revert_uses}. "
                 f"{diagnosis}"
             )
+            if trial.revert_uses > 0:
+                trial.result_experiment_hint = "Next experiment: try holding the margin without reverting."
+            elif trial.irradiation_uses > 0:
+                trial.result_experiment_hint = "Next experiment: compare this mutation path against a no-irradiation run."
+            else:
+                trial.result_experiment_hint = "Next experiment: repeat with one deliberate mutation and compare site control."
             trial.result_next_step = (
                 "Sequence complete. Repeat the assay to test a different mutation path."
             )
@@ -479,6 +669,12 @@ class TrialService:
         trial.result_title = "Culture Stabilized"
         trial.result_grade = grade
         trial.result_summary = summary
+        if trial.trial_id == "bloom":
+            trial.result_experiment_hint = "Next experiment: cross the antibiotic scar without losing the first route."
+        elif trial.trial_id == "antibiotic_band":
+            trial.result_experiment_hint = "Next experiment: carry that route into a rival bloom race."
+        else:
+            trial.result_experiment_hint = "Next experiment: repeat the assay with a different feeding path."
         if trial.trial_index + 1 < len(TRIAL_DEFINITIONS):
             next_trial = TRIAL_DEFINITIONS[trial.trial_index + 1]
             trial.result_next_step = (
@@ -508,6 +704,12 @@ class TrialService:
                 f"reverts used: {trial.revert_uses}. "
                 f"{diagnosis} Seed stronger routes earlier, then mutate only when the current strain stalls."
             )
+            if trial.player_controlled_zones == trial.rival_controlled_zones:
+                trial.result_experiment_hint = "Next experiment: reclaim one extra marked site before timeout."
+            elif trial.irradiation_uses == 0:
+                trial.result_experiment_hint = "Next experiment: use Irradiate only after the baseline strain stalls."
+            else:
+                trial.result_experiment_hint = "Next experiment: feed stronger routes before spending mutation tools."
             trial.result_next_step = (
                 "Retry with earlier nutrient routes and save irradiation for stalled growth."
             )
@@ -517,17 +719,30 @@ class TrialService:
         trial.result_grade = "Unstable"
         total_zones = len(trial.zones)
         if active_count == total_zones:
-            trial.result_summary = (
-                f"All {total_zones} culture sites woke, but stabilization began too late."
-            )
-            trial.result_next_step = (
-                "Retry with earlier routes across the scar so stabilization starts sooner."
-            )
+            if trial.trial_id == "bloom":
+                trial.result_summary = (
+                    "The specimen responded, but the culture was not sustained long enough."
+                )
+                trial.result_experiment_hint = (
+                    "Next experiment: hold nutrient gel on the marked circle until the specimen stabilizes."
+                )
+                trial.result_next_step = (
+                    "Retry the dish and keep the marked circle fed until stabilization completes."
+                )
+            else:
+                trial.result_summary = (
+                    f"All {total_zones} culture sites woke, but stabilization began too late."
+                )
+                trial.result_experiment_hint = "Next experiment: start reinforcing the route earlier."
+                trial.result_next_step = (
+                    "Retry with earlier routes across the scar so stabilization starts sooner."
+                )
         else:
             trial.result_summary = (
                 f"{active_count}/{total_zones} culture sites were stable at timeout. "
                 "Adjust nutrient placement and retry the experiment."
             )
+            trial.result_experiment_hint = "Next experiment: wake every marked site before chasing stability."
             trial.result_next_step = "Retry the dish and keep every marked culture site active before timeout."
 
     def _rival_influence(self, trial: TrialState, point: tuple[float, float]) -> float:

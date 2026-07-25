@@ -53,8 +53,18 @@ class RuleManager:
         """Clear all rule history."""
         self.rule_history = []
 
+    def snapshot_history(self) -> list[tuple[np.ndarray, float]]:
+        """Return a value snapshot suitable for restoring a bounded tool session."""
+        return [(rule.copy(), seed) for rule, seed in self.rule_history]
+
+    def restore_history(self, snapshot: list[tuple[np.ndarray, float]]) -> None:
+        """Replace history with copied snapshot entries."""
+        self.rule_history = [(rule.copy(), seed) for rule, seed in snapshot]
+        self._trim_history()
+
     def has_rules(self) -> bool:
         """Check if there are any rules in history."""
         return len(self.rule_history) > 0
+
     def length(self) -> int:
         return len(self.rule_history)
